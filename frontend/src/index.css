@@ -1,0 +1,82 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Estilos base para clonar SIDEFA */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: Tahoma, Arial, sans-serif;
+  background-color: #f0f0f0;
+  color: #333;
+}
+
+/* Estilos para inputs estilo SIDEFA */
+input[type="text"],
+input[type="number"],
+input[type="password"],
+input[type="email"],
+select,
+textarea {
+  @apply border border-gray-400 px-2 py-1 text-sm focus:outline-none focus:border-blue-500;
+}
+
+/* Botones estilo SIDEFA */
+.btn-sidefa {
+  @apply px-4 py-2 text-sm font-semibold rounded shadow hover:shadow-lg transition-all;
+}
+
+.btn-primary {
+  @apply btn-sidefa bg-blue-600 text-white hover:bg-blue-700;
+}
+
+.btn-success {
+  @apply btn-sidefa bg-green-600 text-white hover:bg-green-700;
+}
+
+.btn-danger {
+  @apply btn-sidefa bg-red-600 text-white hover:bg-red-700;
+}
+
+.btn-warning {
+  @apply btn-sidefa bg-orange-500 text-white hover:bg-orange-600;
+}
+
+/* Tabla estilo SIDEFA */
+.table-sidefa {
+  @apply w-full text-sm border-collapse;
+}
+
+.table-sidefa thead {
+  @apply bg-yellow-400;
+}
+
+.table-sidefa th {
+  @apply border border-gray-400 px-2 py-1 text-left font-bold;
+}
+
+.table-sidefa td {
+  @apply border border-gray-300 px-2 py-1;
+}
+
+.table-sidefa tbody tr:nth-child(even) {
+  @apply bg-blue-50;
+}
+
+.table-sidefa tbody tr:hover {
+  @apply bg-blue-100;
+}
+
+/* Header estilo SIDEFA */
+.header-sidefa {
+  @apply bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-3 shadow-md;
+}
+
+/* Panel estilo SIDEFA */
+.panel-sidefa {
+  @apply bg-white border border-gray-300 shadow-sm;
+}
