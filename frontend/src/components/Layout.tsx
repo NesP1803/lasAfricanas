@@ -35,43 +35,55 @@ export default function Layout() {
   return (
     <div className="flex h-screen bg-gray-100">
       {/* Sidebar */}
-      <aside className="w-64 bg-sidefa text-white flex flex-col">
+      <aside 
+        className="w-64 text-white flex flex-col shadow-lg"
+        style={{ backgroundColor: '#2563EB' }}
+      >
         {/* Logo */}
-        <div className="p-6 border-b border-blue-700">
-          <h1 className="text-2xl font-bold">SIDEFA</h1>
-          <p className="text-sm text-blue-200">Sistema Integrado</p>
+        <div 
+          className="p-6"
+          style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}
+        >
+          <h1 className="text-2xl font-bold text-white">SIDEFA</h1>
+          <p className="text-sm text-blue-100 mt-1">Sistema Integrado</p>
         </div>
 
         {/* Menu */}
-        <nav className="flex-1 p-4 space-y-2">
+        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
           {menuItems.map((item) => (
             <button
               key={item.path}
               onClick={() => navigate(item.path)}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors text-left"
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors text-left text-white hover:bg-blue-700"
             >
               {item.icon}
-              <span>{item.label}</span>
+              <span className="font-medium">{item.label}</span>
             </button>
           ))}
         </nav>
 
         {/* User info */}
-        <div className="p-4 border-t border-blue-700">
+        <div 
+          className="p-4"
+          style={{ borderTop: '1px solid rgba(255, 255, 255, 0.1)' }}
+        >
           <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 rounded-full bg-blue-700 flex items-center justify-center">
-              <span className="text-lg font-bold">
+            <div 
+              className="w-10 h-10 rounded-full flex items-center justify-center"
+              style={{ backgroundColor: '#1e40af' }}
+            >
+              <span className="text-lg font-bold text-white">
                 {user?.username.charAt(0).toUpperCase()}
               </span>
             </div>
             <div className="flex-1">
-              <p className="font-semibold">{user?.username}</p>
-              <p className="text-sm text-blue-200">{user?.role}</p>
+              <p className="font-semibold text-white">{user?.username}</p>
+              <p className="text-sm text-blue-100">{user?.role}</p>
             </div>
           </div>
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+            className="w-full flex items-center gap-2 px-4 py-2 rounded-lg transition-colors text-white hover:bg-blue-700"
           >
             <LogOut size={20} />
             <span>Cerrar Sesión</span>

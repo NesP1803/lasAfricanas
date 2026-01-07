@@ -1,74 +1,90 @@
-import { Users, Package, Wrench, DollarSign } from 'lucide-react';
+import { Outlet, Navigate, useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
+import {
+  LayoutDashboard,
+  Package,
+  Wrench,
+  ShoppingCart,
+  Users,
+  Settings,
+  LogOut,
+} from 'lucide-react';
 
-export default function Dashboard() {
+export default function Layout() {
+  const { isAuthenticated, user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" />;
+  }
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
+
+  const menuItems = [
+    { icon: <LayoutDashboard size={20} />, label: 'Dashboard', path: '/' },
+    { icon: <Package size={20} />, label: 'Inventario', path: '/inventario' },
+    { icon: <Wrench size={20} />, label: 'Taller', path: '/taller' },
+    { icon: <ShoppingCart size={20} />, label: 'Ventas', path: '/ventas' },
+    { icon: <Users size={20} />, label: 'Clientes', path: '/clientes' },
+    { icon: <Settings size={20} />, label: 'Configuración', path: '/configuracion' },
+  ];
+
   return (
-    <div className="space-y-6">
-      <h1 className="text-3xl font-bold text-gray-800">Dashboard</h1>
-
-      {/* Cards de resumen */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard
-          title="Ventas Hoy"
-          value="$2,450,000"
-          icon={<DollarSign size={32} />}
-          color="bg-green-500"
-        />
-        <StatCard
-          title="Productos"
-          value="9,549"
-          icon={<Package size={32} />}
-          color="bg-blue-500"
-        />
-        <StatCard
-          title="Servicios Activos"
-          value="12"
-          icon={<Wrench size={32} />}
-          color="bg-orange-500"
-        />
-        <StatCard
-          title="Clientes"
-          value="1,234"
-          icon={<Users size={32} />}
-          color="bg-purple-500"
-        />
-      </div>
-
-      {/* Contenido adicional */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="panel-sidefa p-6">
-          <h2 className="text-xl font-bold mb-4">Productos con Stock Bajo</h2>
-          <p className="text-gray-600">Próximamente...</p>
+    <div className="flex h-screen bg-gray-100">
+      {/* Sidebar */}
+      <aside className="w-64 bg-blue-600 text-white flex flex-col shadow-lg">
+        {/* Logo */}
+        <div className="p-6 border-b border-blue-700">
+          <h1 className="text-2xl font-bold text-white">SIDEFA</h1>
+          <p className="text-sm text-blue-100 mt-1">Sistema Integrado</p>
         </div>
 
-        <div className="panel-sidefa p-6">
-          <h2 className="text-xl font-bold mb-4">Servicios Pendientes</h2>
-          <p className="text-gray-600">Próximamente...</p>
-        </div>
-      </div>
-    </div>
-  );
-}
+        {/* Menu */}
+        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+          {menuItems.map((item) => (
+            <button
+              key={item.path}
+              onClick={() => navigate(item.path)}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors text-left text-white"
+            >
+              {item.icon}
+              <span className="font-medium">{item.label}</span>
+            </button>
+          ))}
+        </nav>
 
-function StatCard({
-  title,
-  value,
-  icon,
-  color,
-}: {
-  title: string;
-  value: string;
-  icon: React.ReactNode;
-  color: string;
-}) {
-  return (
-    <div className="bg-white rounded-lg shadow p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-gray-600 text-sm">{title}</p>
-          <p className="text-2xl font-bold text-gray-800 mt-2">{value}</p>
+        {/* User info */}
+        <div className="p-4 border-t border-blue-700">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-full bg-blue-800 flex items-center justify-center">
+              <span className="text-lg font-bold text-white">
+                {user?.username.charAt(0).toUpperCase()}
+              </span>
+            </div>
+            <div className="flex-1">
+              <p className="font-semibold text-white">{user?.username}</p>
+              <p className="text-sm text-blue-200">{user?.role}</p>
+            </div>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-white"
+          >
+            <LogOut size={20} />
+            <span>Cerrar Sesión</span>
+          </button>
         </div>
-        <div className={`${color} text-white p-3 rounded-lg`}>{icon}</div>
-      </div>
+      </aside>
+
+      {/* Main Content */}
+      <main className="flex-1 overflow-auto">
+        <div className="p-8">
+          <Outlet />
+        </div>
+      </main>
     </div>
   );
 }

@@ -9,7 +9,7 @@ export default {
       colors: {
         // Colores del sistema SIDEFA
         sidefa: {
-          blue: '#4A90A4',
+          blue: '#2563EB',
           yellow: '#FFD700',
           orange: '#FF8C00',
           green: '#28A745',
