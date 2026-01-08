@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
+import Inventario from './pages/Inventario';
 import Layout from './components/Layout';
 
 function App() {
@@ -12,6 +13,7 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<Layout />}>
             <Route index element={<Dashboard />} />
+            <Route path="inventario" element={<Inventario />} />
             {/* Aquí agregaremos más rutas */}
           </Route>
         </Routes>
