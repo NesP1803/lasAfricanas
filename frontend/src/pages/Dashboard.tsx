@@ -1,90 +1,104 @@
-import { Outlet, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import {
   LayoutDashboard,
   Package,
-  Wrench,
   ShoppingCart,
+  Wrench,
   Users,
-  Settings,
-  LogOut,
+  TrendingUp,
 } from 'lucide-react';
 
-export default function Layout() {
-  const { isAuthenticated, user, logout } = useAuth();
-  const navigate = useNavigate();
+export default function Dashboard() {
+  const { user } = useAuth();
 
-  if (!isAuthenticated) {
-    return <Navigate to="/login" />;
-  }
-
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
-
-  const menuItems = [
-    { icon: <LayoutDashboard size={20} />, label: 'Dashboard', path: '/' },
-    { icon: <Package size={20} />, label: 'Inventario', path: '/inventario' },
-    { icon: <Wrench size={20} />, label: 'Taller', path: '/taller' },
-    { icon: <ShoppingCart size={20} />, label: 'Ventas', path: '/ventas' },
-    { icon: <Users size={20} />, label: 'Clientes', path: '/clientes' },
-    { icon: <Settings size={20} />, label: 'Configuración', path: '/configuracion' },
+  const stats = [
+    {
+      icon: <Package className="w-8 h-8 text-blue-600" />,
+      title: 'Productos',
+      value: '0',
+      description: 'En inventario',
+    },
+    {
+      icon: <ShoppingCart className="w-8 h-8 text-green-600" />,
+      title: 'Ventas del día',
+      value: '$0',
+      description: 'Total de hoy',
+    },
+    {
+      icon: <Wrench className="w-8 h-8 text-purple-600" />,
+      title: 'Órdenes de taller',
+      value: '0',
+      description: 'Activas',
+    },
+    {
+      icon: <Users className="w-8 h-8 text-orange-600" />,
+      title: 'Clientes',
+      value: '0',
+      description: 'Registrados',
+    },
   ];
 
   return (
-    <div className="flex h-screen bg-gray-100">
-      {/* Sidebar */}
-      <aside className="w-64 bg-blue-600 text-white flex flex-col shadow-lg">
-        {/* Logo */}
-        <div className="p-6 border-b border-blue-700">
-          <h1 className="text-2xl font-bold text-white">SIDEFA</h1>
-          <p className="text-sm text-blue-100 mt-1">Sistema Integrado</p>
-        </div>
+    <div className="space-y-6">
+      {/* Header */}
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+        <p className="text-gray-600 mt-2">
+          Bienvenido, {user?.username}
+        </p>
+      </div>
 
-        {/* Menu */}
-        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-          {menuItems.map((item) => (
-            <button
-              key={item.path}
-              onClick={() => navigate(item.path)}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors text-left text-white"
-            >
-              {item.icon}
-              <span className="font-medium">{item.label}</span>
-            </button>
-          ))}
-        </nav>
-
-        {/* User info */}
-        <div className="p-4 border-t border-blue-700">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 rounded-full bg-blue-800 flex items-center justify-center">
-              <span className="text-lg font-bold text-white">
-                {user?.username.charAt(0).toUpperCase()}
-              </span>
-            </div>
-            <div className="flex-1">
-              <p className="font-semibold text-white">{user?.username}</p>
-              <p className="text-sm text-blue-200">{user?.role}</p>
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {stats.map((stat, index) => (
+          <div
+            key={index}
+            className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-600 text-sm font-medium">
+                  {stat.title}
+                </p>
+                <p className="text-3xl font-bold text-gray-900 mt-2">
+                  {stat.value}
+                </p>
+                <p className="text-gray-500 text-sm mt-1">
+                  {stat.description}
+                </p>
+              </div>
+              <div>{stat.icon}</div>
             </div>
           </div>
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-white"
-          >
-            <LogOut size={20} />
-            <span>Cerrar Sesión</span>
-          </button>
-        </div>
-      </aside>
+        ))}
+      </div>
 
-      {/* Main Content */}
-      <main className="flex-1 overflow-auto">
-        <div className="p-8">
-          <Outlet />
+      {/* Additional Info */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">
+            Actividad Reciente
+          </h2>
+          <p className="text-gray-600">No hay actividad reciente</p>
         </div>
-      </main>
+
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">
+            Accesos Rápidos
+          </h2>
+          <div className="space-y-2">
+            <button className="w-full text-left px-4 py-2 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 transition-colors">
+              Nueva venta
+            </button>
+            <button className="w-full text-left px-4 py-2 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 transition-colors">
+              Registrar producto
+            </button>
+            <button className="w-full text-left px-4 py-2 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 transition-colors">
+              Nueva orden de taller
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

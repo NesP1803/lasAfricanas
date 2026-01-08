@@ -44,7 +44,7 @@ export default function Layout() {
           className="p-6"
           style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}
         >
-          <h1 className="text-2xl font-bold text-white">SIDEFA</h1>
+          <h1 className="text-2xl font-bold text-white">Las Africanas</h1>
           <p className="text-sm text-blue-100 mt-1">Sistema Integrado</p>
         </div>
 
