@@ -116,6 +116,16 @@ export interface Venta {
 // ============================================
 // TIPOS DE TALLER
 // ============================================
+export type EstadoServicio =
+  | 'INGRESADO'
+  | 'EN_DIAGNOSTICO'
+  | 'COTIZADO'
+  | 'APROBADO'
+  | 'EN_REPARACION'
+  | 'TERMINADO'
+  | 'ENTREGADO'
+  | 'CANCELADO';
+
 export interface Mecanico {
   id: number;
   usuario: number;
@@ -126,9 +136,59 @@ export interface Mecanico {
   total_cuentas: string;
   servicios_activos: number;
   is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
-export interface ServicioMoto {
+export interface RepuestoAsignado {
+  id: number;
+  mecanico: number;
+  mecanico_nombre: string;
+  producto: number;
+  producto_codigo: string;
+  producto_nombre: string;
+  cantidad: number;
+  precio_unitario: string;
+  valor_total: string;
+  fecha_asignacion: string;
+  is_active: boolean;
+}
+
+export interface ConsumoRepuesto {
+  id: number;
+  servicio: number;
+  producto: number;
+  producto_codigo: string;
+  producto_nombre: string;
+  cantidad: number;
+  precio_unitario: string;
+  descuento: string;
+  subtotal: string;
+  registrado_por: number;
+  registrado_por_nombre: string;
+  descontado_de_mecanico: boolean;
+  stock_descontado: boolean;
+  created_at: string;
+}
+
+export interface ServicioMotoList {
+  id: number;
+  numero_servicio: string;
+  placa: string;
+  marca: string;
+  modelo: string;
+  cliente: number;
+  cliente_nombre: string;
+  mecanico: number;
+  mecanico_nombre: string;
+  estado: EstadoServicio;
+  estado_display: string;
+  total: string;
+  fecha_ingreso: string;
+  fecha_estimada_entrega: string | null;
+}
+
+export interface ServicioMotoDetalle {
   id: number;
   numero_servicio: string;
   placa: string;
@@ -136,9 +196,11 @@ export interface ServicioMoto {
   modelo: string;
   color: string;
   cliente: number;
-  cliente_nombre?: string;
+  cliente_info: Cliente;
   mecanico: number;
-  mecanico_nombre?: string;
+  mecanico_info: Mecanico;
+  recibido_por: number;
+  recibido_por_nombre: string;
   fecha_ingreso: string;
   fecha_estimada_entrega: string | null;
   fecha_entrega_real: string | null;
@@ -148,11 +210,46 @@ export interface ServicioMoto {
   diagnostico: string;
   trabajo_realizado: string;
   recomendaciones: string;
-  estado: 'INGRESADO' | 'EN_DIAGNOSTICO' | 'COTIZADO' | 'APROBADO' | 'EN_REPARACION' | 'TERMINADO' | 'ENTREGADO' | 'CANCELADO';
+  estado: EstadoServicio;
+  estado_display: string;
   costo_mano_obra: string;
   costo_repuestos: string;
   descuento: string;
   total: string;
+  venta: number | null;
+  consumos_repuestos: ConsumoRepuesto[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ServicioMotoCreate {
+  placa: string;
+  marca: string;
+  modelo: string;
+  color: string;
+  cliente: number;
+  mecanico: number;
+  recibido_por: number;
+  fecha_estimada_entrega?: string | null;
+  kilometraje?: number | null;
+  nivel_gasolina?: string;
+  observaciones_ingreso: string;
+  diagnostico?: string;
+  costo_mano_obra?: string;
+}
+
+export interface EstadisticasTaller {
+  servicios_totales: number;
+  servicios_por_estado: {
+    [key in EstadoServicio]: {
+      nombre: string;
+      cantidad: number;
+    };
+  };
+  servicios_ultimo_mes: number;
+  facturacion_ultimo_mes: string;
+  servicios_pendientes: number;
+  tiempo_promedio_entrega_dias: number;
 }
 
 // ============================================
