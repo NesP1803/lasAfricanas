@@ -9,6 +9,7 @@ import type {
   EstadisticasTaller,
   PaginatedResponse,
   EstadoServicio,
+  ServicioMotoUpdate,
   Venta
 } from '../types';
 
@@ -92,7 +93,7 @@ export const servicioAPI = {
   // Actualizar servicio
   update: async (
     id: number,
-    data: Partial<ServicioMotoCreate>
+    data: ServicioMotoUpdate
   ): Promise<ServicioMotoDetalle> => {
     const response = await apiClient.patch(`${API_URL}/servicios/${id}/`, data);
     return response.data;

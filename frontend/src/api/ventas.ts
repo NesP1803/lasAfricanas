@@ -1,15 +1,8 @@
-const API_URL = '/api';
+import type { Cliente } from '../types';
 
-export interface Cliente {
-  id: number;
-  tipo_documento: string;
-  numero_documento: string;
-  nombre: string;
-  telefono?: string;
-  email?: string;
-  direccion?: string;
-  ciudad?: string;
-}
+export type { Cliente };
+
+const API_URL = '/api';
 
 export interface DetalleVenta {
   producto: number;
