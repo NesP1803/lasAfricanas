@@ -176,231 +176,339 @@ export default function PuntoVenta() {
   };
 
   return (
-    <div className="h-full flex flex-col bg-yellow-50">
+    <div className="h-full flex flex-col bg-gray-50">
       {/* Header */}
-      <div className="bg-blue-600 text-white p-3 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div>
-            <label className="text-xs font-semibold block mb-1">DIGITE Nº/CC DEL CLIENTE</label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="Número de documento"
-                value={buscarCliente}
-                onChange={(e) => setBuscarCliente(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && buscarClientePorDocumento()}
-                className="px-3 py-2 rounded text-gray-900 w-48"
-              />
-              <button
-                onClick={buscarClientePorDocumento}
-                className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded font-bold"
-              >
-                ✓
-              </button>
-            </div>
-          </div>
-
-          {cliente && (
-            <div className="bg-white text-gray-900 px-4 py-2 rounded">
-              <p className="font-bold text-lg">{cliente.nombre}</p>
-              <p className="text-sm">{cliente.numero_documento}</p>
-            </div>
-          )}
+      <div className="bg-gradient-to-b from-gray-200 to-gray-300 border-b-2 border-gray-400 p-2">
+        {/* Título y Fecha */}
+        <div className="flex justify-between items-center mb-2 pb-2 border-b border-gray-400">
+          <h1 className="text-sm font-bold text-gray-800">
+            VENTANA DE FACTURACIÓN: GENERAR NUEVA FACTURA O REMISIÓN
+          </h1>
+          <span className="text-xs text-gray-700">
+            {new Date().toLocaleString('es-CO', {
+              day: '2-digit',
+              month: '2-digit',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            })}
+          </span>
         </div>
 
-        <div className="text-right">
-          <p className="text-xs">VENDEDOR</p>
-          <p className="font-bold text-lg">{user?.username.toUpperCase()}</p>
+        {/* Campos superiores */}
+        <div className="grid grid-cols-12 gap-2 items-end text-xs">
+          {/* DIGITE NIT/CC DEL CLIENTE */}
+          <div className="col-span-2">
+            <label className="font-bold text-gray-800 block mb-1">DIGITE NIT/CC DEL CLIENTE</label>
+            <input
+              type="text"
+              placeholder="Documento"
+              value={buscarCliente}
+              onChange={(e) => setBuscarCliente(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && buscarClientePorDocumento()}
+              className="w-full px-2 py-1 border border-gray-400 rounded text-gray-900 text-sm"
+            />
+          </div>
+
+          {/* CLIENTE Y/O RAZON SOCIAL */}
+          <div className="col-span-3">
+            <label className="font-bold text-gray-800 block mb-1">CLIENTE Y/O RAZON SOCIAL</label>
+            <input
+              type="text"
+              value={cliente?.nombre || 'CLIENTE GENERAL'}
+              readOnly
+              className="w-full px-2 py-1 border border-gray-400 rounded bg-white text-gray-900 text-sm font-semibold"
+            />
+          </div>
+
+          {/* VENDEDOR */}
+          <div className="col-span-2">
+            <label className="font-bold text-gray-800 block mb-1">VENDEDOR</label>
+            <input
+              type="text"
+              value={user?.username.toUpperCase() || ''}
+              readOnly
+              className="w-full px-2 py-1 border border-gray-400 rounded bg-blue-100 text-gray-900 text-sm font-semibold"
+            />
+          </div>
+
+          {/* GENERAR FACTURA# */}
+          <div className="col-span-1">
+            <label className="font-bold text-gray-800 block mb-1">GENERAR FACTURA#</label>
+            <select className="w-full px-2 py-1 border border-gray-400 rounded bg-yellow-100 text-gray-900 text-sm">
+              <option>FAC</option>
+            </select>
+          </div>
+
+          {/* Número */}
+          <div className="col-span-1">
+            <label className="font-bold text-gray-800 block mb-1">&nbsp;</label>
+            <input
+              type="text"
+              value="100091"
+              readOnly
+              className="w-full px-2 py-1 border border-gray-400 rounded bg-white text-gray-900 text-sm text-center"
+            />
+          </div>
+
+          {/* GENERAR REMISION# */}
+          <div className="col-span-1">
+            <label className="font-bold text-gray-800 block mb-1">GENERAR REMISION#</label>
+            <input
+              type="text"
+              value="154239"
+              readOnly
+              className="w-full px-2 py-1 border border-gray-400 rounded bg-white text-gray-900 text-sm text-center"
+            />
+          </div>
+
+          {/* MEDIO DE PAGO */}
+          <div className="col-span-1">
+            <label className="font-bold text-gray-800 block mb-1">MEDIO DE PAGO</label>
+            <select
+              value={medioPago}
+              onChange={(e: any) => setMedioPago(e.target.value)}
+              className="w-full px-2 py-1 border border-gray-400 rounded bg-white text-gray-900 text-sm"
+            >
+              <option value="EFECTIVO">EFECTIVO</option>
+              <option value="TARJETA">TARJETA</option>
+              <option value="TRANSFERENCIA">TRANSFER</option>
+              <option value="CREDITO">CREDITO</option>
+            </select>
+          </div>
+
+          {/* AUT VOUCHER */}
+          <div className="col-span-1">
+            <label className="font-bold text-gray-800 block mb-1">AUT VOUCHER</label>
+            <input
+              type="text"
+              defaultValue="0"
+              className="w-full px-2 py-1 border border-gray-400 rounded bg-white text-gray-900 text-sm text-center"
+            />
+          </div>
         </div>
       </div>
 
       {/* Tabla de productos */}
-      <div className="flex-1 bg-white m-3 rounded-lg shadow-lg overflow-hidden flex flex-col">
-        <div className="bg-gray-100 px-4 py-2 border-b grid grid-cols-12 gap-2 font-bold text-sm">
-          <div className="col-span-1">Cant</div>
+      <div className="flex-1 bg-white m-2 border-2 border-gray-400 overflow-hidden flex flex-col">
+        <div className="bg-yellow-400 px-2 py-1 border-b-2 border-gray-400 grid grid-cols-12 gap-1 font-bold text-xs">
+          <div className="col-span-1 text-center">Cant</div>
           <div className="col-span-2">Código</div>
-          <div className="col-span-4">Artículo</div>
+          <div className="col-span-3">Artículo</div>
           <div className="col-span-1 text-center">I.V.A.</div>
           <div className="col-span-1 text-right">Total</div>
           <div className="col-span-1 text-right">PRECIO U</div>
           <div className="col-span-1 text-center">Desc %</div>
-          <div className="col-span-1 text-center">Acciones</div>
+          <div className="col-span-1 text-right">ValorDes</div>
+          <div className="col-span-1 text-center">stock</div>
         </div>
 
         <div className="flex-1 overflow-y-auto">
           {carrito.map((item, index) => (
             <div
               key={item.producto.id}
-              className={`px-4 py-2 grid grid-cols-12 gap-2 items-center border-b hover:bg-yellow-50 ${
-                index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
+              className={`px-2 py-1 grid grid-cols-12 gap-1 items-center border-b border-gray-300 text-xs ${
+                index % 2 === 0 ? 'bg-white' : 'bg-blue-50'
               }`}
             >
-              <div className="col-span-1 flex items-center gap-1">
+              <div className="col-span-1 flex items-center justify-center gap-0.5">
                 <button
                   onClick={() => actualizarCantidad(item.producto.id, item.cantidad - 1)}
-                  className="p-1 bg-gray-200 hover:bg-gray-300 rounded"
+                  className="p-0.5 bg-gray-300 hover:bg-gray-400 rounded text-xs"
                 >
-                  <Minus size={14} />
+                  <Minus size={12} />
                 </button>
-                <span className="font-bold w-8 text-center">{item.cantidad}</span>
+                <span className="font-bold w-8 text-center bg-white border border-gray-300 px-1">
+                  {item.cantidad}
+                </span>
                 <button
                   onClick={() => actualizarCantidad(item.producto.id, item.cantidad + 1)}
-                  className="p-1 bg-gray-200 hover:bg-gray-300 rounded"
+                  className="p-0.5 bg-gray-300 hover:bg-gray-400 rounded text-xs"
                 >
-                  <Plus size={14} />
+                  <Plus size={12} />
                 </button>
               </div>
-              <div className="col-span-2 font-mono text-sm">{item.producto.codigo}</div>
-              <div className="col-span-4 font-semibold">{item.producto.nombre}</div>
-              <div className="col-span-1 text-center">{item.producto.iva_porcentaje}%</div>
+              <div className="col-span-2 font-mono text-xs">{item.producto.codigo}</div>
+              <div className="col-span-3 font-semibold text-xs uppercase">{item.producto.nombre}</div>
+              <div className="col-span-1 text-center">{item.producto.iva_porcentaje}</div>
               <div className="col-span-1 text-right font-bold">
-                ${item.subtotal.toLocaleString('es-CO', { minimumFractionDigits: 0 })}
+                {item.subtotal.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
               </div>
               <div className="col-span-1 text-right">
-                ${item.precio_unitario.toLocaleString('es-CO', { minimumFractionDigits: 0 })}
+                {item.precio_unitario.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
               </div>
-              <div className="col-span-1 text-center">{item.descuento_unitario}</div>
-              <div className="col-span-1 text-center">
-                <button
-                  onClick={() => eliminarDelCarrito(item.producto.id)}
-                  className="p-2 bg-red-500 hover:bg-red-600 text-white rounded"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
+              <div className="col-span-1 text-center font-bold">{item.descuento_unitario}</div>
+              <div className="col-span-1 text-right">{item.descuento_unitario}</div>
+              <div className="col-span-1 text-center font-bold">{item.producto.stock || 0}</div>
             </div>
           ))}
+          {carrito.length === 0 && (
+            <div className="flex items-center justify-center h-full text-gray-400 text-sm">
+              No hay productos en el carrito
+            </div>
+          )}
         </div>
       </div>
 
       {/* Footer con totales y controles */}
-      <div className="bg-gray-100 border-t-4 border-blue-600 p-4">
-        <div className="grid grid-cols-3 gap-4">
-          {/* Búsqueda de código */}
-          <div>
-            <label className="block text-sm font-bold mb-2">DIGITE CÓDIGO DE ARTÍCULO</label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={codigoBusqueda}
-                onChange={(e) => setCodigoBusqueda(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && buscarProducto()}
-                placeholder="Código..."
-                className="flex-1 px-4 py-3 border-2 border-gray-300 rounded-lg text-lg font-mono"
-                autoFocus
-              />
-              <button
-                onClick={buscarProducto}
-                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
-              >
-                <Search size={24} />
-              </button>
+      <div className="bg-gradient-to-b from-gray-200 to-gray-300 border-t-2 border-gray-400 p-2">
+        <div className="grid grid-cols-2 gap-3">
+          {/* Columna izquierda: Controles */}
+          <div className="space-y-2">
+            {/* DIGITE CODIGO DE ARTICULO */}
+            <div className="border-2 border-gray-400 bg-white p-2 rounded">
+              <label className="block text-xs font-bold mb-1 text-gray-800">
+                DIGITE CODIGO DE ARTICULO 🔍
+              </label>
+              <div className="flex gap-1 mb-2">
+                <input
+                  type="text"
+                  value={codigoBusqueda}
+                  onChange={(e) => setCodigoBusqueda(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && buscarProducto()}
+                  placeholder="Código..."
+                  className="flex-1 px-2 py-1 border-2 border-gray-400 rounded text-sm font-mono"
+                  autoFocus
+                />
+              </div>
+              <div className="flex gap-1">
+                <button
+                  onClick={buscarProducto}
+                  className="flex-1 px-2 py-1.5 bg-gray-300 hover:bg-gray-400 border border-gray-500 rounded text-xs font-bold"
+                  title="Buscar"
+                >
+                  🔍
+                </button>
+                <button
+                  className="flex-1 px-2 py-1.5 bg-gray-300 hover:bg-gray-400 border border-gray-500 rounded text-xs font-bold"
+                  title="Editar"
+                >
+                  ✏️
+                </button>
+                <button
+                  className="flex-1 px-2 py-1.5 bg-gray-300 hover:bg-gray-400 border border-gray-500 rounded text-xs font-bold"
+                  title="Agregar"
+                >
+                  ➕
+                </button>
+                <button
+                  className="flex-1 px-2 py-1.5 bg-gray-300 hover:bg-gray-400 border border-gray-500 rounded text-xs font-bold"
+                  title="Información"
+                >
+                  ℹ️
+                </button>
+              </div>
             </div>
 
-            <div className="mt-4">
-              <label className="block text-sm font-bold mb-2">DESCUENTO GENERAL</label>
+            {/* DESCUENTO GENERAL */}
+            <div className="border-2 border-gray-400 bg-white p-2 rounded">
+              <label className="block text-xs font-bold mb-1 text-gray-800">
+                DESCUENTO GENERAL ❓
+              </label>
+              <div className="flex gap-2 items-center mb-2">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={descuentoGeneral}
+                  onChange={(e) => setDescuentoGeneral(parseFloat(e.target.value) || 0)}
+                  className="w-20 px-2 py-1 border-2 border-blue-400 rounded text-center text-lg font-bold text-blue-600"
+                />
+                <span className="text-sm font-bold">%</span>
+              </div>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => procesarVenta('COTIZACION')}
+                  disabled={procesando || carrito.length === 0 || !cliente}
+                  className="flex-1 px-2 py-2 bg-blue-500 hover:bg-blue-600 text-white border border-blue-700 rounded text-xs font-bold disabled:bg-gray-400 disabled:border-gray-500"
+                  title="Cotizar"
+                >
+                  ⭕ COTIZAR
+                </button>
+                <button
+                  onClick={() => procesarVenta('REMISION')}
+                  disabled={procesando || carrito.length === 0 || !cliente}
+                  className="flex-1 px-2 py-2 bg-green-600 hover:bg-green-700 text-white border border-green-800 rounded text-xs font-bold disabled:bg-gray-400 disabled:border-gray-500"
+                  title="Remisión"
+                >
+                  📋 REMISION
+                </button>
+                <button
+                  onClick={() => procesarVenta('FACTURA')}
+                  disabled={procesando || carrito.length === 0 || !cliente}
+                  className="flex-1 px-2 py-2 bg-red-600 hover:bg-red-700 text-white border border-red-800 rounded text-xs font-bold disabled:bg-gray-400 disabled:border-gray-500"
+                  title="Facturar"
+                >
+                  💵 $FACTURAR
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Columna derecha: Totales */}
+          <div className="space-y-1">
+            {/* SUBTOTAL */}
+            <div className="bg-white border-2 border-gray-400 p-1 rounded flex justify-between items-center">
+              <span className="font-bold text-sm text-gray-800">SUBTOTAL :</span>
+              <span className="text-xl font-bold text-gray-900">
+                {subtotal.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+
+            {/* IMPUESTOS */}
+            <div className="bg-white border-2 border-gray-400 p-1 rounded flex justify-between items-center">
+              <span className="font-bold text-sm text-gray-800">IMPUESTOS :</span>
+              <span className="text-xl font-bold text-gray-900">
+                {iva.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+
+            {/* DESCUENTOS */}
+            <div className="bg-white border-2 border-gray-400 p-1 rounded flex justify-between items-center">
+              <span className="font-bold text-sm text-gray-800">DESCUENTOS :</span>
+              <span className="text-xl font-bold text-red-600">
+                {descuentoValor > 0 ? '-' : ''}
+                {descuentoValor.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+
+            {/* TOTAL A PAGAR */}
+            <div className="bg-gradient-to-r from-orange-400 to-orange-500 border-2 border-orange-600 p-2 rounded flex justify-between items-center">
+              <span className="font-bold text-base text-white">TOTAL A PAGAR :</span>
+              <span className="text-3xl font-bold text-white">
+                {totalPagar.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+
+            {/* EFECTIVO RECIBIDO */}
+            <div className="bg-black border-2 border-gray-600 p-2 rounded flex justify-between items-center">
+              <span className="font-bold text-sm text-green-400">EFECTIVO RECIBIDO :</span>
+              <span className="text-2xl font-bold text-green-400">
+                {efectivo.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+
+            {/* CAMBIO */}
+            <div className="bg-blue-600 border-2 border-blue-800 p-1 rounded flex justify-between items-center">
+              <span className="font-bold text-sm text-white">CAMBIO :</span>
+              <span className="text-2xl font-bold text-white">
+                {Math.max(0, cambio).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+
+            {/* DIGITE EFECTIVO RECIBIDO */}
+            <div className="border-2 border-gray-400 bg-white p-1 rounded">
+              <label className="block text-xs font-bold mb-1 text-gray-800">
+                DIGITE EFECTIVO RECIBIDO ⭕
+              </label>
               <input
                 type="number"
-                min="0"
-                max="100"
-                value={descuentoGeneral}
-                onChange={(e) => setDescuentoGeneral(parseFloat(e.target.value) || 0)}
-                className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg text-center text-2xl font-bold text-blue-600"
+                value={efectivoRecibido}
+                onChange={(e) => setEfectivoRecibido(e.target.value)}
+                className="w-full px-2 py-1 border-2 border-gray-400 rounded text-right font-bold text-xl bg-gray-100"
+                placeholder="50000"
               />
             </div>
-          </div>
-
-          {/* Botones de acción */}
-          <div className="flex flex-col justify-center gap-3">
-            <button
-              onClick={() => procesarVenta('COTIZACION')}
-              disabled={procesando || carrito.length === 0 || !cliente}
-              className="py-4 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg font-bold text-lg disabled:bg-gray-400"
-            >
-              📄 COTIZAR
-            </button>
-            <button
-              onClick={() => procesarVenta('REMISION')}
-              disabled={procesando || carrito.length === 0 || !cliente}
-              className="py-4 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-bold text-lg disabled:bg-gray-400"
-            >
-              📋 REMISIÓN
-            </button>
-            <button
-              onClick={() => procesarVenta('FACTURA')}
-              disabled={procesando || carrito.length === 0 || !cliente}
-              className="py-4 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold text-lg disabled:bg-gray-400"
-            >
-              💵 FACTURAR
-            </button>
-          </div>
-
-          {/* Totales */}
-          <div className="space-y-2">
-            <div className="bg-white p-3 rounded-lg flex justify-between items-center">
-              <span className="font-bold text-lg">SUBTOTAL:</span>
-              <span className="text-2xl font-bold">
-                ${subtotal.toLocaleString('es-CO', { minimumFractionDigits: 2 })}
-              </span>
-            </div>
-
-            <div className="bg-white p-3 rounded-lg flex justify-between items-center">
-              <span className="font-bold text-lg">IMPUESTOS:</span>
-              <span className="text-2xl font-bold">
-                ${iva.toLocaleString('es-CO', { minimumFractionDigits: 2 })}
-              </span>
-            </div>
-
-            <div className="bg-white p-3 rounded-lg flex justify-between items-center">
-              <span className="font-bold text-lg text-red-600">DESCUENTOS:</span>
-              <span className="text-2xl font-bold text-red-600">
-                -${descuentoValor.toLocaleString('es-CO', { minimumFractionDigits: 2 })}
-              </span>
-            </div>
-
-            <div className="bg-orange-400 p-4 rounded-lg flex justify-between items-center">
-              <span className="font-bold text-xl text-white">TOTAL A PAGAR:</span>
-              <span className="text-4xl font-bold text-white">
-                ${totalPagar.toLocaleString('es-CO', { minimumFractionDigits: 2 })}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-xs font-bold mb-1">MEDIO DE PAGO</label>
-                <select
-                  value={medioPago}
-                  onChange={(e: any) => setMedioPago(e.target.value)}
-                  className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg font-bold"
-                >
-                  <option value="EFECTIVO">EFECTIVO</option>
-                  <option value="TARJETA">TARJETA</option>
-                  <option value="TRANSFERENCIA">TRANSFERENCIA</option>
-                  <option value="CREDITO">CRÉDITO</option>
-                </select>
-              </div>
-
-              {medioPago === 'EFECTIVO' && (
-                <div>
-                  <label className="block text-xs font-bold mb-1">EFECTIVO RECIBIDO</label>
-                  <input
-                    type="number"
-                    value={efectivoRecibido}
-                    onChange={(e) => setEfectivoRecibido(e.target.value)}
-                    className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg text-right font-bold text-lg bg-black text-green-400"
-                  />
-                </div>
-              )}
-            </div>
-
-            {medioPago === 'EFECTIVO' && efectivo > 0 && (
-              <div className="bg-blue-600 p-3 rounded-lg flex justify-between items-center">
-                <span className="font-bold text-lg text-white">CAMBIO:</span>
-                <span className="text-3xl font-bold text-white">
-                  ${Math.max(0, cambio).toLocaleString('es-CO', { minimumFractionDigits: 2 })}
-                </span>
-              </div>
-            )}
           </div>
         </div>
       </div>
