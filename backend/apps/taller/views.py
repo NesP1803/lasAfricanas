@@ -306,6 +306,93 @@ class ServicioMotoViewSet(viewsets.ModelViewSet):
         serializer = VentaDetailSerializer(venta)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+    @action(detail=False, methods=['get'])
+    def historial_por_placa(self, request):
+        """
+        Retorna el historial completo de servicios para una placa.
+
+        GET /api/servicios/historial_por_placa/?placa=ABC123
+        """
+        placa = request.query_params.get('placa', '').upper().strip()
+        if not placa:
+            return Response(
+                {'error': 'Debe proporcionar el parámetro placa'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        servicios = self.get_queryset().filter(placa__iexact=placa).order_by('-fecha_ingreso')
+        serializer = ServicioMotoDetailSerializer(servicios, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['get'])
+    def estadisticas(self, request):
+        """
+        Retorna estadísticas generales del taller.
+
+        GET /api/servicios/estadisticas/
+        """
+        from datetime import datetime, timedelta
+
+        # Fecha de inicio (último mes)
+        fecha_inicio = timezone.now() - timedelta(days=30)
+
+        # Servicios totales
+        servicios_totales = self.get_queryset().count()
+
+        # Servicios por estado
+        servicios_por_estado = {}
+        for estado_code, estado_name in ServicioMoto.ESTADO:
+            count = self.get_queryset().filter(estado=estado_code).count()
+            servicios_por_estado[estado_code] = {
+                'nombre': estado_name,
+                'cantidad': count
+            }
+
+        # Servicios del último mes
+        servicios_mes = self.get_queryset().filter(
+            fecha_ingreso__gte=fecha_inicio
+        ).count()
+
+        # Facturación del último mes
+        facturacion_mes = self.get_queryset().filter(
+            fecha_ingreso__gte=fecha_inicio,
+            estado='ENTREGADO'
+        ).aggregate(total=Sum('total'))['total'] or 0
+
+        # Servicios pendientes (no entregados ni cancelados)
+        servicios_pendientes = self.get_queryset().exclude(
+            estado__in=['ENTREGADO', 'CANCELADO']
+        ).count()
+
+        # Tiempo promedio de entrega (en días)
+        from django.db.models import Avg, ExpressionWrapper, F, DurationField
+
+        servicios_entregados = self.get_queryset().filter(
+            estado='ENTREGADO',
+            fecha_entrega_real__isnull=False
+        )
+
+        if servicios_entregados.exists():
+            tiempo_promedio = servicios_entregados.annotate(
+                duracion=ExpressionWrapper(
+                    F('fecha_entrega_real') - F('fecha_ingreso'),
+                    output_field=DurationField()
+                )
+            ).aggregate(promedio=Avg('duracion'))['promedio']
+
+            tiempo_promedio_dias = tiempo_promedio.days if tiempo_promedio else 0
+        else:
+            tiempo_promedio_dias = 0
+
+        return Response({
+            'servicios_totales': servicios_totales,
+            'servicios_por_estado': servicios_por_estado,
+            'servicios_ultimo_mes': servicios_mes,
+            'facturacion_ultimo_mes': facturacion_mes,
+            'servicios_pendientes': servicios_pendientes,
+            'tiempo_promedio_entrega_dias': tiempo_promedio_dias
+        })
+
 
 class RepuestoAsignadoViewSet(viewsets.ModelViewSet):
     """ViewSet para gestionar repuestos asignados a mecánicos"""

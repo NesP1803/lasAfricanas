@@ -234,7 +234,27 @@ class ServicioMoto(BaseModel):
     
     def __str__(self):
         return f"{self.numero_servicio} - {self.placa}"
-    
+
+    def save(self, *args, **kwargs):
+        """Genera número de servicio automáticamente si no existe"""
+        if not self.numero_servicio:
+            from datetime import datetime
+            # Generar número: SRV-YYYYMMDD-NNNN
+            fecha = datetime.now().strftime('%Y%m%d')
+            ultimo_servicio = ServicioMoto.objects.filter(
+                numero_servicio__startswith=f'SRV-{fecha}'
+            ).order_by('-numero_servicio').first()
+
+            if ultimo_servicio:
+                ultimo_num = int(ultimo_servicio.numero_servicio.split('-')[-1])
+                nuevo_num = ultimo_num + 1
+            else:
+                nuevo_num = 1
+
+            self.numero_servicio = f'SRV-{fecha}-{nuevo_num:04d}'
+
+        super().save(*args, **kwargs)
+
     def calcular_total(self):
         """Calcula el total del servicio"""
         # Sumar todos los repuestos consumidos

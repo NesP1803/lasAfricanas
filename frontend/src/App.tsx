@@ -4,6 +4,10 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Inventario from './pages/Inventario';
 import PuntoVenta from './pages/PuntoVenta';
+import Taller from './pages/Taller';
+import TallerNuevoServicio from './pages/TallerNuevoServicio';
+import TallerDetalle from './pages/TallerDetalle';
+import TallerHistorial from './pages/TallerHistorial';
 import Layout from './components/Layout';
 
 function App() {
@@ -16,7 +20,10 @@ function App() {
             <Route index element={<Dashboard />} />
             <Route path="inventario" element={<Inventario />} />
             <Route path="ventas" element={<PuntoVenta />} />
-            {/* Aquí agregaremos más rutas */}
+            <Route path="taller" element={<Taller />} />
+            <Route path="taller/nuevo" element={<TallerNuevoServicio />} />
+            <Route path="taller/:id" element={<TallerDetalle />} />
+            <Route path="taller/historial/:placa" element={<TallerHistorial />} />
           </Route>
         </Routes>
       </BrowserRouter>
