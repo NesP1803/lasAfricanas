@@ -1,5 +1,7 @@
 import type { Cliente } from '../types';
 
+export type { Cliente };
+
 const API_URL = '/api';
 
 export interface DetalleVenta {
