@@ -24,7 +24,7 @@ import {
   formatDate,
   puedeTransicionar
 } from '../api/taller';
-import { ServicioMotoDetalle, EstadoServicio, ConsumoRepuesto, Producto } from '../types';
+import type { ServicioMotoDetalle, EstadoServicio, ConsumoRepuesto, Producto } from '../types';
 import { productosApi } from '../api/productos';
 import toast from 'react-hot-toast';
 

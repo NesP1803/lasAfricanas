@@ -4,7 +4,7 @@ import { ArrowLeft, Save, Search } from 'lucide-react';
 import { servicioAPI } from '../api/taller';
 import { mecanicoAPI } from '../api/taller';
 import { ventasApi } from '../api/ventas';
-import { Mecanico, Cliente, ServicioMotoCreate } from '../types';
+import type { Mecanico, Cliente, ServicioMotoCreate } from '../types';
 import { useAuthStore } from '../store/authStore';
 import toast from 'react-hot-toast';
 

@@ -13,7 +13,7 @@ import {
   Users
 } from 'lucide-react';
 import { servicioAPI, estadoColors, estadoNames, formatCurrency, formatDateShort } from '../api/taller';
-import { ServicioMotoList, EstadoServicio, EstadisticasTaller } from '../types';
+import type { ServicioMotoList, EstadoServicio, EstadisticasTaller } from '../types';
 import toast from 'react-hot-toast';
 
 export default function Taller() {

@@ -7,7 +7,7 @@ import {
   formatCurrency,
   formatDate
 } from '../api/taller';
-import { ServicioMotoDetalle } from '../types';
+import type { ServicioMotoDetalle } from '../types';
 import toast from 'react-hot-toast';
 
 export default function TallerHistorial() {
