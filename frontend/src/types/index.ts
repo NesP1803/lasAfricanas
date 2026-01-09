@@ -238,6 +238,11 @@ export interface ServicioMotoCreate {
   costo_mano_obra?: string;
 }
 
+export interface ServicioMotoUpdate extends Partial<ServicioMotoCreate> {
+  trabajo_realizado?: string;
+  recomendaciones?: string;
+}
+
 export interface EstadisticasTaller {
   servicios_totales: number;
   servicios_por_estado: {
