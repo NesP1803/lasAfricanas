@@ -24,6 +24,16 @@ from apps.taller.views import (
     ConsumoRepuestoViewSet
 )
 
+# Importar ViewSets de Configuración
+from apps.core.views import (
+    ConfiguracionEmpresaViewSet,
+    ImpuestoViewSet,
+    AuditoriaViewSet,
+    ConfiguracionFacturacionViewSet,
+    UsuarioViewSet,
+    BackupViewSet
+)
+
 # Crear router único
 router = DefaultRouter()
 
@@ -42,3 +52,11 @@ router.register(r'mecanicos', MecanicoViewSet, basename='mecanico')
 router.register(r'servicios', ServicioMotoViewSet, basename='servicio')
 router.register(r'repuestos-asignados', RepuestoAsignadoViewSet, basename='repuesto-asignado')
 router.register(r'consumos', ConsumoRepuestoViewSet, basename='consumo')
+
+# Registrar ViewSets de Configuración
+router.register(r'config/empresa', ConfiguracionEmpresaViewSet, basename='config-empresa')
+router.register(r'config/impuestos', ImpuestoViewSet, basename='config-impuesto')
+router.register(r'config/auditoria', AuditoriaViewSet, basename='config-auditoria')
+router.register(r'config/facturacion', ConfiguracionFacturacionViewSet, basename='config-facturacion')
+router.register(r'config/usuarios', UsuarioViewSet, basename='config-usuario')
+router.register(r'config/backup', BackupViewSet, basename='config-backup')
