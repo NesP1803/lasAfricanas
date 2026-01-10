@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
+import { X, HelpCircle, Info } from 'lucide-react';
 import { inventarioApi } from '../api/inventario';
 import type { Producto, Categoria, Proveedor} from "../api/inventario";
 
@@ -123,120 +123,221 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
     }
   };
 
+  const formattedPrecio = new Intl.NumberFormat('es-CO').format(
+    Number(formData.precio_venta || 0)
+  );
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white shadow-xl max-w-3xl w-full rounded-md border border-gray-400 max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <h2 className="text-2xl font-bold text-gray-900">
-            {producto ? 'Editar Producto' : 'Nuevo Producto'}
+        <div className="flex items-center justify-between px-4 py-2 bg-blue-600 text-white">
+          <h2 className="text-sm font-bold uppercase">
+            {producto ? 'Actualizar mercancía' : 'Registrar nuevo artículo'}
           </h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
+            className="text-white hover:text-gray-100 transition-colors"
           >
-            <X size={24} />
+            <X size={18} />
           </button>
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {/* Información Básica */}
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Información Básica</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Código *
-                </label>
-                <input
-                  type="text"
-                  name="codigo"
-                  value={formData.codigo}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  required
-                />
-                {errors.codigo && (
-                  <p className="text-red-500 text-sm mt-1">{errors.codigo}</p>
-                )}
-              </div>
+        <form onSubmit={handleSubmit} className="p-4 space-y-4 text-sm">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="flex items-center gap-2 font-semibold text-gray-800 mb-1">
+                Código *
+                <HelpCircle size={14} className="text-gray-500" />
+              </label>
+              <input
+                type="text"
+                name="codigo"
+                value={formData.codigo}
+                onChange={handleChange}
+                className="w-full px-2 py-1 border border-gray-400 rounded bg-white"
+                required
+              />
+              {errors.codigo && (
+                <p className="text-red-500 text-xs mt-1">{errors.codigo}</p>
+              )}
+            </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Nombre *
-                </label>
-                <input
-                  type="text"
-                  name="nombre"
-                  value={formData.nombre}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  required
-                />
-              </div>
+            <div>
+              <label className="flex items-center gap-2 font-semibold text-gray-800 mb-1">
+                Nombre *
+                <HelpCircle size={14} className="text-gray-500" />
+              </label>
+              <input
+                type="text"
+                name="nombre"
+                value={formData.nombre}
+                onChange={handleChange}
+                className="w-full px-2 py-1 border border-gray-400 rounded bg-white"
+                required
+              />
+            </div>
 
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Descripción
-                </label>
-                <textarea
-                  name="descripcion"
-                  value={formData.descripcion}
-                  onChange={handleChange}
-                  rows={3}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
+            <div>
+              <label className="flex items-center gap-2 font-semibold text-gray-800 mb-1">
+                Categoría *
+                <HelpCircle size={14} className="text-gray-500" />
+              </label>
+              <select
+                name="categoria"
+                value={formData.categoria}
+                onChange={handleChange}
+                className="w-full px-2 py-1 border border-gray-400 rounded bg-white"
+                required
+              >
+                <option value="">Seleccione una categoría</option>
+                {categorias.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Categoría *
-                </label>
-                <select
-                  name="categoria"
-                  value={formData.categoria}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  required
-                >
-                  <option value="">Seleccione una categoría</option>
-                  {categorias.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.nombre}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div>
+              <label className="flex items-center gap-2 font-semibold text-gray-800 mb-1">
+                Proveedor *
+                <HelpCircle size={14} className="text-gray-500" />
+              </label>
+              <select
+                name="proveedor"
+                value={formData.proveedor}
+                onChange={handleChange}
+                className="w-full px-2 py-1 border border-gray-400 rounded bg-white"
+                required
+              >
+                <option value="">Seleccione un proveedor</option>
+                {proveedores.map((prov) => (
+                  <option key={prov.id} value={prov.id}>
+                    {prov.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Proveedor *
-                </label>
-                <select
-                  name="proveedor"
-                  value={formData.proveedor}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  required
-                >
-                  <option value="">Seleccione un proveedor</option>
-                  {proveedores.map((prov) => (
-                    <option key={prov.id} value={prov.id}>
-                      {prov.nombre}
-                    </option>
-                  ))}
-                </select>
+            <div>
+              <label className="block font-semibold text-gray-800 mb-1">
+                U/M
+              </label>
+              <select
+                name="unidad_medida"
+                value={formData.unidad_medida}
+                onChange={handleChange}
+                className="w-full px-2 py-1 border border-gray-400 rounded bg-white"
+              >
+                <option value="UND">Unidad</option>
+                <option value="PAR">Par</option>
+                <option value="KG">Kilogramo</option>
+                <option value="LT">Litro</option>
+                <option value="MT">Metro</option>
+              </select>
+              <p className="text-[11px] text-red-600 mt-1">
+                Si el artículo se vende suelto seleccione unidad de medida (UM)
+              </p>
+            </div>
+
+            <div>
+              <label className="flex items-center gap-2 font-semibold text-gray-800 mb-1">
+                IVA (%)
+                <HelpCircle size={14} className="text-gray-500" />
+              </label>
+              <input
+                type="number"
+                name="iva_porcentaje"
+                value={formData.iva_porcentaje}
+                onChange={handleChange}
+                step="0.01"
+                min="0"
+                max="100"
+                className="w-full px-2 py-1 border border-gray-400 rounded bg-white"
+              />
+            </div>
+
+            <div>
+              <label className="flex items-center gap-2 font-semibold text-gray-800 mb-1">
+                Cantidad *
+                <HelpCircle size={14} className="text-gray-500" />
+              </label>
+              <input
+                type="number"
+                name="stock"
+                value={formData.stock}
+                onChange={handleChange}
+                min="0"
+                className="w-full px-2 py-1 border border-gray-400 rounded bg-white"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="flex items-center gap-2 font-semibold text-gray-800 mb-1">
+                Aviso *
+                <HelpCircle size={14} className="text-gray-500" />
+              </label>
+              <input
+                type="number"
+                name="stock_minimo"
+                value={formData.stock_minimo}
+                onChange={handleChange}
+                min="0"
+                className="w-full px-2 py-1 border border-gray-400 rounded bg-white"
+                required
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="flex items-center gap-2 font-semibold text-gray-800 mb-1">
+                Estante
+                <HelpCircle size={14} className="text-gray-500" />
+              </label>
+              <input
+                type="text"
+                name="descripcion"
+                value={formData.descripcion}
+                onChange={handleChange}
+                className="w-full px-2 py-1 border border-gray-400 rounded bg-white"
+                placeholder="Ubicación o estantería"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="flex items-center gap-2 font-semibold text-gray-800 mb-1">
+                Precio *
+                <HelpCircle size={14} className="text-gray-500" />
+              </label>
+              <input
+                type="number"
+                name="precio_venta"
+                value={formData.precio_venta}
+                onChange={handleChange}
+                step="0.01"
+                min="0"
+                className="w-full px-2 py-1 border border-gray-400 rounded bg-white"
+                required
+              />
+            </div>
+            <div className="flex items-end">
+              <div className="w-full bg-gray-100 border border-gray-300 rounded px-3 py-2 text-lg font-bold text-gray-900 text-center">
+                {formattedPrecio}
               </div>
             </div>
           </div>
 
-          {/* Precios */}
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Precios</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <details className="border border-gray-200 rounded p-3 bg-gray-50">
+            <summary className="cursor-pointer font-semibold text-gray-700">
+              Opciones avanzadas
+            </summary>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block font-semibold text-gray-800 mb-1">
                   Precio Costo *
                 </label>
                 <input
@@ -246,29 +347,13 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
                   onChange={handleChange}
                   step="0.01"
                   min="0"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-2 py-1 border border-gray-400 rounded bg-white"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Precio Venta *
-                </label>
-                <input
-                  type="number"
-                  name="precio_venta"
-                  value={formData.precio_venta}
-                  onChange={handleChange}
-                  step="0.01"
-                  min="0"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block font-semibold text-gray-800 mb-1">
                   Precio Venta Mínimo *
                 </label>
                 <input
@@ -278,140 +363,72 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
                   onChange={handleChange}
                   step="0.01"
                   min="0"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-2 py-1 border border-gray-400 rounded bg-white"
                   required
                 />
               </div>
             </div>
+          </details>
+
+          <div className="flex flex-wrap items-center gap-4 text-xs">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                name="aplica_descuento"
+                checked={formData.aplica_descuento}
+                onChange={handleChange}
+                className="w-4 h-4 text-blue-600 rounded"
+              />
+              Aplica descuento
+            </label>
+
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                name="es_servicio"
+                checked={formData.es_servicio}
+                onChange={handleChange}
+                className="w-4 h-4 text-blue-600 rounded"
+              />
+              Es servicio
+            </label>
+
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                name="is_active"
+                checked={formData.is_active}
+                onChange={handleChange}
+                className="w-4 h-4 text-blue-600 rounded"
+              />
+              Activo
+            </label>
           </div>
 
-          {/* Inventario */}
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Inventario</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Stock Actual *
-                </label>
-                <input
-                  type="number"
-                  name="stock"
-                  value={formData.stock}
-                  onChange={handleChange}
-                  min="0"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Stock Mínimo *
-                </label>
-                <input
-                  type="number"
-                  name="stock_minimo"
-                  value={formData.stock_minimo}
-                  onChange={handleChange}
-                  min="0"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Unidad de Medida
-                </label>
-                <select
-                  name="unidad_medida"
-                  value={formData.unidad_medida}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="UND">Unidad</option>
-                  <option value="PAR">Par</option>
-                  <option value="KG">Kilogramo</option>
-                  <option value="LT">Litro</option>
-                  <option value="MT">Metro</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          {/* Configuración */}
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Configuración</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  IVA (%)
-                </label>
-                <input
-                  type="number"
-                  name="iva_porcentaje"
-                  value={formData.iva_porcentaje}
-                  onChange={handleChange}
-                  step="0.01"
-                  min="0"
-                  max="100"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-
-              <div className="flex items-center gap-6 pt-8">
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    name="aplica_descuento"
-                    checked={formData.aplica_descuento}
-                    onChange={handleChange}
-                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                  />
-                  <span className="text-sm font-medium text-gray-700">Aplica Descuento</span>
-                </label>
-
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    name="es_servicio"
-                    checked={formData.es_servicio}
-                    onChange={handleChange}
-                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                  />
-                  <span className="text-sm font-medium text-gray-700">Es Servicio</span>
-                </label>
-
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    name="is_active"
-                    checked={formData.is_active}
-                    onChange={handleChange}
-                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                  />
-                  <span className="text-sm font-medium text-gray-700">Activo</span>
-                </label>
-              </div>
-            </div>
-          </div>
-
-          {/* Botones */}
-          <div className="flex items-center justify-end gap-4 pt-6 border-t border-gray-200">
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-gray-200">
             <button
               type="button"
-              onClick={onClose}
-              className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+              className="px-3 py-1 border border-gray-400 rounded text-gray-700 hover:bg-gray-100 transition-colors text-xs font-semibold flex items-center gap-2"
             >
-              Cancelar
+              <Info size={14} />
+              Ayuda
             </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? 'Guardando...' : producto ? 'Actualizar' : 'Crear Producto'}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="submit"
+                disabled={loading}
+                className="px-4 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-xs font-semibold"
+              >
+                {loading ? 'Guardando...' : 'Guardar'}
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-1 border border-gray-400 rounded text-gray-700 hover:bg-gray-100 transition-colors text-xs font-semibold"
+              >
+                Cerrar
+              </button>
+            </div>
           </div>
         </form>
       </div>
