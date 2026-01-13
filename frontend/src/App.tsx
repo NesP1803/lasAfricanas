@@ -10,6 +10,7 @@ import TallerDetalle from './pages/TallerDetalle';
 import TallerHistorial from './pages/TallerHistorial';
 import Layout from './components/Layout';
 import Configuracion from './pages/Configuracion';
+import Listados from './pages/Listados';
 
 function App() {
   return (
@@ -26,6 +27,7 @@ function App() {
             <Route path="taller/:id" element={<TallerDetalle />} />
             <Route path="taller/historial/:placa" element={<TallerHistorial />} />
             <Route path="configuracion" element={<Configuracion />} />
+            <Route path="listados" element={<Listados />} />
           </Route>
         </Routes>
       </BrowserRouter>

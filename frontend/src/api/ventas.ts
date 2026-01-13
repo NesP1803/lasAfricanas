@@ -1,4 +1,4 @@
-import type { Cliente } from '../types';
+import type { Cliente, PaginatedResponse } from '../types';
 
 export type { Cliente };
 
@@ -73,6 +73,41 @@ export const ventasApi = {
     return response.json();
   },
 
+  async getClientes(params?: { search?: string; page?: number; ordering?: string }): Promise<PaginatedResponse<Cliente> | Cliente[]> {
+    const token = localStorage.getItem('token');
+    const queryParams = new URLSearchParams();
+    if (params?.search) queryParams.append('search', params.search);
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.ordering) queryParams.append('ordering', params.ordering);
+    const query = queryParams.toString();
+    const response = await fetch(`${API_URL}/clientes/${query ? `?${query}` : ''}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error('Error al obtener clientes');
+    }
+    return response.json();
+  },
+
+  async getCliente(id: number): Promise<Cliente> {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/clientes/${id}/`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error('Error al obtener cliente');
+    }
+    return response.json();
+  },
+
   async crearCliente(data: Partial<Cliente>): Promise<Cliente> {
     const token = localStorage.getItem('token');
     const response = await fetch(`${API_URL}/clientes/`, {
@@ -89,6 +124,38 @@ export const ventasApi = {
       throw new Error(JSON.stringify(error));
     }
     return response.json();
+  },
+
+  async actualizarCliente(id: number, data: Partial<Cliente>): Promise<Cliente> {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/clientes/${id}/`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(JSON.stringify(error));
+    }
+    return response.json();
+  },
+
+  async eliminarCliente(id: number): Promise<void> {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/clientes/${id}/`, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error('Error al eliminar cliente');
+    }
   },
 
   // Ventas

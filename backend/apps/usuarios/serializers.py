@@ -23,6 +23,8 @@ class CustomTokenObtainPairView(TokenObtainPairView):
 
 
 class UsuarioSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, required=False, allow_blank=True)
+
     class Meta:
         model = Usuario
         fields = [
@@ -35,7 +37,27 @@ class UsuarioSerializer(serializers.ModelSerializer):
             'telefono',
             'sede',
             'is_active',
+            'password',
             'last_login',
             'date_joined',
         ]
         read_only_fields = ['id', 'last_login', 'date_joined']
+
+    def create(self, validated_data):
+        password = validated_data.pop('password', None)
+        usuario = Usuario(**validated_data)
+        if password:
+            usuario.set_password(password)
+        else:
+            usuario.set_unusable_password()
+        usuario.save()
+        return usuario
+
+    def update(self, instance, validated_data):
+        password = validated_data.pop('password', None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        if password:
+            instance.set_password(password)
+        instance.save()
+        return instance

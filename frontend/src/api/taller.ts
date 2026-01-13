@@ -20,8 +20,8 @@ const API_URL = '/api';
 // ============================================
 export const mecanicoAPI = {
   // Obtener todos los mecánicos
-  getAll: async (): Promise<PaginatedResponse<Mecanico>> => {
-    const response = await apiClient.get(`${API_URL}/mecanicos/`);
+  getAll: async (params?: { search?: string; page?: number; ordering?: string }): Promise<PaginatedResponse<Mecanico>> => {
+    const response = await apiClient.get(`${API_URL}/mecanicos/`, { params });
     return response.data;
   },
 

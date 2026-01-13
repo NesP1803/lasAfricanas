@@ -62,7 +62,7 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
   const loadCategorias = async () => {
     try {
       const data = await inventarioApi.getCategorias();
-      setCategorias(data);
+      setCategorias(Array.isArray(data) ? data : data.results);
     } catch (error) {
       console.error('Error al cargar categorías:', error);
     }
@@ -71,7 +71,7 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
   const loadProveedores = async () => {
     try {
       const data = await inventarioApi.getProveedores();
-      setProveedores(data);
+      setProveedores(Array.isArray(data) ? data : data.results);
     } catch (error) {
       console.error('Error al cargar proveedores:', error);
     }

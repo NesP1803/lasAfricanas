@@ -35,7 +35,7 @@ export default function Inventario() {
   const loadCategorias = async () => {
     try {
       const data = await inventarioApi.getCategorias();
-      setCategorias(data);
+      setCategorias(Array.isArray(data) ? data : data.results);
     } catch (error) {
       console.error("Error al cargar categorías:", error);
     }
