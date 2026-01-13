@@ -9,6 +9,7 @@ import TallerNuevoServicio from './pages/TallerNuevoServicio';
 import TallerDetalle from './pages/TallerDetalle';
 import TallerHistorial from './pages/TallerHistorial';
 import Layout from './components/Layout';
+import Configuracion from './pages/Configuracion';
 
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
             <Route path="taller/nuevo" element={<TallerNuevoServicio />} />
             <Route path="taller/:id" element={<TallerDetalle />} />
             <Route path="taller/historial/:placa" element={<TallerHistorial />} />
+            <Route path="configuracion" element={<Configuracion />} />
           </Route>
         </Routes>
       </BrowserRouter>
