@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   CheckCircle2,
   Plus,
@@ -9,102 +9,108 @@ import {
   UserCog,
   Users,
   X,
-} from 'lucide-react';
-import { configuracionAPI } from '../api/configuracion';
+} from "lucide-react";
+import { configuracionAPI } from "../api/configuracion";
 import type {
   AuditoriaRegistro,
   ConfiguracionEmpresa,
   ConfiguracionFacturacion,
   Impuesto,
   UsuarioAdmin,
-} from '../types';
-import { useAuth } from '../contexts/AuthContext';
+} from "../types";
+import { useAuth } from "../contexts/AuthContext";
 
 type ConfigTab =
-  | 'facturacion'
-  | 'impuestos'
-  | 'empresa'
-  | 'auditoria'
-  | 'usuarios'
-  | 'clave';
+  | "facturacion"
+  | "empresa"
+  | "impuestos"
+  | "auditoria"
+  | "usuarios"
+  | "clave";
 
 const defaultEmpresa: ConfiguracionEmpresa = {
   id: 1,
-  tipo_identificacion: 'NIT',
-  identificacion: '91068915',
-  dv: '8',
-  tipo_persona: 'Persona natural',
-  razon_social: 'MOTOREPUESTOS LAS AFRICANAS',
-  regimen: 'RÉGIMEN COMÚN',
-  direccion: 'CALLE 6 # 12A-45 GAIRA',
-  ciudad: 'MAGDALENA',
-  municipio: 'SANTA MARTA',
-  telefono: '54350548',
-  sitio_web: '',
-  correo: '',
+  tipo_identificacion: "NIT",
+  identificacion: "91068915",
+  dv: "8",
+  tipo_persona: "Persona natural",
+  razon_social: "MOTOREPUESTOS LAS AFRICANAS",
+  regimen: "RÉGIMEN COMÚN",
+  direccion: "CALLE 6 # 12A-45 GAIRA",
+  ciudad: "MAGDALENA",
+  municipio: "SANTA MARTA",
+  telefono: "54350548",
+  sitio_web: "",
+  correo: "",
   logo: null,
 };
 
 const defaultFacturacion: ConfiguracionFacturacion = {
   id: 1,
-  prefijo_factura: 'FAC',
+  prefijo_factura: "FAC",
   numero_factura: 100702,
-  prefijo_remision: '',
+  prefijo_remision: "",
   numero_remision: 154239,
-  resolucion: 'Resolución Facturación POS N°. 18764006081459 de 2020/10/22\nRango del 00001 al 50000.',
+  resolucion:
+    "Resolución Facturación POS N°. 18764006081459 de 2020/10/22\nRango del 00001 al 50000.",
   notas_factura:
-    'Para trámite de cambios y garantías, indispensable presentar la factura de venta. Tiene hasta 5 días para trámites. Los productos deben estar en perfecto estado y empaque original.',
+    "Para trámite de cambios y garantías, indispensable presentar la factura de venta. Tiene hasta 5 días para trámites. Los productos deben estar en perfecto estado y empaque original.",
 };
 
 const defaultImpuestos: Impuesto[] = [
-  { id: -1, nombre: 'IVA', valor: '0', porcentaje: '0', es_exento: true },
-  { id: -2, nombre: 'IVA', valor: '19', porcentaje: '19', es_exento: false },
-  { id: -3, nombre: 'IVA', valor: 'E', porcentaje: null, es_exento: true },
+  { id: -1, nombre: "IVA", valor: "0", porcentaje: "0", es_exento: true },
+  { id: -2, nombre: "IVA", valor: "19", porcentaje: "19", es_exento: false },
+  { id: -3, nombre: "IVA", valor: "E", porcentaje: null, es_exento: true },
 ];
 
 export default function Configuracion() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialTab = (searchParams.get('tab') as ConfigTab) || 'facturacion';
+  const initialTab = (searchParams.get("tab") as ConfigTab) || "facturacion";
 
   const [activeTab, setActiveTab] = useState<ConfigTab>(initialTab);
   const [empresa, setEmpresa] = useState<ConfiguracionEmpresa>(defaultEmpresa);
-  const [facturacion, setFacturacion] = useState<ConfiguracionFacturacion>(defaultFacturacion);
+  const [facturacion, setFacturacion] =
+    useState<ConfiguracionFacturacion>(defaultFacturacion);
   const [impuestos, setImpuestos] = useState<Impuesto[]>(defaultImpuestos);
   const [auditoria, setAuditoria] = useState<AuditoriaRegistro[]>([]);
   const [usuarios, setUsuarios] = useState<UsuarioAdmin[]>([]);
   const [nuevoImpuesto, setNuevoImpuesto] = useState<Partial<Impuesto>>({
-    nombre: 'IVA',
-    valor: '',
-    porcentaje: '',
+    nombre: "IVA",
+    valor: "",
+    porcentaje: "",
   });
 
-  const [mensajeEmpresa, setMensajeEmpresa] = useState('');
-  const [mensajeClave, setMensajeClave] = useState('');
-  const [mensajeFacturacion, setMensajeFacturacion] = useState('');
-  const [mensajeImpuesto, setMensajeImpuesto] = useState('');
-  const [mensajeUsuario, setMensajeUsuario] = useState('');
+  const [mensajeEmpresa, setMensajeEmpresa] = useState("");
+  const [mensajeClave, setMensajeClave] = useState("");
+  const [mensajeFacturacion, setMensajeFacturacion] = useState("");
+  const [mensajeImpuesto, setMensajeImpuesto] = useState("");
+  const [mensajeUsuario, setMensajeUsuario] = useState("");
 
-  const [claveActual, setClaveActual] = useState('');
-  const [nuevaClave, setNuevaClave] = useState('');
-  const [confirmarClave, setConfirmarClave] = useState('');
+  const [claveActual, setClaveActual] = useState("");
+  const [nuevaClave, setNuevaClave] = useState("");
+  const [confirmarClave, setConfirmarClave] = useState("");
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'ADMIN';
+  const isAdmin = user?.role === "admin" || user?.role === "ADMIN";
 
   const tabs = useMemo(
     () => [
-      { id: 'facturacion', label: 'Facturación', icon: <ShieldCheck size={18} /> },
-      { id: 'impuestos', label: 'Impuestos', icon: <Plus size={18} /> },
-      { id: 'empresa', label: 'Empresa', icon: <UserCog size={18} /> },
-      { id: 'auditoria', label: 'Auditoría', icon: <Users size={18} /> },
-      { id: 'usuarios', label: 'Usuarios', icon: <Users size={18} /> },
-      { id: 'clave', label: 'Cambiar clave', icon: <UserCog size={18} /> },
+      {
+        id: "facturacion",
+        label: "Facturación",
+        icon: <ShieldCheck size={18} />,
+      },
+      { id: "empresa", label: "Empresa", icon: <UserCog size={18} /> },
+      { id: "usuarios", label: "Usuarios", icon: <Users size={18} /> },
+      { id: "impuestos", label: "Impuestos", icon: <Plus size={18} /> },
+      { id: "auditoria", label: "Auditoría", icon: <Users size={18} /> },
+      { id: "clave", label: "Cambiar clave", icon: <UserCog size={18} /> },
     ],
     []
   );
 
   useEffect(() => {
-    const tabParam = searchParams.get('tab') as ConfigTab | null;
+    const tabParam = searchParams.get("tab") as ConfigTab | null;
     if (tabParam && tabParam !== activeTab) {
       setActiveTab(tabParam);
     }
@@ -118,7 +124,7 @@ export default function Configuracion() {
           setEmpresa(data);
         }
       } catch (error) {
-        console.error('Error cargando empresa:', error);
+        console.error("Error cargando empresa:", error);
       }
 
       try {
@@ -127,7 +133,7 @@ export default function Configuracion() {
           setFacturacion(data);
         }
       } catch (error) {
-        console.error('Error cargando facturación:', error);
+        console.error("Error cargando facturación:", error);
       }
 
       try {
@@ -136,7 +142,7 @@ export default function Configuracion() {
           setImpuestos(data);
         }
       } catch (error) {
-        console.error('Error cargando impuestos:', error);
+        console.error("Error cargando impuestos:", error);
       }
 
       try {
@@ -145,7 +151,7 @@ export default function Configuracion() {
           setAuditoria(data);
         }
       } catch (error) {
-        console.error('Error cargando auditoría:', error);
+        console.error("Error cargando auditoría:", error);
       }
     };
 
@@ -162,7 +168,7 @@ export default function Configuracion() {
         const data = await configuracionAPI.obtenerUsuarios();
         setUsuarios(data);
       } catch (error) {
-        console.error('Error cargando usuarios:', error);
+        console.error("Error cargando usuarios:", error);
       }
     };
 
@@ -176,29 +182,37 @@ export default function Configuracion() {
 
   const handleGuardarEmpresa = async () => {
     try {
-      const data = await configuracionAPI.actualizarEmpresa(empresa.id, empresa);
+      const data = await configuracionAPI.actualizarEmpresa(
+        empresa.id,
+        empresa
+      );
       setEmpresa(data);
-      setMensajeEmpresa('Los datos han sido actualizados correctamente.');
+      setMensajeEmpresa("Los datos han sido actualizados correctamente.");
     } catch (error) {
-      console.error('Error actualizando empresa:', error);
-      setMensajeEmpresa('No se pudo actualizar la información. Intenta nuevamente.');
+      console.error("Error actualizando empresa:", error);
+      setMensajeEmpresa(
+        "No se pudo actualizar la información. Intenta nuevamente."
+      );
     }
   };
 
   const handleGuardarFacturacion = async () => {
     try {
-      const data = await configuracionAPI.actualizarFacturacion(facturacion.id, facturacion);
+      const data = await configuracionAPI.actualizarFacturacion(
+        facturacion.id,
+        facturacion
+      );
       setFacturacion(data);
-      setMensajeFacturacion('Configuración de facturación actualizada.');
+      setMensajeFacturacion("Configuración de facturación actualizada.");
     } catch (error) {
-      console.error('Error actualizando facturación:', error);
-      setMensajeFacturacion('No se pudo actualizar la facturación.');
+      console.error("Error actualizando facturación:", error);
+      setMensajeFacturacion("No se pudo actualizar la facturación.");
     }
   };
 
   const handleAgregarImpuesto = async () => {
     if (!nuevoImpuesto.nombre || !nuevoImpuesto.valor) {
-      setMensajeImpuesto('Completa el nombre y el valor del impuesto.');
+      setMensajeImpuesto("Completa el nombre y el valor del impuesto.");
       return;
     }
 
@@ -207,14 +221,14 @@ export default function Configuracion() {
         nombre: nuevoImpuesto.nombre,
         valor: nuevoImpuesto.valor,
         porcentaje: nuevoImpuesto.porcentaje || null,
-        es_exento: nuevoImpuesto.valor === 'E',
+        es_exento: nuevoImpuesto.valor === "E",
       });
       setImpuestos((prev) => [...prev, nuevo]);
-      setNuevoImpuesto({ nombre: 'IVA', valor: '', porcentaje: '' });
-      setMensajeImpuesto('Impuesto agregado correctamente.');
+      setNuevoImpuesto({ nombre: "IVA", valor: "", porcentaje: "" });
+      setMensajeImpuesto("Impuesto agregado correctamente.");
     } catch (error) {
-      console.error('Error agregando impuesto:', error);
-      setMensajeImpuesto('No se pudo agregar el impuesto.');
+      console.error("Error agregando impuesto:", error);
+      setMensajeImpuesto("No se pudo agregar el impuesto.");
     }
   };
 
@@ -225,8 +239,8 @@ export default function Configuracion() {
       }
       setImpuestos((prev) => prev.filter((item) => item.id !== impuesto.id));
     } catch (error) {
-      console.error('Error eliminando impuesto:', error);
-      setMensajeImpuesto('No se pudo quitar el impuesto.');
+      console.error("Error eliminando impuesto:", error);
+      setMensajeImpuesto("No se pudo quitar el impuesto.");
     }
   };
 
@@ -236,43 +250,48 @@ export default function Configuracion() {
         tipo_usuario: usuario.tipo_usuario,
         is_active: usuario.is_active,
       });
-      setUsuarios((prev) => prev.map((item) => (item.id === data.id ? data : item)));
-      setMensajeUsuario('Cambios guardados para el usuario.');
+      setUsuarios((prev) =>
+        prev.map((item) => (item.id === data.id ? data : item))
+      );
+      setMensajeUsuario("Cambios guardados para el usuario.");
     } catch (error) {
-      console.error('Error actualizando usuario:', error);
-      setMensajeUsuario('No se pudo actualizar el usuario.');
+      console.error("Error actualizando usuario:", error);
+      setMensajeUsuario("No se pudo actualizar el usuario.");
     }
   };
 
   const handleCambiarClave = async () => {
     if (!user?.id) {
-      setMensajeClave('No se pudo identificar el usuario actual.');
+      setMensajeClave("No se pudo identificar el usuario actual.");
       return;
     }
 
     if (!nuevaClave || nuevaClave !== confirmarClave) {
-      setMensajeClave('La nueva clave y la confirmación no coinciden.');
+      setMensajeClave("La nueva clave y la confirmación no coinciden.");
       return;
     }
 
     try {
       await configuracionAPI.cambiarClave(user.id, nuevaClave);
-      setClaveActual('');
-      setNuevaClave('');
-      setConfirmarClave('');
-      setMensajeClave('La clave ha sido actualizada correctamente.');
+      setClaveActual("");
+      setNuevaClave("");
+      setConfirmarClave("");
+      setMensajeClave("La clave ha sido actualizada correctamente.");
     } catch (error) {
-      console.error('Error cambiando clave:', error);
-      setMensajeClave('No se pudo actualizar la clave.');
+      console.error("Error cambiando clave:", error);
+      setMensajeClave("No se pudo actualizar la clave.");
     }
   };
 
   return (
     <div className="space-y-6">
       <div className="rounded-2xl bg-white p-6 shadow-sm">
-        <h2 className="text-2xl font-semibold text-slate-900">Módulo de configuración</h2>
+        <h2 className="text-2xl font-semibold text-slate-900">
+          Módulo de configuración
+        </h2>
         <p className="mt-1 text-sm text-slate-500">
-          Gestiona facturación, impuestos, datos de empresa, auditoría y usuarios desde un solo lugar.
+          Gestiona facturación, impuestos, datos de empresa, auditoría y
+          usuarios desde un solo lugar.
         </p>
         <div className="mt-5 flex flex-wrap gap-2">
           {tabs.map((tab) => (
@@ -281,8 +300,8 @@ export default function Configuracion() {
               onClick={() => onTabChange(tab.id as ConfigTab)}
               className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition ${
                 activeTab === tab.id
-                  ? 'border-blue-600 bg-blue-600 text-white'
-                  : 'border-slate-200 text-slate-600 hover:border-blue-300 hover:text-blue-600'
+                  ? "border-blue-600 bg-blue-600 text-white"
+                  : "border-slate-200 text-slate-600 hover:border-blue-300 hover:text-blue-600"
               }`}
             >
               {tab.icon}
@@ -292,7 +311,7 @@ export default function Configuracion() {
         </div>
       </div>
 
-      {activeTab === 'facturacion' && (
+      {activeTab === "facturacion" && (
         <section className="grid gap-6 lg:grid-cols-3">
           <div className="rounded-2xl bg-white p-6 shadow-sm lg:col-span-2">
             <div className="flex items-start justify-between">
@@ -301,7 +320,8 @@ export default function Configuracion() {
                   Numeración para facturas de venta
                 </h3>
                 <p className="text-sm text-slate-500">
-                  Esta sección se sincronizará con la cantidad de facturas del sistema.
+                  Esta sección se sincronizará con la cantidad de facturas del
+                  sistema.
                 </p>
               </div>
               <button
@@ -325,7 +345,10 @@ export default function Configuracion() {
                 <input
                   value={facturacion.prefijo_factura}
                   onChange={(event) =>
-                    setFacturacion((prev) => ({ ...prev, prefijo_factura: event.target.value }))
+                    setFacturacion((prev) => ({
+                      ...prev,
+                      prefijo_factura: event.target.value,
+                    }))
                   }
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                 />
@@ -379,7 +402,10 @@ export default function Configuracion() {
                 <textarea
                   value={facturacion.resolucion}
                   onChange={(event) =>
-                    setFacturacion((prev) => ({ ...prev, resolucion: event.target.value }))
+                    setFacturacion((prev) => ({
+                      ...prev,
+                      resolucion: event.target.value,
+                    }))
                   }
                   rows={4}
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
@@ -390,7 +416,10 @@ export default function Configuracion() {
                 <textarea
                   value={facturacion.notas_factura}
                   onChange={(event) =>
-                    setFacturacion((prev) => ({ ...prev, notas_factura: event.target.value }))
+                    setFacturacion((prev) => ({
+                      ...prev,
+                      notas_factura: event.target.value,
+                    }))
                   }
                   rows={3}
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
@@ -400,25 +429,31 @@ export default function Configuracion() {
           </div>
 
           <div className="rounded-2xl bg-white p-6 shadow-sm">
-            <h4 className="text-sm font-semibold text-slate-500">Estado actual</h4>
+            <h4 className="text-sm font-semibold text-slate-500">
+              Estado actual
+            </h4>
             <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50 p-4">
               <p className="text-3xl font-semibold text-slate-900">0</p>
               <p className="text-sm text-slate-500">Facturas registradas</p>
             </div>
             <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-700">
-              Este panel tomará los datos reales cuando el backend entregue el conteo de facturas.
+              Este panel tomará los datos reales cuando el backend entregue el
+              conteo de facturas.
             </div>
           </div>
         </section>
       )}
 
-      {activeTab === 'impuestos' && (
+      {activeTab === "impuestos" && (
         <section className="rounded-2xl bg-white p-6 shadow-sm">
           <div className="flex items-start justify-between">
             <div>
-              <h3 className="text-lg font-semibold text-slate-900">Impuestos</h3>
+              <h3 className="text-lg font-semibold text-slate-900">
+                Impuestos
+              </h3>
               <p className="text-sm text-slate-500">
-                Los impuestos principales permanecen fijos, pero puedes agregar o quitar adicionales.
+                Los impuestos principales permanecen fijos, pero puedes agregar
+                o quitar adicionales.
               </p>
             </div>
             <button
@@ -445,8 +480,12 @@ export default function Configuracion() {
               >
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-sm font-semibold text-slate-900">{impuesto.nombre}</p>
-                    <p className="text-xs text-slate-500">Valor: {impuesto.valor}</p>
+                    <p className="text-sm font-semibold text-slate-900">
+                      {impuesto.nombre}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      Valor: {impuesto.valor}
+                    </p>
                   </div>
                   <button
                     type="button"
@@ -458,21 +497,28 @@ export default function Configuracion() {
                   </button>
                 </div>
                 <p className="mt-3 text-xs text-slate-500">
-                  {impuesto.es_exento ? 'Exento' : `Porcentaje: ${impuesto.porcentaje ?? 'N/A'}%`}
+                  {impuesto.es_exento
+                    ? "Exento"
+                    : `Porcentaje: ${impuesto.porcentaje ?? "N/A"}%`}
                 </p>
               </div>
             ))}
           </div>
 
           <div className="mt-8 rounded-xl border border-dashed border-slate-200 p-4">
-            <h4 className="text-sm font-semibold text-slate-700">Agregar impuesto</h4>
+            <h4 className="text-sm font-semibold text-slate-700">
+              Agregar impuesto
+            </h4>
             <div className="mt-4 grid gap-4 md:grid-cols-3">
               <label className="space-y-2 text-sm font-medium text-slate-700">
                 Nombre
                 <input
                   value={nuevoImpuesto.nombre}
                   onChange={(event) =>
-                    setNuevoImpuesto((prev) => ({ ...prev, nombre: event.target.value }))
+                    setNuevoImpuesto((prev) => ({
+                      ...prev,
+                      nombre: event.target.value,
+                    }))
                   }
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                 />
@@ -482,7 +528,10 @@ export default function Configuracion() {
                 <input
                   value={nuevoImpuesto.valor}
                   onChange={(event) =>
-                    setNuevoImpuesto((prev) => ({ ...prev, valor: event.target.value }))
+                    setNuevoImpuesto((prev) => ({
+                      ...prev,
+                      valor: event.target.value,
+                    }))
                   }
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                 />
@@ -490,9 +539,12 @@ export default function Configuracion() {
               <label className="space-y-2 text-sm font-medium text-slate-700">
                 Porcentaje
                 <input
-                  value={nuevoImpuesto.porcentaje ?? ''}
+                  value={nuevoImpuesto.porcentaje ?? ""}
                   onChange={(event) =>
-                    setNuevoImpuesto((prev) => ({ ...prev, porcentaje: event.target.value }))
+                    setNuevoImpuesto((prev) => ({
+                      ...prev,
+                      porcentaje: event.target.value,
+                    }))
                   }
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                 />
@@ -509,7 +561,7 @@ export default function Configuracion() {
         </section>
       )}
 
-      {activeTab === 'empresa' && (
+      {activeTab === "empresa" && (
         <section className="rounded-2xl bg-white p-6 shadow-sm">
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -544,12 +596,15 @@ export default function Configuracion() {
                 onChange={(event) =>
                   setEmpresa((prev) => ({
                     ...prev,
-                    tipo_identificacion: event.target.value as ConfiguracionEmpresa['tipo_identificacion'],
+                    tipo_identificacion: event.target
+                      .value as ConfiguracionEmpresa["tipo_identificacion"],
                   }))
                 }
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
               >
-                <option value="NIT">NÚMERO DE IDENTIFICACIÓN TRIBUTARIA (NIT)</option>
+                <option value="NIT">
+                  NÚMERO DE IDENTIFICACIÓN TRIBUTARIA (NIT)
+                </option>
                 <option value="CC">CÉDULA DE CIUDADANÍA</option>
                 <option value="CE">CÉDULA DE EXTRANJERÍA</option>
               </select>
@@ -560,7 +615,10 @@ export default function Configuracion() {
                 <input
                   value={empresa.identificacion}
                   onChange={(event) =>
-                    setEmpresa((prev) => ({ ...prev, identificacion: event.target.value }))
+                    setEmpresa((prev) => ({
+                      ...prev,
+                      identificacion: event.target.value,
+                    }))
                   }
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                 />
@@ -569,7 +627,9 @@ export default function Configuracion() {
                 DV
                 <input
                   value={empresa.dv}
-                  onChange={(event) => setEmpresa((prev) => ({ ...prev, dv: event.target.value }))}
+                  onChange={(event) =>
+                    setEmpresa((prev) => ({ ...prev, dv: event.target.value }))
+                  }
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                 />
               </label>
@@ -581,7 +641,8 @@ export default function Configuracion() {
                 onChange={(event) =>
                   setEmpresa((prev) => ({
                     ...prev,
-                    tipo_persona: event.target.value as ConfiguracionEmpresa['tipo_persona'],
+                    tipo_persona: event.target
+                      .value as ConfiguracionEmpresa["tipo_persona"],
                   }))
                 }
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
@@ -595,7 +656,10 @@ export default function Configuracion() {
               <input
                 value={empresa.razon_social}
                 onChange={(event) =>
-                  setEmpresa((prev) => ({ ...prev, razon_social: event.target.value }))
+                  setEmpresa((prev) => ({
+                    ...prev,
+                    razon_social: event.target.value,
+                  }))
                 }
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
               />
@@ -607,13 +671,16 @@ export default function Configuracion() {
                 onChange={(event) =>
                   setEmpresa((prev) => ({
                     ...prev,
-                    regimen: event.target.value as ConfiguracionEmpresa['regimen'],
+                    regimen: event.target
+                      .value as ConfiguracionEmpresa["regimen"],
                   }))
                 }
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
               >
                 <option value="RÉGIMEN COMÚN">RÉGIMEN COMÚN</option>
-                <option value="RÉGIMEN SIMPLIFICADO">RÉGIMEN SIMPLIFICADO</option>
+                <option value="RÉGIMEN SIMPLIFICADO">
+                  RÉGIMEN SIMPLIFICADO
+                </option>
               </select>
             </label>
             <label className="space-y-2 text-sm font-medium text-slate-700">
@@ -621,7 +688,10 @@ export default function Configuracion() {
               <input
                 value={empresa.direccion}
                 onChange={(event) =>
-                  setEmpresa((prev) => ({ ...prev, direccion: event.target.value }))
+                  setEmpresa((prev) => ({
+                    ...prev,
+                    direccion: event.target.value,
+                  }))
                 }
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
               />
@@ -632,7 +702,10 @@ export default function Configuracion() {
                 <input
                   value={empresa.ciudad}
                   onChange={(event) =>
-                    setEmpresa((prev) => ({ ...prev, ciudad: event.target.value }))
+                    setEmpresa((prev) => ({
+                      ...prev,
+                      ciudad: event.target.value,
+                    }))
                   }
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                 />
@@ -642,7 +715,10 @@ export default function Configuracion() {
                 <input
                   value={empresa.municipio}
                   onChange={(event) =>
-                    setEmpresa((prev) => ({ ...prev, municipio: event.target.value }))
+                    setEmpresa((prev) => ({
+                      ...prev,
+                      municipio: event.target.value,
+                    }))
                   }
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                 />
@@ -653,7 +729,10 @@ export default function Configuracion() {
               <input
                 value={empresa.telefono}
                 onChange={(event) =>
-                  setEmpresa((prev) => ({ ...prev, telefono: event.target.value }))
+                  setEmpresa((prev) => ({
+                    ...prev,
+                    telefono: event.target.value,
+                  }))
                 }
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
               />
@@ -663,7 +742,10 @@ export default function Configuracion() {
               <input
                 value={empresa.sitio_web}
                 onChange={(event) =>
-                  setEmpresa((prev) => ({ ...prev, sitio_web: event.target.value }))
+                  setEmpresa((prev) => ({
+                    ...prev,
+                    sitio_web: event.target.value,
+                  }))
                 }
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
               />
@@ -672,7 +754,12 @@ export default function Configuracion() {
               Correo
               <input
                 value={empresa.correo}
-                onChange={(event) => setEmpresa((prev) => ({ ...prev, correo: event.target.value }))}
+                onChange={(event) =>
+                  setEmpresa((prev) => ({
+                    ...prev,
+                    correo: event.target.value,
+                  }))
+                }
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
               />
             </label>
@@ -680,11 +767,12 @@ export default function Configuracion() {
         </section>
       )}
 
-      {activeTab === 'auditoria' && (
+      {activeTab === "auditoria" && (
         <section className="rounded-2xl bg-white p-6 shadow-sm">
           <h3 className="text-lg font-semibold text-slate-900">Auditoría</h3>
           <p className="text-sm text-slate-500">
-            Cada movimiento entre módulos y cambios de usuarios se registra automáticamente.
+            Cada movimiento entre módulos y cambios de usuarios se registra
+            automáticamente.
           </p>
 
           <div className="mt-6 overflow-hidden rounded-xl border border-slate-200">
@@ -707,7 +795,9 @@ export default function Configuracion() {
                 ) : (
                   auditoria.slice(0, 10).map((registro) => (
                     <tr key={registro.id} className="text-slate-700">
-                      <td className="px-4 py-3">{new Date(registro.fecha_hora).toLocaleString()}</td>
+                      <td className="px-4 py-3">
+                        {new Date(registro.fecha_hora).toLocaleString()}
+                      </td>
                       <td className="px-4 py-3">{registro.usuario_nombre}</td>
                       <td className="px-4 py-3">{registro.accion}</td>
                       <td className="px-4 py-3">{registro.notas}</td>
@@ -720,11 +810,12 @@ export default function Configuracion() {
         </section>
       )}
 
-      {activeTab === 'usuarios' && (
+      {activeTab === "usuarios" && (
         <section className="rounded-2xl bg-white p-6 shadow-sm">
           <h3 className="text-lg font-semibold text-slate-900">Usuarios</h3>
           <p className="text-sm text-slate-500">
-            Solo los administradores pueden administrar accesos y permisos de los usuarios.
+            Solo los administradores pueden administrar accesos y permisos de
+            los usuarios.
           </p>
 
           {!isAdmin ? (
@@ -753,16 +844,21 @@ export default function Configuracion() {
                       <tr key={usuario.id} className="text-slate-700">
                         <td className="px-4 py-3">
                           <p className="font-medium">{usuario.username}</p>
-                          <p className="text-xs text-slate-500">{usuario.email}</p>
+                          <p className="text-xs text-slate-500">
+                            {usuario.email}
+                          </p>
                         </td>
                         <td className="px-4 py-3">
                           <select
                             value={usuario.tipo_usuario}
                             onChange={(event) => {
-                              const value = event.target.value as UsuarioAdmin['tipo_usuario'];
+                              const value = event.target
+                                .value as UsuarioAdmin["tipo_usuario"];
                               setUsuarios((prev) =>
                                 prev.map((item) =>
-                                  item.id === usuario.id ? { ...item, tipo_usuario: value } : item
+                                  item.id === usuario.id
+                                    ? { ...item, tipo_usuario: value }
+                                    : item
                                 )
                               );
                             }}
@@ -783,13 +879,16 @@ export default function Configuracion() {
                                 setUsuarios((prev) =>
                                   prev.map((item) =>
                                     item.id === usuario.id
-                                      ? { ...item, is_active: event.target.checked }
+                                      ? {
+                                          ...item,
+                                          is_active: event.target.checked,
+                                        }
                                       : item
                                   )
                                 )
                               }
                             />
-                            {usuario.is_active ? 'Activo' : 'Inactivo'}
+                            {usuario.is_active ? "Activo" : "Inactivo"}
                           </label>
                         </td>
                         <td className="px-4 py-3">
@@ -811,11 +910,14 @@ export default function Configuracion() {
         </section>
       )}
 
-      {activeTab === 'clave' && (
+      {activeTab === "clave" && (
         <section className="rounded-2xl bg-white p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-slate-900">Cambiar clave</h3>
+          <h3 className="text-lg font-semibold text-slate-900">
+            Cambiar clave
+          </h3>
           <p className="text-sm text-slate-500">
-            Actualiza tu clave de acceso. Esta acción quedará registrada en auditoría.
+            Actualiza tu clave de acceso. Esta acción quedará registrada en
+            auditoría.
           </p>
 
           {mensajeClave && (

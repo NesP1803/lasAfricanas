@@ -1,4 +1,5 @@
 import json
+from django.http import RawPostDataException
 
 from .models import Auditoria
 
@@ -43,15 +44,33 @@ class AuditoriaMiddleware:
         return 'OTRO'
 
     def _get_usuario_nombre(self, request, usuario):
+        # Si ya está autenticado, úsalo
         if usuario:
             return usuario.get_username()
 
-        if request.path.startswith('/api/auth/login/') and request.body:
+        # ✅ Login: NO leer request.body (rompe DRF). Intenta por POST (si es form) o deja genérico.
+        if request.path.startswith('/api/auth/login/'):
+            username = request.POST.get('username')  # si algún día mandas form-data
+            return username or 'Desconocido'
+
+        # Para otras rutas, intenta leer body SOLO si aún es accesible
+        try:
+            raw = request.body
+        except RawPostDataException:
+            return 'Sistema'
+
+        if raw:
             try:
-                body = json.loads(request.body.decode('utf-8'))
-                return body.get('username', 'Desconocido')
-            except json.JSONDecodeError:
-                return 'Desconocido'
+                body = json.loads(raw.decode('utf-8'))
+                # intenta por convenciones comunes
+                return (
+                    body.get('username')
+                    or body.get('user')
+                    or body.get('usuario')
+                    or 'Sistema'
+                )
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                return 'Sistema'
 
         return 'Sistema'
 
