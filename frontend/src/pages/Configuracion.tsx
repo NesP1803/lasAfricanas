@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Building2,
   Users,
@@ -11,8 +11,22 @@ import {
   HelpCircle,
   Save,
   X,
+  Edit,
+  Trash2,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
+import {
+  configuracionEmpresaApi,
+  impuestosApi,
+  auditoriaApi,
+  usuariosApi,
+  backupApi,
+  type ConfiguracionEmpresa as ConfiguracionEmpresaType,
+  type Impuesto,
+  type Auditoria,
+  type Usuario,
+  type Backup,
+} from "../api/configuracion";
 
 type SeccionConfig =
   | "empresa"
@@ -129,32 +143,85 @@ function MenuItem({
 // SECCIÓN: EMPRESA (Estilo SIDEFA)
 // ============================================
 function ConfiguracionEmpresa() {
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<ConfiguracionEmpresaType>({
     tipo_identificacion: "NIT",
-    identificacion: "91068915",
-    dv: "8",
+    identificacion: "",
+    dv: "",
     tipo_persona: "Persona natural",
-    razon_social: "MOTOREPUESTOS LAS AFRICANAS",
+    razon_social: "",
     regimen: "RÉGIMEN COMÚN",
-    direccion: "CALLE 6 # 12A-45 GAIRA",
-    ciudad: "MAGDALENA",
-    municipio: "SANTA MARTA",
-    telefono: "54350548",
+    direccion: "",
+    ciudad: "",
+    municipio: "",
+    telefono: "",
     sitio_web: "",
     correo: "",
   });
 
   const [guardando, setGuardando] = useState(false);
+  const [cargando, setCargando] = useState(true);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+
+  useEffect(() => {
+    cargarDatos();
+  }, []);
+
+  const cargarDatos = async () => {
+    try {
+      setCargando(true);
+      const data = await configuracionEmpresaApi.obtener();
+      setFormData(data);
+    } catch (error) {
+      console.error("Error al cargar configuración:", error);
+      alert("Error al cargar los datos de la empresa");
+    } finally {
+      setCargando(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setGuardando(true);
 
-    setTimeout(() => {
-      alert("Datos de empresa guardados");
+    try {
+      if (formData.id) {
+        await configuracionEmpresaApi.actualizar(formData.id, formData);
+
+        // Si hay un logo seleccionado, subirlo
+        if (logoFile) {
+          await configuracionEmpresaApi.subirLogo(formData.id, logoFile);
+          setLogoFile(null);
+        }
+
+        alert("Datos de empresa guardados exitosamente");
+        await cargarDatos();
+      }
+    } catch (error) {
+      console.error("Error al guardar:", error);
+      alert("Error al guardar los datos de la empresa");
+    } finally {
       setGuardando(false);
-    }, 1000);
+    }
   };
+
+  const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setLogoFile(e.target.files[0]);
+    }
+  };
+
+  const handleCancel = () => {
+    cargarDatos();
+    setLogoFile(null);
+  };
+
+  if (cargando) {
+    return (
+      <div className="p-6 flex items-center justify-center">
+        <p className="text-gray-600">Cargando...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6">
@@ -376,11 +443,31 @@ function ConfiguracionEmpresa() {
                 Logo
               </label>
               <div className="flex-1 flex items-start gap-2">
-                <div className="w-32 h-32 border-2 border-dashed border-gray-300 rounded flex items-center justify-center bg-gray-50">
-                  <span className="text-gray-400 text-sm">Sin logo</span>
+                <div className="w-32 h-32 border-2 border-dashed border-gray-300 rounded flex items-center justify-center bg-gray-50 overflow-hidden">
+                  {formData.logo ? (
+                    <img
+                      src={formData.logo}
+                      alt="Logo"
+                      className="w-full h-full object-contain"
+                    />
+                  ) : logoFile ? (
+                    <span className="text-gray-600 text-sm text-center px-2">
+                      {logoFile.name}
+                    </span>
+                  ) : (
+                    <span className="text-gray-400 text-sm">Sin logo</span>
+                  )}
                 </div>
+                <input
+                  type="file"
+                  id="logo-input"
+                  accept="image/*"
+                  onChange={handleLogoChange}
+                  className="hidden"
+                />
                 <button
                   type="button"
+                  onClick={() => document.getElementById("logo-input")?.click()}
                   className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded border border-gray-400"
                 >
                   📁 Seleccionar
@@ -394,14 +481,16 @@ function ConfiguracionEmpresa() {
             <button
               type="submit"
               disabled={guardando}
-              className="px-6 py-2 bg-blue-100 hover:bg-blue-200 border border-blue-400 rounded flex items-center gap-2 font-semibold"
+              className="px-6 py-2 bg-blue-100 hover:bg-blue-200 border border-blue-400 rounded flex items-center gap-2 font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Save size={18} />
               {guardando ? "GUARDANDO..." : "GUARDAR"}
             </button>
             <button
               type="button"
-              className="px-6 py-2 bg-red-100 hover:bg-red-200 border border-red-400 rounded flex items-center gap-2"
+              onClick={handleCancel}
+              disabled={guardando}
+              className="px-6 py-2 bg-red-100 hover:bg-red-200 border border-red-400 rounded flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <X size={18} />
             </button>
@@ -540,11 +629,69 @@ function ConfiguracionFacturacion() {
 // SECCIÓN: IMPUESTOS (Estilo SIDEFA)
 // ============================================
 function ConfiguracionImpuestos() {
-  const [impuestos, setImpuestos] = useState([
-    { id: 1, nombre: "IVA", valor: "0" },
-    { id: 2, nombre: "", valor: "19" },
-    { id: 3, nombre: "", valor: "E" },
-  ]);
+  const [impuestos, setImpuestos] = useState<Impuesto[]>([]);
+  const [nuevoValor, setNuevoValor] = useState("");
+  const [cargando, setCargando] = useState(true);
+  const [guardando, setGuardando] = useState(false);
+
+  useEffect(() => {
+    cargarImpuestos();
+  }, []);
+
+  const cargarImpuestos = async () => {
+    try {
+      setCargando(true);
+      const data = await impuestosApi.listar();
+      setImpuestos(data);
+    } catch (error) {
+      console.error("Error al cargar impuestos:", error);
+      alert("Error al cargar los impuestos");
+    } finally {
+      setCargando(false);
+    }
+  };
+
+  const handleAgregarImpuesto = async () => {
+    if (!nuevoValor.trim()) {
+      alert("Por favor ingrese un valor");
+      return;
+    }
+
+    setGuardando(true);
+    try {
+      const esExento = nuevoValor.toUpperCase() === "E";
+      const porcentaje = esExento ? 0 : parseFloat(nuevoValor);
+
+      if (!esExento && isNaN(porcentaje)) {
+        alert("Valor inválido. Ingrese un número o 'E' para exento");
+        return;
+      }
+
+      await impuestosApi.crear({
+        nombre: "IVA",
+        valor: nuevoValor.toUpperCase(),
+        porcentaje: esExento ? 0 : porcentaje,
+        es_exento: esExento,
+        is_active: true,
+      });
+
+      setNuevoValor("");
+      await cargarImpuestos();
+    } catch (error) {
+      console.error("Error al agregar impuesto:", error);
+      alert("Error al agregar el impuesto");
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  if (cargando) {
+    return (
+      <div className="p-6 flex items-center justify-center">
+        <p className="text-gray-600">Cargando...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6">
@@ -578,9 +725,18 @@ function ConfiguracionImpuestos() {
         <div className="flex justify-center gap-3">
           <input
             type="text"
-            className="w-24 px-3 py-2 border border-gray-300 rounded"
+            value={nuevoValor}
+            onChange={(e) => setNuevoValor(e.target.value)}
+            onKeyPress={(e) => e.key === "Enter" && handleAgregarImpuesto()}
+            placeholder="19 o E"
+            disabled={guardando}
+            className="w-24 px-3 py-2 border border-gray-300 rounded disabled:opacity-50"
           />
-          <button className="p-2 bg-blue-100 hover:bg-blue-200 border border-blue-400 rounded w-10 h-10 flex items-center justify-center">
+          <button
+            onClick={handleAgregarImpuesto}
+            disabled={guardando}
+            className="p-2 bg-blue-100 hover:bg-blue-200 border border-blue-400 rounded w-10 h-10 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+          >
             <Save size={18} />
           </button>
         </div>
@@ -593,26 +749,44 @@ function ConfiguracionImpuestos() {
 // SECCIÓN: AUDITORÍA (Estilo SIDEFA)
 // ============================================
 function ConfiguracionAuditoria() {
-  const auditorias = [
-    {
-      fecha: "22/10/2025 20:09",
-      usuario: "jorge",
-      accion: "Eliminar",
-      notas: "Se elimino moto : NKD - FABIAN RAMIREZ",
-    },
-    {
-      fecha: "22/10/2025 20:06",
-      usuario: "jorge",
-      accion: "Actualizar",
-      notas: "Se Actualizo un articulo : ACEITE 20W",
-    },
-    {
-      fecha: "22/10/2025 19:53",
-      usuario: "jorge",
-      accion: "Actualizar",
-      notas: "Se Actualizo un articulo : MANUBRIO",
-    },
-  ];
+  const [auditorias, setAuditorias] = useState<Auditoria[]>([]);
+  const [cargando, setCargando] = useState(true);
+
+  useEffect(() => {
+    cargarAuditorias();
+  }, []);
+
+  const cargarAuditorias = async () => {
+    try {
+      setCargando(true);
+      const data = await auditoriaApi.listar();
+      setAuditorias(data);
+    } catch (error) {
+      console.error("Error al cargar auditorías:", error);
+      alert("Error al cargar las auditorías");
+    } finally {
+      setCargando(false);
+    }
+  };
+
+  const formatearFecha = (fecha: string) => {
+    const date = new Date(fecha);
+    return date.toLocaleString("es-CO", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  if (cargando) {
+    return (
+      <div className="p-6 flex items-center justify-center">
+        <p className="text-gray-600">Cargando...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6">
@@ -640,23 +814,31 @@ function ConfiguracionAuditoria() {
               </tr>
             </thead>
             <tbody>
-              {auditorias.map((aud, index) => (
-                <tr
-                  key={index}
-                  className={index % 2 === 0 ? "bg-blue-50" : "bg-white"}
-                >
-                  <td className="px-4 py-2 text-sm border-r border-gray-200">
-                    {aud.fecha}
+              {auditorias.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
+                    No hay registros de auditoría
                   </td>
-                  <td className="px-4 py-2 text-sm border-r border-gray-200">
-                    {aud.usuario}
-                  </td>
-                  <td className="px-4 py-2 text-sm border-r border-gray-200">
-                    {aud.accion}
-                  </td>
-                  <td className="px-4 py-2 text-sm">{aud.notas}</td>
                 </tr>
-              ))}
+              ) : (
+                auditorias.map((aud, index) => (
+                  <tr
+                    key={aud.id}
+                    className={index % 2 === 0 ? "bg-blue-50" : "bg-white"}
+                  >
+                    <td className="px-4 py-2 text-sm border-r border-gray-200">
+                      {formatearFecha(aud.fecha_hora)}
+                    </td>
+                    <td className="px-4 py-2 text-sm border-r border-gray-200">
+                      {aud.usuario_nombre}
+                    </td>
+                    <td className="px-4 py-2 text-sm border-r border-gray-200">
+                      {aud.accion}
+                    </td>
+                    <td className="px-4 py-2 text-sm">{aud.notas}</td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -665,17 +847,77 @@ function ConfiguracionAuditoria() {
   );
 }
 
-// Las secciones de Usuarios, Cambiar Clave y Backup se mantienen igual...
-// (Continúa en el siguiente mensaje)
-
 function ConfiguracionUsuarios() {
+  const [usuarios, setUsuarios] = useState<Usuario[]>([]);
+  const [cargando, setCargando] = useState(true);
+  const [mostrarModal, setMostrarModal] = useState(false);
+  const [usuarioEditando, setUsuarioEditando] = useState<Usuario | null>(null);
+
+  useEffect(() => {
+    cargarUsuarios();
+  }, []);
+
+  const cargarUsuarios = async () => {
+    try {
+      setCargando(true);
+      const data = await usuariosApi.listar();
+      setUsuarios(data);
+    } catch (error) {
+      console.error("Error al cargar usuarios:", error);
+      alert("Error al cargar los usuarios");
+    } finally {
+      setCargando(false);
+    }
+  };
+
+  const handleDesactivar = async (usuario: Usuario) => {
+    if (
+      !confirm(
+        `¿Está seguro de desactivar al usuario ${usuario.username}?`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      if (usuario.id) {
+        await usuariosApi.desactivar(usuario.id);
+        await cargarUsuarios();
+      }
+    } catch (error) {
+      console.error("Error al desactivar usuario:", error);
+      alert("Error al desactivar el usuario");
+    }
+  };
+
+  const handleEditar = (usuario: Usuario) => {
+    setUsuarioEditando(usuario);
+    setMostrarModal(true);
+  };
+
+  const handleNuevo = () => {
+    setUsuarioEditando(null);
+    setMostrarModal(true);
+  };
+
+  if (cargando) {
+    return (
+      <div className="p-6 flex items-center justify-center">
+        <p className="text-gray-600">Cargando...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl font-bold text-gray-900">
           Gestión de Usuarios
         </h1>
-        <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+        <button
+          onClick={handleNuevo}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+        >
           + Nuevo Usuario
         </button>
       </div>
@@ -688,10 +930,10 @@ function ConfiguracionUsuarios() {
                 USUARIO
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                ROL
+                NOMBRE
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                DESCUENTO MÁX.
+                ROL
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                 ESTADO
@@ -702,26 +944,274 @@ function ConfiguracionUsuarios() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            <tr>
-              <td className="px-6 py-4 text-sm text-gray-900">admin</td>
-              <td className="px-6 py-4 text-sm text-gray-900">Administrador</td>
-              <td className="px-6 py-4 text-sm text-gray-900">100%</td>
-              <td className="px-6 py-4">
-                <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-700">
-                  Activo
-                </span>
-              </td>
-              <td className="px-6 py-4 text-right text-sm space-x-2">
-                <button className="text-blue-600 hover:text-blue-900">
-                  Editar
-                </button>
-                <button className="text-red-600 hover:text-red-900">
-                  Desactivar
-                </button>
-              </td>
-            </tr>
+            {usuarios.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                  No hay usuarios registrados
+                </td>
+              </tr>
+            ) : (
+              usuarios.map((usuario) => (
+                <tr key={usuario.id}>
+                  <td className="px-6 py-4 text-sm text-gray-900">
+                    {usuario.username}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-900">
+                    {usuario.nombre_completo || `${usuario.first_name} ${usuario.last_name}`}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-900">
+                    {usuario.tipo_usuario}
+                  </td>
+                  <td className="px-6 py-4">
+                    <span
+                      className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                        usuario.is_active
+                          ? "bg-green-100 text-green-700"
+                          : "bg-red-100 text-red-700"
+                      }`}
+                    >
+                      {usuario.is_active ? "Activo" : "Inactivo"}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-right text-sm space-x-2">
+                    <button
+                      onClick={() => handleEditar(usuario)}
+                      className="text-blue-600 hover:text-blue-900"
+                    >
+                      Editar
+                    </button>
+                    {usuario.is_active && (
+                      <button
+                        onClick={() => handleDesactivar(usuario)}
+                        className="text-red-600 hover:text-red-900"
+                      >
+                        Desactivar
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
+      </div>
+
+      {mostrarModal && (
+        <ModalUsuario
+          usuario={usuarioEditando}
+          onClose={() => {
+            setMostrarModal(false);
+            setUsuarioEditando(null);
+          }}
+          onGuardar={cargarUsuarios}
+        />
+      )}
+    </div>
+  );
+}
+
+function ModalUsuario({
+  usuario,
+  onClose,
+  onGuardar,
+}: {
+  usuario: Usuario | null;
+  onClose: () => void;
+  onGuardar: () => void;
+}) {
+  const [formData, setFormData] = useState<Partial<Usuario>>({
+    username: usuario?.username || "",
+    email: usuario?.email || "",
+    first_name: usuario?.first_name || "",
+    last_name: usuario?.last_name || "",
+    tipo_usuario: usuario?.tipo_usuario || "Vendedor",
+    telefono: usuario?.telefono || "",
+    sede: usuario?.sede || "",
+    password: "",
+  });
+  const [guardando, setGuardando] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setGuardando(true);
+
+    try {
+      if (usuario?.id) {
+        // Actualizar usuario existente
+        const dataToUpdate = { ...formData };
+        if (!dataToUpdate.password) {
+          delete dataToUpdate.password;
+        }
+        await usuariosApi.actualizar(usuario.id, dataToUpdate);
+      } else {
+        // Crear nuevo usuario
+        if (!formData.password) {
+          alert("La contraseña es obligatoria para usuarios nuevos");
+          setGuardando(false);
+          return;
+        }
+        await usuariosApi.crear(formData);
+      }
+
+      onGuardar();
+      onClose();
+    } catch (error) {
+      console.error("Error al guardar usuario:", error);
+      alert("Error al guardar el usuario");
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <h2 className="text-2xl font-bold mb-4">
+          {usuario ? "Editar Usuario" : "Nuevo Usuario"}
+        </h2>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Usuario
+              </label>
+              <input
+                type="text"
+                value={formData.username}
+                onChange={(e) =>
+                  setFormData({ ...formData, username: e.target.value })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Email
+              </label>
+              <input
+                type="email"
+                value={formData.email}
+                onChange={(e) =>
+                  setFormData({ ...formData, email: e.target.value })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Nombre
+              </label>
+              <input
+                type="text"
+                value={formData.first_name}
+                onChange={(e) =>
+                  setFormData({ ...formData, first_name: e.target.value })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Apellido
+              </label>
+              <input
+                type="text"
+                value={formData.last_name}
+                onChange={(e) =>
+                  setFormData({ ...formData, last_name: e.target.value })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Tipo de Usuario
+              </label>
+              <select
+                value={formData.tipo_usuario}
+                onChange={(e) =>
+                  setFormData({ ...formData, tipo_usuario: e.target.value })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                required
+              >
+                <option value="Administrador">Administrador</option>
+                <option value="Vendedor">Vendedor</option>
+                <option value="Mecanico">Mecánico</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Teléfono
+              </label>
+              <input
+                type="text"
+                value={formData.telefono}
+                onChange={(e) =>
+                  setFormData({ ...formData, telefono: e.target.value })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Sede
+              </label>
+              <input
+                type="text"
+                value={formData.sede}
+                onChange={(e) =>
+                  setFormData({ ...formData, sede: e.target.value })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Contraseña {usuario && "(dejar vacío para no cambiar)"}
+              </label>
+              <input
+                type="password"
+                value={formData.password}
+                onChange={(e) =>
+                  setFormData({ ...formData, password: e.target.value })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                required={!usuario}
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={guardando}
+              className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={guardando}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {guardando ? "Guardando..." : "Guardar"}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
@@ -733,8 +1223,9 @@ function CambiarClave() {
     clave_nueva: "",
     confirmar_clave: "",
   });
+  const [guardando, setGuardando] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (formData.clave_nueva !== formData.confirmar_clave) {
@@ -742,8 +1233,25 @@ function CambiarClave() {
       return;
     }
 
-    alert("Contraseña cambiada exitosamente");
-    setFormData({ clave_actual: "", clave_nueva: "", confirmar_clave: "" });
+    if (formData.clave_nueva.length < 6) {
+      alert("La contraseña debe tener al menos 6 caracteres");
+      return;
+    }
+
+    setGuardando(true);
+    try {
+      await usuariosApi.cambiarPassword(formData);
+      alert("Contraseña cambiada exitosamente");
+      setFormData({ clave_actual: "", clave_nueva: "", confirmar_clave: "" });
+    } catch (error: any) {
+      console.error("Error al cambiar contraseña:", error);
+      const mensaje = error.response?.data?.clave_actual?.[0] ||
+                      error.response?.data?.clave_nueva?.[0] ||
+                      "Error al cambiar la contraseña";
+      alert(mensaje);
+    } finally {
+      setGuardando(false);
+    }
   };
 
   return (
@@ -802,9 +1310,10 @@ function CambiarClave() {
 
             <button
               type="submit"
-              className="w-full px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+              disabled={guardando}
+              className="w-full px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Cambiar Contraseña
+              {guardando ? "Cambiando..." : "Cambiar Contraseña"}
             </button>
           </form>
         </div>
@@ -814,6 +1323,51 @@ function CambiarClave() {
 }
 
 function BackupRestore() {
+  const [backups, setBackups] = useState<Backup[]>([]);
+  const [cargando, setCargando] = useState(true);
+  const [creandoBackup, setCreandoBackup] = useState(false);
+
+  useEffect(() => {
+    cargarBackups();
+  }, []);
+
+  const cargarBackups = async () => {
+    try {
+      setCargando(true);
+      const data = await backupApi.listarBackups();
+      setBackups(data);
+    } catch (error) {
+      console.error("Error al cargar backups:", error);
+      alert("Error al cargar la lista de backups");
+    } finally {
+      setCargando(false);
+    }
+  };
+
+  const handleCrearBackup = async () => {
+    if (!confirm("¿Está seguro de crear un backup de la base de datos?")) {
+      return;
+    }
+
+    setCreandoBackup(true);
+    try {
+      const resultado = await backupApi.crearBackup();
+      alert(`Backup creado exitosamente: ${resultado.archivo}`);
+      await cargarBackups();
+    } catch (error) {
+      console.error("Error al crear backup:", error);
+      alert("Error al crear el backup");
+    } finally {
+      setCreandoBackup(false);
+    }
+  };
+
+  const formatearTamaño = (bytes: number) => {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(2) + " MB";
+  };
+
   return (
     <div className="p-6">
       <h1 className="text-3xl font-bold text-gray-900 mb-6">
@@ -827,8 +1381,12 @@ function BackupRestore() {
           <p className="text-sm text-gray-600 mb-4">
             Crea una copia de seguridad completa de la base de datos
           </p>
-          <button className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium">
-            Crear Backup Ahora
+          <button
+            onClick={handleCrearBackup}
+            disabled={creandoBackup}
+            className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {creandoBackup ? "Creando Backup..." : "Crear Backup Ahora"}
           </button>
         </div>
 
@@ -838,24 +1396,55 @@ function BackupRestore() {
           <p className="text-sm text-gray-600 mb-4">
             Restaura la base de datos desde un archivo de backup
           </p>
-          <div className="flex items-center gap-4">
-            <input
-              type="file"
-              accept=".sql,.backup"
-              className="block flex-1 text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-            />
-            <button className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">
-              Seleccionar archivo
-            </button>
-          </div>
+          <p className="text-sm text-yellow-600 mb-4">
+            Nota: La función de restauración debe implementarse con precaución.
+            Contacte al administrador del sistema.
+          </p>
         </div>
 
         {/* Backups Anteriores */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h3 className="text-xl font-semibold mb-4">Backups Anteriores</h3>
-          <div className="text-center text-gray-500 py-8">
-            No hay backups disponibles
-          </div>
+          {cargando ? (
+            <div className="text-center text-gray-500 py-8">Cargando...</div>
+          ) : backups.length === 0 ? (
+            <div className="text-center text-gray-500 py-8">
+              No hay backups disponibles
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                      Archivo
+                    </th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                      Fecha
+                    </th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                      Tamaño
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {backups.map((backup, index) => (
+                    <tr key={index}>
+                      <td className="px-4 py-3 text-sm text-gray-900">
+                        {backup.nombre}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-900">
+                        {backup.fecha}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-900">
+                        {formatearTamaño(backup.tamaño)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     </div>
