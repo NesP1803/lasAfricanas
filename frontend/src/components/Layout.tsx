@@ -6,7 +6,6 @@ import {
   Wrench,
   ShoppingCart,
   Users,
-  Settings,
   LogOut,
 } from 'lucide-react';
 
@@ -29,7 +28,6 @@ export default function Layout() {
     { icon: <Wrench size={20} />, label: 'Taller', path: '/taller' },
     { icon: <ShoppingCart size={20} />, label: 'Ventas', path: '/ventas' },
     { icon: <Users size={20} />, label: 'Clientes', path: '/clientes' },
-    { icon: <Settings size={20} />, label: 'Configuración', path: '/configuracion' },
   ];
 
   return (

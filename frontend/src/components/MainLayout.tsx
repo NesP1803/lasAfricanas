@@ -6,9 +6,7 @@ import {
   ShoppingCart,
   Wrench,
   FileText,
-  Users,
   LogOut,
-  Settings,
 } from 'lucide-react';
 
 export default function MainLayout() {
@@ -71,13 +69,6 @@ export default function MainLayout() {
             icon={<FileText size={18} />}
             label="Reportes"
           />
-          {user?.tipo_usuario === 'ADMIN' && (
-            <NavLink
-              to="/configuracion"
-              icon={<Settings size={18} />}
-              label="Configuración"
-            />
-          )}
         </div>
       </nav>
 
