@@ -2,7 +2,6 @@ import { Outlet, Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import {
   Home,
-  Package,
   ShoppingCart,
   Wrench,
   FileText,
@@ -49,11 +48,6 @@ export default function MainLayout() {
       <nav className="bg-gray-800 text-white">
         <div className="flex gap-1 px-4">
           <NavLink to="/" icon={<Home size={18} />} label="Inicio" />
-          <NavLink
-            to="/productos"
-            icon={<Package size={18} />}
-            label="Inventario"
-          />
           <NavLink
             to="/punto-venta"
             icon={<ShoppingCart size={18} />}
