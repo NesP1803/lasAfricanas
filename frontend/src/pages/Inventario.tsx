@@ -35,6 +35,7 @@ export default function Inventario() {
   useEffect(() => {
     loadCategorias();
     loadProductos();
+    loadStockBajo();
   }, [page, search, categoriaFilter]);
 
   const loadCategorias = async () => {
@@ -60,6 +61,18 @@ export default function Inventario() {
       console.error("Error al cargar productos:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadStockBajo = async () => {
+    try {
+      setLoadingStockBajo(true);
+      const data = await inventarioApi.getStockBajo();
+      setStockBajo(data);
+    } catch (error) {
+      console.error("Error al cargar stock bajo:", error);
+    } finally {
+      setLoadingStockBajo(false);
     }
   };
 
@@ -416,6 +429,21 @@ export default function Inventario() {
                 </button>
               </div>
             )}
+            <div className="bg-gray-100 border-t border-gray-300 px-3 py-2 text-xs text-gray-700 flex flex-wrap gap-4">
+              <span>
+                Artículos registrados: <strong>{productos.length}</strong>
+              </span>
+              <span>
+                Stock bajo: <strong>{stockBajo.length}</strong>
+              </span>
+              <span>
+                Agotados: <strong>{agotadosItems.length}</strong>
+              </span>
+              <span>
+                Cartera de inventario:{" "}
+                <strong>${Math.round(inventoryValue).toLocaleString("es-CO")}</strong>
+              </span>
+            </div>
           </>
         )}
       </section>

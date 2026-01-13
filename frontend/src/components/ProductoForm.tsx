@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { X, HelpCircle, Info } from 'lucide-react';
 import { inventarioApi } from '../api/inventario';
+import { configuracionAPI } from '../api/configuracion';
 import type { Producto, Categoria, Proveedor} from "../api/inventario";
+import type { Impuesto } from '../types';
 
 
 interface ProductoFormProps {
@@ -13,6 +15,7 @@ interface ProductoFormProps {
 export default function ProductoForm({ producto, onClose, onSuccess }: ProductoFormProps) {
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
+  const [impuestos, setImpuestos] = useState<Impuesto[]>([]);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<any>({});
 
@@ -37,6 +40,7 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
   useEffect(() => {
     loadCategorias();
     loadProveedores();
+    loadImpuestos();
 
     if (producto) {
       setFormData({
@@ -77,6 +81,23 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
     }
   };
 
+  const loadImpuestos = async () => {
+    try {
+      const data = await configuracionAPI.obtenerImpuestos();
+      setImpuestos(data);
+      if (!producto && data.length > 0) {
+        const impuestoBase = data.find((item) => item.is_active !== false) ?? data[0];
+        const porcentaje =
+          impuestoBase.porcentaje ?? (impuestoBase.valor && impuestoBase.valor !== 'E'
+            ? impuestoBase.valor
+            : '0');
+        setFormData((prev) => ({ ...prev, iva_porcentaje: porcentaje ?? '0' }));
+      }
+    } catch (error) {
+      console.error('Error al cargar impuestos:', error);
+    }
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
     
@@ -100,6 +121,8 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
         proveedor: Number(formData.proveedor),
         stock: Number(formData.stock),
         stock_minimo: Number(formData.stock_minimo),
+        precio_costo: formData.precio_costo || "0",
+        precio_venta_minimo: formData.precio_venta_minimo || "0",
       };
 
       if (producto) {
@@ -247,16 +270,29 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
                 IVA (%)
                 <HelpCircle size={14} className="text-gray-500" />
               </label>
-              <input
-                type="number"
+              <select
                 name="iva_porcentaje"
                 value={formData.iva_porcentaje}
                 onChange={handleChange}
-                step="0.01"
-                min="0"
-                max="100"
                 className="w-full px-2 py-1 border border-gray-400 rounded bg-white"
-              />
+              >
+                {impuestos.length === 0 && (
+                  <option value="">Sin impuestos configurados</option>
+                )}
+                {impuestos.map((impuesto) => {
+                  const porcentaje =
+                    impuesto.porcentaje ??
+                    (impuesto.valor && impuesto.valor !== 'E' ? impuesto.valor : '0');
+                  const label = impuesto.es_exento
+                    ? `${impuesto.nombre} (Exento)`
+                    : `${impuesto.nombre} ${porcentaje ?? '0'}%`;
+                  return (
+                    <option key={impuesto.id} value={porcentaje ?? '0'}>
+                      {label}
+                    </option>
+                  );
+                })}
+              </select>
             </div>
 
             <div>
@@ -330,45 +366,6 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
               </div>
             </div>
           </div>
-
-          <details className="border border-gray-200 rounded p-3 bg-gray-50">
-            <summary className="cursor-pointer font-semibold text-gray-700">
-              Opciones avanzadas
-            </summary>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-              <div>
-                <label className="block font-semibold text-gray-800 mb-1">
-                  Precio Costo *
-                </label>
-                <input
-                  type="number"
-                  name="precio_costo"
-                  value={formData.precio_costo}
-                  onChange={handleChange}
-                  step="0.01"
-                  min="0"
-                  className="w-full px-2 py-1 border border-gray-400 rounded bg-white"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-gray-800 mb-1">
-                  Precio Venta Mínimo *
-                </label>
-                <input
-                  type="number"
-                  name="precio_venta_minimo"
-                  value={formData.precio_venta_minimo}
-                  onChange={handleChange}
-                  step="0.01"
-                  min="0"
-                  className="w-full px-2 py-1 border border-gray-400 rounded bg-white"
-                  required
-                />
-              </div>
-            </div>
-          </details>
 
           <div className="flex flex-wrap items-center gap-4 text-xs">
             <label className="flex items-center gap-2">
