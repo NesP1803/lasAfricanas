@@ -140,12 +140,12 @@ export default function Layout() {
         label: "Configuración",
         icon: <Settings size={18} />,
         items: [
-          { label: "Facturación" },
-          { label: "Empresa" },
-          { label: "Usuarios" },
-          { label: "Impuestos" },
-          { label: "Auditoria" },
-          { label: "Cambiar Clave" },
+          { label: "Facturación", path: "/configuracion?tab=facturacion" },
+          { label: "Empresa", path: "/configuracion?tab=empresa" },
+          { label: "Usuarios", path: "/configuracion?tab=usuarios" },
+          { label: "Impuestos", path: "/configuracion?tab=impuestos" },
+          { label: "Auditoría", path: "/configuracion?tab=auditoria" },
+          { label: "Cambiar Clave", path: "/configuracion?tab=clave" },
         ],
       },
       {

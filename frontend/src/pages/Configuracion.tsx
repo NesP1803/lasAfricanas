@@ -1,0 +1,867 @@
+import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import {
+  CheckCircle2,
+  Plus,
+  Save,
+  ShieldCheck,
+  Trash2,
+  UserCog,
+  Users,
+  X,
+} from 'lucide-react';
+import { configuracionAPI } from '../api/configuracion';
+import type {
+  AuditoriaRegistro,
+  ConfiguracionEmpresa,
+  ConfiguracionFacturacion,
+  Impuesto,
+  UsuarioAdmin,
+} from '../types';
+import { useAuth } from '../contexts/AuthContext';
+
+type ConfigTab =
+  | 'facturacion'
+  | 'impuestos'
+  | 'empresa'
+  | 'auditoria'
+  | 'usuarios'
+  | 'clave';
+
+const defaultEmpresa: ConfiguracionEmpresa = {
+  id: 1,
+  tipo_identificacion: 'NIT',
+  identificacion: '91068915',
+  dv: '8',
+  tipo_persona: 'Persona natural',
+  razon_social: 'MOTOREPUESTOS LAS AFRICANAS',
+  regimen: 'RÉGIMEN COMÚN',
+  direccion: 'CALLE 6 # 12A-45 GAIRA',
+  ciudad: 'MAGDALENA',
+  municipio: 'SANTA MARTA',
+  telefono: '54350548',
+  sitio_web: '',
+  correo: '',
+  logo: null,
+};
+
+const defaultFacturacion: ConfiguracionFacturacion = {
+  id: 1,
+  prefijo_factura: 'FAC',
+  numero_factura: 100702,
+  prefijo_remision: '',
+  numero_remision: 154239,
+  resolucion: 'Resolución Facturación POS N°. 18764006081459 de 2020/10/22\nRango del 00001 al 50000.',
+  notas_factura:
+    'Para trámite de cambios y garantías, indispensable presentar la factura de venta. Tiene hasta 5 días para trámites. Los productos deben estar en perfecto estado y empaque original.',
+};
+
+const defaultImpuestos: Impuesto[] = [
+  { id: -1, nombre: 'IVA', valor: '0', porcentaje: '0', es_exento: true },
+  { id: -2, nombre: 'IVA', valor: '19', porcentaje: '19', es_exento: false },
+  { id: -3, nombre: 'IVA', valor: 'E', porcentaje: null, es_exento: true },
+];
+
+export default function Configuracion() {
+  const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialTab = (searchParams.get('tab') as ConfigTab) || 'facturacion';
+
+  const [activeTab, setActiveTab] = useState<ConfigTab>(initialTab);
+  const [empresa, setEmpresa] = useState<ConfiguracionEmpresa>(defaultEmpresa);
+  const [facturacion, setFacturacion] = useState<ConfiguracionFacturacion>(defaultFacturacion);
+  const [impuestos, setImpuestos] = useState<Impuesto[]>(defaultImpuestos);
+  const [auditoria, setAuditoria] = useState<AuditoriaRegistro[]>([]);
+  const [usuarios, setUsuarios] = useState<UsuarioAdmin[]>([]);
+  const [nuevoImpuesto, setNuevoImpuesto] = useState<Partial<Impuesto>>({
+    nombre: 'IVA',
+    valor: '',
+    porcentaje: '',
+  });
+
+  const [mensajeEmpresa, setMensajeEmpresa] = useState('');
+  const [mensajeClave, setMensajeClave] = useState('');
+  const [mensajeFacturacion, setMensajeFacturacion] = useState('');
+  const [mensajeImpuesto, setMensajeImpuesto] = useState('');
+  const [mensajeUsuario, setMensajeUsuario] = useState('');
+
+  const [claveActual, setClaveActual] = useState('');
+  const [nuevaClave, setNuevaClave] = useState('');
+  const [confirmarClave, setConfirmarClave] = useState('');
+
+  const isAdmin = user?.role === 'admin' || user?.role === 'ADMIN';
+
+  const tabs = useMemo(
+    () => [
+      { id: 'facturacion', label: 'Facturación', icon: <ShieldCheck size={18} /> },
+      { id: 'impuestos', label: 'Impuestos', icon: <Plus size={18} /> },
+      { id: 'empresa', label: 'Empresa', icon: <UserCog size={18} /> },
+      { id: 'auditoria', label: 'Auditoría', icon: <Users size={18} /> },
+      { id: 'usuarios', label: 'Usuarios', icon: <Users size={18} /> },
+      { id: 'clave', label: 'Cambiar clave', icon: <UserCog size={18} /> },
+    ],
+    []
+  );
+
+  useEffect(() => {
+    const tabParam = searchParams.get('tab') as ConfigTab | null;
+    if (tabParam && tabParam !== activeTab) {
+      setActiveTab(tabParam);
+    }
+  }, [searchParams, activeTab]);
+
+  useEffect(() => {
+    const cargarDatos = async () => {
+      try {
+        const data = await configuracionAPI.obtenerEmpresa();
+        if (data) {
+          setEmpresa(data);
+        }
+      } catch (error) {
+        console.error('Error cargando empresa:', error);
+      }
+
+      try {
+        const data = await configuracionAPI.obtenerFacturacion();
+        if (data) {
+          setFacturacion(data);
+        }
+      } catch (error) {
+        console.error('Error cargando facturación:', error);
+      }
+
+      try {
+        const data = await configuracionAPI.obtenerImpuestos();
+        if (data?.length) {
+          setImpuestos(data);
+        }
+      } catch (error) {
+        console.error('Error cargando impuestos:', error);
+      }
+
+      try {
+        const data = await configuracionAPI.obtenerAuditoria();
+        if (data?.length) {
+          setAuditoria(data);
+        }
+      } catch (error) {
+        console.error('Error cargando auditoría:', error);
+      }
+    };
+
+    cargarDatos();
+  }, []);
+
+  useEffect(() => {
+    if (!isAdmin) {
+      return;
+    }
+
+    const cargarUsuarios = async () => {
+      try {
+        const data = await configuracionAPI.obtenerUsuarios();
+        setUsuarios(data);
+      } catch (error) {
+        console.error('Error cargando usuarios:', error);
+      }
+    };
+
+    cargarUsuarios();
+  }, [isAdmin]);
+
+  const onTabChange = (tabId: ConfigTab) => {
+    setActiveTab(tabId);
+    setSearchParams({ tab: tabId });
+  };
+
+  const handleGuardarEmpresa = async () => {
+    try {
+      const data = await configuracionAPI.actualizarEmpresa(empresa.id, empresa);
+      setEmpresa(data);
+      setMensajeEmpresa('Los datos han sido actualizados correctamente.');
+    } catch (error) {
+      console.error('Error actualizando empresa:', error);
+      setMensajeEmpresa('No se pudo actualizar la información. Intenta nuevamente.');
+    }
+  };
+
+  const handleGuardarFacturacion = async () => {
+    try {
+      const data = await configuracionAPI.actualizarFacturacion(facturacion.id, facturacion);
+      setFacturacion(data);
+      setMensajeFacturacion('Configuración de facturación actualizada.');
+    } catch (error) {
+      console.error('Error actualizando facturación:', error);
+      setMensajeFacturacion('No se pudo actualizar la facturación.');
+    }
+  };
+
+  const handleAgregarImpuesto = async () => {
+    if (!nuevoImpuesto.nombre || !nuevoImpuesto.valor) {
+      setMensajeImpuesto('Completa el nombre y el valor del impuesto.');
+      return;
+    }
+
+    try {
+      const nuevo = await configuracionAPI.crearImpuesto({
+        nombre: nuevoImpuesto.nombre,
+        valor: nuevoImpuesto.valor,
+        porcentaje: nuevoImpuesto.porcentaje || null,
+        es_exento: nuevoImpuesto.valor === 'E',
+      });
+      setImpuestos((prev) => [...prev, nuevo]);
+      setNuevoImpuesto({ nombre: 'IVA', valor: '', porcentaje: '' });
+      setMensajeImpuesto('Impuesto agregado correctamente.');
+    } catch (error) {
+      console.error('Error agregando impuesto:', error);
+      setMensajeImpuesto('No se pudo agregar el impuesto.');
+    }
+  };
+
+  const handleEliminarImpuesto = async (impuesto: Impuesto) => {
+    try {
+      if (impuesto.id > 0) {
+        await configuracionAPI.eliminarImpuesto(impuesto.id);
+      }
+      setImpuestos((prev) => prev.filter((item) => item.id !== impuesto.id));
+    } catch (error) {
+      console.error('Error eliminando impuesto:', error);
+      setMensajeImpuesto('No se pudo quitar el impuesto.');
+    }
+  };
+
+  const handleActualizarUsuario = async (usuario: UsuarioAdmin) => {
+    try {
+      const data = await configuracionAPI.actualizarUsuario(usuario.id, {
+        tipo_usuario: usuario.tipo_usuario,
+        is_active: usuario.is_active,
+      });
+      setUsuarios((prev) => prev.map((item) => (item.id === data.id ? data : item)));
+      setMensajeUsuario('Cambios guardados para el usuario.');
+    } catch (error) {
+      console.error('Error actualizando usuario:', error);
+      setMensajeUsuario('No se pudo actualizar el usuario.');
+    }
+  };
+
+  const handleCambiarClave = async () => {
+    if (!user?.id) {
+      setMensajeClave('No se pudo identificar el usuario actual.');
+      return;
+    }
+
+    if (!nuevaClave || nuevaClave !== confirmarClave) {
+      setMensajeClave('La nueva clave y la confirmación no coinciden.');
+      return;
+    }
+
+    try {
+      await configuracionAPI.cambiarClave(user.id, nuevaClave);
+      setClaveActual('');
+      setNuevaClave('');
+      setConfirmarClave('');
+      setMensajeClave('La clave ha sido actualizada correctamente.');
+    } catch (error) {
+      console.error('Error cambiando clave:', error);
+      setMensajeClave('No se pudo actualizar la clave.');
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-2xl bg-white p-6 shadow-sm">
+        <h2 className="text-2xl font-semibold text-slate-900">Módulo de configuración</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Gestiona facturación, impuestos, datos de empresa, auditoría y usuarios desde un solo lugar.
+        </p>
+        <div className="mt-5 flex flex-wrap gap-2">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => onTabChange(tab.id as ConfigTab)}
+              className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition ${
+                activeTab === tab.id
+                  ? 'border-blue-600 bg-blue-600 text-white'
+                  : 'border-slate-200 text-slate-600 hover:border-blue-300 hover:text-blue-600'
+              }`}
+            >
+              {tab.icon}
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {activeTab === 'facturacion' && (
+        <section className="grid gap-6 lg:grid-cols-3">
+          <div className="rounded-2xl bg-white p-6 shadow-sm lg:col-span-2">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">
+                  Numeración para facturas de venta
+                </h3>
+                <p className="text-sm text-slate-500">
+                  Esta sección se sincronizará con la cantidad de facturas del sistema.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleGuardarFacturacion}
+                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-blue-700"
+              >
+                <Save size={16} /> Guardar
+              </button>
+            </div>
+
+            {mensajeFacturacion && (
+              <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+                {mensajeFacturacion}
+              </div>
+            )}
+
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
+              <label className="space-y-2 text-sm font-medium text-slate-700">
+                Prefijo
+                <input
+                  value={facturacion.prefijo_factura}
+                  onChange={(event) =>
+                    setFacturacion((prev) => ({ ...prev, prefijo_factura: event.target.value }))
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="space-y-2 text-sm font-medium text-slate-700">
+                Número
+                <input
+                  type="number"
+                  value={facturacion.numero_factura}
+                  onChange={(event) =>
+                    setFacturacion((prev) => ({
+                      ...prev,
+                      numero_factura: Number(event.target.value),
+                    }))
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="space-y-2 text-sm font-medium text-slate-700">
+                Prefijo remisión
+                <input
+                  value={facturacion.prefijo_remision}
+                  onChange={(event) =>
+                    setFacturacion((prev) => ({
+                      ...prev,
+                      prefijo_remision: event.target.value,
+                    }))
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="space-y-2 text-sm font-medium text-slate-700">
+                Número remisión
+                <input
+                  type="number"
+                  value={facturacion.numero_remision}
+                  onChange={(event) =>
+                    setFacturacion((prev) => ({
+                      ...prev,
+                      numero_remision: Number(event.target.value),
+                    }))
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+              </label>
+            </div>
+
+            <div className="mt-6 grid gap-4">
+              <label className="space-y-2 text-sm font-medium text-slate-700">
+                Resolución
+                <textarea
+                  value={facturacion.resolucion}
+                  onChange={(event) =>
+                    setFacturacion((prev) => ({ ...prev, resolucion: event.target.value }))
+                  }
+                  rows={4}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="space-y-2 text-sm font-medium text-slate-700">
+                Notas de la factura de venta
+                <textarea
+                  value={facturacion.notas_factura}
+                  onChange={(event) =>
+                    setFacturacion((prev) => ({ ...prev, notas_factura: event.target.value }))
+                  }
+                  rows={3}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+              </label>
+            </div>
+          </div>
+
+          <div className="rounded-2xl bg-white p-6 shadow-sm">
+            <h4 className="text-sm font-semibold text-slate-500">Estado actual</h4>
+            <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50 p-4">
+              <p className="text-3xl font-semibold text-slate-900">0</p>
+              <p className="text-sm text-slate-500">Facturas registradas</p>
+            </div>
+            <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-700">
+              Este panel tomará los datos reales cuando el backend entregue el conteo de facturas.
+            </div>
+          </div>
+        </section>
+      )}
+
+      {activeTab === 'impuestos' && (
+        <section className="rounded-2xl bg-white p-6 shadow-sm">
+          <div className="flex items-start justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-slate-900">Impuestos</h3>
+              <p className="text-sm text-slate-500">
+                Los impuestos principales permanecen fijos, pero puedes agregar o quitar adicionales.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setImpuestos(defaultImpuestos)}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600 hover:border-red-200 hover:text-red-600"
+              title="Restablecer a impuestos base"
+            >
+              <X size={16} /> Restablecer
+            </button>
+          </div>
+
+          {mensajeImpuesto && (
+            <div className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+              {mensajeImpuesto}
+            </div>
+          )}
+
+          <div className="mt-6 grid gap-4 md:grid-cols-3">
+            {impuestos.map((impuesto) => (
+              <div
+                key={impuesto.id}
+                className="rounded-xl border border-slate-100 bg-slate-50 p-4"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">{impuesto.nombre}</p>
+                    <p className="text-xs text-slate-500">Valor: {impuesto.valor}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleEliminarImpuesto(impuesto)}
+                    className="rounded-full border border-transparent p-1 text-slate-400 hover:border-red-200 hover:text-red-600"
+                    title="Quitar impuesto"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+                <p className="mt-3 text-xs text-slate-500">
+                  {impuesto.es_exento ? 'Exento' : `Porcentaje: ${impuesto.porcentaje ?? 'N/A'}%`}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-8 rounded-xl border border-dashed border-slate-200 p-4">
+            <h4 className="text-sm font-semibold text-slate-700">Agregar impuesto</h4>
+            <div className="mt-4 grid gap-4 md:grid-cols-3">
+              <label className="space-y-2 text-sm font-medium text-slate-700">
+                Nombre
+                <input
+                  value={nuevoImpuesto.nombre}
+                  onChange={(event) =>
+                    setNuevoImpuesto((prev) => ({ ...prev, nombre: event.target.value }))
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="space-y-2 text-sm font-medium text-slate-700">
+                Valor
+                <input
+                  value={nuevoImpuesto.valor}
+                  onChange={(event) =>
+                    setNuevoImpuesto((prev) => ({ ...prev, valor: event.target.value }))
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="space-y-2 text-sm font-medium text-slate-700">
+                Porcentaje
+                <input
+                  value={nuevoImpuesto.porcentaje ?? ''}
+                  onChange={(event) =>
+                    setNuevoImpuesto((prev) => ({ ...prev, porcentaje: event.target.value }))
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+              </label>
+            </div>
+            <button
+              type="button"
+              onClick={handleAgregarImpuesto}
+              className="mt-4 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-blue-700"
+            >
+              <Plus size={16} /> Agregar impuesto
+            </button>
+          </div>
+        </section>
+      )}
+
+      {activeTab === 'empresa' && (
+        <section className="rounded-2xl bg-white p-6 shadow-sm">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-semibold text-slate-900">
+                Actualiza los datos generales de tu empresa
+              </h3>
+              <p className="text-sm text-slate-500">
+                Puedes editar la información directamente y guardar los cambios.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleGuardarEmpresa}
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-blue-700"
+            >
+              <Save size={16} /> Guardar
+            </button>
+          </div>
+
+          {mensajeEmpresa && (
+            <div className="mt-4 flex items-center gap-2 rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+              <CheckCircle2 size={16} />
+              {mensajeEmpresa}
+            </div>
+          )}
+
+          <div className="mt-6 grid gap-4 md:grid-cols-2">
+            <label className="space-y-2 text-sm font-medium text-slate-700">
+              Tipo de identificación
+              <select
+                value={empresa.tipo_identificacion}
+                onChange={(event) =>
+                  setEmpresa((prev) => ({
+                    ...prev,
+                    tipo_identificacion: event.target.value as ConfiguracionEmpresa['tipo_identificacion'],
+                  }))
+                }
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              >
+                <option value="NIT">NÚMERO DE IDENTIFICACIÓN TRIBUTARIA (NIT)</option>
+                <option value="CC">CÉDULA DE CIUDADANÍA</option>
+                <option value="CE">CÉDULA DE EXTRANJERÍA</option>
+              </select>
+            </label>
+            <div className="grid gap-4 md:grid-cols-3">
+              <label className="space-y-2 text-sm font-medium text-slate-700 md:col-span-2">
+                Identificación
+                <input
+                  value={empresa.identificacion}
+                  onChange={(event) =>
+                    setEmpresa((prev) => ({ ...prev, identificacion: event.target.value }))
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="space-y-2 text-sm font-medium text-slate-700">
+                DV
+                <input
+                  value={empresa.dv}
+                  onChange={(event) => setEmpresa((prev) => ({ ...prev, dv: event.target.value }))}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+              </label>
+            </div>
+            <label className="space-y-2 text-sm font-medium text-slate-700">
+              Tipo de persona
+              <select
+                value={empresa.tipo_persona}
+                onChange={(event) =>
+                  setEmpresa((prev) => ({
+                    ...prev,
+                    tipo_persona: event.target.value as ConfiguracionEmpresa['tipo_persona'],
+                  }))
+                }
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              >
+                <option value="Persona natural">Persona natural</option>
+                <option value="Persona jurídica">Persona jurídica</option>
+              </select>
+            </label>
+            <label className="space-y-2 text-sm font-medium text-slate-700">
+              Razón social
+              <input
+                value={empresa.razon_social}
+                onChange={(event) =>
+                  setEmpresa((prev) => ({ ...prev, razon_social: event.target.value }))
+                }
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="space-y-2 text-sm font-medium text-slate-700">
+              Régimen
+              <select
+                value={empresa.regimen}
+                onChange={(event) =>
+                  setEmpresa((prev) => ({
+                    ...prev,
+                    regimen: event.target.value as ConfiguracionEmpresa['regimen'],
+                  }))
+                }
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              >
+                <option value="RÉGIMEN COMÚN">RÉGIMEN COMÚN</option>
+                <option value="RÉGIMEN SIMPLIFICADO">RÉGIMEN SIMPLIFICADO</option>
+              </select>
+            </label>
+            <label className="space-y-2 text-sm font-medium text-slate-700">
+              Dirección
+              <input
+                value={empresa.direccion}
+                onChange={(event) =>
+                  setEmpresa((prev) => ({ ...prev, direccion: event.target.value }))
+                }
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              />
+            </label>
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="space-y-2 text-sm font-medium text-slate-700">
+                Ciudad
+                <input
+                  value={empresa.ciudad}
+                  onChange={(event) =>
+                    setEmpresa((prev) => ({ ...prev, ciudad: event.target.value }))
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="space-y-2 text-sm font-medium text-slate-700">
+                Municipio
+                <input
+                  value={empresa.municipio}
+                  onChange={(event) =>
+                    setEmpresa((prev) => ({ ...prev, municipio: event.target.value }))
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+              </label>
+            </div>
+            <label className="space-y-2 text-sm font-medium text-slate-700">
+              Teléfono
+              <input
+                value={empresa.telefono}
+                onChange={(event) =>
+                  setEmpresa((prev) => ({ ...prev, telefono: event.target.value }))
+                }
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="space-y-2 text-sm font-medium text-slate-700">
+              Sitio web
+              <input
+                value={empresa.sitio_web}
+                onChange={(event) =>
+                  setEmpresa((prev) => ({ ...prev, sitio_web: event.target.value }))
+                }
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="space-y-2 text-sm font-medium text-slate-700">
+              Correo
+              <input
+                value={empresa.correo}
+                onChange={(event) => setEmpresa((prev) => ({ ...prev, correo: event.target.value }))}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              />
+            </label>
+          </div>
+        </section>
+      )}
+
+      {activeTab === 'auditoria' && (
+        <section className="rounded-2xl bg-white p-6 shadow-sm">
+          <h3 className="text-lg font-semibold text-slate-900">Auditoría</h3>
+          <p className="text-sm text-slate-500">
+            Cada movimiento entre módulos y cambios de usuarios se registra automáticamente.
+          </p>
+
+          <div className="mt-6 overflow-hidden rounded-xl border border-slate-200">
+            <table className="min-w-full divide-y divide-slate-200 text-sm">
+              <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
+                <tr>
+                  <th className="px-4 py-3">Fecha</th>
+                  <th className="px-4 py-3">Usuario</th>
+                  <th className="px-4 py-3">Acción</th>
+                  <th className="px-4 py-3">Notas</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {auditoria.length === 0 ? (
+                  <tr>
+                    <td className="px-4 py-4 text-slate-500" colSpan={4}>
+                      Aún no hay movimientos registrados.
+                    </td>
+                  </tr>
+                ) : (
+                  auditoria.slice(0, 10).map((registro) => (
+                    <tr key={registro.id} className="text-slate-700">
+                      <td className="px-4 py-3">{new Date(registro.fecha_hora).toLocaleString()}</td>
+                      <td className="px-4 py-3">{registro.usuario_nombre}</td>
+                      <td className="px-4 py-3">{registro.accion}</td>
+                      <td className="px-4 py-3">{registro.notas}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {activeTab === 'usuarios' && (
+        <section className="rounded-2xl bg-white p-6 shadow-sm">
+          <h3 className="text-lg font-semibold text-slate-900">Usuarios</h3>
+          <p className="text-sm text-slate-500">
+            Solo los administradores pueden administrar accesos y permisos de los usuarios.
+          </p>
+
+          {!isAdmin ? (
+            <div className="mt-6 rounded-lg border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+              Tu perfil no tiene permisos para administrar usuarios.
+            </div>
+          ) : (
+            <>
+              {mensajeUsuario && (
+                <div className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                  {mensajeUsuario}
+                </div>
+              )}
+              <div className="mt-6 overflow-hidden rounded-xl border border-slate-200">
+                <table className="min-w-full divide-y divide-slate-200 text-sm">
+                  <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
+                    <tr>
+                      <th className="px-4 py-3">Usuario</th>
+                      <th className="px-4 py-3">Rol</th>
+                      <th className="px-4 py-3">Estado</th>
+                      <th className="px-4 py-3">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {usuarios.map((usuario) => (
+                      <tr key={usuario.id} className="text-slate-700">
+                        <td className="px-4 py-3">
+                          <p className="font-medium">{usuario.username}</p>
+                          <p className="text-xs text-slate-500">{usuario.email}</p>
+                        </td>
+                        <td className="px-4 py-3">
+                          <select
+                            value={usuario.tipo_usuario}
+                            onChange={(event) => {
+                              const value = event.target.value as UsuarioAdmin['tipo_usuario'];
+                              setUsuarios((prev) =>
+                                prev.map((item) =>
+                                  item.id === usuario.id ? { ...item, tipo_usuario: value } : item
+                                )
+                              );
+                            }}
+                            className="rounded-lg border border-slate-200 px-2 py-1 text-sm"
+                          >
+                            <option value="ADMIN">Administrador</option>
+                            <option value="VENDEDOR">Vendedor</option>
+                            <option value="MECANICO">Mecánico</option>
+                            <option value="BODEGUERO">Bodeguero</option>
+                          </select>
+                        </td>
+                        <td className="px-4 py-3">
+                          <label className="inline-flex items-center gap-2 text-xs text-slate-600">
+                            <input
+                              type="checkbox"
+                              checked={usuario.is_active}
+                              onChange={(event) =>
+                                setUsuarios((prev) =>
+                                  prev.map((item) =>
+                                    item.id === usuario.id
+                                      ? { ...item, is_active: event.target.checked }
+                                      : item
+                                  )
+                                )
+                              }
+                            />
+                            {usuario.is_active ? 'Activo' : 'Inactivo'}
+                          </label>
+                        </td>
+                        <td className="px-4 py-3">
+                          <button
+                            type="button"
+                            onClick={() => handleActualizarUsuario(usuario)}
+                            className="rounded-lg bg-slate-900 px-3 py-1 text-xs font-medium text-white hover:bg-slate-800"
+                          >
+                            Guardar
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </section>
+      )}
+
+      {activeTab === 'clave' && (
+        <section className="rounded-2xl bg-white p-6 shadow-sm">
+          <h3 className="text-lg font-semibold text-slate-900">Cambiar clave</h3>
+          <p className="text-sm text-slate-500">
+            Actualiza tu clave de acceso. Esta acción quedará registrada en auditoría.
+          </p>
+
+          {mensajeClave && (
+            <div className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+              {mensajeClave}
+            </div>
+          )}
+
+          <div className="mt-6 grid gap-4 md:grid-cols-3">
+            <label className="space-y-2 text-sm font-medium text-slate-700">
+              Clave actual
+              <input
+                type="password"
+                value={claveActual}
+                onChange={(event) => setClaveActual(event.target.value)}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="space-y-2 text-sm font-medium text-slate-700">
+              Nueva clave
+              <input
+                type="password"
+                value={nuevaClave}
+                onChange={(event) => setNuevaClave(event.target.value)}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="space-y-2 text-sm font-medium text-slate-700">
+              Confirmar nueva clave
+              <input
+                type="password"
+                value={confirmarClave}
+                onChange={(event) => setConfirmarClave(event.target.value)}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              />
+            </label>
+          </div>
+          <button
+            type="button"
+            onClick={handleCambiarClave}
+            className="mt-4 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-blue-700"
+          >
+            <Save size={16} /> Guardar nueva clave
+          </button>
+        </section>
+      )}
+    </div>
+  );
+}

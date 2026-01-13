@@ -1,0 +1,93 @@
+from django.conf import settings
+from django.db import migrations, models
+import django.db.models.deletion
+
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        ('core', '0002_remove_configuracion_models'),
+        migrations.swappable_dependency(settings.AUTH_USER_MODEL),
+    ]
+
+    operations = [
+        migrations.CreateModel(
+            name='ConfiguracionEmpresa',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('tipo_identificacion', models.CharField(choices=[('NIT', 'NÚMERO DE IDENTIFICACIÓN TRIBUTARIA (NIT)'), ('CC', 'CÉDULA DE CIUDADANÍA'), ('CE', 'CÉDULA DE EXTRANJERÍA')], default='NIT', max_length=10)),
+                ('identificacion', models.CharField(max_length=20)),
+                ('dv', models.CharField(blank=True, max_length=1)),
+                ('tipo_persona', models.CharField(choices=[('Persona natural', 'Persona natural'), ('Persona jurídica', 'Persona jurídica')], default='Persona natural', max_length=20)),
+                ('razon_social', models.CharField(max_length=200)),
+                ('regimen', models.CharField(choices=[('RÉGIMEN COMÚN', 'RÉGIMEN COMÚN'), ('RÉGIMEN SIMPLIFICADO', 'RÉGIMEN SIMPLIFICADO')], default='RÉGIMEN COMÚN', max_length=25)),
+                ('direccion', models.CharField(max_length=200)),
+                ('ciudad', models.CharField(max_length=100)),
+                ('municipio', models.CharField(max_length=100)),
+                ('telefono', models.CharField(blank=True, max_length=20)),
+                ('sitio_web', models.URLField(blank=True)),
+                ('correo', models.EmailField(blank=True, max_length=254)),
+                ('logo', models.ImageField(blank=True, null=True, upload_to='empresa/')),
+            ],
+            options={
+                'verbose_name': 'Configuración de Empresa',
+                'verbose_name_plural': 'Configuración de Empresa',
+                'db_table': 'configuracion_empresa',
+            },
+        ),
+        migrations.CreateModel(
+            name='ConfiguracionFacturacion',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('prefijo_factura', models.CharField(default='FAC', max_length=10)),
+                ('numero_factura', models.IntegerField(default=1)),
+                ('prefijo_remision', models.CharField(blank=True, max_length=10)),
+                ('numero_remision', models.IntegerField(default=1)),
+                ('resolucion', models.TextField(blank=True)),
+                ('notas_factura', models.TextField(blank=True)),
+            ],
+            options={
+                'verbose_name': 'Configuración de Facturación',
+                'verbose_name_plural': 'Configuración de Facturación',
+                'db_table': 'configuracion_facturacion',
+            },
+        ),
+        migrations.CreateModel(
+            name='Impuesto',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('created_at', models.DateTimeField(auto_now_add=True, db_index=True, verbose_name='Fecha de creación')),
+                ('updated_at', models.DateTimeField(auto_now=True, verbose_name='Fecha de actualización')),
+                ('is_active', models.BooleanField(db_index=True, default=True, verbose_name='Activo')),
+                ('nombre', models.CharField(max_length=50)),
+                ('valor', models.CharField(max_length=10)),
+                ('porcentaje', models.DecimalField(blank=True, decimal_places=2, max_digits=5, null=True)),
+                ('es_exento', models.BooleanField(default=False)),
+            ],
+            options={
+                'verbose_name': 'Impuesto',
+                'verbose_name_plural': 'Impuestos',
+                'db_table': 'impuestos',
+            },
+        ),
+        migrations.CreateModel(
+            name='Auditoria',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('fecha_hora', models.DateTimeField(auto_now_add=True)),
+                ('usuario_nombre', models.CharField(max_length=150)),
+                ('accion', models.CharField(choices=[('CREAR', 'Crear'), ('ACTUALIZAR', 'Actualizar'), ('ELIMINAR', 'Eliminar'), ('LOGIN', 'Inicio de sesión'), ('LOGOUT', 'Cierre de sesión'), ('OTRO', 'Otro')], max_length=20)),
+                ('modelo', models.CharField(blank=True, max_length=100)),
+                ('objeto_id', models.CharField(blank=True, max_length=100)),
+                ('notas', models.TextField()),
+                ('ip_address', models.GenericIPAddressField(blank=True, null=True)),
+                ('usuario', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='auditorias', to=settings.AUTH_USER_MODEL)),
+            ],
+            options={
+                'verbose_name': 'Registro de Auditoría',
+                'verbose_name_plural': 'Registros de Auditoría',
+                'db_table': 'auditoria',
+                'ordering': ['-fecha_hora'],
+            },
+        ),
+    ]

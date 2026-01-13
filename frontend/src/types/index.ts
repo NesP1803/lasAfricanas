@@ -258,6 +258,70 @@ export interface EstadisticasTaller {
 }
 
 // ============================================
+// TIPOS DE CONFIGURACIÓN
+// ============================================
+export interface ConfiguracionEmpresa {
+  id: number;
+  tipo_identificacion: 'NIT' | 'CC' | 'CE';
+  identificacion: string;
+  dv: string;
+  tipo_persona: 'Persona natural' | 'Persona jurídica';
+  razon_social: string;
+  regimen: 'RÉGIMEN COMÚN' | 'RÉGIMEN SIMPLIFICADO';
+  direccion: string;
+  ciudad: string;
+  municipio: string;
+  telefono: string;
+  sitio_web: string;
+  correo: string;
+  logo: string | null;
+}
+
+export interface ConfiguracionFacturacion {
+  id: number;
+  prefijo_factura: string;
+  numero_factura: number;
+  prefijo_remision: string;
+  numero_remision: number;
+  resolucion: string;
+  notas_factura: string;
+}
+
+export interface Impuesto {
+  id: number;
+  nombre: string;
+  valor: string;
+  porcentaje?: string | null;
+  es_exento?: boolean;
+  is_active?: boolean;
+}
+
+export interface AuditoriaRegistro {
+  id: number;
+  fecha_hora: string;
+  usuario_nombre: string;
+  accion: string;
+  modelo: string;
+  objeto_id: string;
+  notas: string;
+  ip_address: string | null;
+}
+
+export interface UsuarioAdmin {
+  id: number;
+  username: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  tipo_usuario: 'ADMIN' | 'VENDEDOR' | 'MECANICO' | 'BODEGUERO';
+  telefono?: string;
+  sede?: string;
+  is_active: boolean;
+  last_login: string | null;
+  date_joined: string;
+}
+
+// ============================================
 // TIPOS DE RESPUESTA DE API
 // ============================================
 export interface PaginatedResponse<T> {
