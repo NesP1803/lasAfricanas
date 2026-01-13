@@ -165,7 +165,6 @@ export default function Layout() {
           { label: "Empleados", path: "/listados?tab=empleados" },
           { label: "Categorias", path: "/listados?tab=categorias" },
           { label: "Mecánicos", path: "/listados?tab=mecanicos" },
-          { label: "Descuentos Clientes" },
         ],
       },
       {
@@ -183,7 +182,7 @@ export default function Layout() {
       },
       {
         label: "Entrega M/CIA",
-        icon: <Share2 size={18} />,
+        icon: <PackageOpen size={18} />,
         items: [
           { label: "Registrar Moto a Mecanico" },
           { label: " Listado de Motos" },
@@ -209,7 +208,7 @@ export default function Layout() {
       },
       {
         label: "Reportes",
-        icon: <PackageOpen size={18} />,
+        icon: <Share2 size={18} />,
         items: [{ label: "Resumen diario" }, { label: "Resumen mensual" }],
       },
     ],
