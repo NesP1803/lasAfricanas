@@ -21,15 +21,12 @@ export default function Inventario() {
   const [categoriaFilter, setCategoriaFilter] = useState<number | null>(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [stockBajo, setStockBajo] = useState<ProductoList[]>([]);
-  const [loadingStockBajo, setLoadingStockBajo] = useState(true);
   const [bajaCodigo, setBajaCodigo] = useState("");
   const [bajaCantidad, setBajaCantidad] = useState(1);
   const [bajaMotivo, setBajaMotivo] = useState("Daños");
   const [bajaItems, setBajaItems] = useState<
-    { id: number; codigo: string; nombre: string; cantidad: number; motivo: string; stockActual: number }[]
+    { id: number; codigo: string; nombre: string; cantidad: number; motivo: string }[]
   >([]);
-  const [savingBaja, setSavingBaja] = useState(false);
   
   // Estados para el formulario
   const [showForm, setShowForm] = useState(false);
@@ -121,6 +118,11 @@ export default function Inventario() {
     loadProductos();
   };
 
+  const lowStockItems = useMemo(
+    () => productos.filter((p) => p.stock_estado === "BAJO"),
+    [productos]
+  );
+
   const agotadosItems = useMemo(
     () => productos.filter((p) => p.stock_estado === "AGOTADO"),
     [productos]
@@ -135,59 +137,30 @@ export default function Inventario() {
     }, 0);
   }, [productos]);
 
-  const handleAgregarBaja = async () => {
+  const handleAgregarBaja = () => {
     if (!bajaCodigo.trim()) return;
-    try {
-      const match = await inventarioApi.buscarPorCodigo(bajaCodigo.trim());
-      setBajaItems((prev) => [
-        ...prev,
-        {
-          id: match.id,
-          codigo: match.codigo,
-          nombre: match.nombre,
-          cantidad: bajaCantidad,
-          motivo: bajaMotivo,
-          stockActual: match.stock,
-        },
-      ]);
-      setBajaCodigo("");
-      setBajaCantidad(1);
-      setBajaMotivo("Daños");
-    } catch (error) {
-      console.error("Error al buscar artículo:", error);
+    const match = productos.find((producto) => producto.codigo === bajaCodigo.trim());
+    if (!match) {
       alert("No se encontró el artículo con ese código.");
+      return;
     }
+    setBajaItems((prev) => [
+      ...prev,
+      {
+        id: match.id,
+        codigo: match.codigo,
+        nombre: match.nombre,
+        cantidad: bajaCantidad,
+        motivo: bajaMotivo,
+      },
+    ]);
+    setBajaCodigo("");
+    setBajaCantidad(1);
+    setBajaMotivo("Daños");
   };
 
   const handleRemoveBaja = (index: number) => {
     setBajaItems((prev) => prev.filter((_, idx) => idx !== index));
-  };
-
-  const handleGuardarBaja = async () => {
-    if (bajaItems.length === 0) return;
-    setSavingBaja(true);
-    try {
-      for (const item of bajaItems) {
-        const nuevoStock = item.stockActual - item.cantidad;
-        if (nuevoStock < 0) {
-          alert(`La cantidad supera el stock disponible para ${item.codigo}.`);
-          setSavingBaja(false);
-          return;
-        }
-        await inventarioApi.updateProducto(item.id, {
-          stock: nuevoStock,
-          is_active: nuevoStock === 0 ? false : true,
-        });
-      }
-      setBajaItems([]);
-      loadProductos();
-      loadStockBajo();
-    } catch (error) {
-      console.error("Error al dar de baja artículos:", error);
-      alert("No se pudieron guardar las bajas.");
-    } finally {
-      setSavingBaja(false);
-    }
   };
 
   const getStockBadge = (estado: string) => {
@@ -213,8 +186,36 @@ export default function Inventario() {
   };
 
   return (
-    <div className="space-y-5">
-      <section className="bg-gradient-to-b from-gray-200 to-gray-300 border border-gray-400 rounded-md p-2 shadow-sm">
+    <div className="space-y-4">
+      <div className="bg-white border border-gray-300 rounded-md p-4 shadow-sm">
+        <h1 className="text-sm font-bold text-gray-800 uppercase mb-3">
+          Módulo de artículos
+        </h1>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 text-xs text-gray-700">
+          <div className="border border-gray-300 rounded-md p-3 bg-gray-50">
+            <p className="uppercase text-gray-500 text-[11px]">Artículos registrados</p>
+            <p className="text-lg font-semibold text-gray-900">{productos.length}</p>
+          </div>
+          <div className="border border-gray-300 rounded-md p-3 bg-gray-50">
+            <p className="uppercase text-gray-500 text-[11px]">Stock bajo</p>
+            <p className="text-lg font-semibold text-yellow-700">
+              {lowStockItems.length}
+            </p>
+          </div>
+          <div className="border border-gray-300 rounded-md p-3 bg-gray-50">
+            <p className="uppercase text-gray-500 text-[11px]">Agotados</p>
+            <p className="text-lg font-semibold text-red-700">{agotadosItems.length}</p>
+          </div>
+          <div className="border border-gray-300 rounded-md p-3 bg-gray-50">
+            <p className="uppercase text-gray-500 text-[11px]">Cartera de inventario</p>
+            <p className="text-lg font-semibold text-gray-900">
+              ${Math.round(inventoryValue).toLocaleString("es-CO")}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <section className="bg-gradient-to-b from-gray-200 to-gray-300 border border-gray-400 rounded-md p-2">
         <div className="flex items-center justify-between border-b border-gray-400 pb-2">
           <h2 className="text-sm font-bold text-gray-800 uppercase">
             Listado de artículos (CRUD)
@@ -464,20 +465,14 @@ export default function Inventario() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {loadingStockBajo ? (
-                <tr>
-                  <td className="px-3 py-3 text-center text-gray-500" colSpan={2}>
-                    Cargando stock bajo...
-                  </td>
-                </tr>
-              ) : stockBajo.length === 0 ? (
+              {lowStockItems.length === 0 ? (
                 <tr>
                   <td className="px-3 py-3 text-center text-gray-500" colSpan={2}>
                     No hay artículos con stock bajo.
                   </td>
                 </tr>
               ) : (
-                stockBajo.map((producto) => (
+                lowStockItems.map((producto) => (
                   <tr key={producto.id} className="hover:bg-blue-50">
                     <td className="px-3 py-2 text-gray-900">{producto.nombre}</td>
                     <td className="px-3 py-2 text-gray-900">{producto.stock}</td>
@@ -539,11 +534,9 @@ export default function Inventario() {
             </button>
             <button
               type="button"
-              onClick={handleGuardarBaja}
-              disabled={savingBaja}
-              className="ml-auto px-3 py-1 border border-gray-400 rounded bg-white text-gray-800 text-xs font-semibold hover:bg-gray-100 disabled:opacity-50"
+              className="ml-auto px-3 py-1 border border-gray-400 rounded bg-white text-gray-800 text-xs font-semibold hover:bg-gray-100"
             >
-              {savingBaja ? "Guardando..." : "Guardar"}
+              Guardar
             </button>
             <button
               type="button"
