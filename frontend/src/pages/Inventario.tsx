@@ -1,8 +1,7 @@
-import { useState, useEffect } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   Plus,
   Filter,
-  Download,
   Edit,
   Trash2,
   HelpCircle,
@@ -22,6 +21,12 @@ export default function Inventario() {
   const [categoriaFilter, setCategoriaFilter] = useState<number | null>(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [bajaCodigo, setBajaCodigo] = useState("");
+  const [bajaCantidad, setBajaCantidad] = useState(1);
+  const [bajaMotivo, setBajaMotivo] = useState("Daños");
+  const [bajaItems, setBajaItems] = useState<
+    { id: number; codigo: string; nombre: string; cantidad: number; motivo: string }[]
+  >([]);
   
   // Estados para el formulario
   const [showForm, setShowForm] = useState(false);
@@ -100,6 +105,51 @@ export default function Inventario() {
     loadProductos();
   };
 
+  const lowStockItems = useMemo(
+    () => productos.filter((p) => p.stock_estado === "BAJO"),
+    [productos]
+  );
+
+  const agotadosItems = useMemo(
+    () => productos.filter((p) => p.stock_estado === "AGOTADO"),
+    [productos]
+  );
+
+  const inventoryValue = useMemo(() => {
+    return productos.reduce((acc, producto) => {
+      const precio = Number.parseFloat(producto.precio_venta || "0");
+      const stock = Number(producto.stock || 0);
+      if (Number.isNaN(precio) || Number.isNaN(stock)) return acc;
+      return acc + precio * stock;
+    }, 0);
+  }, [productos]);
+
+  const handleAgregarBaja = () => {
+    if (!bajaCodigo.trim()) return;
+    const match = productos.find((producto) => producto.codigo === bajaCodigo.trim());
+    if (!match) {
+      alert("No se encontró el artículo con ese código.");
+      return;
+    }
+    setBajaItems((prev) => [
+      ...prev,
+      {
+        id: match.id,
+        codigo: match.codigo,
+        nombre: match.nombre,
+        cantidad: bajaCantidad,
+        motivo: bajaMotivo,
+      },
+    ]);
+    setBajaCodigo("");
+    setBajaCantidad(1);
+    setBajaMotivo("Daños");
+  };
+
+  const handleRemoveBaja = (index: number) => {
+    setBajaItems((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
   const getStockBadge = (estado: string) => {
     if (estado === "AGOTADO") {
       return (
@@ -124,12 +174,39 @@ export default function Inventario() {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="bg-gradient-to-b from-gray-200 to-gray-300 border border-gray-400 rounded-md p-2">
+      <div className="bg-white border border-gray-300 rounded-md p-4 shadow-sm">
+        <h1 className="text-sm font-bold text-gray-800 uppercase mb-3">
+          Módulo de artículos
+        </h1>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 text-xs text-gray-700">
+          <div className="border border-gray-300 rounded-md p-3 bg-gray-50">
+            <p className="uppercase text-gray-500 text-[11px]">Artículos registrados</p>
+            <p className="text-lg font-semibold text-gray-900">{productos.length}</p>
+          </div>
+          <div className="border border-gray-300 rounded-md p-3 bg-gray-50">
+            <p className="uppercase text-gray-500 text-[11px]">Stock bajo</p>
+            <p className="text-lg font-semibold text-yellow-700">
+              {lowStockItems.length}
+            </p>
+          </div>
+          <div className="border border-gray-300 rounded-md p-3 bg-gray-50">
+            <p className="uppercase text-gray-500 text-[11px]">Agotados</p>
+            <p className="text-lg font-semibold text-red-700">{agotadosItems.length}</p>
+          </div>
+          <div className="border border-gray-300 rounded-md p-3 bg-gray-50">
+            <p className="uppercase text-gray-500 text-[11px]">Cartera de inventario</p>
+            <p className="text-lg font-semibold text-gray-900">
+              ${Math.round(inventoryValue).toLocaleString("es-CO")}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <section className="bg-gradient-to-b from-gray-200 to-gray-300 border border-gray-400 rounded-md p-2">
         <div className="flex items-center justify-between border-b border-gray-400 pb-2">
-          <h1 className="text-sm font-bold text-gray-800 uppercase">
-            Listado de artículos
-          </h1>
+          <h2 className="text-sm font-bold text-gray-800 uppercase">
+            Listado de artículos (CRUD)
+          </h2>
           <div className="flex items-center gap-2">
             <button
               onClick={handleCreate}
@@ -214,17 +291,11 @@ export default function Inventario() {
                 disabled
               />
             </div>
-
-            <button className="flex items-center justify-center gap-2 px-3 py-1 border border-gray-400 rounded bg-white text-gray-800 text-xs font-semibold hover:bg-gray-100 transition-colors">
-              <Download size={16} />
-              Exportar
-            </button>
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Products Table */}
-      <div className="bg-white border border-gray-400 rounded-md overflow-hidden">
+      <section className="bg-white border border-gray-400 rounded-md overflow-hidden">
         {loading ? (
           <div className="p-8 text-center text-gray-500">
             Cargando productos...
@@ -324,7 +395,6 @@ export default function Inventario() {
               </table>
             </div>
 
-            {/* Pagination */}
             {totalPages > 1 && (
               <div className="px-3 py-2 border-t border-gray-200 flex items-center justify-between text-sm">
                 <button
@@ -348,25 +418,158 @@ export default function Inventario() {
             )}
           </>
         )}
-      </div>
+      </section>
 
-      <div className="bg-gray-100 border border-gray-400 rounded-md px-3 py-1 text-xs text-gray-700 flex flex-wrap gap-4">
-        <span>
-          Artículos registrados: <strong>{productos.length}</strong>
-        </span>
-        <span>
-          Stock bajo:{" "}
-          <strong>
-            {productos.filter((p) => p.stock_estado === "BAJO").length}
-          </strong>
-        </span>
-        <span>
-          Agotados:{" "}
-          <strong>
-            {productos.filter((p) => p.stock_estado === "AGOTADO").length}
-          </strong>
-        </span>
-      </div>
+      <section className="bg-white border border-gray-400 rounded-md overflow-hidden">
+        <div className="bg-gradient-to-b from-blue-500 to-blue-600 text-white text-xs font-bold uppercase px-3 py-2">
+          Artículos con stock bajo
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-yellow-300 border-b border-gray-400">
+              <tr>
+                <th className="px-3 py-2 text-left text-xs font-bold text-gray-900 uppercase tracking-wider">
+                  Artículo
+                </th>
+                <th className="px-3 py-2 text-left text-xs font-bold text-gray-900 uppercase tracking-wider">
+                  Stock
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {lowStockItems.length === 0 ? (
+                <tr>
+                  <td className="px-3 py-3 text-center text-gray-500" colSpan={2}>
+                    No hay artículos con stock bajo.
+                  </td>
+                </tr>
+              ) : (
+                lowStockItems.map((producto) => (
+                  <tr key={producto.id} className="hover:bg-blue-50">
+                    <td className="px-3 py-2 text-gray-900">{producto.nombre}</td>
+                    <td className="px-3 py-2 text-gray-900">{producto.stock}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="bg-white border border-gray-400 rounded-md overflow-hidden">
+        <div className="bg-gradient-to-b from-blue-500 to-blue-600 text-white text-xs font-bold uppercase px-3 py-2">
+          Dar de baja artículos del sistema
+        </div>
+        <div className="p-3 space-y-3 text-xs">
+          <div className="flex flex-wrap gap-3 items-end">
+            <div className="min-w-[180px]">
+              <label className="font-bold text-gray-800 block mb-1">
+                Digite código de artículo
+              </label>
+              <input
+                type="text"
+                value={bajaCodigo}
+                onChange={(event) => setBajaCodigo(event.target.value)}
+                className="w-full px-2 py-1 border border-gray-400 rounded text-sm text-gray-900"
+                placeholder="Ej: 00075"
+              />
+            </div>
+            <div className="min-w-[120px]">
+              <label className="font-bold text-gray-800 block mb-1">Cant.</label>
+              <input
+                type="number"
+                min={1}
+                value={bajaCantidad}
+                onChange={(event) => setBajaCantidad(Number(event.target.value))}
+                className="w-full px-2 py-1 border border-gray-400 rounded text-sm text-gray-900"
+              />
+            </div>
+            <div className="min-w-[240px]">
+              <label className="font-bold text-gray-800 block mb-1">Motivo</label>
+              <select
+                value={bajaMotivo}
+                onChange={(event) => setBajaMotivo(event.target.value)}
+                className="w-full px-2 py-1 border border-gray-400 rounded text-sm text-gray-900"
+              >
+                <option value="Daños">Daños</option>
+                <option value="Pérdidas">Pérdidas</option>
+                <option value="Obsequios">Obsequios</option>
+                <option value="Devolución proveedor">Devolución proveedor</option>
+              </select>
+            </div>
+            <button
+              type="button"
+              onClick={handleAgregarBaja}
+              className="px-3 py-1 border border-gray-400 rounded bg-white text-gray-800 text-xs font-semibold hover:bg-gray-100"
+            >
+              Agregar
+            </button>
+            <button
+              type="button"
+              className="ml-auto px-3 py-1 border border-gray-400 rounded bg-white text-gray-800 text-xs font-semibold hover:bg-gray-100"
+            >
+              Guardar
+            </button>
+            <button
+              type="button"
+              className="px-3 py-1 border border-gray-400 rounded bg-white text-gray-800 text-xs font-semibold hover:bg-gray-100"
+            >
+              Ayuda
+            </button>
+          </div>
+
+          <div className="overflow-x-auto border border-gray-300 rounded">
+            <table className="w-full text-sm">
+              <thead className="bg-yellow-300 border-b border-gray-400">
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs font-bold text-gray-900 uppercase tracking-wider">
+                    Código
+                  </th>
+                  <th className="px-3 py-2 text-left text-xs font-bold text-gray-900 uppercase tracking-wider">
+                    Producto
+                  </th>
+                  <th className="px-3 py-2 text-left text-xs font-bold text-gray-900 uppercase tracking-wider">
+                    Cant.
+                  </th>
+                  <th className="px-3 py-2 text-left text-xs font-bold text-gray-900 uppercase tracking-wider">
+                    Motivo
+                  </th>
+                  <th className="px-3 py-2 text-right text-xs font-bold text-gray-900 uppercase tracking-wider">
+                    Acción
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {bajaItems.length === 0 ? (
+                  <tr>
+                    <td className="px-3 py-4 text-center text-gray-500" colSpan={5}>
+                      No hay artículos en baja.
+                    </td>
+                  </tr>
+                ) : (
+                  bajaItems.map((item, index) => (
+                    <tr key={`${item.codigo}-${index}`} className="hover:bg-blue-50">
+                      <td className="px-3 py-2 text-gray-900">{item.codigo}</td>
+                      <td className="px-3 py-2 text-gray-900">{item.nombre}</td>
+                      <td className="px-3 py-2 text-gray-900">{item.cantidad}</td>
+                      <td className="px-3 py-2 text-gray-900">{item.motivo}</td>
+                      <td className="px-3 py-2 text-right">
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveBaja(index)}
+                          className="text-red-600 hover:text-red-900"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
 
       {/* Modal de formulario */}
       {showForm && (
