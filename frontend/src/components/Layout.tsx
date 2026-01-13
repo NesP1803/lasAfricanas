@@ -15,6 +15,8 @@ import {
 export default function Layout() {
   const { isAuthenticated, user, logout } = useAuth();
   const navigate = useNavigate();
+  const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [activeMenu, setActiveMenu] = useState<string | null>(null);
 
   if (!isAuthenticated) {
     return <Navigate to="/login" />;
