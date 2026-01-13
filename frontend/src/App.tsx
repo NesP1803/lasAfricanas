@@ -2,7 +2,6 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
-import Inventario from './pages/Inventario';
 import PuntoVenta from './pages/PuntoVenta';
 import Taller from './pages/Taller';
 import TallerNuevoServicio from './pages/TallerNuevoServicio';
@@ -20,7 +19,6 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<Layout />}>
             <Route index element={<Dashboard />} />
-            <Route path="inventario" element={<Inventario />} />
             <Route path="ventas" element={<PuntoVenta />} />
             <Route path="taller" element={<Taller />} />
             <Route path="taller/nuevo" element={<TallerNuevoServicio />} />

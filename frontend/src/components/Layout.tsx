@@ -2,7 +2,6 @@ import { Outlet, Navigate, useNavigate } from "react-router-dom";
 import { useMemo, useState, useRef, type ReactNode } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import {
-  Boxes,
   ClipboardList,
   FileText,
   LogOut,
@@ -165,19 +164,6 @@ export default function Layout() {
           { label: "Empleados", path: "/listados?tab=empleados" },
           { label: "Categorias", path: "/listados?tab=categorias" },
           { label: "Mecánicos", path: "/listados?tab=mecanicos" },
-        ],
-      },
-      {
-        label: "Artículos",
-        icon: <Boxes size={18} />,
-        items: [
-          { label: "Nuevo", path: "/inventario" },
-          { label: "Mercancia" },
-          { label: "Stock Bajo" },
-          { label: "Nueva Compra" },
-          { label: "Compras" },
-          { label: "Dar de Baja" },
-          { label: "Descargados" },
         ],
       },
       {
