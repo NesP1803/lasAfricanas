@@ -1,5 +1,5 @@
 import { Outlet, Navigate, useNavigate } from 'react-router-dom';
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import {
   Boxes,
@@ -25,24 +25,6 @@ export default function Layout() {
   const handleLogout = () => {
     logout();
     navigate('/login');
-  };
-
-  const handleMenuEnter = (label: string) => {
-    if (closeTimeoutRef.current) {
-      clearTimeout(closeTimeoutRef.current);
-      closeTimeoutRef.current = null;
-    }
-    setActiveMenu(label);
-  };
-
-  const handleMenuLeave = () => {
-    if (closeTimeoutRef.current) {
-      clearTimeout(closeTimeoutRef.current);
-    }
-    closeTimeoutRef.current = setTimeout(() => {
-      setActiveMenu(null);
-      closeTimeoutRef.current = null;
-    }, 300);
   };
 
   type MenuItem = {
@@ -208,27 +190,16 @@ export default function Layout() {
 
           <nav className="flex flex-1 items-center justify-center gap-2">
             {menuItems.map((item) => (
-              <div
-                key={item.label}
-                className="relative"
-                onMouseEnter={() => handleMenuEnter(item.label)}
-                onMouseLeave={handleMenuLeave}
-              >
+              <div key={item.label} className="relative group">
                 <button
                   type="button"
                   className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-white/90 transition hover:bg-white/15 hover:text-white"
                 >
                   {renderMenuButton(item.label, item.icon)}
                 </button>
-                {activeMenu === item.label && (
-                  <div
-                    className="absolute left-0 mt-2 min-w-[220px] rounded-md border border-slate-200 bg-white shadow-xl"
-                    onMouseEnter={() => handleMenuEnter(item.label)}
-                    onMouseLeave={handleMenuLeave}
-                  >
-                    {renderDropdownItems(item.items)}
-                  </div>
-                )}
+                <div className="absolute left-0 mt-2 hidden min-w-[220px] rounded-md border border-slate-200 bg-white shadow-xl group-hover:block">
+                  {renderDropdownItems(item.items)}
+                </div>
               </div>
             ))}
           </nav>
