@@ -182,9 +182,14 @@ export const inventarioApi = {
   },
 
   // Categorías
-  async getCategorias(): Promise<Categoria[]> {
+  async getCategorias(params?: { search?: string; page?: number; ordering?: string }): Promise<Categoria[] | PaginatedResponse<Categoria>> {
     const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/categorias/`, {
+    const queryParams = new URLSearchParams();
+    if (params?.search) queryParams.append('search', params.search);
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.ordering) queryParams.append('ordering', params.ordering);
+    const query = queryParams.toString();
+    const response = await fetch(`${API_URL}/categorias/${query ? `?${query}` : ''}`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
@@ -192,14 +197,66 @@ export const inventarioApi = {
     });
 
     if (!response.ok) throw new Error('Error al obtener categorías');
-    const data = await response.json();
-    return data.results || data;
+    return response.json();
+  },
+
+  async createCategoria(data: Partial<Categoria>): Promise<Categoria> {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/categorias/`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(JSON.stringify(error));
+    }
+    return response.json();
+  },
+
+  async updateCategoria(id: number, data: Partial<Categoria>): Promise<Categoria> {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/categorias/${id}/`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(JSON.stringify(error));
+    }
+    return response.json();
+  },
+
+  async deleteCategoria(id: number): Promise<void> {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/categorias/${id}/`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) throw new Error('Error al eliminar categoría');
   },
 
   // Proveedores
-  async getProveedores(): Promise<Proveedor[]> {
+  async getProveedores(params?: { search?: string; page?: number; ordering?: string }): Promise<Proveedor[] | PaginatedResponse<Proveedor>> {
     const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/proveedores/`, {
+    const queryParams = new URLSearchParams();
+    if (params?.search) queryParams.append('search', params.search);
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.ordering) queryParams.append('ordering', params.ordering);
+    const query = queryParams.toString();
+    const response = await fetch(`${API_URL}/proveedores/${query ? `?${query}` : ''}`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
@@ -207,7 +264,54 @@ export const inventarioApi = {
     });
 
     if (!response.ok) throw new Error('Error al obtener proveedores');
-    const data = await response.json();
-    return data.results || data;
+    return response.json();
+  },
+
+  async createProveedor(data: Partial<Proveedor>): Promise<Proveedor> {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/proveedores/`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(JSON.stringify(error));
+    }
+    return response.json();
+  },
+
+  async updateProveedor(id: number, data: Partial<Proveedor>): Promise<Proveedor> {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/proveedores/${id}/`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(JSON.stringify(error));
+    }
+    return response.json();
+  },
+
+  async deleteProveedor(id: number): Promise<void> {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/proveedores/${id}/`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) throw new Error('Error al eliminar proveedor');
   },
 };
