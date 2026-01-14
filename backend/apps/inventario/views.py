@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models import F, Sum
 from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -133,6 +134,25 @@ class ProductoViewSet(viewsets.ModelViewSet):
         
         serializer = ProductoListSerializer(productos, many=True)
         return Response(serializer.data)
+
+    @action(detail=False, methods=['get'])
+    def estadisticas(self, request):
+        """Retorna estadísticas generales del inventario."""
+        queryset = self.get_queryset()
+        total = queryset.count()
+        stock_bajo = queryset.filter(stock__lte=models.F('stock_minimo')).count()
+        agotados = queryset.filter(stock__lte=0).count()
+        valor_inventario = (
+            queryset.aggregate(total=Sum(F('precio_costo') * F('stock')))['total'] or 0
+        )
+        return Response(
+            {
+                'total': total,
+                'stock_bajo': stock_bajo,
+                'agotados': agotados,
+                'valor_inventario': valor_inventario,
+            }
+        )
     
     @action(detail=False, methods=['get'])
     def por_categoria(self, request):

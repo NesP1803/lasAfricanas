@@ -66,6 +66,21 @@ export interface PaginatedResponse<T> {
   results: T[];
 }
 
+export interface AjusteStockPayload {
+  cantidad: number;
+  tipo?: 'ENTRADA' | 'SALIDA' | 'AJUSTE' | 'DEVOLUCION' | 'TALLER' | 'BAJA';
+  costo_unitario?: number | string;
+  observaciones?: string;
+  referencia?: string;
+}
+
+export interface InventarioEstadisticas {
+  total: number;
+  stock_bajo: number;
+  agotados: number;
+  valor_inventario: string | number;
+}
+
 // Funciones API
 export const inventarioApi = {
   // Productos
@@ -178,6 +193,37 @@ export const inventarioApi = {
     });
 
     if (!response.ok) throw new Error('Error al obtener productos con stock bajo');
+    return response.json();
+  },
+
+  async getEstadisticas(): Promise<InventarioEstadisticas> {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/productos/estadisticas/`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) throw new Error('Error al obtener estadísticas del inventario');
+    return response.json();
+  },
+
+  async ajustarStock(id: number, payload: AjusteStockPayload): Promise<Producto> {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/productos/${id}/ajustar_stock/`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(JSON.stringify(error));
+    }
     return response.json();
   },
 
