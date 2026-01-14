@@ -1,12 +1,5 @@
 import { useAuth } from '../contexts/AuthContext';
-import {
-  LayoutDashboard,
-  Package,
-  ShoppingCart,
-  Wrench,
-  Users,
-  TrendingUp,
-} from 'lucide-react';
+import { Package, ShoppingCart, Users } from 'lucide-react';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -23,12 +16,6 @@ export default function Dashboard() {
       title: 'Ventas del día',
       value: '$0',
       description: 'Total de hoy',
-    },
-    {
-      icon: <Wrench className="w-8 h-8 text-purple-600" />,
-      title: 'Órdenes de taller',
-      value: '0',
-      description: 'Activas',
     },
     {
       icon: <Users className="w-8 h-8 text-orange-600" />,
@@ -92,9 +79,6 @@ export default function Dashboard() {
             </button>
             <button className="w-full text-left px-4 py-2 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 transition-colors">
               Registrar producto
-            </button>
-            <button className="w-full text-left px-4 py-2 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 transition-colors">
-              Nueva orden de taller
             </button>
           </div>
         </div>

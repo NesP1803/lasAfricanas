@@ -11,17 +11,15 @@ import {
   Briefcase,
   Tags,
   Truck,
-  Wrench,
   X,
 } from 'lucide-react';
 import { inventarioApi } from '../api/inventario';
 import { ventasApi } from '../api/ventas';
-import { mecanicoAPI } from '../api/taller';
 import { usuariosApi } from '../api/usuarios';
 import type { Categoria, Proveedor } from '../api/inventario';
-import type { Cliente, Mecanico, PaginatedResponse, UsuarioAdmin } from '../types';
+import type { Cliente, PaginatedResponse, UsuarioAdmin } from '../types';
 
-type ActiveTab = 'clientes' | 'proveedores' | 'empleados' | 'categorias' | 'mecanicos';
+type ActiveTab = 'clientes' | 'proveedores' | 'empleados' | 'categorias';
 
 type FormMode = 'create' | 'edit';
 
@@ -56,12 +54,6 @@ const tabs: ListadoTab[] = [
     label: 'Categorías',
     description: 'Clasificación de repuestos y servicios.',
     icon: <Tags size={18} />,
-  },
-  {
-    key: 'mecanicos',
-    label: 'Mecánicos',
-    description: 'Equipo técnico y especialidades del taller.',
-    icon: <Wrench size={18} />,
   },
 ];
 
@@ -108,8 +100,6 @@ export default function Listados() {
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [usuarios, setUsuarios] = useState<UsuarioAdmin[]>([]);
-  const [mecanicos, setMecanicos] = useState<Mecanico[]>([]);
-  const [usuariosDisponibles, setUsuariosDisponibles] = useState<UsuarioAdmin[]>([]);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [formMode, setFormMode] = useState<FormMode>('create');
@@ -161,11 +151,6 @@ export default function Listados() {
         setTotalRegistros(parsed.count);
         return;
       }
-      if (activeTab === 'mecanicos') {
-        const data = await mecanicoAPI.getAll({ search });
-        setMecanicos(data.results);
-        setTotalRegistros(data.count);
-      }
     } catch (error) {
       console.error('Error al cargar listados:', error);
       setFormError('No se pudieron cargar los listados. Intenta nuevamente.');
@@ -178,26 +163,14 @@ export default function Listados() {
     setFormMode('create');
     setFormError(null);
     setFormData(getDefaultFormData(activeTab));
-    if (activeTab === 'mecanicos') {
-      await loadUsuariosDisponibles();
-    }
     setModalOpen(true);
   };
 
   const openEdit = async (record: any) => {
     setFormMode('edit');
     setFormError(null);
-    if (activeTab === 'mecanicos') {
-      await loadUsuariosDisponibles();
-    }
     setFormData(getEditFormData(activeTab, record));
     setModalOpen(true);
-  };
-
-  const loadUsuariosDisponibles = async () => {
-    const data = await usuariosApi.getUsuarios();
-    const parsed = parseListado(data);
-    setUsuariosDisponibles(parsed.items);
   };
 
   const closeModal = () => {
@@ -224,8 +197,6 @@ export default function Listados() {
         await inventarioApi.deleteCategoria(selectedId);
       } else if (activeTab === 'empleados') {
         await usuariosApi.deleteUsuario(selectedId);
-      } else if (activeTab === 'mecanicos') {
-        await mecanicoAPI.delete(selectedId);
       }
       setSelectedId(null);
       await loadListado();
@@ -268,12 +239,6 @@ export default function Listados() {
         } else {
           await usuariosApi.updateUsuario(formData.id, payload);
         }
-      } else if (activeTab === 'mecanicos') {
-        if (formMode === 'create') {
-          await mecanicoAPI.create(payload);
-        } else {
-          await mecanicoAPI.update(formData.id, payload);
-        }
       }
       setModalOpen(false);
       setFormData({});
@@ -295,16 +260,14 @@ export default function Listados() {
     if (activeTab === 'proveedores') return proveedores;
     if (activeTab === 'categorias') return categorias;
     if (activeTab === 'empleados') return usuarios;
-    if (activeTab === 'mecanicos') return mecanicos;
     return [];
-  }, [activeTab, categorias, clientes, mecanicos, proveedores, usuarios]);
+  }, [activeTab, categorias, clientes, proveedores, usuarios]);
 
   const searchPlaceholder = useMemo(() => {
     if (activeTab === 'clientes') return 'Buscar por nombre, documento o teléfono...';
     if (activeTab === 'proveedores') return 'Buscar por proveedor, NIT o ciudad...';
     if (activeTab === 'categorias') return 'Buscar por nombre o descripción...';
     if (activeTab === 'empleados') return 'Buscar por usuario, nombre o rol...';
-    if (activeTab === 'mecanicos') return 'Buscar por nombre o especialidad...';
     return 'Buscar...';
   }, [activeTab]);
 
@@ -437,7 +400,6 @@ export default function Listados() {
                   proveedores,
                   categorias,
                   usuarios,
-                  mecanicos,
                   selectedId,
                   onSelect: handleRowSelect,
                   onDoubleClick: openEdit,
@@ -476,7 +438,7 @@ export default function Listados() {
                   {formError}
                 </div>
               )}
-              {renderFormFields(activeTab, formData, setFormData, usuariosDisponibles)}
+              {renderFormFields(activeTab, formData, setFormData)}
               <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 pt-4">
                 <button
                   type="button"
@@ -547,12 +509,7 @@ const getDefaultFormData = (tab: ActiveTab) => {
       password: '',
     };
   }
-  return {
-    usuario: '',
-    especialidad: '',
-    comision_porcentaje: '0',
-    is_active: true,
-  };
+  return {};
 };
 
 const getEditFormData = (tab: ActiveTab, record: any) => {
@@ -605,13 +562,7 @@ const getEditFormData = (tab: ActiveTab, record: any) => {
       password: '',
     };
   }
-  return {
-    id: record.id,
-    usuario: record.usuario ?? '',
-    especialidad: record.especialidad ?? '',
-    comision_porcentaje: record.comision_porcentaje ?? '0',
-    is_active: record.is_active,
-  };
+  return {};
 };
 
 const buildPayload = (tab: ActiveTab, data: Record<string, any>) => {
@@ -620,14 +571,6 @@ const buildPayload = (tab: ActiveTab, data: Record<string, any>) => {
       nombre: data.nombre,
       descripcion: data.descripcion,
       orden: Number(data.orden) || 0,
-      is_active: data.is_active,
-    };
-  }
-  if (tab === 'mecanicos') {
-    return {
-      usuario: Number(data.usuario),
-      especialidad: data.especialidad,
-      comision_porcentaje: data.comision_porcentaje,
       is_active: data.is_active,
     };
   }
@@ -719,16 +662,7 @@ const renderTableHeader = (tab: ActiveTab) => {
       </tr>
     );
   }
-  return (
-    <tr>
-      <th className="px-4 py-3">Mecánico</th>
-      <th className="px-4 py-3">Usuario</th>
-      <th className="px-4 py-3">Especialidad</th>
-      <th className="px-4 py-3">Comisión</th>
-      <th className="px-4 py-3">Servicios activos</th>
-      <th className="px-4 py-3">Estado</th>
-    </tr>
-  );
+  return null;
 };
 
 const renderTableRows = ({
@@ -737,7 +671,6 @@ const renderTableRows = ({
   proveedores,
   categorias,
   usuarios,
-  mecanicos,
   selectedId,
   onSelect,
   onDoubleClick,
@@ -747,7 +680,6 @@ const renderTableRows = ({
   proveedores: Proveedor[];
   categorias: Categoria[];
   usuarios: UsuarioAdmin[];
-  mecanicos: Mecanico[];
   selectedId: number | null;
   onSelect: (id: number) => void;
   onDoubleClick: (record: any) => void;
@@ -847,25 +779,7 @@ const renderTableRows = ({
     ));
   }
 
-  return mecanicos.map((mecanico) => (
-    <tr
-      key={mecanico.id}
-      className={baseRowClasses(mecanico.id === selectedId)}
-      onClick={() => onSelect(mecanico.id)}
-      onDoubleClick={() => onDoubleClick(mecanico)}
-    >
-      <td className="px-4 py-3 font-medium text-slate-800">
-        {mecanico.usuario_nombre || '—'}
-      </td>
-      <td className="px-4 py-3">{mecanico.usuario_username}</td>
-      <td className="px-4 py-3">{mecanico.especialidad || '—'}</td>
-      <td className="px-4 py-3">{mecanico.comision_porcentaje}%</td>
-      <td className="px-4 py-3">{mecanico.servicios_activos}</td>
-      <td className="px-4 py-3">
-        <EstadoBadge activo={mecanico.is_active} />
-      </td>
-    </tr>
-  ));
+  return null;
 };
 
 const EstadoBadge = ({ activo }: { activo: boolean }) => (
@@ -881,8 +795,7 @@ const EstadoBadge = ({ activo }: { activo: boolean }) => (
 const renderFormFields = (
   tab: ActiveTab,
   formData: Record<string, any>,
-  setFormData: Dispatch<SetStateAction<Record<string, any>>>,
-  usuariosDisponibles: UsuarioAdmin[]
+  setFormData: Dispatch<SetStateAction<Record<string, any>>>
 ) => {
   const handleChange = (
     event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
@@ -1115,41 +1028,7 @@ const renderFormFields = (
     );
   }
 
-  return (
-    <div className="grid gap-4 md:grid-cols-2">
-      <SelectField
-        label="Usuario asociado"
-        name="usuario"
-        value={formData.usuario}
-        onChange={handleChange}
-        options={usuariosDisponibles.map((usuario) => ({
-          value: String(usuario.id),
-          label: `${usuario.username} - ${usuario.first_name || ''} ${usuario.last_name || ''}`.trim(),
-        }))}
-        placeholder="Seleccionar usuario"
-        required
-      />
-      <InputField
-        label="Especialidad"
-        name="especialidad"
-        value={formData.especialidad}
-        onChange={handleChange}
-      />
-      <InputField
-        label="Comisión (%)"
-        name="comision_porcentaje"
-        type="number"
-        value={formData.comision_porcentaje}
-        onChange={handleChange}
-      />
-      <CheckboxField
-        label="Mecánico activo"
-        name="is_active"
-        checked={formData.is_active}
-        onChange={handleChange}
-      />
-    </div>
-  );
+  return null;
 };
 
 const InputField = ({
