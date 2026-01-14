@@ -9,6 +9,7 @@ import {
   ReceiptText,
   Settings,
   Share2,
+  Wrench,
 } from "lucide-react";
 
 type MenuItem = {
@@ -162,6 +163,7 @@ export default function Layout() {
           { label: "Proveedores", path: "/listados?tab=proveedores" },
           { label: "Empleados", path: "/listados?tab=empleados" },
           { label: "Categorias", path: "/listados?tab=categorias" },
+          { label: "Mecánicos", path: "/listados?tab=mecanicos" },
         ],
       },
       {
@@ -172,6 +174,14 @@ export default function Layout() {
           { label: "Stock Bajo", path: "/articulos?tab=stock-bajo" },
           { label: "Nueva Compra", path: "/articulos?tab=nueva-compra" },
           { label: "Dar de Baja", path: "/articulos?tab=dar-de-baja" },
+        ],
+      },
+      {
+        label: "Taller",
+        icon: <Wrench size={18} />,
+        items: [
+          { label: "Operaciones", path: "/taller?tab=ordenes" },
+          { label: "Registro de Motos", path: "/taller?tab=motos" },
         ],
       },
       {
