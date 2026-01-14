@@ -10,8 +10,8 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ("inventario", "0001_initial"),
-        ("ventas", "0001_initial"),
+        ("inventario", "__first__"),
+        ("ventas", "__first__"),
     ]
 
     operations = [

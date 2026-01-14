@@ -19,7 +19,7 @@ import {
 } from '../api/inventario';
 import ProductoForm from '../components/ProductoForm';
 
-type ArticulosTab = 'mercancia' | 'stock-bajo' | 'nueva-compra' | 'dar-de-baja';
+type ArticulosTab = 'mercancia' | 'stock-bajo' |  'dar-de-baja';
 
 const tabConfig: Array<{
   key: ArticulosTab;
@@ -35,11 +35,6 @@ const tabConfig: Array<{
     key: 'stock-bajo',
     label: 'Stock bajo',
     description: 'Artículos con alerta de inventario.',
-  },
-  {
-    key: 'nueva-compra',
-    label: 'Nueva compra',
-    description: 'Registra entradas de inventario.',
   },
   {
     key: 'dar-de-baja',
@@ -524,21 +519,6 @@ export default function Articulos() {
               </tbody>
             </table>
           </div>
-        </div>
-      )}
-
-      {activeTab === 'nueva-compra' && (
-        <div className="rounded-xl border border-dashed border-slate-200 bg-white p-8 text-center text-slate-500">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 text-blue-600">
-            <Boxes size={20} />
-          </div>
-          <h2 className="mt-4 text-lg font-semibold text-slate-800">
-            Registro de nuevas compras
-          </h2>
-          <p className="mt-2 text-sm">
-            Este módulo quedará listo para registrar entradas de inventario cuando se
-            habilite la integración de compras.
-          </p>
         </div>
       )}
 
