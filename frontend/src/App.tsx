@@ -7,6 +7,7 @@ import Layout from './components/Layout';
 import Configuracion from './pages/Configuracion';
 import Listados from './pages/Listados';
 import Articulos from './pages/Articulos';
+import Taller from './pages/Taller';
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
             <Route path="configuracion" element={<Configuracion />} />
             <Route path="listados" element={<Listados />} />
             <Route path="articulos" element={<Articulos />} />
+            <Route path="taller" element={<Taller />} />
           </Route>
         </Routes>
       </BrowserRouter>

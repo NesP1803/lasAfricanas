@@ -11,15 +11,17 @@ import {
   Briefcase,
   Tags,
   Truck,
+  Wrench,
   X,
 } from 'lucide-react';
 import { inventarioApi } from '../api/inventario';
 import { ventasApi } from '../api/ventas';
 import { usuariosApi } from '../api/usuarios';
+import { tallerApi, type Mecanico } from '../api/taller';
 import type { Categoria, Proveedor } from '../api/inventario';
 import type { Cliente, PaginatedResponse, UsuarioAdmin } from '../types';
 
-type ActiveTab = 'clientes' | 'proveedores' | 'empleados' | 'categorias';
+type ActiveTab = 'clientes' | 'proveedores' | 'empleados' | 'categorias' | 'mecanicos';
 
 type FormMode = 'create' | 'edit';
 
@@ -54,6 +56,12 @@ const tabs: ListadoTab[] = [
     label: 'Categorías',
     description: 'Clasificación de repuestos y servicios.',
     icon: <Tags size={18} />,
+  },
+  {
+    key: 'mecanicos',
+    label: 'Mecánicos',
+    description: 'Equipo del taller asignado a las motos y reparaciones.',
+    icon: <Wrench size={18} />,
   },
 ];
 
@@ -100,6 +108,7 @@ export default function Listados() {
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [usuarios, setUsuarios] = useState<UsuarioAdmin[]>([]);
+  const [mecanicos, setMecanicos] = useState<Mecanico[]>([]);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [formMode, setFormMode] = useState<FormMode>('create');
@@ -151,6 +160,13 @@ export default function Listados() {
         setTotalRegistros(parsed.count);
         return;
       }
+      if (activeTab === 'mecanicos') {
+        const data = await tallerApi.getMecanicos({ search });
+        const parsed = parseListado(data);
+        setMecanicos(parsed.items);
+        setTotalRegistros(parsed.count);
+        return;
+      }
     } catch (error) {
       console.error('Error al cargar listados:', error);
       setFormError('No se pudieron cargar los listados. Intenta nuevamente.');
@@ -197,6 +213,8 @@ export default function Listados() {
         await inventarioApi.deleteCategoria(selectedId);
       } else if (activeTab === 'empleados') {
         await usuariosApi.deleteUsuario(selectedId);
+      } else if (activeTab === 'mecanicos') {
+        await tallerApi.deleteMecanico(selectedId);
       }
       setSelectedId(null);
       await loadListado();
@@ -239,6 +257,12 @@ export default function Listados() {
         } else {
           await usuariosApi.updateUsuario(formData.id, payload);
         }
+      } else if (activeTab === 'mecanicos') {
+        if (formMode === 'create') {
+          await tallerApi.createMecanico(payload);
+        } else {
+          await tallerApi.updateMecanico(formData.id, payload);
+        }
       }
       setModalOpen(false);
       setFormData({});
@@ -260,14 +284,16 @@ export default function Listados() {
     if (activeTab === 'proveedores') return proveedores;
     if (activeTab === 'categorias') return categorias;
     if (activeTab === 'empleados') return usuarios;
+    if (activeTab === 'mecanicos') return mecanicos;
     return [];
-  }, [activeTab, categorias, clientes, proveedores, usuarios]);
+  }, [activeTab, categorias, clientes, proveedores, usuarios, mecanicos]);
 
   const searchPlaceholder = useMemo(() => {
     if (activeTab === 'clientes') return 'Buscar por nombre, documento o teléfono...';
     if (activeTab === 'proveedores') return 'Buscar por proveedor, NIT o ciudad...';
     if (activeTab === 'categorias') return 'Buscar por nombre o descripción...';
     if (activeTab === 'empleados') return 'Buscar por usuario, nombre o rol...';
+    if (activeTab === 'mecanicos') return 'Buscar por nombre, teléfono o ciudad...';
     return 'Buscar...';
   }, [activeTab]);
 
@@ -400,6 +426,7 @@ export default function Listados() {
                   proveedores,
                   categorias,
                   usuarios,
+                  mecanicos,
                   selectedId,
                   onSelect: handleRowSelect,
                   onDoubleClick: openEdit,
@@ -509,6 +536,16 @@ const getDefaultFormData = (tab: ActiveTab) => {
       password: '',
     };
   }
+  if (tab === 'mecanicos') {
+    return {
+      nombre: '',
+      telefono: '',
+      email: '',
+      direccion: '',
+      ciudad: '',
+      is_active: true,
+    };
+  }
   return {};
 };
 
@@ -562,6 +599,17 @@ const getEditFormData = (tab: ActiveTab, record: any) => {
       password: '',
     };
   }
+  if (tab === 'mecanicos') {
+    return {
+      id: record.id,
+      nombre: record.nombre,
+      telefono: record.telefono ?? '',
+      email: record.email ?? '',
+      direccion: record.direccion ?? '',
+      ciudad: record.ciudad ?? '',
+      is_active: record.is_active,
+    };
+  }
   return {};
 };
 
@@ -594,6 +642,16 @@ const buildPayload = (tab: ActiveTab, data: Record<string, any>) => {
     return {
       tipo_documento: data.tipo_documento,
       numero_documento: data.numero_documento,
+      nombre: data.nombre,
+      telefono: data.telefono,
+      email: data.email,
+      direccion: data.direccion,
+      ciudad: data.ciudad,
+      is_active: data.is_active,
+    };
+  }
+  if (tab === 'mecanicos') {
+    return {
       nombre: data.nombre,
       telefono: data.telefono,
       email: data.email,
@@ -662,6 +720,17 @@ const renderTableHeader = (tab: ActiveTab) => {
       </tr>
     );
   }
+  if (tab === 'mecanicos') {
+    return (
+      <tr>
+        <th className="px-4 py-3">Mecánico</th>
+        <th className="px-4 py-3">Teléfono</th>
+        <th className="px-4 py-3">Email</th>
+        <th className="px-4 py-3">Ciudad</th>
+        <th className="px-4 py-3">Estado</th>
+      </tr>
+    );
+  }
   return null;
 };
 
@@ -671,6 +740,7 @@ const renderTableRows = ({
   proveedores,
   categorias,
   usuarios,
+  mecanicos,
   selectedId,
   onSelect,
   onDoubleClick,
@@ -680,6 +750,7 @@ const renderTableRows = ({
   proveedores: Proveedor[];
   categorias: Categoria[];
   usuarios: UsuarioAdmin[];
+  mecanicos: Mecanico[];
   selectedId: number | null;
   onSelect: (id: number) => void;
   onDoubleClick: (record: any) => void;
@@ -774,6 +845,27 @@ const renderTableRows = ({
         <td className="px-4 py-3">{usuario.sede || '—'}</td>
         <td className="px-4 py-3">
           <EstadoBadge activo={usuario.is_active} />
+        </td>
+      </tr>
+    ));
+  }
+
+  if (activeTab === 'mecanicos') {
+    return mecanicos.map((mecanico) => (
+      <tr
+        key={mecanico.id}
+        className={baseRowClasses(mecanico.id === selectedId)}
+        onClick={() => onSelect(mecanico.id)}
+        onDoubleClick={() => onDoubleClick(mecanico)}
+      >
+        <td className="px-4 py-3 font-medium text-slate-800">
+          {mecanico.nombre}
+        </td>
+        <td className="px-4 py-3">{mecanico.telefono || '—'}</td>
+        <td className="px-4 py-3">{mecanico.email || '—'}</td>
+        <td className="px-4 py-3">{mecanico.ciudad || '—'}</td>
+        <td className="px-4 py-3">
+          <EstadoBadge activo={mecanico.is_active} />
         </td>
       </tr>
     ));
@@ -1020,6 +1112,51 @@ const renderFormFields = (
         />
         <CheckboxField
           label="Usuario activo"
+          name="is_active"
+          checked={formData.is_active}
+          onChange={handleChange}
+        />
+      </div>
+    );
+  }
+
+  if (tab === 'mecanicos') {
+    return (
+      <div className="grid gap-4 md:grid-cols-2">
+        <InputField
+          label="Nombre del mecánico"
+          name="nombre"
+          value={formData.nombre}
+          onChange={handleChange}
+          required
+        />
+        <InputField
+          label="Teléfono"
+          name="telefono"
+          value={formData.telefono}
+          onChange={handleChange}
+        />
+        <InputField
+          label="Email"
+          name="email"
+          type="email"
+          value={formData.email}
+          onChange={handleChange}
+        />
+        <InputField
+          label="Ciudad"
+          name="ciudad"
+          value={formData.ciudad}
+          onChange={handleChange}
+        />
+        <TextAreaField
+          label="Dirección"
+          name="direccion"
+          value={formData.direccion}
+          onChange={handleChange}
+        />
+        <CheckboxField
+          label="Mecánico activo"
           name="is_active"
           checked={formData.is_active}
           onChange={handleChange}
