@@ -68,7 +68,7 @@ export interface PaginatedResponse<T> {
 
 export interface AjusteStockPayload {
   cantidad: number;
-  tipo?: 'ENTRADA' | 'SALIDA' | 'AJUSTE' | 'DEVOLUCION' | 'TALLER' | 'BAJA';
+  tipo?: 'ENTRADA' | 'SALIDA' | 'AJUSTE' | 'DEVOLUCION' | 'BAJA';
   costo_unitario?: number | string;
   observaciones?: string;
   referencia?: string;

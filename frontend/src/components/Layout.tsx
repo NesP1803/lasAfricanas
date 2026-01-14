@@ -6,7 +6,6 @@ import {
   Boxes,
   FileText,
   LogOut,
-  PackageOpen,
   ReceiptText,
   Settings,
   Share2,
@@ -153,7 +152,6 @@ export default function Layout() {
         icon: <ReceiptText size={18} />,
         items: [
           { label: "Registro general", path: "/" },
-          { label: "Servicios de taller", path: "/taller" },
         ],
       },
       {
@@ -164,7 +162,6 @@ export default function Layout() {
           { label: "Proveedores", path: "/listados?tab=proveedores" },
           { label: "Empleados", path: "/listados?tab=empleados" },
           { label: "Categorias", path: "/listados?tab=categorias" },
-          { label: "Mecánicos", path: "/listados?tab=mecanicos" },
         ],
       },
       {
@@ -175,14 +172,6 @@ export default function Layout() {
           { label: "Stock Bajo", path: "/articulos?tab=stock-bajo" },
           { label: "Nueva Compra", path: "/articulos?tab=nueva-compra" },
           { label: "Dar de Baja", path: "/articulos?tab=dar-de-baja" },
-        ],
-      },
-      {
-        label: "Entrega M/CIA",
-        icon: <PackageOpen size={18} />,
-        items: [
-          { label: "Registrar Moto a Mecanico" },
-          { label: " Listado de Motos" },
         ],
       },
       {

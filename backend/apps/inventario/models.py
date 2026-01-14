@@ -172,7 +172,7 @@ class Producto(BaseModel):
     es_servicio = models.BooleanField(
         default=False,
         verbose_name='Es servicio',
-        help_text='Marca si es un servicio de taller en lugar de producto físico'
+        help_text='Marca si es un servicio en lugar de producto físico'
     )
     
     class Meta:
@@ -215,7 +215,6 @@ class MovimientoInventario(BaseModel):
         ('SALIDA', 'Salida (Venta)'),
         ('AJUSTE', 'Ajuste Manual'),
         ('DEVOLUCION', 'Devolución'),
-        ('TALLER', 'Consumo Taller'),
         ('BAJA', 'Dar de Baja'),
     ]
     

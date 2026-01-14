@@ -16,13 +16,6 @@ from apps.ventas.views import (
     VentaViewSet
 )
 
-# Importar ViewSets de Taller
-from apps.taller.views import (
-    MecanicoViewSet,
-    ServicioMotoViewSet,
-    RepuestoAsignadoViewSet,
-    ConsumoRepuestoViewSet
-)
 from apps.core.views import (
     ConfiguracionEmpresaViewSet,
     ConfiguracionFacturacionViewSet,
@@ -45,11 +38,6 @@ router.register(r'movimientos', MovimientoInventarioViewSet, basename='movimient
 router.register(r'clientes', ClienteViewSet, basename='cliente')
 router.register(r'ventas', VentaViewSet, basename='venta')
 
-# Registrar ViewSets de Taller
-router.register(r'mecanicos', MecanicoViewSet, basename='mecanico')
-router.register(r'servicios', ServicioMotoViewSet, basename='servicio')
-router.register(r'repuestos-asignados', RepuestoAsignadoViewSet, basename='repuesto-asignado')
-router.register(r'consumos', ConsumoRepuestoViewSet, basename='consumo')
 
 # Registrar Configuración y Auditoría
 router.register(r'configuracion-empresa', ConfiguracionEmpresaViewSet, basename='configuracion-empresa')

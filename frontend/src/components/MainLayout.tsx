@@ -3,7 +3,6 @@ import { useAuthStore } from '../store/authStore';
 import {
   Home,
   ShoppingCart,
-  Wrench,
   FileText,
   LogOut,
 } from 'lucide-react';
@@ -24,9 +23,7 @@ export default function MainLayout() {
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-4">
             <h1 className="text-2xl font-bold">LAS AFRICANAS</h1>
-            <span className="text-sm opacity-90">
-              Sistema de Gestión - Taller y Repuestos
-            </span>
+            <span className="text-sm opacity-90">Sistema de Gestión</span>
           </div>
           <div className="flex items-center gap-4">
             <span className="text-sm">
@@ -52,11 +49,6 @@ export default function MainLayout() {
             to="/punto-venta"
             icon={<ShoppingCart size={18} />}
             label="Punto de Venta"
-          />
-          <NavLink
-            to="/taller"
-            icon={<Wrench size={18} />}
-            label="Taller"
           />
           <NavLink
             to="/reportes"
