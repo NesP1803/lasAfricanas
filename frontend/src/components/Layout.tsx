@@ -3,6 +3,7 @@ import { useMemo, useState, useRef, type ReactNode } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import {
   ClipboardList,
+  Boxes,
   FileText,
   LogOut,
   PackageOpen,
@@ -164,6 +165,16 @@ export default function Layout() {
           { label: "Empleados", path: "/listados?tab=empleados" },
           { label: "Categorias", path: "/listados?tab=categorias" },
           { label: "Mecánicos", path: "/listados?tab=mecanicos" },
+        ],
+      },
+      {
+        label: "Artículos",
+        icon: <Boxes size={18} />,
+        items: [
+          { label: "Mercancia", path: "/articulos?tab=mercancia" },
+          { label: "Stock Bajo", path: "/articulos?tab=stock-bajo" },
+          { label: "Nueva Compra", path: "/articulos?tab=nueva-compra" },
+          { label: "Dar de Baja", path: "/articulos?tab=dar-de-baja" },
         ],
       },
       {
