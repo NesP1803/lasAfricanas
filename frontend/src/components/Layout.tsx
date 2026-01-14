@@ -172,7 +172,6 @@ export default function Layout() {
         items: [
           { label: "Mercancia", path: "/articulos?tab=mercancia" },
           { label: "Stock Bajo", path: "/articulos?tab=stock-bajo" },
-          { label: "Nueva Compra", path: "/articulos?tab=nueva-compra" },
           { label: "Dar de Baja", path: "/articulos?tab=dar-de-baja" },
         ],
       },
