@@ -390,17 +390,6 @@ export default function Taller() {
               <RefreshCw size={16} />
               Actualizar
             </button>
-            {activeTab === 'ordenes' && (
-              <button
-                type="button"
-                onClick={handleFacturar}
-                disabled={facturando || !ordenActual || ordenActual.repuestos.length === 0}
-                className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <PackageCheck size={16} />
-                {facturando ? 'Enviando...' : 'Facturar'}
-              </button>
-            )}
             {activeTab === 'motos' && (
               <button
                 type="button"
@@ -523,21 +512,10 @@ export default function Taller() {
 
               <section className="space-y-6">
                 <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
-                  <div>
+                  <div className="border-b border-slate-200 px-4 py-3">
                     <h2 className="text-sm font-semibold text-slate-800">Buscar repuestos</h2>
                     <p className="text-xs text-slate-500">Busca por código o nombre del artículo</p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleFacturar}
-                    disabled={facturando || !ordenActual || ordenActual.repuestos.length === 0}
-                    className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    <PackageCheck size={14} />
-                    {facturando ? 'Enviando...' : 'Facturar'}
-                  </button>
-                </div>
                   <div className="px-4 py-4">
                     <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 shadow-sm">
                       <Search size={16} className="text-slate-400" />
