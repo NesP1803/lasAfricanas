@@ -23,6 +23,7 @@ from apps.core.views import (
     AuditoriaViewSet,
 )
 from apps.usuarios.views import UsuarioViewSet
+from apps.taller.views import MecanicoViewSet, MotoViewSet, OrdenTallerViewSet
 
 
 # Crear router único
@@ -47,3 +48,8 @@ router.register(r'auditoria', AuditoriaViewSet, basename='auditoria')
 
 # Registrar Usuarios
 router.register(r'usuarios', UsuarioViewSet, basename='usuario')
+
+# Registrar Taller
+router.register(r'mecanicos', MecanicoViewSet, basename='mecanico')
+router.register(r'motos', MotoViewSet, basename='moto')
+router.register(r'ordenes-taller', OrdenTallerViewSet, basename='orden-taller')
