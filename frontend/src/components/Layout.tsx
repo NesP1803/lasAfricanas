@@ -153,6 +153,7 @@ export default function Layout() {
         icon: <ReceiptText size={18} />,
         items: [
           { label: "Registro general", path: "/" },
+          { label: "Venta rápida", path: "/ventas" },
         ],
       },
       {
