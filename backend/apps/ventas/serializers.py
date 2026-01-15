@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from .models import Cliente, Venta, DetalleVenta, AuditoriaDescuento, VentaAnulada
 from apps.inventario.serializers import ProductoListSerializer
+from apps.usuarios.models import Usuario
 
 
 class ClienteSerializer(serializers.ModelSerializer):
@@ -138,6 +139,11 @@ class VentaDetailSerializer(serializers.ModelSerializer):
 class VentaCreateSerializer(serializers.ModelSerializer):
     """Serializer para crear ventas"""
     detalles = DetalleVentaSerializer(many=True)
+    descuento_aprobado_por = serializers.PrimaryKeyRelatedField(
+        queryset=Usuario.objects.all(),
+        required=False,
+        allow_null=True
+    )
     
     class Meta:
         model = Venta
@@ -150,6 +156,7 @@ class VentaCreateSerializer(serializers.ModelSerializer):
             'descuento_valor',
             'iva',
             'total',
+            'descuento_aprobado_por',
             'medio_pago',
             'efectivo_recibido',
             'cambio',

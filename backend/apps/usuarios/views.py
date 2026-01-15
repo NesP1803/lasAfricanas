@@ -1,3 +1,5 @@
+from decimal import Decimal, InvalidOperation
+from django.contrib.auth import authenticate
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
@@ -13,6 +15,8 @@ class UsuarioViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         if self.action == 'change_password':
+            return [IsAuthenticated()]
+        if self.action == 'validar_descuento':
             return [IsAuthenticated()]
         return [IsAdminUser()]
 
@@ -30,3 +34,51 @@ class UsuarioViewSet(viewsets.ModelViewSet):
         usuario.save(update_fields=['password'])
 
         return Response({'detail': 'Contraseña actualizada correctamente.'})
+
+    @action(detail=False, methods=['post'])
+    def validar_descuento(self, request):
+        username = request.data.get('username')
+        password = request.data.get('password')
+        descuento_porcentaje = request.data.get('descuento_porcentaje')
+
+        if not username or not password:
+            return Response(
+                {'detail': 'Usuario y contraseña son requeridos.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            descuento_decimal = Decimal(str(descuento_porcentaje))
+        except (InvalidOperation, TypeError):
+            return Response(
+                {'detail': 'Descuento inválido.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        usuario = authenticate(request, username=username, password=password)
+        if not usuario or not usuario.is_active:
+            return Response({'detail': 'Credenciales inválidas.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        aprobado = False
+        if usuario.is_superuser or usuario.tipo_usuario == 'ADMIN':
+            aprobado = True
+        else:
+            perfil = getattr(usuario, 'perfil_vendedor', None)
+            if perfil and descuento_decimal <= perfil.descuento_maximo:
+                aprobado = True
+
+        if not aprobado:
+            return Response(
+                {'detail': 'El usuario no tiene permisos para aprobar este descuento.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        return Response(
+            {
+                'id': usuario.id,
+                'nombre': usuario.get_full_name() or usuario.username,
+                'descuento_maximo': str(getattr(usuario, 'perfil_vendedor', None).descuento_maximo)
+                if hasattr(usuario, 'perfil_vendedor')
+                else None,
+            }
+        )
