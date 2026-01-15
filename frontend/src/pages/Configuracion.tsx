@@ -11,6 +11,7 @@ import {
   X,
 } from "lucide-react";
 import { configuracionAPI } from "../api/configuracion";
+import { tallerApi, type Mecanico } from "../api/taller";
 import type {
   AuditoriaRegistro,
   ConfiguracionEmpresa,
@@ -95,6 +96,24 @@ export default function Configuracion() {
   const [impuestos, setImpuestos] = useState<Impuesto[]>(defaultImpuestos);
   const [auditoria, setAuditoria] = useState<AuditoriaRegistro[]>([]);
   const [usuarios, setUsuarios] = useState<UsuarioAdmin[]>([]);
+  const [mecanicosDisponibles, setMecanicosDisponibles] = useState<Mecanico[]>(
+    []
+  );
+  const [origenUsuario, setOrigenUsuario] = useState<"manual" | "mecanico">(
+    "manual"
+  );
+  const [mecanicoSeleccionado, setMecanicoSeleccionado] = useState<
+    number | ""
+  >("");
+  const [nuevoUsuario, setNuevoUsuario] = useState({
+    username: "",
+    email: "",
+    first_name: "",
+    last_name: "",
+    telefono: "",
+    tipo_usuario: "VENDEDOR" as UsuarioAdmin["tipo_usuario"],
+    password: "",
+  });
   const [nuevoImpuesto, setNuevoImpuesto] = useState<Partial<Impuesto>>({
     nombre: "IVA",
     valor: "",
@@ -106,6 +125,7 @@ export default function Configuracion() {
   const [mensajeFacturacion, setMensajeFacturacion] = useState("");
   const [mensajeImpuesto, setMensajeImpuesto] = useState("");
   const [mensajeUsuario, setMensajeUsuario] = useState("");
+  const [mensajeNuevoUsuario, setMensajeNuevoUsuario] = useState("");
 
   const [claveActual, setClaveActual] = useState("");
   const [nuevaClave, setNuevaClave] = useState("");
@@ -232,6 +252,25 @@ export default function Configuracion() {
   }, [isAdmin]);
 
   useEffect(() => {
+    if (!isAdmin) {
+      return;
+    }
+
+    const cargarMecanicos = async () => {
+      try {
+        const data = await tallerApi.getMecanicos();
+        const parsed = Array.isArray(data) ? data : data.results ?? [];
+        setMecanicosDisponibles(parsed);
+      } catch (error) {
+        console.error("Error cargando mecánicos:", error);
+        setMecanicosDisponibles([]);
+      }
+    };
+
+    cargarMecanicos();
+  }, [isAdmin]);
+
+  useEffect(() => {
     if (!logoFile) {
       return;
     }
@@ -342,6 +381,77 @@ export default function Configuracion() {
       setMensajeUsuario("No se pudo actualizar el usuario.");
     }
   };
+
+  const handleCrearUsuario = async () => {
+    if (!nuevoUsuario.username || !nuevoUsuario.tipo_usuario) {
+      setMensajeNuevoUsuario("Completa el usuario y el rol para continuar.");
+      return;
+    }
+    if (!nuevoUsuario.password) {
+      setMensajeNuevoUsuario("Debes asignar una contraseña al usuario.");
+      return;
+    }
+
+    try {
+      const payload = {
+        username: nuevoUsuario.username,
+        email: nuevoUsuario.email || "",
+        first_name: nuevoUsuario.first_name || "",
+        last_name: nuevoUsuario.last_name || "",
+        telefono: nuevoUsuario.telefono || "",
+        tipo_usuario: nuevoUsuario.tipo_usuario,
+        password: nuevoUsuario.password,
+      };
+      const data = await configuracionAPI.crearUsuario(payload);
+      setUsuarios((prev) => [data, ...prev]);
+      setNuevoUsuario({
+        username: "",
+        email: "",
+        first_name: "",
+        last_name: "",
+        telefono: "",
+        tipo_usuario: "VENDEDOR",
+        password: "",
+      });
+      setMecanicoSeleccionado("");
+      setOrigenUsuario("manual");
+      setMensajeNuevoUsuario("Usuario creado correctamente.");
+    } catch (error) {
+      console.error("Error creando usuario:", error);
+      setMensajeNuevoUsuario("No se pudo crear el usuario.");
+    }
+  };
+
+  useEffect(() => {
+    if (origenUsuario !== "mecanico") {
+      return;
+    }
+    const mecanico = mecanicosDisponibles.find(
+      (item) => item.id === mecanicoSeleccionado
+    );
+    if (!mecanico) {
+      return;
+    }
+    const partesNombre = mecanico.nombre.split(" ").filter(Boolean);
+    const firstName = partesNombre[0] ?? "";
+    const lastName = partesNombre.slice(1).join(" ");
+    const usernameBase =
+      mecanico.email?.split("@")[0] ?? mecanico.nombre.toLowerCase();
+    const username = usernameBase
+      .trim()
+      .replace(/\s+/g, ".")
+      .replace(/[^a-z0-9._-]/gi, "");
+
+    setNuevoUsuario((prev) => ({
+      ...prev,
+      username: prev.username || username,
+      email: mecanico.email ?? prev.email,
+      telefono: mecanico.telefono ?? prev.telefono,
+      first_name: prev.first_name || firstName,
+      last_name: prev.last_name || lastName,
+      tipo_usuario: "MECANICO",
+    }));
+  }, [mecanicoSeleccionado, mecanicosDisponibles, origenUsuario]);
 
   const handleCambiarClave = async () => {
     if (!user?.id) {
@@ -974,6 +1084,186 @@ export default function Configuracion() {
             </div>
           ) : (
             <>
+              <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-700">
+                      Crear nuevo usuario
+                    </h4>
+                    <p className="text-xs text-slate-500">
+                      Puedes crear usuarios manualmente o partir desde un
+                      mecánico ya registrado.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCrearUsuario}
+                    className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow hover:bg-blue-700"
+                  >
+                    <Plus size={14} /> Crear usuario
+                  </button>
+                </div>
+
+                {mensajeNuevoUsuario && (
+                  <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                    {mensajeNuevoUsuario}
+                  </div>
+                )}
+
+                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                  <label className="space-y-2 text-xs font-medium text-slate-700">
+                    Origen
+                    <select
+                      value={origenUsuario}
+                      onChange={(event) => {
+                        const value = event.target.value as
+                          | "manual"
+                          | "mecanico";
+                        setOrigenUsuario(value);
+                        setMecanicoSeleccionado("");
+                        setNuevoUsuario((prev) => ({
+                          ...prev,
+                          username: "",
+                          email: "",
+                          first_name: "",
+                          last_name: "",
+                          telefono: "",
+                        }));
+                      }}
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    >
+                      <option value="manual">Manual</option>
+                      <option value="mecanico">Mecánico existente</option>
+                    </select>
+                  </label>
+
+                  {origenUsuario === "mecanico" && (
+                    <label className="space-y-2 text-xs font-medium text-slate-700">
+                      Mecánico
+                      <select
+                        value={mecanicoSeleccionado}
+                        onChange={(event) =>
+                          setMecanicoSeleccionado(
+                            event.target.value
+                              ? Number(event.target.value)
+                              : ""
+                          )
+                        }
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                      >
+                        <option value="">Selecciona un mecánico</option>
+                        {mecanicosDisponibles.map((mecanico) => (
+                          <option key={mecanico.id} value={mecanico.id}>
+                            {mecanico.nombre}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                </div>
+
+                <div className="mt-4 grid gap-4 md:grid-cols-3">
+                  <label className="space-y-2 text-xs font-medium text-slate-700">
+                    Usuario
+                    <input
+                      value={nuevoUsuario.username}
+                      onChange={(event) =>
+                        setNuevoUsuario((prev) => ({
+                          ...prev,
+                          username: event.target.value,
+                        }))
+                      }
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    />
+                  </label>
+                  <label className="space-y-2 text-xs font-medium text-slate-700">
+                    Correo
+                    <input
+                      value={nuevoUsuario.email}
+                      onChange={(event) =>
+                        setNuevoUsuario((prev) => ({
+                          ...prev,
+                          email: event.target.value,
+                        }))
+                      }
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    />
+                  </label>
+                  <label className="space-y-2 text-xs font-medium text-slate-700">
+                    Teléfono
+                    <input
+                      value={nuevoUsuario.telefono}
+                      onChange={(event) =>
+                        setNuevoUsuario((prev) => ({
+                          ...prev,
+                          telefono: event.target.value,
+                        }))
+                      }
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    />
+                  </label>
+                  <label className="space-y-2 text-xs font-medium text-slate-700">
+                    Nombre
+                    <input
+                      value={nuevoUsuario.first_name}
+                      onChange={(event) =>
+                        setNuevoUsuario((prev) => ({
+                          ...prev,
+                          first_name: event.target.value,
+                        }))
+                      }
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    />
+                  </label>
+                  <label className="space-y-2 text-xs font-medium text-slate-700">
+                    Apellido
+                    <input
+                      value={nuevoUsuario.last_name}
+                      onChange={(event) =>
+                        setNuevoUsuario((prev) => ({
+                          ...prev,
+                          last_name: event.target.value,
+                        }))
+                      }
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    />
+                  </label>
+                  <label className="space-y-2 text-xs font-medium text-slate-700">
+                    Rol
+                    <select
+                      value={nuevoUsuario.tipo_usuario}
+                      onChange={(event) =>
+                        setNuevoUsuario((prev) => ({
+                          ...prev,
+                          tipo_usuario: event.target
+                            .value as UsuarioAdmin["tipo_usuario"],
+                        }))
+                      }
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    >
+                      <option value="ADMIN">Administrador</option>
+                      <option value="VENDEDOR">Vendedor</option>
+                      <option value="MECANICO">Mecánico</option>
+                      <option value="BODEGUERO">Bodeguero</option>
+                    </select>
+                  </label>
+                  <label className="space-y-2 text-xs font-medium text-slate-700">
+                    Contraseña
+                    <input
+                      type="password"
+                      value={nuevoUsuario.password}
+                      onChange={(event) =>
+                        setNuevoUsuario((prev) => ({
+                          ...prev,
+                          password: event.target.value,
+                        }))
+                      }
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    />
+                  </label>
+                </div>
+              </div>
+
               {mensajeUsuario && (
                 <div className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
                   {mensajeUsuario}

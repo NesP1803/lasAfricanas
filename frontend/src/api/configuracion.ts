@@ -109,6 +109,10 @@ export const configuracionAPI = {
     }
     return [];
   },
+  crearUsuario: async (data: Partial<UsuarioAdmin> & { password?: string }) => {
+    const response = await apiClient.post<UsuarioAdmin>('/usuarios/', data);
+    return response.data;
+  },
   actualizarUsuario: async (id: number, data: Partial<UsuarioAdmin>) => {
     const response = await apiClient.patch<UsuarioAdmin>(
       `/usuarios/${id}/`,
