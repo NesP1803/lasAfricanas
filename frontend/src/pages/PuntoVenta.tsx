@@ -252,49 +252,70 @@ export default function PuntoVenta() {
 
   return (
     <div className="h-full flex flex-col bg-slate-50">
-      <div className="bg-blue-500 text-white p-4 flex flex-wrap items-center justify-between gap-4 shadow">
-        <div className="flex flex-wrap items-end gap-4">
+      <div className="px-6 pt-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <label className="text-xs font-semibold block mb-1">DIGITE Nº/CC DEL CLIENTE</label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="Número de documento"
-                value={buscarCliente}
-                onChange={(e) => setBuscarCliente(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && buscarClientePorDocumento()}
-                className="px-3 py-2 rounded text-gray-900 w-48"
-              />
-              <button
-                onClick={buscarClientePorDocumento}
-                className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 rounded font-bold"
-              >
-                ✓
-              </button>
-            </div>
+            <h1 className="text-2xl font-semibold text-slate-900">Punto de venta</h1>
+            <p className="text-sm text-slate-500">
+              Administra clientes, productos y pagos en un solo lugar.
+            </p>
           </div>
-
-          <div>
-            <label className="text-xs font-semibold block mb-1">CLIENTE / RAZÓN SOCIAL</label>
-            <div className="bg-white text-gray-900 px-4 py-2 rounded min-w-[240px]">
-              <p className="font-bold text-lg">
-                {cliente?.nombre || 'Cliente general'}
-              </p>
-              <p className="text-sm text-gray-500">
-                {cliente?.numero_documento || 'Sin documento'}
-              </p>
-            </div>
+          <div className="bg-white border border-slate-200 rounded-xl shadow-sm px-4 py-3 text-right">
+            <p className="text-xs text-slate-400">VENDEDOR</p>
+            <p className="font-semibold text-slate-900">
+              {user?.username?.toUpperCase() || '---'}
+            </p>
+            <p className="text-xs text-slate-400">{new Date().toLocaleString('es-CO')}</p>
           </div>
         </div>
 
-        <div className="text-right">
-          <p className="text-xs text-slate-200">VENDEDOR</p>
-          <p className="font-bold text-lg">{user?.username?.toUpperCase() || '---'}</p>
-          <p className="text-xs text-slate-300">{new Date().toLocaleString('es-CO')}</p>
+        <div className="mt-4 bg-white rounded-xl shadow border border-slate-200 p-4 flex flex-wrap items-end justify-between gap-4">
+          <div className="flex flex-wrap items-end gap-4">
+            <div>
+              <label className="text-xs font-semibold text-slate-500 block mb-1">
+                DIGITE Nº/CC DEL CLIENTE
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Número de documento"
+                  value={buscarCliente}
+                  onChange={(e) => setBuscarCliente(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && buscarClientePorDocumento()}
+                  className="px-3 py-2 rounded border border-slate-200 text-slate-900 w-48"
+                />
+                <button
+                  onClick={buscarClientePorDocumento}
+                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded font-semibold"
+                >
+                  Buscar
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-slate-500 block mb-1">
+                CLIENTE / RAZÓN SOCIAL
+              </label>
+              <div className="bg-slate-50 border border-slate-200 text-slate-900 px-4 py-2 rounded min-w-[240px]">
+                <p className="font-semibold text-lg">
+                  {cliente?.nombre || 'Cliente general'}
+                </p>
+                <p className="text-sm text-slate-500">
+                  {cliente?.numero_documento || 'Sin documento'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="text-sm text-slate-500">
+            <p className="font-semibold text-slate-700">Estado de venta</p>
+            <p>{ventaItems.length} artículo(s) en la factura</p>
+          </div>
         </div>
       </div>
 
-      <div className="flex-1 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-4 p-4">
+      <div className="flex-1 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-4 p-6">
         <section className="bg-white rounded-xl shadow border border-slate-200 flex flex-col">
           <div className="border-b border-slate-100 p-4 flex flex-wrap items-center gap-4">
             <div className="flex-1 min-w-[220px]">
