@@ -228,7 +228,14 @@ export const ventasApi = {
     if (!response.ok) {
       throw new Error('Error al obtener ventas');
     }
-    return response.json();
+    const data = await response.json();
+    if (Array.isArray(data)) {
+      return data;
+    }
+    if (Array.isArray(data?.results)) {
+      return data.results;
+    }
+    throw new Error('Respuesta inválida al obtener ventas');
   },
 
   async getRemisionesPendientes(): Promise<Venta[]> {
