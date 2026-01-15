@@ -181,21 +181,24 @@ export default function Layout() {
           { label: "Registro de Motos", path: "/taller?tab=motos" },
         ],
       },
+      {
+        label: "Facturación",
+        icon: <FileText size={18} />,
+        items: [
+          { label: "Venta rápida", path: "/ventas" },
           {
-            label: "Facturación",
-            icon: <FileText size={18} />,
+            label: "Cuentas",
             items: [
-              { label: "Venta rápida", path: "/ventas" },
-              {
-                label: "Cuentas",
-                items: [
-                  { label: "Cuentas del día", path: "/ventas/cuentas-dia" },
-                  { label: "Detalles cuentas", path: "/ventas/detalles-cuentas" },
-                ],
-              },
+              { label: "Cuentas del día", path: "/ventas/cuentas-dia" },
+              { label: "Detalles cuentas", path: "/ventas/detalles-cuentas" },
+            ],
+          },
           {
             label: "Listados",
-            items: [{ label: "Facturas" }, { label: "Remisiones" }],
+            items: [
+              { label: "Facturas", path: "/facturacion/facturas" },
+              { label: "Remisiones", path: "/facturacion/remisiones" },
+            ],
           },
         ],
       },
