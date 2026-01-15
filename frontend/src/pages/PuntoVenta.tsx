@@ -307,11 +307,6 @@ export default function PuntoVenta() {
               </div>
             </div>
           </div>
-
-          <div className="text-sm text-slate-500">
-            <p className="font-semibold text-slate-700">Estado de venta</p>
-            <p>{ventaItems.length} artículo(s) en la factura</p>
-          </div>
         </div>
       </div>
 
@@ -352,6 +347,11 @@ export default function PuntoVenta() {
             >
               Borrar todo
             </button>
+
+            <div className="ml-auto text-sm text-slate-500 text-right">
+              <p className="font-semibold text-slate-700">Estado de venta</p>
+              <p>{ventaItems.length} artículo(s) en la factura</p>
+            </div>
           </div>
 
           <div className="overflow-auto flex-1">
