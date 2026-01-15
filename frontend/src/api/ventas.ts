@@ -53,6 +53,24 @@ export interface Venta {
   detalles: any[];
 }
 
+export interface VentaListItem {
+  id: number;
+  numero_comprobante: string;
+  tipo_comprobante: string;
+  tipo_comprobante_display: string;
+  fecha: string;
+  cliente: number;
+  cliente_nombre: string;
+  cliente_numero_documento: string;
+  vendedor: number;
+  vendedor_nombre: string;
+  total: string;
+  medio_pago: string;
+  medio_pago_display: string;
+  estado: string;
+  estado_display: string;
+}
+
 export interface EstadisticasVentas {
   total_ventas: number;
   total_facturado: string | null;
@@ -187,6 +205,32 @@ export const ventasApi = {
     return response.json();
   },
 
+  async getVentas(params?: {
+    tipoComprobante?: string;
+    estado?: string;
+    search?: string;
+    ordering?: string;
+  }): Promise<VentaListItem[]> {
+    const token = localStorage.getItem('token');
+    const queryParams = new URLSearchParams();
+    if (params?.tipoComprobante) queryParams.append('tipo_comprobante', params.tipoComprobante);
+    if (params?.estado) queryParams.append('estado', params.estado);
+    if (params?.search) queryParams.append('search', params.search);
+    if (params?.ordering) queryParams.append('ordering', params.ordering);
+    const query = queryParams.toString();
+    const response = await fetch(`${API_URL}/ventas/${query ? `?${query}` : ''}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error('Error al obtener ventas');
+    }
+    return response.json();
+  },
+
   async getRemisionesPendientes(): Promise<Venta[]> {
     const token = localStorage.getItem('token');
     const response = await fetch(`${API_URL}/ventas/remisiones_pendientes/`, {
@@ -216,6 +260,27 @@ export const ventasApi = {
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.error || 'Error al convertir a factura');
+    }
+    return response.json();
+  },
+
+  async anularVenta(
+    ventaId: number,
+    data: { motivo: string; descripcion: string; devuelve_inventario: boolean }
+  ): Promise<Venta> {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/ventas/${ventaId}/anular/`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Error al anular venta');
     }
     return response.json();
   },
