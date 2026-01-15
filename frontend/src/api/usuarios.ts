@@ -1,28 +1,34 @@
-import apiClient from './client';
-import type { PaginatedResponse, UsuarioAdmin } from '../types';
+export interface DescuentoApprovalPayload {
+  username: string;
+  password: string;
+  descuento_porcentaje: number;
+}
+
+export interface DescuentoApprovalResponse {
+  id: number;
+  nombre: string;
+  descuento_maximo?: string | null;
+}
 
 const API_URL = '/api';
 
 export const usuariosApi = {
-  async getUsuarios(params?: { search?: string; page?: number; ordering?: string }): Promise<PaginatedResponse<UsuarioAdmin> | UsuarioAdmin[]> {
-    const response = await apiClient.get<PaginatedResponse<UsuarioAdmin> | UsuarioAdmin[]>(
-      `${API_URL}/usuarios/`,
-      { params }
-    );
-    return response.data;
-  },
+  async validarDescuento(payload: DescuentoApprovalPayload): Promise<DescuentoApprovalResponse> {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/usuarios/validar_descuento/`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
 
-  async createUsuario(data: Partial<UsuarioAdmin> & { password?: string }): Promise<UsuarioAdmin> {
-    const response = await apiClient.post<UsuarioAdmin>(`${API_URL}/usuarios/`, data);
-    return response.data;
-  },
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'No se pudo validar el descuento');
+    }
 
-  async updateUsuario(id: number, data: Partial<UsuarioAdmin> & { password?: string }): Promise<UsuarioAdmin> {
-    const response = await apiClient.patch<UsuarioAdmin>(`${API_URL}/usuarios/${id}/`, data);
-    return response.data;
-  },
-
-  async deleteUsuario(id: number): Promise<void> {
-    await apiClient.delete(`${API_URL}/usuarios/${id}/`);
+    return response.json();
   },
 };
