@@ -112,6 +112,29 @@ class ConfiguracionFacturacion(models.Model):
         return f"{self.prefijo_factura} {self.numero_factura}"
 
 
+class ConfiguracionModulos(models.Model):
+    configuracion = models.OneToOneField(
+        ConfiguracionEmpresa,
+        on_delete=models.CASCADE,
+        related_name='accesos_modulos',
+    )
+    configuracion_enabled = models.BooleanField(default=True)
+    registrar_enabled = models.BooleanField(default=True)
+    listados_enabled = models.BooleanField(default=True)
+    articulos_enabled = models.BooleanField(default=True)
+    taller_enabled = models.BooleanField(default=True)
+    facturacion_enabled = models.BooleanField(default=True)
+    reportes_enabled = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = 'Configuración de Módulos'
+        verbose_name_plural = 'Configuración de Módulos'
+        db_table = 'configuracion_modulos'
+
+    def __str__(self):
+        return "Configuración de módulos"
+
+
 class Impuesto(BaseModel):
     nombre = models.CharField(max_length=50)
     valor = models.CharField(max_length=10)

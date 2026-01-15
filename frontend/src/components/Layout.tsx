@@ -7,6 +7,7 @@ import {
 import { useEffect, useMemo, useState, useRef, type ReactNode } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { configuracionAPI } from "../api/configuracion";
+import { DEFAULT_MODULE_ACCESS, type ModuleKey } from "../store/moduleAccess";
 import {
   loadModuleAccess,
   type ModuleKey,
@@ -121,7 +122,7 @@ export default function Layout() {
   const [mobileExpanded, setMobileExpanded] = useState<Record<string, boolean>>(
     {}
   );
-  const [moduleAccess, setModuleAccess] = useState(loadModuleAccess());
+  const [moduleAccess, setModuleAccess] = useState(DEFAULT_MODULE_ACCESS);
 
   // --- Menú principal con delay ---
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
@@ -167,13 +168,18 @@ export default function Layout() {
   }, []);
 
   useEffect(() => {
-    const refreshAccess = () => {
-      setModuleAccess(loadModuleAccess());
+    const refreshAccess = async () => {
+      try {
+        const data = await configuracionAPI.obtenerAccesosModulos();
+        setModuleAccess(data.access);
+      } catch (error) {
+        console.error("Error cargando accesos de módulos:", error);
+      }
     };
-    window.addEventListener("storage", refreshAccess);
+
+    refreshAccess();
     window.addEventListener("module-access-updated", refreshAccess);
     return () => {
-      window.removeEventListener("storage", refreshAccess);
       window.removeEventListener("module-access-updated", refreshAccess);
     };
   }, []);

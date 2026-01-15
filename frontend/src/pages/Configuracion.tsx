@@ -22,8 +22,6 @@ import type {
 import { useAuth } from "../contexts/AuthContext";
 import {
   DEFAULT_MODULE_ACCESS,
-  loadModuleAccess,
-  saveModuleAccess,
   type ModuleAccess,
 } from "../store/moduleAccess";
 
@@ -152,8 +150,9 @@ export default function Configuracion() {
 
   const [perfil, setPerfil] = useState<UsuarioAdmin | null>(null);
   const [accesosModulos, setAccesosModulos] = useState<ModuleAccess>(
-    loadModuleAccess()
+    DEFAULT_MODULE_ACCESS
   );
+  const [accesosModulosId, setAccesosModulosId] = useState<number | null>(null);
 
   const tabs = useMemo(() => {
     if (!isAdmin) {
@@ -363,6 +362,41 @@ export default function Configuracion() {
       return;
     }
 
+    const cargarAccesos = async () => {
+      try {
+        const data = await configuracionAPI.obtenerAccesosModulos();
+        setAccesosModulos(data.access);
+        setAccesosModulosId(data.id);
+      } catch (error) {
+        console.error("Error cargando accesos de módulos:", error);
+      }
+    };
+
+    cargarAccesos();
+  }, [isAdmin]);
+
+  useEffect(() => {
+    if (!user?.id) {
+      return;
+    }
+
+    const cargarPerfil = async () => {
+      try {
+        const data = await configuracionAPI.obtenerUsuarioActual();
+        setPerfil(data);
+      } catch (error) {
+        console.error("Error cargando perfil:", error);
+      }
+    };
+
+    cargarPerfil();
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!isAdmin) {
+      return;
+    }
+
     const cargarMecanicos = async () => {
       try {
         const data = await tallerApi.getMecanicos();
@@ -510,10 +544,24 @@ export default function Configuracion() {
     }
   };
 
-  const handleGuardarAccesos = () => {
-    saveModuleAccess(accesosModulos);
-    setMensajeAccesos("Accesos de módulos actualizados.");
-    window.dispatchEvent(new Event("module-access-updated"));
+  const handleGuardarAccesos = async () => {
+    if (!accesosModulosId) {
+      setMensajeAccesos("No se encontró la configuración de módulos.");
+      return;
+    }
+
+    try {
+      const data = await configuracionAPI.actualizarAccesosModulos(
+        accesosModulosId,
+        accesosModulos
+      );
+      setAccesosModulos(data.access);
+      setMensajeAccesos("Accesos de módulos actualizados.");
+      window.dispatchEvent(new Event("module-access-updated"));
+    } catch (error) {
+      console.error("Error actualizando accesos de módulos:", error);
+      setMensajeAccesos("No se pudieron actualizar los accesos.");
+    }
   };
 
   const resetNuevoUsuario = () => {
