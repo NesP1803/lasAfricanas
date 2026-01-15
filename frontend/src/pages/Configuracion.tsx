@@ -99,6 +99,11 @@ export default function Configuracion() {
   const [mecanicosDisponibles, setMecanicosDisponibles] = useState<Mecanico[]>(
     []
   );
+  const [userModalOpen, setUserModalOpen] = useState(false);
+  const [userModalMode, setUserModalMode] = useState<"create" | "edit">(
+    "create"
+  );
+  const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [origenUsuario, setOrigenUsuario] = useState<"manual" | "mecanico">(
     "manual"
   );
@@ -112,6 +117,7 @@ export default function Configuracion() {
     last_name: "",
     telefono: "",
     tipo_usuario: "VENDEDOR" as UsuarioAdmin["tipo_usuario"],
+    is_active: true,
     password: "",
   });
   const [nuevoImpuesto, setNuevoImpuesto] = useState<Partial<Impuesto>>({
@@ -382,48 +388,107 @@ export default function Configuracion() {
     }
   };
 
-  const handleCrearUsuario = async () => {
+  const resetNuevoUsuario = () => {
+    setNuevoUsuario({
+      username: "",
+      email: "",
+      first_name: "",
+      last_name: "",
+      telefono: "",
+      tipo_usuario: "VENDEDOR",
+      is_active: true,
+      password: "",
+    });
+    setMecanicoSeleccionado("");
+    setOrigenUsuario("manual");
+    setEditingUserId(null);
+  };
+
+  const openCreateUserModal = () => {
+    setUserModalMode("create");
+    resetNuevoUsuario();
+    setMensajeNuevoUsuario("");
+    setUserModalOpen(true);
+  };
+
+  const openEditUserModal = (usuario: UsuarioAdmin) => {
+    setUserModalMode("edit");
+    setEditingUserId(usuario.id);
+    setNuevoUsuario({
+      username: usuario.username,
+      email: usuario.email || "",
+      first_name: usuario.first_name || "",
+      last_name: usuario.last_name || "",
+      telefono: usuario.telefono || "",
+      tipo_usuario: usuario.tipo_usuario,
+      is_active: usuario.is_active,
+      password: "",
+    });
+    setMensajeNuevoUsuario("");
+    setUserModalOpen(true);
+  };
+
+  const handleGuardarUsuarioModal = async () => {
     if (!nuevoUsuario.username || !nuevoUsuario.tipo_usuario) {
       setMensajeNuevoUsuario("Completa el usuario y el rol para continuar.");
       return;
     }
-    if (!nuevoUsuario.password) {
+
+    if (userModalMode === "create" && !nuevoUsuario.password) {
       setMensajeNuevoUsuario("Debes asignar una contraseña al usuario.");
       return;
     }
 
     try {
-      const payload = {
-        username: nuevoUsuario.username,
-        email: nuevoUsuario.email || "",
-        first_name: nuevoUsuario.first_name || "",
-        last_name: nuevoUsuario.last_name || "",
-        telefono: nuevoUsuario.telefono || "",
-        tipo_usuario: nuevoUsuario.tipo_usuario,
-        password: nuevoUsuario.password,
-      };
-      const data = await configuracionAPI.crearUsuario(payload);
-      setUsuarios((prev) => [data, ...prev]);
-      setNuevoUsuario({
-        username: "",
-        email: "",
-        first_name: "",
-        last_name: "",
-        telefono: "",
-        tipo_usuario: "VENDEDOR",
-        password: "",
-      });
-      setMecanicoSeleccionado("");
-      setOrigenUsuario("manual");
-      setMensajeNuevoUsuario("Usuario creado correctamente.");
+      if (userModalMode === "create") {
+        const payload = {
+          username: nuevoUsuario.username,
+          email: nuevoUsuario.email || "",
+          first_name: nuevoUsuario.first_name || "",
+          last_name: nuevoUsuario.last_name || "",
+          telefono: nuevoUsuario.telefono || "",
+          tipo_usuario: nuevoUsuario.tipo_usuario,
+          is_active: nuevoUsuario.is_active,
+          password: nuevoUsuario.password,
+        };
+        const data = await configuracionAPI.crearUsuario(payload);
+        setUsuarios((prev) => [data, ...prev]);
+        setMensajeNuevoUsuario("Usuario creado correctamente.");
+      } else {
+        if (!editingUserId) {
+          setMensajeNuevoUsuario(
+            "No se encontró el usuario a editar. Refresca la lista."
+          );
+          return;
+        }
+        const payload: Partial<UsuarioAdmin> & { password?: string } = {
+          username: nuevoUsuario.username,
+          email: nuevoUsuario.email || "",
+          first_name: nuevoUsuario.first_name || "",
+          last_name: nuevoUsuario.last_name || "",
+          telefono: nuevoUsuario.telefono || "",
+          tipo_usuario: nuevoUsuario.tipo_usuario,
+          is_active: nuevoUsuario.is_active,
+        };
+        if (nuevoUsuario.password) {
+          payload.password = nuevoUsuario.password;
+        }
+        const data = await configuracionAPI.actualizarUsuario(editingUserId, payload);
+        setUsuarios((prev) =>
+          prev.map((item) => (item.id === data.id ? data : item))
+        );
+        setMensajeNuevoUsuario("Usuario actualizado correctamente.");
+      }
+      setUserModalOpen(false);
+      resetNuevoUsuario();
     } catch (error) {
-      console.error("Error creando usuario:", error);
-      setMensajeNuevoUsuario("No se pudo crear el usuario.");
+      console.error("Error guardando usuario:", error);
+      setMensajeNuevoUsuario("No se pudo guardar el usuario.");
     }
   };
 
   useEffect(() => {
-    if (origenUsuario !== "mecanico") {
+    if (origenUsuario !== "mecanico" || userModalMode !== "create") {
       return;
     }
     const mecanico = mecanicosDisponibles.find(
@@ -451,7 +516,12 @@ export default function Configuracion() {
       last_name: prev.last_name || lastName,
       tipo_usuario: "MECANICO",
     }));
-  }, [mecanicoSeleccionado, mecanicosDisponibles, origenUsuario]);
+  }, [
+    mecanicoSeleccionado,
+    mecanicosDisponibles,
+    origenUsuario,
+    userModalMode,
+  ]);
 
   const handleCambiarClave = async () => {
     if (!user?.id) {
@@ -1084,184 +1154,22 @@ export default function Configuracion() {
             </div>
           ) : (
             <>
-              <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <h4 className="text-sm font-semibold text-slate-700">
-                      Crear nuevo usuario
-                    </h4>
-                    <p className="text-xs text-slate-500">
-                      Puedes crear usuarios manualmente o partir desde un
-                      mecánico ya registrado.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleCrearUsuario}
-                    className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow hover:bg-blue-700"
-                  >
-                    <Plus size={14} /> Crear usuario
-                  </button>
+              <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <div>
+                  <h4 className="text-sm font-semibold text-slate-700">
+                    Gestiona usuarios
+                  </h4>
+                  <p className="text-xs text-slate-500">
+                    Crea usuarios desde cero o usando mecánicos existentes.
+                  </p>
                 </div>
-
-                {mensajeNuevoUsuario && (
-                  <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700">
-                    {mensajeNuevoUsuario}
-                  </div>
-                )}
-
-                <div className="mt-4 grid gap-4 md:grid-cols-2">
-                  <label className="space-y-2 text-xs font-medium text-slate-700">
-                    Origen
-                    <select
-                      value={origenUsuario}
-                      onChange={(event) => {
-                        const value = event.target.value as
-                          | "manual"
-                          | "mecanico";
-                        setOrigenUsuario(value);
-                        setMecanicoSeleccionado("");
-                        setNuevoUsuario((prev) => ({
-                          ...prev,
-                          username: "",
-                          email: "",
-                          first_name: "",
-                          last_name: "",
-                          telefono: "",
-                        }));
-                      }}
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                    >
-                      <option value="manual">Manual</option>
-                      <option value="mecanico">Mecánico existente</option>
-                    </select>
-                  </label>
-
-                  {origenUsuario === "mecanico" && (
-                    <label className="space-y-2 text-xs font-medium text-slate-700">
-                      Mecánico
-                      <select
-                        value={mecanicoSeleccionado}
-                        onChange={(event) =>
-                          setMecanicoSeleccionado(
-                            event.target.value
-                              ? Number(event.target.value)
-                              : ""
-                          )
-                        }
-                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                      >
-                        <option value="">Selecciona un mecánico</option>
-                        {mecanicosDisponibles.map((mecanico) => (
-                          <option key={mecanico.id} value={mecanico.id}>
-                            {mecanico.nombre}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  )}
-                </div>
-
-                <div className="mt-4 grid gap-4 md:grid-cols-3">
-                  <label className="space-y-2 text-xs font-medium text-slate-700">
-                    Usuario
-                    <input
-                      value={nuevoUsuario.username}
-                      onChange={(event) =>
-                        setNuevoUsuario((prev) => ({
-                          ...prev,
-                          username: event.target.value,
-                        }))
-                      }
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                    />
-                  </label>
-                  <label className="space-y-2 text-xs font-medium text-slate-700">
-                    Correo
-                    <input
-                      value={nuevoUsuario.email}
-                      onChange={(event) =>
-                        setNuevoUsuario((prev) => ({
-                          ...prev,
-                          email: event.target.value,
-                        }))
-                      }
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                    />
-                  </label>
-                  <label className="space-y-2 text-xs font-medium text-slate-700">
-                    Teléfono
-                    <input
-                      value={nuevoUsuario.telefono}
-                      onChange={(event) =>
-                        setNuevoUsuario((prev) => ({
-                          ...prev,
-                          telefono: event.target.value,
-                        }))
-                      }
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                    />
-                  </label>
-                  <label className="space-y-2 text-xs font-medium text-slate-700">
-                    Nombre
-                    <input
-                      value={nuevoUsuario.first_name}
-                      onChange={(event) =>
-                        setNuevoUsuario((prev) => ({
-                          ...prev,
-                          first_name: event.target.value,
-                        }))
-                      }
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                    />
-                  </label>
-                  <label className="space-y-2 text-xs font-medium text-slate-700">
-                    Apellido
-                    <input
-                      value={nuevoUsuario.last_name}
-                      onChange={(event) =>
-                        setNuevoUsuario((prev) => ({
-                          ...prev,
-                          last_name: event.target.value,
-                        }))
-                      }
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                    />
-                  </label>
-                  <label className="space-y-2 text-xs font-medium text-slate-700">
-                    Rol
-                    <select
-                      value={nuevoUsuario.tipo_usuario}
-                      onChange={(event) =>
-                        setNuevoUsuario((prev) => ({
-                          ...prev,
-                          tipo_usuario: event.target
-                            .value as UsuarioAdmin["tipo_usuario"],
-                        }))
-                      }
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                    >
-                      <option value="ADMIN">Administrador</option>
-                      <option value="VENDEDOR">Vendedor</option>
-                      <option value="MECANICO">Mecánico</option>
-                      <option value="BODEGUERO">Bodeguero</option>
-                    </select>
-                  </label>
-                  <label className="space-y-2 text-xs font-medium text-slate-700">
-                    Contraseña
-                    <input
-                      type="password"
-                      value={nuevoUsuario.password}
-                      onChange={(event) =>
-                        setNuevoUsuario((prev) => ({
-                          ...prev,
-                          password: event.target.value,
-                        }))
-                      }
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                    />
-                  </label>
-                </div>
+                <button
+                  type="button"
+                  onClick={openCreateUserModal}
+                  className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow hover:bg-blue-700"
+                >
+                  <Plus size={14} /> Crear usuario
+                </button>
               </div>
 
               {mensajeUsuario && (
@@ -1339,6 +1247,13 @@ export default function Configuracion() {
                           >
                             Guardar
                           </button>
+                          <button
+                            type="button"
+                            onClick={() => openEditUserModal(usuario)}
+                            className="ml-2 rounded-lg border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 hover:border-blue-200 hover:text-blue-600"
+                          >
+                            Editar
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -1403,6 +1318,239 @@ export default function Configuracion() {
             <Save size={16} /> Guardar nueva clave
           </button>
         </section>
+      )}
+
+      {userModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4 py-6">
+          <div className="w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+              <div>
+                <p className="text-xs font-semibold uppercase text-blue-500">
+                  {userModalMode === "create"
+                    ? "Nuevo usuario"
+                    : "Editar usuario"}
+                </p>
+                <h2 className="text-lg font-semibold text-slate-900">
+                  {userModalMode === "create"
+                    ? "Registrar usuario"
+                    : "Actualizar usuario"}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setUserModalOpen(false);
+                  resetNuevoUsuario();
+                  setMensajeNuevoUsuario("");
+                }}
+                className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="space-y-6 px-6 py-4">
+              {mensajeNuevoUsuario && (
+                <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+                  {mensajeNuevoUsuario}
+                </div>
+              )}
+
+              {userModalMode === "create" && (
+                <div className="grid gap-4 md:grid-cols-2">
+                  <label className="space-y-2 text-xs font-medium text-slate-700">
+                    Origen
+                    <select
+                      value={origenUsuario}
+                      onChange={(event) => {
+                        const value = event.target.value as
+                          | "manual"
+                          | "mecanico";
+                        setOrigenUsuario(value);
+                        setMecanicoSeleccionado("");
+                        setNuevoUsuario((prev) => ({
+                          ...prev,
+                          username: "",
+                          email: "",
+                          first_name: "",
+                          last_name: "",
+                          telefono: "",
+                        }));
+                      }}
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    >
+                      <option value="manual">Manual</option>
+                      <option value="mecanico">Mecánico existente</option>
+                    </select>
+                  </label>
+
+                  {origenUsuario === "mecanico" && (
+                    <label className="space-y-2 text-xs font-medium text-slate-700">
+                      Mecánico
+                      <select
+                        value={mecanicoSeleccionado}
+                        onChange={(event) =>
+                          setMecanicoSeleccionado(
+                            event.target.value
+                              ? Number(event.target.value)
+                              : ""
+                          )
+                        }
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                      >
+                        <option value="">Selecciona un mecánico</option>
+                        {mecanicosDisponibles.map((mecanico) => (
+                          <option key={mecanico.id} value={mecanico.id}>
+                            {mecanico.nombre}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                </div>
+              )}
+
+              <div className="grid gap-4 md:grid-cols-3">
+                <label className="space-y-2 text-xs font-medium text-slate-700">
+                  Usuario
+                  <input
+                    value={nuevoUsuario.username}
+                    onChange={(event) =>
+                      setNuevoUsuario((prev) => ({
+                        ...prev,
+                        username: event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="space-y-2 text-xs font-medium text-slate-700">
+                  Correo
+                  <input
+                    value={nuevoUsuario.email}
+                    onChange={(event) =>
+                      setNuevoUsuario((prev) => ({
+                        ...prev,
+                        email: event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="space-y-2 text-xs font-medium text-slate-700">
+                  Teléfono
+                  <input
+                    value={nuevoUsuario.telefono}
+                    onChange={(event) =>
+                      setNuevoUsuario((prev) => ({
+                        ...prev,
+                        telefono: event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="space-y-2 text-xs font-medium text-slate-700">
+                  Nombre
+                  <input
+                    value={nuevoUsuario.first_name}
+                    onChange={(event) =>
+                      setNuevoUsuario((prev) => ({
+                        ...prev,
+                        first_name: event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="space-y-2 text-xs font-medium text-slate-700">
+                  Apellido
+                  <input
+                    value={nuevoUsuario.last_name}
+                    onChange={(event) =>
+                      setNuevoUsuario((prev) => ({
+                        ...prev,
+                        last_name: event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="space-y-2 text-xs font-medium text-slate-700">
+                  Rol
+                  <select
+                    value={nuevoUsuario.tipo_usuario}
+                    onChange={(event) =>
+                      setNuevoUsuario((prev) => ({
+                        ...prev,
+                        tipo_usuario: event.target
+                          .value as UsuarioAdmin["tipo_usuario"],
+                      }))
+                    }
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  >
+                    <option value="ADMIN">Administrador</option>
+                    <option value="VENDEDOR">Vendedor</option>
+                    <option value="MECANICO">Mecánico</option>
+                    <option value="BODEGUERO">Bodeguero</option>
+                  </select>
+                </label>
+                <label className="space-y-2 text-xs font-medium text-slate-700">
+                  Contraseña
+                  <input
+                    type="password"
+                    value={nuevoUsuario.password}
+                    onChange={(event) =>
+                      setNuevoUsuario((prev) => ({
+                        ...prev,
+                        password: event.target.value,
+                      }))
+                    }
+                    placeholder={
+                      userModalMode === "edit"
+                        ? "Dejar en blanco para mantener"
+                        : ""
+                    }
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={nuevoUsuario.is_active}
+                    onChange={(event) =>
+                      setNuevoUsuario((prev) => ({
+                        ...prev,
+                        is_active: event.target.checked,
+                      }))
+                    }
+                  />
+                  Usuario activo
+                </label>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUserModalOpen(false);
+                    resetNuevoUsuario();
+                    setMensajeNuevoUsuario("");
+                  }}
+                  className="rounded-full border border-slate-200 px-5 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleGuardarUsuarioModal}
+                  className="rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+                >
+                  {userModalMode === "create" ? "Crear usuario" : "Guardar"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
