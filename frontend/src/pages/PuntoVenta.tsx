@@ -252,7 +252,7 @@ export default function PuntoVenta() {
 
   return (
     <div className="h-full flex flex-col bg-slate-50">
-      <div className="bg-slate-900 text-white p-4 flex flex-wrap items-center justify-between gap-4 shadow">
+      <div className="bg-blue-600 text-white p-4 flex flex-wrap items-center justify-between gap-4 shadow">
         <div className="flex flex-wrap items-end gap-4">
           <div>
             <label className="text-xs font-semibold block mb-1">DIGITE Nº/CC DEL CLIENTE</label>
@@ -313,7 +313,7 @@ export default function PuntoVenta() {
 
             <button
               onClick={agregarProductoPorCodigo}
-              className="px-4 py-2 bg-slate-900 text-white rounded hover:bg-slate-800"
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
             >
               Añadir producto
             </button>
@@ -529,7 +529,7 @@ export default function PuntoVenta() {
             </button>
             <button
               onClick={() => crearVenta('REMISION')}
-              className="w-full px-3 py-3 bg-slate-800 text-white rounded hover:bg-slate-700"
+              className="w-full px-3 py-3 bg-blue-700 text-white rounded hover:bg-blue-600"
             >
               Remisión
             </button>
@@ -566,7 +566,7 @@ export default function PuntoVenta() {
               />
               <button
                 onClick={buscarProductos}
-                className="px-4 py-2 bg-slate-900 text-white rounded hover:bg-slate-800"
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
               >
                 Buscar
               </button>
@@ -660,7 +660,7 @@ export default function PuntoVenta() {
               </button>
               <button
                 onClick={confirmarAprobacion}
-                className="px-3 py-2 bg-slate-900 text-white rounded"
+                className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
               >
                 Autorizar descuento
               </button>
