@@ -98,11 +98,22 @@ export const configuracionAPI = {
     return response.data.results;
   },
   obtenerUsuarios: async () => {
-    const response = await apiClient.get<UsuarioAdmin[]>('/usuarios/');
-    return response.data;
+    const response = await apiClient.get<
+      UsuarioAdmin[] | PaginatedResponse<UsuarioAdmin>
+    >('/usuarios/');
+    if (Array.isArray(response.data)) {
+      return response.data;
+    }
+    if (Array.isArray(response.data.results)) {
+      return response.data.results;
+    }
+    return [];
   },
   actualizarUsuario: async (id: number, data: Partial<UsuarioAdmin>) => {
-    const response = await apiClient.put<UsuarioAdmin>(`/usuarios/${id}/`, data);
+    const response = await apiClient.patch<UsuarioAdmin>(
+      `/usuarios/${id}/`,
+      data
+    );
     return response.data;
   },
   cambiarClave: async (id: number, newPassword: string) => {
