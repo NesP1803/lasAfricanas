@@ -120,6 +120,14 @@ export const configuracionAPI = {
     );
     return response.data;
   },
+  obtenerUsuarioActual: async () => {
+    const response = await apiClient.get<UsuarioAdmin>('/usuarios/me/');
+    return response.data;
+  },
+  actualizarUsuarioActual: async (data: Partial<UsuarioAdmin>) => {
+    const response = await apiClient.patch<UsuarioAdmin>('/usuarios/me/', data);
+    return response.data;
+  },
   cambiarClave: async (id: number, newPassword: string) => {
     const response = await apiClient.post<{ detail: string }>(`/usuarios/${id}/change_password/`, {
       new_password: newPassword,

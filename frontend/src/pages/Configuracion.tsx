@@ -20,14 +20,22 @@ import type {
   UsuarioAdmin,
 } from "../types";
 import { useAuth } from "../contexts/AuthContext";
+import {
+  DEFAULT_MODULE_ACCESS,
+  loadModuleAccess,
+  saveModuleAccess,
+  type ModuleAccess,
+} from "../store/moduleAccess";
 
 type ConfigTab =
+  | "perfil"
   | "facturacion"
   | "empresa"
   | "impuestos"
   | "auditoria"
   | "usuarios"
-  | "clave";
+  | "clave"
+  | "accesos";
 
 type PlantillaField =
   | "plantilla_factura_carta"
@@ -81,7 +89,10 @@ const defaultImpuestos: Impuesto[] = [
 export default function Configuracion() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialTab = (searchParams.get("tab") as ConfigTab) || "facturacion";
+  const isAdmin = user?.role?.toUpperCase() === "ADMIN";
+  const defaultTab: ConfigTab = isAdmin ? "facturacion" : "perfil";
+  const initialTab =
+    (searchParams.get("tab") as ConfigTab) || defaultTab;
 
   const [activeTab, setActiveTab] = useState<ConfigTab>(initialTab);
   const [empresa, setEmpresa] = useState<ConfiguracionEmpresa>(defaultEmpresa);
@@ -132,15 +143,28 @@ export default function Configuracion() {
   const [mensajeImpuesto, setMensajeImpuesto] = useState("");
   const [mensajeUsuario, setMensajeUsuario] = useState("");
   const [mensajeNuevoUsuario, setMensajeNuevoUsuario] = useState("");
+  const [mensajePerfil, setMensajePerfil] = useState("");
+  const [mensajeAccesos, setMensajeAccesos] = useState("");
 
   const [claveActual, setClaveActual] = useState("");
   const [nuevaClave, setNuevaClave] = useState("");
   const [confirmarClave, setConfirmarClave] = useState("");
 
-  const isAdmin = user?.role === "admin" || user?.role === "ADMIN";
+  const [perfil, setPerfil] = useState<UsuarioAdmin | null>(null);
+  const [accesosModulos, setAccesosModulos] = useState<ModuleAccess>(
+    loadModuleAccess()
+  );
 
-  const tabs = useMemo(
-    () => [
+  const tabs = useMemo(() => {
+    if (!isAdmin) {
+      return [
+        { id: "perfil", label: "Mi perfil", icon: <UserCog size={18} /> },
+        { id: "clave", label: "Cambiar clave", icon: <UserCog size={18} /> },
+      ];
+    }
+
+    return [
+      { id: "perfil", label: "Mi perfil", icon: <UserCog size={18} /> },
       {
         id: "facturacion",
         label: "Facturación",
@@ -150,9 +174,14 @@ export default function Configuracion() {
       { id: "usuarios", label: "Usuarios", icon: <Users size={18} /> },
       { id: "impuestos", label: "Impuestos", icon: <Plus size={18} /> },
       { id: "auditoria", label: "Auditoría", icon: <Users size={18} /> },
+      { id: "accesos", label: "Accesos", icon: <ShieldCheck size={18} /> },
       { id: "clave", label: "Cambiar clave", icon: <UserCog size={18} /> },
-    ],
-    []
+    ];
+  }, [isAdmin]);
+
+  const availableTabs = useMemo(
+    () => tabs.map((tab) => tab.id as ConfigTab),
+    [tabs]
   );
 
   const plantillaOptions = useMemo(
@@ -185,12 +214,63 @@ export default function Configuracion() {
     []
   );
 
+  const moduleOptions = useMemo<
+    Array<{ key: keyof ModuleAccess; label: string; description: string }>
+  >(
+    () => [
+      {
+        key: "configuracion",
+        label: "Configuración",
+        description: "Permite acceder a la información y ajustes del sistema.",
+      },
+      {
+        key: "registrar",
+        label: "Registrar",
+        description: "Habilita el registro general de operaciones.",
+      },
+      {
+        key: "listados",
+        label: "Listados",
+        description: "Acceso a clientes, proveedores, empleados y categorías.",
+      },
+      {
+        key: "articulos",
+        label: "Artículos",
+        description: "Inventario, stock y bajas de mercancía.",
+      },
+      {
+        key: "taller",
+        label: "Taller",
+        description: "Operaciones y registro de motos del taller.",
+      },
+      {
+        key: "facturacion",
+        label: "Facturación",
+        description: "Venta rápida, cuentas y listados de facturas.",
+      },
+      {
+        key: "reportes",
+        label: "Reportes",
+        description: "Visualización de reportes diarios y mensuales.",
+      },
+    ],
+    []
+  );
+
   useEffect(() => {
     const tabParam = searchParams.get("tab") as ConfigTab | null;
-    if (tabParam && tabParam !== activeTab) {
-      setActiveTab(tabParam);
+    if (tabParam && availableTabs.includes(tabParam)) {
+      if (tabParam !== activeTab) {
+        setActiveTab(tabParam);
+      }
+      return;
     }
-  }, [searchParams, activeTab]);
+    if (!availableTabs.includes(activeTab)) {
+      const fallback = availableTabs[0] ?? defaultTab;
+      setActiveTab(fallback);
+      setSearchParams({ tab: fallback });
+    }
+  }, [activeTab, availableTabs, defaultTab, searchParams, setSearchParams]);
 
   useEffect(() => {
     const cargarDatos = async () => {
@@ -218,6 +298,10 @@ export default function Configuracion() {
         console.error("Error cargando facturación:", error);
       }
 
+      if (!isAdmin) {
+        return;
+      }
+
       try {
         const data = await configuracionAPI.obtenerImpuestos();
         if (data?.length) {
@@ -238,7 +322,7 @@ export default function Configuracion() {
     };
 
     cargarDatos();
-  }, []);
+  }, [isAdmin]);
 
   useEffect(() => {
     if (!isAdmin) {
@@ -256,6 +340,23 @@ export default function Configuracion() {
 
     cargarUsuarios();
   }, [isAdmin]);
+
+  useEffect(() => {
+    if (!user?.id) {
+      return;
+    }
+
+    const cargarPerfil = async () => {
+      try {
+        const data = await configuracionAPI.obtenerUsuarioActual();
+        setPerfil(data);
+      } catch (error) {
+        console.error("Error cargando perfil:", error);
+      }
+    };
+
+    cargarPerfil();
+  }, [user?.id]);
 
   useEffect(() => {
     if (!isAdmin) {
@@ -386,6 +487,33 @@ export default function Configuracion() {
       console.error("Error actualizando usuario:", error);
       setMensajeUsuario("No se pudo actualizar el usuario.");
     }
+  };
+
+  const handleGuardarPerfil = async () => {
+    if (!perfil) {
+      return;
+    }
+
+    try {
+      const data = await configuracionAPI.actualizarUsuarioActual({
+        email: perfil.email,
+        first_name: perfil.first_name,
+        last_name: perfil.last_name,
+        telefono: perfil.telefono ?? "",
+        sede: perfil.sede ?? "",
+      });
+      setPerfil(data);
+      setMensajePerfil("Tus datos se actualizaron correctamente.");
+    } catch (error) {
+      console.error("Error actualizando perfil:", error);
+      setMensajePerfil("No se pudo actualizar tu perfil.");
+    }
+  };
+
+  const handleGuardarAccesos = () => {
+    saveModuleAccess(accesosModulos);
+    setMensajeAccesos("Accesos de módulos actualizados.");
+    window.dispatchEvent(new Event("module-access-updated"));
   };
 
   const resetNuevoUsuario = () => {
@@ -589,6 +717,122 @@ export default function Configuracion() {
           ))}
         </div>
       </div>
+
+      {activeTab === "perfil" && (
+        <section className="rounded-2xl bg-white p-6 shadow-sm">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-semibold text-slate-900">
+                Datos personales
+              </h3>
+              <p className="text-sm text-slate-500">
+                Mantén actualizada tu información de contacto.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleGuardarPerfil}
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-blue-700"
+              disabled={!perfil}
+            >
+              <Save size={16} /> Guardar
+            </button>
+          </div>
+
+          {mensajePerfil && (
+            <div className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+              {mensajePerfil}
+            </div>
+          )}
+
+          {!perfil ? (
+            <div className="mt-6 rounded-lg border border-slate-100 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+              Cargando tu perfil...
+            </div>
+          ) : (
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
+              <label className="space-y-2 text-sm font-medium text-slate-700">
+                Usuario
+                <input
+                  value={perfil.username}
+                  disabled
+                  className="w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-500"
+                />
+              </label>
+              <label className="space-y-2 text-sm font-medium text-slate-700">
+                Correo electrónico
+                <input
+                  value={perfil.email || ""}
+                  onChange={(event) =>
+                    setPerfil((prev) =>
+                      prev
+                        ? { ...prev, email: event.target.value }
+                        : prev
+                    )
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="space-y-2 text-sm font-medium text-slate-700">
+                Nombres
+                <input
+                  value={perfil.first_name || ""}
+                  onChange={(event) =>
+                    setPerfil((prev) =>
+                      prev
+                        ? { ...prev, first_name: event.target.value }
+                        : prev
+                    )
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="space-y-2 text-sm font-medium text-slate-700">
+                Apellidos
+                <input
+                  value={perfil.last_name || ""}
+                  onChange={(event) =>
+                    setPerfil((prev) =>
+                      prev
+                        ? { ...prev, last_name: event.target.value }
+                        : prev
+                    )
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="space-y-2 text-sm font-medium text-slate-700">
+                Teléfono
+                <input
+                  value={perfil.telefono || ""}
+                  onChange={(event) =>
+                    setPerfil((prev) =>
+                      prev
+                        ? { ...prev, telefono: event.target.value }
+                        : prev
+                    )
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="space-y-2 text-sm font-medium text-slate-700">
+                Sede
+                <input
+                  value={perfil.sede || ""}
+                  onChange={(event) =>
+                    setPerfil((prev) =>
+                      prev
+                        ? { ...prev, sede: event.target.value }
+                        : prev
+                    )
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+              </label>
+            </div>
+          )}
+        </section>
+      )}
 
       {activeTab === "facturacion" && (
         <section className="grid gap-6 lg:grid-cols-3">
@@ -1136,6 +1380,69 @@ export default function Configuracion() {
                 )}
               </tbody>
             </table>
+          </div>
+        </section>
+      )}
+
+      {activeTab === "accesos" && (
+        <section className="rounded-2xl bg-white p-6 shadow-sm">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-semibold text-slate-900">
+                Accesos por módulos
+              </h3>
+              <p className="text-sm text-slate-500">
+                Activa o desactiva los módulos disponibles para los perfiles
+                operativos.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleGuardarAccesos}
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-blue-700"
+            >
+              <Save size={16} /> Guardar
+            </button>
+          </div>
+
+          {mensajeAccesos && (
+            <div className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+              {mensajeAccesos}
+            </div>
+          )}
+
+          <div className="mt-6 grid gap-4 md:grid-cols-2">
+            {moduleOptions.map((modulo) => (
+              <label
+                key={modulo.key}
+                className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4"
+              >
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">
+                    {modulo.label}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {modulo.description}
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={accesosModulos[modulo.key]}
+                  onChange={(event) =>
+                    setAccesosModulos((prev) => ({
+                      ...prev,
+                      [modulo.key]: event.target.checked,
+                    }))
+                  }
+                  className="h-5 w-5 accent-blue-600"
+                />
+              </label>
+            ))}
+          </div>
+
+          <div className="mt-6 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
+            Estado por defecto:{" "}
+            {Object.keys(DEFAULT_MODULE_ACCESS).length} módulos habilitados.
           </div>
         </section>
       )}

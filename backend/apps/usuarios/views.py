@@ -16,6 +16,8 @@ class UsuarioViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         if self.action == 'change_password':
             return [IsAuthenticated()]
+        if self.action == 'me':
+            return [IsAuthenticated()]
         if self.action == 'validar_descuento':
             return [IsAuthenticated()]
         return [IsAdminUser()]
@@ -82,3 +84,30 @@ class UsuarioViewSet(viewsets.ModelViewSet):
                 else None,
             }
         )
+
+    @action(detail=False, methods=['get', 'patch'])
+    def me(self, request):
+        usuario = request.user
+
+        if request.method.lower() == 'patch':
+            allowed_fields = {
+                'email',
+                'first_name',
+                'last_name',
+                'telefono',
+                'sede',
+            }
+            payload = {
+                key: value
+                for key, value in request.data.items()
+                if key in allowed_fields
+            }
+            serializer = self.get_serializer(
+                usuario, data=payload, partial=True
+            )
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            return Response(serializer.data)
+
+        serializer = self.get_serializer(usuario)
+        return Response(serializer.data)

@@ -1,7 +1,16 @@
-import { Outlet, Navigate, useNavigate } from "react-router-dom";
+import {
+  Outlet,
+  Navigate,
+  useNavigate,
+  useLocation,
+} from "react-router-dom";
 import { useEffect, useMemo, useState, useRef, type ReactNode } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { configuracionAPI } from "../api/configuracion";
+import {
+  loadModuleAccess,
+  type ModuleKey,
+} from "../store/moduleAccess";
 import {
   ClipboardList,
   Boxes,
@@ -106,11 +115,13 @@ function DropdownList({
 export default function Layout() {
   const { isAuthenticated, user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileExpanded, setMobileExpanded] = useState<Record<string, boolean>>(
     {}
   );
+  const [moduleAccess, setModuleAccess] = useState(loadModuleAccess());
 
   // --- Menú principal con delay ---
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
@@ -155,6 +166,18 @@ export default function Layout() {
     cargarLogo();
   }, []);
 
+  useEffect(() => {
+    const refreshAccess = () => {
+      setModuleAccess(loadModuleAccess());
+    };
+    window.addEventListener("storage", refreshAccess);
+    window.addEventListener("module-access-updated", refreshAccess);
+    return () => {
+      window.removeEventListener("storage", refreshAccess);
+      window.removeEventListener("module-access-updated", refreshAccess);
+    };
+  }, []);
+
   if (!isAuthenticated) {
     return <Navigate to="/login" />;
   }
@@ -164,82 +187,191 @@ export default function Layout() {
     navigate("/login");
   };
 
-  const menuItems = useMemo<MenuItem[]>(
-    () => [
-      {
-        label: "Configuración",
-        icon: <Settings size={18} />,
-        items: [
-          { label: "Facturación", path: "/configuracion?tab=facturacion" },
-          { label: "Empresa", path: "/configuracion?tab=empresa" },
-          { label: "Usuarios", path: "/configuracion?tab=usuarios" },
-          { label: "Impuestos", path: "/configuracion?tab=impuestos" },
-          { label: "Auditoría", path: "/configuracion?tab=auditoria" },
-          { label: "Cambiar Clave", path: "/configuracion?tab=clave" },
-        ],
-      },
-      {
-        label: "Registrar",
-        icon: <ReceiptText size={18} />,
-        items: [{ label: "Registro general", path: "/" }],
-      },
-      {
-        label: "Listados",
-        icon: <ClipboardList size={18} />,
-        items: [
-          { label: "Clientes", path: "/listados?tab=clientes" },
-          { label: "Proveedores", path: "/listados?tab=proveedores" },
-          { label: "Empleados", path: "/listados?tab=empleados" },
-          { label: "Categorias", path: "/listados?tab=categorias" },
-          { label: "Mecánicos", path: "/listados?tab=mecanicos" },
-        ],
-      },
-      {
-        label: "Artículos",
-        icon: <Boxes size={18} />,
-        items: [
-          { label: "Mercancia", path: "/articulos?tab=mercancia" },
-          { label: "Stock Bajo", path: "/articulos?tab=stock-bajo" },
-          { label: "Dar de Baja", path: "/articulos?tab=dar-de-baja" },
-        ],
-      },
-      {
-        label: "Taller",
-        icon: <Wrench size={18} />,
-        items: [
-          { label: "Operaciones", path: "/taller?tab=ordenes" },
-          { label: "Registro de Motos", path: "/taller?tab=motos" },
-        ],
-      },
-      {
-        label: "Facturación",
-        icon: <FileText size={18} />,
-        items: [
-          { label: "Venta rápida", path: "/ventas" },
-          {
-            label: "Cuentas",
-            items: [
-              { label: "Cuentas del día", path: "/ventas/cuentas-dia" },
-              { label: "Detalles cuentas", path: "/ventas/detalles-cuentas" },
-            ],
-          },
-          {
-            label: "Listados",
-            items: [
-              { label: "Facturas", path: "/facturacion/facturas" },
-              { label: "Remisiones", path: "/facturacion/remisiones" },
-            ],
-          },
-        ],
-      },
-      {
-        label: "Reportes",
-        icon: <Share2 size={18} />,
-        items: [{ label: "Resumen diario" }, { label: "Resumen mensual" }],
-      },
-    ],
-    [navigate]
+  const role = user?.role?.toUpperCase() ?? "VENDEDOR";
+  const isAdmin = role === "ADMIN";
+  const isVendedor = role === "VENDEDOR";
+  const isMecanico = role === "MECANICO";
+
+  const moduleEnabled = (key: ModuleKey) => {
+    if (isAdmin) {
+      return true;
+    }
+    return moduleAccess[key];
+  };
+
+  const configuracionItems = useMemo(
+    () =>
+      isAdmin
+        ? [
+            { label: "Mi perfil", path: "/configuracion?tab=perfil" },
+            { label: "Facturación", path: "/configuracion?tab=facturacion" },
+            { label: "Empresa", path: "/configuracion?tab=empresa" },
+            { label: "Usuarios", path: "/configuracion?tab=usuarios" },
+            { label: "Impuestos", path: "/configuracion?tab=impuestos" },
+            { label: "Auditoría", path: "/configuracion?tab=auditoria" },
+            { label: "Accesos", path: "/configuracion?tab=accesos" },
+            { label: "Cambiar Clave", path: "/configuracion?tab=clave" },
+          ]
+        : [
+            { label: "Mi perfil", path: "/configuracion?tab=perfil" },
+            { label: "Cambiar Clave", path: "/configuracion?tab=clave" },
+          ],
+    [isAdmin]
   );
+
+  const menuItems = useMemo<MenuItem[]>(
+    () => {
+      const items: MenuItem[] = [];
+
+      if (moduleEnabled("configuracion")) {
+        items.push({
+          label: "Configuración",
+          icon: <Settings size={18} />,
+          items: configuracionItems,
+        });
+      }
+
+      if (isVendedor) {
+        if (moduleEnabled("taller")) {
+          items.push({
+            label: "Taller",
+            icon: <Wrench size={18} />,
+            items: [{ label: "Operaciones", path: "/taller?tab=ordenes" }],
+          });
+        }
+        if (moduleEnabled("facturacion")) {
+          items.push({
+            label: "Facturación",
+            icon: <FileText size={18} />,
+            items: [{ label: "Venta rápida", path: "/ventas" }],
+          });
+        }
+        return items;
+      }
+
+      if (isMecanico) {
+        if (moduleEnabled("taller")) {
+          items.push({
+            label: "Taller",
+            icon: <Wrench size={18} />,
+            items: [
+              { label: "Operaciones", path: "/taller?tab=ordenes" },
+              { label: "Registro de Motos", path: "/taller?tab=motos" },
+            ],
+          });
+        }
+        return items;
+      }
+
+      if (moduleEnabled("registrar")) {
+        items.push({
+          label: "Registrar",
+          icon: <ReceiptText size={18} />,
+          items: [{ label: "Registro general", path: "/" }],
+        });
+      }
+      if (moduleEnabled("listados")) {
+        items.push({
+          label: "Listados",
+          icon: <ClipboardList size={18} />,
+          items: [
+            { label: "Clientes", path: "/listados?tab=clientes" },
+            { label: "Proveedores", path: "/listados?tab=proveedores" },
+            { label: "Empleados", path: "/listados?tab=empleados" },
+            { label: "Categorias", path: "/listados?tab=categorias" },
+            { label: "Mecánicos", path: "/listados?tab=mecanicos" },
+          ],
+        });
+      }
+      if (moduleEnabled("articulos")) {
+        items.push({
+          label: "Artículos",
+          icon: <Boxes size={18} />,
+          items: [
+            { label: "Mercancia", path: "/articulos?tab=mercancia" },
+            { label: "Stock Bajo", path: "/articulos?tab=stock-bajo" },
+            { label: "Dar de Baja", path: "/articulos?tab=dar-de-baja" },
+          ],
+        });
+      }
+      if (moduleEnabled("taller")) {
+        items.push({
+          label: "Taller",
+          icon: <Wrench size={18} />,
+          items: [
+            { label: "Operaciones", path: "/taller?tab=ordenes" },
+            { label: "Registro de Motos", path: "/taller?tab=motos" },
+          ],
+        });
+      }
+      if (moduleEnabled("facturacion")) {
+        items.push({
+          label: "Facturación",
+          icon: <FileText size={18} />,
+          items: [
+            { label: "Venta rápida", path: "/ventas" },
+            {
+              label: "Cuentas",
+              items: [
+                { label: "Cuentas del día", path: "/ventas/cuentas-dia" },
+                {
+                  label: "Detalles cuentas",
+                  path: "/ventas/detalles-cuentas",
+                },
+              ],
+            },
+            {
+              label: "Listados",
+              items: [
+                { label: "Facturas", path: "/facturacion/facturas" },
+                { label: "Remisiones", path: "/facturacion/remisiones" },
+              ],
+            },
+          ],
+        });
+      }
+      if (moduleEnabled("reportes")) {
+        items.push({
+          label: "Reportes",
+          icon: <Share2 size={18} />,
+          items: [{ label: "Resumen diario" }, { label: "Resumen mensual" }],
+        });
+      }
+
+      return items;
+    },
+    [configuracionItems, isAdmin, isMecanico, isVendedor, moduleAccess]
+  );
+
+  const allowedPaths = useMemo(() => {
+    const paths: string[] = [];
+    const collectPaths = (items: MenuItem[]) => {
+      items.forEach((item) => {
+        if (item.path) {
+          paths.push(item.path.split("?")[0]);
+        }
+        if (item.items) {
+          collectPaths(item.items);
+        }
+      });
+    };
+    collectPaths(menuItems);
+    return paths;
+  }, [menuItems]);
+
+  useEffect(() => {
+    if (isAdmin) {
+      return;
+    }
+    if (allowedPaths.length === 0) {
+      return;
+    }
+    const currentPath = location.pathname;
+    const isAllowed = allowedPaths.some((path) => path === currentPath);
+    if (!isAllowed) {
+      navigate(allowedPaths[0]);
+    }
+  }, [allowedPaths, isAdmin, location.pathname, navigate]);
 
   const renderMenuButton = (label: string, icon?: ReactNode) => (
     <>

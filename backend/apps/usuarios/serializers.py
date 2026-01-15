@@ -9,11 +9,12 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         data = super().validate(attrs)
         
         # Agregar información del usuario
+        role = 'ADMIN' if self.user.is_superuser else self.user.tipo_usuario
         data['user'] = {
             'id': self.user.id,
             'username': self.user.username,
             'email': self.user.email,
-            'role': 'admin' if self.user.is_superuser else 'vendedor',
+            'role': role,
         }
         
         return data
