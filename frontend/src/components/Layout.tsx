@@ -187,7 +187,6 @@ export default function Layout() {
         label: "Facturación",
         icon: <FileText size={18} />,
         items: [
-          { label: "Generar Factura", path: "/ventas" },
           {
             label: "Cuentas",
             items: [
