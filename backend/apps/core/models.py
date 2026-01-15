@@ -96,6 +96,12 @@ class ConfiguracionFacturacion(models.Model):
     numero_remision = models.IntegerField(default=1)
     resolucion = models.TextField(blank=True)
     notas_factura = models.TextField(blank=True)
+    plantilla_factura_carta = models.TextField(blank=True)
+    plantilla_factura_tirilla = models.TextField(blank=True)
+    plantilla_remision_carta = models.TextField(blank=True)
+    plantilla_remision_tirilla = models.TextField(blank=True)
+    plantilla_nota_credito_carta = models.TextField(blank=True)
+    plantilla_nota_credito_tirilla = models.TextField(blank=True)
 
     class Meta:
         verbose_name = 'Configuración de Facturación'
@@ -154,4 +160,3 @@ class Auditoria(models.Model):
 
     def __str__(self):
         return f"{self.usuario_nombre} - {self.accion}"
-
