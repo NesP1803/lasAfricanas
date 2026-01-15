@@ -8,13 +8,57 @@ import type {
   PaginatedResponse,
 } from '../types';
 
+const buildEmpresaFormData = (
+  data: ConfiguracionEmpresa,
+  logoFile?: File | null,
+  removeLogo?: boolean
+) => {
+  const formData = new FormData();
+  Object.entries(data).forEach(([key, value]) => {
+    if (key === 'logo' || key === 'id') {
+      return;
+    }
+    formData.append(key, value === null ? '' : String(value));
+  });
+
+  if (logoFile) {
+    formData.append('logo', logoFile);
+  } else if (removeLogo) {
+    formData.append('logo', '');
+  }
+
+  return formData;
+};
+
 export const configuracionAPI = {
   obtenerEmpresa: async () => {
-    const response = await apiClient.get<ConfiguracionEmpresa[]>('/configuracion-empresa/');
+    const response = await apiClient.get<ConfiguracionEmpresa[]>(
+      '/configuracion-empresa/'
+    );
     return response.data[0];
   },
-  actualizarEmpresa: async (id: number, data: ConfiguracionEmpresa) => {
-    const response = await apiClient.put<ConfiguracionEmpresa>(`/configuracion-empresa/${id}/`, data);
+  actualizarEmpresa: async (
+    id: number,
+    data: ConfiguracionEmpresa,
+    options?: { logoFile?: File | null; removeLogo?: boolean }
+  ) => {
+    if (options?.logoFile || options?.removeLogo) {
+      const formData = buildEmpresaFormData(
+        data,
+        options?.logoFile,
+        options?.removeLogo
+      );
+      const response = await apiClient.put<ConfiguracionEmpresa>(
+        `/configuracion-empresa/${id}/`,
+        formData
+      );
+      return response.data;
+    }
+
+    const response = await apiClient.put<ConfiguracionEmpresa>(
+      `/configuracion-empresa/${id}/`,
+      data
+    );
     return response.data;
   },
   obtenerFacturacion: async () => {
