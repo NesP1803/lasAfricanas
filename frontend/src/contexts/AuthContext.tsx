@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState } from 'react';
 import type { ReactNode } from 'react';
 
 interface User {
@@ -18,22 +18,20 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-
-  useEffect(() => {
+  const [user, setUser] = useState<User | null>(() => {
     const token = localStorage.getItem('token');
     const savedUser = localStorage.getItem('user');
-    
     if (token && savedUser) {
       try {
-        setUser(JSON.parse(savedUser));
+        return JSON.parse(savedUser) as User;
       } catch (error) {
         console.error('Error parsing saved user:', error);
         localStorage.removeItem('token');
         localStorage.removeItem('user');
       }
     }
-  }, []);
+    return null;
+  });
 
   const login = async (username: string, password: string) => {
     try {
