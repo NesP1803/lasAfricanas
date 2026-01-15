@@ -1,13 +1,20 @@
 from rest_framework import viewsets
 from rest_framework.parsers import FormParser, MultiPartParser, JSONParser
 from rest_framework.response import Response
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
-from .models import ConfiguracionEmpresa, ConfiguracionFacturacion, Impuesto, Auditoria
+from .models import (
+    ConfiguracionEmpresa,
+    ConfiguracionFacturacion,
+    ConfiguracionModulos,
+    Impuesto,
+    Auditoria,
+)
 from .serializers import (
     ConfiguracionEmpresaSerializer,
     ConfiguracionFacturacionSerializer,
+    ConfiguracionModulosSerializer,
     ImpuestoSerializer,
     AuditoriaSerializer,
 )
@@ -70,6 +77,25 @@ class ConfiguracionFacturacionViewSet(viewsets.ModelViewSet):
             },
         )
         serializer = self.get_serializer([configuracion], many=True)
+        return Response(serializer.data)
+
+
+class ConfiguracionModulosViewSet(viewsets.ModelViewSet):
+    queryset = ConfiguracionModulos.objects.all()
+    serializer_class = ConfiguracionModulosSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        if self.action in {"list", "retrieve"}:
+            return [IsAuthenticated()]
+        return [IsAdminUser()]
+
+    def list(self, request, *args, **kwargs):
+        configuracion, _ = ConfiguracionEmpresa.objects.get_or_create(id=1)
+        modulos, _ = ConfiguracionModulos.objects.get_or_create(
+            configuracion=configuracion
+        )
+        serializer = self.get_serializer([modulos], many=True)
         return Response(serializer.data)
 
 
