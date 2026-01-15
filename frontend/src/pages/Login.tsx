@@ -17,17 +17,20 @@ export default function Login() {
     const storedLogo = localStorage.getItem('empresa_logo');
     if (storedLogo) {
       setLogoUrl(storedLogo);
+      return;
     }
 
     const cargarLogo = async () => {
       try {
-        const data = await configuracionAPI.obtenerEmpresa();
-        if (data?.logo) {
-          setLogoUrl(data.logo);
-          localStorage.setItem('empresa_logo', data.logo);
-        } else {
-          setLogoUrl(null);
-          localStorage.removeItem('empresa_logo');
+        const response = await fetch('/api/configuracion-empresa/');
+        if (!response.ok) {
+          return;
+        }
+        const data = await response.json();
+        const logo = data?.[0]?.logo ?? null;
+        if (logo) {
+          setLogoUrl(logo);
+          localStorage.setItem('empresa_logo', logo);
         }
       } catch (error) {
         console.error('Error cargando logo:', error);

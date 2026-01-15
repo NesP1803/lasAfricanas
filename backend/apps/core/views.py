@@ -1,6 +1,8 @@
 from rest_framework import viewsets
+from rest_framework.parsers import FormParser, MultiPartParser, JSONParser
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from .models import ConfiguracionEmpresa, ConfiguracionFacturacion, Impuesto, Auditoria
 from .serializers import (
@@ -14,7 +16,13 @@ from .serializers import (
 class ConfiguracionEmpresaViewSet(viewsets.ModelViewSet):
     queryset = ConfiguracionEmpresa.objects.all()
     serializer_class = ConfiguracionEmpresaSerializer
-    permission_classes = [IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    def get_permissions(self):
+        if self.action in {"list", "retrieve"}:
+            return [AllowAny()]
+        return [IsAuthenticated()]
 
     def list(self, request, *args, **kwargs):
         configuracion, _ = ConfiguracionEmpresa.objects.get_or_create(
