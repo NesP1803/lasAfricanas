@@ -9,6 +9,10 @@ import { useAuth } from "../contexts/AuthContext";
 import { configuracionAPI } from "../api/configuracion";
 import { DEFAULT_MODULE_ACCESS, type ModuleKey } from "../store/moduleAccess";
 import {
+  loadModuleAccess,
+  type ModuleKey,
+} from "../store/moduleAccess";
+import {
   ClipboardList,
   Boxes,
   FileText,
