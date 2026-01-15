@@ -1,27 +1,89 @@
+import { useEffect, useMemo, useState } from 'react';
+import { Package, ShoppingCart, TriangleAlert } from 'lucide-react';
+import { inventarioApi, type InventarioEstadisticas } from '../api/inventario';
+import { ventasApi, type EstadisticasVentas } from '../api/ventas';
 import { useAuth } from '../contexts/AuthContext';
-import { Package, ShoppingCart, Users } from 'lucide-react';
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const [inventarioStats, setInventarioStats] =
+    useState<InventarioEstadisticas | null>(null);
+  const [ventasStats, setVentasStats] = useState<EstadisticasVentas | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const currencyFormatter = useMemo(
+    () =>
+      new Intl.NumberFormat('es-CO', {
+        style: 'currency',
+        currency: 'COP',
+        maximumFractionDigits: 0,
+      }),
+    []
+  );
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchStats = async () => {
+      try {
+        setLoading(true);
+        setErrorMessage(null);
+        const [inventarioResponse, ventasResponse] = await Promise.all([
+          inventarioApi.getEstadisticas(),
+          ventasApi.getEstadisticasHoy(),
+        ]);
+
+        if (!isMounted) return;
+        setInventarioStats(inventarioResponse);
+        setVentasStats(ventasResponse);
+      } catch (error) {
+        if (!isMounted) return;
+        setErrorMessage('No se pudieron cargar las estadísticas del dashboard.');
+      } finally {
+        if (!isMounted) return;
+        setLoading(false);
+      }
+    };
+
+    fetchStats();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const formatCurrency = (value: string | number | null | undefined) => {
+    if (value === null || value === undefined) {
+      return '--';
+    }
+    const numericValue = typeof value === 'string' ? Number(value) : value;
+    if (Number.isNaN(numericValue)) {
+      return '--';
+    }
+    return currencyFormatter.format(numericValue);
+  };
 
   const stats = [
     {
       icon: <Package className="w-8 h-8 text-blue-600" />,
       title: 'Productos',
-      value: '0',
+      value: loading ? '...' : inventarioStats?.total?.toString() ?? '--',
       description: 'En inventario',
     },
     {
       icon: <ShoppingCart className="w-8 h-8 text-green-600" />,
       title: 'Ventas del día',
-      value: '$0',
+      value: loading
+        ? '...'
+        : formatCurrency(ventasStats?.total_facturado ?? 0),
       description: 'Total de hoy',
     },
     {
-      icon: <Users className="w-8 h-8 text-orange-600" />,
-      title: 'Clientes',
-      value: '0',
-      description: 'Registrados',
+      icon: <TriangleAlert className="w-8 h-8 text-orange-600" />,
+      title: 'Stock bajo',
+      value: loading ? '...' : inventarioStats?.stock_bajo?.toString() ?? '--',
+      description: 'Requieren reposición',
     },
   ];
 
@@ -33,6 +95,9 @@ export default function Dashboard() {
         <p className="text-gray-600 mt-2">
           Bienvenido, {user?.username}
         </p>
+        {errorMessage ? (
+          <p className="text-sm text-red-600 mt-2">{errorMessage}</p>
+        ) : null}
       </div>
 
       {/* Stats Grid */}
