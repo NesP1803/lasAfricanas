@@ -53,6 +53,16 @@ export interface Venta {
   detalles: any[];
 }
 
+export interface EstadisticasVentas {
+  total_ventas: number;
+  total_facturado: string | null;
+  total_cotizaciones: number;
+  total_remisiones: number;
+  total_facturas: number;
+  total_facturas_valor: string | null;
+  total_remisiones_valor: string | null;
+}
+
 export const ventasApi = {
   // Clientes
   async buscarCliente(documento: string): Promise<Cliente> {
@@ -213,6 +223,26 @@ export const ventasApi = {
   async getEstadisticasHoy(): Promise<any> {
     const token = localStorage.getItem('token');
     const response = await fetch(`${API_URL}/ventas/estadisticas_hoy/`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) throw new Error('Error al obtener estadísticas');
+    return response.json();
+  },
+
+  async getEstadisticas(params?: {
+    fechaInicio?: string;
+    fechaFin?: string;
+  }): Promise<EstadisticasVentas> {
+    const token = localStorage.getItem('token');
+    const queryParams = new URLSearchParams();
+    if (params?.fechaInicio) queryParams.append('fecha_inicio', params.fechaInicio);
+    if (params?.fechaFin) queryParams.append('fecha_fin', params.fechaFin);
+    const query = queryParams.toString();
+    const response = await fetch(`${API_URL}/ventas/estadisticas/${query ? `?${query}` : ''}`, {
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
