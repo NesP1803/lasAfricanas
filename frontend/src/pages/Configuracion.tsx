@@ -1197,26 +1197,15 @@ export default function Configuracion() {
                           </p>
                         </td>
                         <td className="px-4 py-3">
-                          <select
-                            value={usuario.tipo_usuario}
-                            onChange={(event) => {
-                              const value = event.target
-                                .value as UsuarioAdmin["tipo_usuario"];
-                              setUsuarios((prev) =>
-                                prev.map((item) =>
-                                  item.id === usuario.id
-                                    ? { ...item, tipo_usuario: value }
-                                    : item
-                                )
-                              );
-                            }}
-                            className="rounded-lg border border-slate-200 px-2 py-1 text-sm"
-                          >
-                            <option value="ADMIN">Administrador</option>
-                            <option value="VENDEDOR">Vendedor</option>
-                            <option value="MECANICO">Mecánico</option>
-                            <option value="BODEGUERO">Bodeguero</option>
-                          </select>
+                          <span className="inline-flex rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600">
+                            {usuario.tipo_usuario === "ADMIN"
+                              ? "Administrador"
+                              : usuario.tipo_usuario === "VENDEDOR"
+                              ? "Vendedor"
+                              : usuario.tipo_usuario === "MECANICO"
+                              ? "Mecánico"
+                              : "Bodeguero"}
+                          </span>
                         </td>
                         <td className="px-4 py-3">
                           <label className="inline-flex items-center gap-2 text-xs text-slate-600">
@@ -1512,6 +1501,12 @@ export default function Configuracion() {
                     }
                     className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                   />
+                  {userModalMode === "edit" && (
+                    <p className="text-[11px] font-normal text-slate-500">
+                      Por seguridad no se muestra la contraseña actual. Ingresa
+                      una nueva si deseas actualizarla.
+                    </p>
+                  )}
                 </label>
                 <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
                   <input
