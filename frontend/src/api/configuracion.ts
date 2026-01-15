@@ -15,7 +15,7 @@ const buildEmpresaFormData = (
 ) => {
   const formData = new FormData();
   Object.entries(data).forEach(([key, value]) => {
-    if (key === 'logo') {
+    if (key === 'logo' || key === 'id') {
       return;
     }
     formData.append(key, value === null ? '' : String(value));
@@ -50,12 +50,7 @@ export const configuracionAPI = {
       );
       const response = await apiClient.put<ConfiguracionEmpresa>(
         `/configuracion-empresa/${id}/`,
-        formData,
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-        }
+        formData
       );
       return response.data;
     }
