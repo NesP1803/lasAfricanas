@@ -11,6 +11,7 @@ import Ventas from './pages/Ventas';
 import CuentasDia from './pages/CuentasDia';
 import DetallesCuentas from './pages/DetallesCuentas';
 import Facturas from './pages/Facturas';
+import Remisiones from './pages/Remisiones';
 
 function App() {
   return (
@@ -28,6 +29,7 @@ function App() {
             <Route path="ventas/cuentas-dia" element={<CuentasDia />} />
             <Route path="ventas/detalles-cuentas" element={<DetallesCuentas />} />
             <Route path="facturacion/facturas" element={<Facturas />} />
+            <Route path="facturacion/remisiones" element={<Remisiones />} />
           </Route>
         </Routes>
       </BrowserRouter>

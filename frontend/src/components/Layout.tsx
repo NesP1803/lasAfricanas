@@ -197,7 +197,7 @@ export default function Layout() {
             label: "Listados",
             items: [
               { label: "Facturas", path: "/facturacion/facturas" },
-              { label: "Remisiones" },
+              { label: "Remisiones", path: "/facturacion/remisiones" },
             ],
           },
         ],
