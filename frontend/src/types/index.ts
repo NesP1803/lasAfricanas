@@ -141,6 +141,12 @@ export interface ConfiguracionFacturacion {
   numero_remision: number;
   resolucion: string;
   notas_factura: string;
+  plantilla_factura_carta: string;
+  plantilla_factura_tirilla: string;
+  plantilla_remision_carta: string;
+  plantilla_remision_tirilla: string;
+  plantilla_nota_credito_carta: string;
+  plantilla_nota_credito_tirilla: string;
 }
 
 export interface Impuesto {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   CheckCircle2,
@@ -28,6 +28,14 @@ type ConfigTab =
   | "usuarios"
   | "clave";
 
+type PlantillaField =
+  | "plantilla_factura_carta"
+  | "plantilla_factura_tirilla"
+  | "plantilla_remision_carta"
+  | "plantilla_remision_tirilla"
+  | "plantilla_nota_credito_carta"
+  | "plantilla_nota_credito_tirilla";
+
 const defaultEmpresa: ConfiguracionEmpresa = {
   id: 1,
   tipo_identificacion: "NIT",
@@ -55,6 +63,12 @@ const defaultFacturacion: ConfiguracionFacturacion = {
     "Resolución Facturación POS N°. 18764006081459 de 2020/10/22\nRango del 00001 al 50000.",
   notas_factura:
     "Para trámite de cambios y garantías, indispensable presentar la factura de venta. Tiene hasta 5 días para trámites. Los productos deben estar en perfecto estado y empaque original.",
+  plantilla_factura_carta: "",
+  plantilla_factura_tirilla: "",
+  plantilla_remision_carta: "",
+  plantilla_remision_tirilla: "",
+  plantilla_nota_credito_carta: "",
+  plantilla_nota_credito_tirilla: "",
 };
 
 const defaultImpuestos: Impuesto[] = [
@@ -75,6 +89,9 @@ export default function Configuracion() {
   const [logoRemoved, setLogoRemoved] = useState(false);
   const [facturacion, setFacturacion] =
     useState<ConfiguracionFacturacion>(defaultFacturacion);
+  const [plantillaActiva, setPlantillaActiva] =
+    useState<PlantillaField>("plantilla_factura_carta");
+  const editorRef = useRef<HTMLDivElement | null>(null);
   const [impuestos, setImpuestos] = useState<Impuesto[]>(defaultImpuestos);
   const [auditoria, setAuditoria] = useState<AuditoriaRegistro[]>([]);
   const [usuarios, setUsuarios] = useState<UsuarioAdmin[]>([]);
@@ -108,6 +125,36 @@ export default function Configuracion() {
       { id: "impuestos", label: "Impuestos", icon: <Plus size={18} /> },
       { id: "auditoria", label: "Auditoría", icon: <Users size={18} /> },
       { id: "clave", label: "Cambiar clave", icon: <UserCog size={18} /> },
+    ],
+    []
+  );
+
+  const plantillaOptions = useMemo(
+    () => [
+      {
+        id: "plantilla_factura_carta",
+        label: "Factura de venta · Carta",
+      },
+      {
+        id: "plantilla_factura_tirilla",
+        label: "Factura de venta · Tirilla",
+      },
+      {
+        id: "plantilla_remision_carta",
+        label: "Remisión · Carta",
+      },
+      {
+        id: "plantilla_remision_tirilla",
+        label: "Remisión · Tirilla",
+      },
+      {
+        id: "plantilla_nota_credito_carta",
+        label: "Nota crédito · Carta",
+      },
+      {
+        id: "plantilla_nota_credito_tirilla",
+        label: "Nota crédito · Tirilla",
+      },
     ],
     []
   );
@@ -194,6 +241,13 @@ export default function Configuracion() {
       URL.revokeObjectURL(objectUrl);
     };
   }, [logoFile]);
+
+  useEffect(() => {
+    if (!editorRef.current) {
+      return;
+    }
+    editorRef.current.innerHTML = facturacion[plantillaActiva] || "";
+  }, [facturacion, plantillaActiva]);
 
   const onTabChange = (tabId: ConfigTab) => {
     setActiveTab(tabId);
@@ -310,6 +364,22 @@ export default function Configuracion() {
       console.error("Error cambiando clave:", error);
       setMensajeClave("No se pudo actualizar la clave.");
     }
+  };
+
+  const actualizarPlantilla = (value: string) => {
+    setFacturacion((prev) => ({
+      ...prev,
+      [plantillaActiva]: value,
+    }));
+  };
+
+  const aplicarFormato = (comando: string, valor?: string) => {
+    if (!editorRef.current) {
+      return;
+    }
+    editorRef.current.focus();
+    document.execCommand(comando, false, valor);
+    actualizarPlantilla(editorRef.current.innerHTML);
   };
 
   return (
