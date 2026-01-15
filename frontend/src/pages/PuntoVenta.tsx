@@ -251,11 +251,11 @@ export default function PuntoVenta() {
   };
 
   return (
-    <div className="h-full flex flex-col bg-slate-50">
-      <div className="bg-blue-600 text-white p-4 flex flex-wrap items-center justify-between gap-4 shadow">
+    <div className="h-full flex flex-col bg-gray-100">
+      <div className="bg-gradient-to-r from-blue-700 to-blue-600 text-white p-5 flex flex-wrap items-center justify-between gap-4 shadow-lg border-b-4 border-blue-800">
         <div className="flex flex-wrap items-end gap-4">
           <div>
-            <label className="text-xs font-semibold block mb-1">DIGITE Nº/CC DEL CLIENTE</label>
+            <label className="text-xs font-bold block mb-2 tracking-wide uppercase">Digite Nº/CC del Cliente</label>
             <div className="flex gap-2">
               <input
                 type="text"
@@ -263,11 +263,11 @@ export default function PuntoVenta() {
                 value={buscarCliente}
                 onChange={(e) => setBuscarCliente(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && buscarClientePorDocumento()}
-                className="px-3 py-2 rounded text-gray-900 w-48"
+                className="px-4 py-2.5 rounded-lg text-gray-900 w-52 font-semibold shadow-sm focus:ring-2 focus:ring-blue-300 focus:outline-none"
               />
               <button
                 onClick={buscarClientePorDocumento}
-                className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 rounded font-bold"
+                className="px-5 py-2.5 bg-green-500 hover:bg-green-600 rounded-lg font-bold shadow-md hover:shadow-lg transition-all text-lg"
               >
                 ✓
               </button>
@@ -275,31 +275,31 @@ export default function PuntoVenta() {
           </div>
 
           <div>
-            <label className="text-xs font-semibold block mb-1">CLIENTE / RAZÓN SOCIAL</label>
-            <div className="bg-white text-gray-900 px-4 py-2 rounded min-w-[240px]">
-              <p className="font-bold text-lg">
+            <label className="text-xs font-bold block mb-2 tracking-wide uppercase">Cliente / Razón Social</label>
+            <div className="bg-white text-gray-900 px-5 py-2.5 rounded-lg min-w-[280px] shadow-sm border-2 border-blue-200">
+              <p className="font-bold text-xl text-blue-900">
                 {cliente?.nombre || 'Cliente general'}
               </p>
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-gray-600 font-medium">
                 {cliente?.numero_documento || 'Sin documento'}
               </p>
             </div>
           </div>
         </div>
 
-        <div className="text-right">
-          <p className="text-xs text-slate-200">VENDEDOR</p>
-          <p className="font-bold text-lg">{user?.username?.toUpperCase() || '---'}</p>
-          <p className="text-xs text-slate-300">{new Date().toLocaleString('es-CO')}</p>
+        <div className="text-right bg-blue-800/30 px-6 py-3 rounded-lg border border-blue-500/30">
+          <p className="text-xs text-blue-200 font-bold uppercase tracking-wide">Vendedor</p>
+          <p className="font-bold text-xl text-white">{user?.username?.toUpperCase() || 'ADMIN'}</p>
+          <p className="text-xs text-blue-200 font-medium">{new Date().toLocaleString('es-CO')}</p>
         </div>
       </div>
 
-      <div className="flex-1 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-4 p-4">
-        <section className="bg-white rounded-xl shadow border border-slate-200 flex flex-col">
-          <div className="border-b border-slate-100 p-4 flex flex-wrap items-center gap-4">
-            <div className="flex-1 min-w-[220px]">
-              <label className="text-xs font-semibold text-slate-500 block mb-1">
-                ESCÁNER / CÓDIGO DEL ARTÍCULO
+      <div className="flex-1 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_400px] gap-4 p-4">
+        <section className="bg-white rounded-xl shadow-lg border border-gray-200 flex flex-col overflow-hidden">
+          <div className="bg-gradient-to-r from-slate-100 to-gray-100 border-b-2 border-gray-300 p-4 flex flex-wrap items-center gap-3">
+            <div className="flex-1 min-w-[240px]">
+              <label className="text-xs font-bold text-gray-700 block mb-2 uppercase tracking-wide">
+                Escáner / Código del Artículo
               </label>
               <input
                 type="text"
@@ -307,27 +307,27 @@ export default function PuntoVenta() {
                 value={codigoScan}
                 onChange={(e) => setCodigoScan(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && agregarProductoPorCodigo()}
-                className="w-full px-3 py-2 border border-slate-200 rounded focus:outline-none focus:ring-2 focus:ring-slate-300"
+                className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 font-medium shadow-sm"
               />
             </div>
 
             <button
               onClick={agregarProductoPorCodigo}
-              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold shadow-md hover:shadow-lg transition-all uppercase tracking-wide"
             >
               Añadir producto
             </button>
 
             <button
               onClick={abrirBuscador}
-              className="px-4 py-2 bg-slate-100 border border-slate-200 rounded hover:bg-slate-200"
+              className="px-5 py-2.5 bg-white border-2 border-gray-300 rounded-lg hover:bg-gray-50 font-bold shadow-sm hover:shadow-md transition-all uppercase tracking-wide"
             >
               Buscar en catálogo
             </button>
 
             <button
               onClick={limpiarVenta}
-              className="px-4 py-2 bg-red-50 text-red-600 border border-red-200 rounded hover:bg-red-100"
+              className="px-5 py-2.5 bg-red-500 text-white border-2 border-red-600 rounded-lg hover:bg-red-600 font-bold shadow-md hover:shadow-lg transition-all uppercase tracking-wide"
             >
               Borrar todo
             </button>
@@ -335,26 +335,31 @@ export default function PuntoVenta() {
 
           <div className="overflow-auto flex-1">
             <table className="min-w-full text-sm">
-              <thead className="bg-slate-100 text-slate-600 uppercase text-xs">
+              <thead className="bg-gradient-to-r from-blue-600 to-blue-700 text-white uppercase text-xs font-bold sticky top-0 shadow-md">
                 <tr>
-                  <th className="px-3 py-2 text-left">Cant</th>
-                  <th className="px-3 py-2 text-left">Código</th>
-                  <th className="px-3 py-2 text-left">Artículo</th>
-                  <th className="px-3 py-2 text-right">IVA</th>
-                  <th className="px-3 py-2 text-right">Precio U</th>
-                  <th className="px-3 py-2 text-right">Total</th>
-                  <th className="px-3 py-2 text-center">Acciones</th>
+                  <th className="px-4 py-3 text-left border-r border-blue-500">Cant</th>
+                  <th className="px-4 py-3 text-left border-r border-blue-500">Código</th>
+                  <th className="px-4 py-3 text-left border-r border-blue-500">Artículo</th>
+                  <th className="px-4 py-3 text-right border-r border-blue-500">IVA</th>
+                  <th className="px-4 py-3 text-right border-r border-blue-500">Precio U</th>
+                  <th className="px-4 py-3 text-right border-r border-blue-500">Total</th>
+                  <th className="px-4 py-3 text-center">Acciones</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="bg-white">
                 {itemsFiltrados.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-6 text-center text-slate-400">
-                      No hay productos agregados.
+                    <td colSpan={7} className="px-4 py-12 text-center text-gray-400 text-base">
+                      <div className="flex flex-col items-center gap-2">
+                        <svg className="w-16 h-16 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                        </svg>
+                        <span className="font-semibold">No hay productos agregados.</span>
+                      </div>
                     </td>
                   </tr>
                 ) : (
-                  itemsFiltrados.map((item) => {
+                  itemsFiltrados.map((item, index) => {
                     const precio = toNumber(item.producto.precio_venta);
                     const descuentoUnitario = (precio * descuentoNumero) / 100;
                     const subtotal = (precio - descuentoUnitario) * item.cantidad;
@@ -364,9 +369,9 @@ export default function PuntoVenta() {
                     return (
                       <tr
                         key={item.producto.id}
-                        className="border-b border-slate-100 hover:bg-slate-50"
+                        className={`border-b border-gray-200 hover:bg-blue-50 transition-colors ${index % 2 === 0 ? 'bg-gray-50' : 'bg-white'}`}
                       >
-                        <td className="px-3 py-2">
+                        <td className="px-4 py-3">
                           <input
                             type="number"
                             min={1}
@@ -374,29 +379,29 @@ export default function PuntoVenta() {
                             onChange={(e) =>
                               actualizarCantidad(item.producto.id, Number(e.target.value))
                             }
-                            className="w-16 px-2 py-1 border border-slate-200 rounded"
+                            className="w-16 px-3 py-1.5 border-2 border-gray-300 rounded-md text-center font-bold text-base focus:ring-2 focus:ring-blue-400 focus:border-blue-400"
                           />
                         </td>
-                        <td className="px-3 py-2 font-mono text-xs text-slate-500">
+                        <td className="px-4 py-3 font-mono text-xs text-blue-600 font-semibold">
                           {item.producto.codigo}
                         </td>
-                        <td className="px-3 py-2">
-                          <p className="font-medium text-slate-800">{item.producto.nombre}</p>
-                          <p className="text-xs text-slate-400">{item.producto.categoria_nombre}</p>
+                        <td className="px-4 py-3">
+                          <p className="font-bold text-gray-800 text-base">{item.producto.nombre}</p>
+                          <p className="text-xs text-gray-500 font-medium">{item.producto.categoria_nombre}</p>
                         </td>
-                        <td className="px-3 py-2 text-right">
+                        <td className="px-4 py-3 text-right font-semibold text-gray-700">
                           {item.producto.iva_porcentaje}%
                         </td>
-                        <td className="px-3 py-2 text-right">
+                        <td className="px-4 py-3 text-right font-bold text-gray-800 text-base">
                           {currency.format(precio)}
                         </td>
-                        <td className="px-3 py-2 text-right font-semibold">
+                        <td className="px-4 py-3 text-right font-bold text-blue-700 text-lg">
                           {currency.format(totalLinea)}
                         </td>
-                        <td className="px-3 py-2 text-center">
+                        <td className="px-4 py-3 text-center">
                           <button
                             onClick={() => quitarProducto(item.producto.id)}
-                            className="text-red-500 hover:text-red-700"
+                            className="px-3 py-1.5 text-red-600 hover:text-white hover:bg-red-600 border border-red-600 rounded-md font-bold transition-all text-xs uppercase"
                           >
                             Quitar
                           </button>
@@ -409,260 +414,294 @@ export default function PuntoVenta() {
             </table>
           </div>
 
-          <div className="border-t border-slate-100 p-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="bg-gradient-to-r from-slate-100 to-gray-100 border-t-2 border-gray-300 p-4 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div>
-                <label className="text-xs font-semibold text-slate-500 block mb-1">BÚSQUEDA RÁPIDA</label>
+                <label className="text-xs font-bold text-gray-700 block mb-1.5 uppercase tracking-wide">Búsqueda Rápida</label>
                 <input
                   type="text"
                   placeholder="Filtrar por código o nombre"
                   value={filtroRapido}
                   onChange={(e) => setFiltroRapido(e.target.value)}
-                  className="px-3 py-2 border border-slate-200 rounded"
+                  className="px-3 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-400 focus:border-blue-400 shadow-sm"
                 />
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-500 block mb-1">OBSERVACIONES</label>
+                <label className="text-xs font-bold text-gray-700 block mb-1.5 uppercase tracking-wide">Observaciones</label>
                 <input
                   type="text"
                   value={observaciones}
                   onChange={(e) => setObservaciones(e.target.value)}
                   placeholder="Observaciones para la venta"
-                  className="px-3 py-2 border border-slate-200 rounded w-64"
+                  className="px-3 py-2 border-2 border-gray-300 rounded-lg w-64 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 shadow-sm"
                 />
               </div>
             </div>
-            <p className="text-xs text-slate-400">{mensaje}</p>
+            {mensaje && (
+              <div className="bg-blue-100 border-l-4 border-blue-600 px-4 py-2 rounded-r-lg">
+                <p className="text-sm text-blue-800 font-semibold">{mensaje}</p>
+              </div>
+            )}
           </div>
         </section>
 
-        <aside className="bg-white rounded-xl shadow border border-slate-200 p-4 flex flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-slate-800">Resumen</h2>
+        <aside className="bg-white rounded-xl shadow-xl border-2 border-gray-200 flex flex-col overflow-hidden">
+          <div className="bg-gradient-to-r from-blue-700 to-blue-600 text-white px-5 py-4 border-b-4 border-blue-800">
+            <h2 className="font-bold text-xl uppercase tracking-wide">Resumen</h2>
             {descuentoNumero > 0 && (
-              <span className={`text-xs px-2 py-1 rounded-full ${descuentoAprobador ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+              <span className={`inline-block mt-2 text-xs px-3 py-1.5 rounded-full font-bold ${descuentoAprobador ? 'bg-green-500 text-white' : 'bg-yellow-400 text-yellow-900'}`}>
                 {descuentoAprobador
-                  ? `Aprobado por ${descuentoAprobador.nombre}`
-                  : 'Descuento pendiente de aprobación'}
+                  ? `✓ Aprobado por ${descuentoAprobador.nombre}`
+                  : '⚠ Descuento pendiente de aprobación'}
               </span>
             )}
           </div>
 
-          <div className="space-y-3">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-slate-500">Subtotal</span>
-              <span className="font-semibold">{currency.format(totales.subtotal)}</span>
+          <div className="p-5 space-y-3 bg-gradient-to-b from-gray-50 to-white">
+            <div className="flex items-center justify-between py-2 border-b border-gray-200">
+              <span className="text-gray-600 font-semibold uppercase text-sm">Subtotal</span>
+              <span className="font-bold text-lg text-gray-800">{currency.format(totales.subtotal)}</span>
             </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-slate-500">Impuestos</span>
-              <span className="font-semibold">{currency.format(totales.iva)}</span>
+            <div className="flex items-center justify-between py-2 border-b border-gray-200">
+              <span className="text-gray-600 font-semibold uppercase text-sm">Impuestos</span>
+              <span className="font-bold text-lg text-gray-800">{currency.format(totales.iva)}</span>
             </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-slate-500">Descuentos</span>
-              <span className="font-semibold text-rose-600">
+            <div className="flex items-center justify-between py-2 border-b border-gray-200">
+              <span className="text-gray-600 font-semibold uppercase text-sm">Descuentos</span>
+              <span className="font-bold text-lg text-red-600">
                 -{currency.format(totales.descuentoValor)}
               </span>
             </div>
-            <div className="flex items-center justify-between text-base">
-              <span className="font-semibold">Total a pagar</span>
-              <span className="font-bold text-slate-900">{currency.format(totales.total)}</span>
+            <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-4 rounded-lg shadow-md mt-4">
+              <div className="flex items-center justify-between">
+                <span className="font-bold uppercase text-sm tracking-wide">Total a pagar</span>
+                <span className="font-bold text-3xl">{currency.format(totales.total)}</span>
+              </div>
             </div>
           </div>
 
-          <div className="border-t border-slate-100 pt-4 space-y-3">
+          <div className="border-t-2 border-gray-200 bg-white p-5 space-y-3">
             <div>
-              <label className="text-xs font-semibold text-slate-500 block mb-1">Descuento general (%)</label>
+              <label className="text-xs font-bold text-gray-700 block mb-2 uppercase tracking-wide">Descuento general (%)</label>
               <input
                 type="number"
                 min={0}
                 max={100}
                 value={descuentoPorcentaje}
                 onChange={(e) => aplicarDescuento(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded"
+                className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg text-lg font-bold text-center focus:ring-2 focus:ring-blue-400 focus:border-blue-400 shadow-sm"
               />
             </div>
             {descuentoNumero > 0 && !descuentoAprobador && (
               <button
                 onClick={solicitarAprobacion}
-                className="w-full px-3 py-2 bg-amber-500 text-white rounded hover:bg-amber-600"
+                className="w-full px-4 py-3 bg-yellow-500 text-yellow-900 rounded-lg hover:bg-yellow-600 font-bold shadow-md hover:shadow-lg transition-all uppercase tracking-wide border-2 border-yellow-600"
               >
-                Solicitar aprobación
+                ⚠ Solicitar aprobación
               </button>
             )}
             <div>
-              <label className="text-xs font-semibold text-slate-500 block mb-1">Medio de pago</label>
+              <label className="text-xs font-bold text-gray-700 block mb-2 uppercase tracking-wide">Medio de pago</label>
               <select
                 value={medioPago}
                 onChange={(e) => setMedioPago(e.target.value as typeof medioPago)}
-                className="w-full px-3 py-2 border border-slate-200 rounded"
+                className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg text-base font-semibold focus:ring-2 focus:ring-blue-400 focus:border-blue-400 shadow-sm"
               >
-                <option value="EFECTIVO">Efectivo</option>
-                <option value="TARJETA">Tarjeta</option>
-                <option value="TRANSFERENCIA">Transferencia</option>
-                <option value="CREDITO">Crédito</option>
+                <option value="EFECTIVO">💵 Efectivo</option>
+                <option value="TARJETA">💳 Tarjeta</option>
+                <option value="TRANSFERENCIA">🏦 Transferencia</option>
+                <option value="CREDITO">📋 Crédito</option>
               </select>
             </div>
             <div>
-              <label className="text-xs font-semibold text-slate-500 block mb-1">Efectivo recibido</label>
+              <label className="text-xs font-bold text-gray-700 block mb-2 uppercase tracking-wide">Efectivo recibido</label>
               <input
                 type="number"
                 min={0}
                 value={efectivoRecibido}
                 onChange={(e) => setEfectivoRecibido(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded"
+                className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg text-lg font-bold text-center focus:ring-2 focus:ring-blue-400 focus:border-blue-400 shadow-sm"
               />
             </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-slate-500">Cambio</span>
-              <span className="font-semibold text-emerald-600">
-                {currency.format(cambio)}
-              </span>
+            <div className="bg-green-100 border-2 border-green-500 p-3 rounded-lg">
+              <div className="flex items-center justify-between">
+                <span className="text-green-800 font-bold uppercase text-sm">Cambio</span>
+                <span className="font-bold text-2xl text-green-700">
+                  {currency.format(cambio)}
+                </span>
+              </div>
             </div>
           </div>
 
-          <div className="mt-auto space-y-2">
+          <div className="p-5 space-y-3 bg-gradient-to-b from-white to-gray-50">
             <button
               onClick={() => crearVenta('COTIZACION')}
-              className="w-full px-3 py-3 bg-slate-100 border border-slate-200 rounded hover:bg-slate-200"
+              className="w-full px-4 py-3.5 bg-white border-2 border-gray-400 text-gray-700 rounded-lg hover:bg-gray-50 font-bold shadow-md hover:shadow-lg transition-all uppercase tracking-wide text-base"
             >
-              Cotizar
+              📋 Cotizar
             </button>
             <button
               onClick={() => crearVenta('REMISION')}
-              className="w-full px-3 py-3 bg-blue-700 text-white rounded hover:bg-blue-600"
+              className="w-full px-4 py-3.5 bg-blue-600 text-white border-2 border-blue-700 rounded-lg hover:bg-blue-700 font-bold shadow-md hover:shadow-lg transition-all uppercase tracking-wide text-base"
             >
-              Remisión
+              📄 Remisión
             </button>
             <button
               onClick={() => crearVenta('FACTURA')}
-              className="w-full px-3 py-3 bg-emerald-500 text-white rounded hover:bg-emerald-600"
+              className="w-full px-4 py-4 bg-gradient-to-r from-green-500 to-green-600 text-white border-2 border-green-700 rounded-lg hover:from-green-600 hover:to-green-700 font-bold shadow-lg hover:shadow-xl transition-all uppercase tracking-wide text-lg"
             >
-              Facturar
+              ✓ Facturar
             </button>
           </div>
         </aside>
       </div>
 
       {mostrarBuscador && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl">
-            <div className="border-b border-slate-100 p-4 flex items-center justify-between">
-              <h3 className="font-semibold text-slate-800">Listado de artículos</h3>
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl overflow-hidden border-2 border-gray-300">
+            <div className="bg-gradient-to-r from-blue-700 to-blue-600 text-white px-6 py-4 flex items-center justify-between border-b-4 border-blue-800">
+              <h3 className="font-bold text-xl uppercase tracking-wide">Listado de Artículos</h3>
               <button
                 onClick={() => setMostrarBuscador(false)}
-                className="text-slate-500 hover:text-slate-700"
+                className="text-white hover:text-red-300 hover:bg-red-600/30 px-3 py-1.5 rounded-lg font-bold transition-all"
               >
-                Cerrar
+                ✕ Cerrar
               </button>
             </div>
-            <div className="p-4 flex items-center gap-3">
+            <div className="bg-gray-50 p-4 flex items-center gap-3 border-b-2 border-gray-200">
               <input
                 type="text"
                 placeholder="Buscar por nombre o código"
                 value={busquedaProducto}
                 onChange={(e) => setBusquedaProducto(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && buscarProductos()}
-                className="flex-1 px-3 py-2 border border-slate-200 rounded"
+                className="flex-1 px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-400 focus:border-blue-400 font-medium shadow-sm"
               />
               <button
                 onClick={buscarProductos}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold shadow-md hover:shadow-lg transition-all uppercase tracking-wide"
               >
-                Buscar
+                🔍 Buscar
               </button>
             </div>
             <div className="max-h-[420px] overflow-auto">
               <table className="min-w-full text-sm">
-                <thead className="bg-slate-100 text-slate-600 uppercase text-xs">
+                <thead className="bg-gradient-to-r from-blue-600 to-blue-700 text-white uppercase text-xs font-bold sticky top-0">
                   <tr>
-                    <th className="px-3 py-2 text-left">Código</th>
-                    <th className="px-3 py-2 text-left">Artículo</th>
-                    <th className="px-3 py-2 text-right">Precio</th>
-                    <th className="px-3 py-2 text-right">Stock</th>
+                    <th className="px-4 py-3 text-left border-r border-blue-500">Código</th>
+                    <th className="px-4 py-3 text-left border-r border-blue-500">Artículo</th>
+                    <th className="px-4 py-3 text-right border-r border-blue-500">Precio</th>
+                    <th className="px-4 py-3 text-right">Stock</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="bg-white">
                   {cargandoProductos ? (
                     <tr>
-                      <td colSpan={4} className="px-4 py-6 text-center text-slate-400">
-                        Buscando productos...
+                      <td colSpan={4} className="px-4 py-8 text-center text-gray-400 text-base">
+                        <div className="flex flex-col items-center gap-2">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                          <span className="font-semibold">Buscando productos...</span>
+                        </div>
                       </td>
                     </tr>
                   ) : productosEncontrados.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="px-4 py-6 text-center text-slate-400">
-                        Ingresa un criterio para buscar artículos.
+                      <td colSpan={4} className="px-4 py-8 text-center text-gray-400 text-base">
+                        <div className="flex flex-col items-center gap-2">
+                          <svg className="w-12 h-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                          </svg>
+                          <span className="font-semibold">Ingresa un criterio para buscar artículos.</span>
+                        </div>
                       </td>
                     </tr>
                   ) : (
-                    productosEncontrados.map((producto) => (
+                    productosEncontrados.map((producto, index) => (
                       <tr
                         key={producto.id}
                         onDoubleClick={() => agregarProductoPorLista(producto)}
-                        className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer"
+                        className={`border-b border-gray-200 hover:bg-blue-50 cursor-pointer transition-colors ${index % 2 === 0 ? 'bg-gray-50' : 'bg-white'}`}
                       >
-                        <td className="px-3 py-2 font-mono text-xs text-slate-500">
+                        <td className="px-4 py-3 font-mono text-xs text-blue-600 font-semibold">
                           {producto.codigo}
                         </td>
-                        <td className="px-3 py-2">
-                          <p className="font-medium text-slate-800">{producto.nombre}</p>
-                          <p className="text-xs text-slate-400">{producto.categoria_nombre}</p>
+                        <td className="px-4 py-3">
+                          <p className="font-bold text-gray-800">{producto.nombre}</p>
+                          <p className="text-xs text-gray-500 font-medium">{producto.categoria_nombre}</p>
                         </td>
-                        <td className="px-3 py-2 text-right">{currency.format(Number(producto.precio_venta))}</td>
-                        <td className="px-3 py-2 text-right">{producto.stock}</td>
+                        <td className="px-4 py-3 text-right font-bold text-gray-800">{currency.format(Number(producto.precio_venta))}</td>
+                        <td className="px-4 py-3 text-right font-bold text-gray-700">{producto.stock}</td>
                       </tr>
                     ))
                   )}
                 </tbody>
               </table>
             </div>
-            <div className="border-t border-slate-100 px-4 py-3 text-xs text-slate-400">
-              Doble clic sobre un artículo para añadirlo a la factura.
+            <div className="bg-blue-50 border-t-2 border-blue-200 px-6 py-3 flex items-center gap-2">
+              <svg className="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              </svg>
+              <span className="text-sm text-blue-800 font-semibold">Doble clic sobre un artículo para añadirlo a la factura.</span>
             </div>
           </div>
         </div>
       )}
 
       {mostrarAprobacion && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-4">
-            <h3 className="font-semibold text-slate-800">Aprobación de descuento</h3>
-            <p className="text-sm text-slate-500">
-              El descuento de {descuentoNumero}% requiere aprobación del dueño o persona designada.
-            </p>
-            <div>
-              <label className="text-xs font-semibold text-slate-500 block mb-1">Usuario autorizado</label>
-              <input
-                type="text"
-                value={aprobacionUsuario}
-                onChange={(e) => setAprobacionUsuario(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded"
-              />
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden border-2 border-gray-300">
+            <div className="bg-gradient-to-r from-yellow-500 to-yellow-600 text-yellow-900 px-6 py-4 border-b-4 border-yellow-700">
+              <h3 className="font-bold text-xl uppercase tracking-wide flex items-center gap-2">
+                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+                Aprobación de Descuento
+              </h3>
             </div>
-            <div>
-              <label className="text-xs font-semibold text-slate-500 block mb-1">Contraseña</label>
-              <input
-                type="password"
-                value={aprobacionPassword}
-                onChange={(e) => setAprobacionPassword(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded"
-              />
+            <div className="p-6 space-y-4">
+              <div className="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded-r-lg">
+                <p className="text-sm text-yellow-800 font-semibold">
+                  El descuento de <span className="text-lg font-bold">{descuentoNumero}%</span> requiere aprobación del dueño o persona designada.
+                </p>
+              </div>
+              <div>
+                <label className="text-xs font-bold text-gray-700 block mb-2 uppercase tracking-wide">Usuario Autorizado</label>
+                <input
+                  type="text"
+                  value={aprobacionUsuario}
+                  onChange={(e) => setAprobacionUsuario(e.target.value)}
+                  placeholder="Ingrese usuario autorizado"
+                  className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 font-medium shadow-sm"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-gray-700 block mb-2 uppercase tracking-wide">Contraseña</label>
+                <input
+                  type="password"
+                  value={aprobacionPassword}
+                  onChange={(e) => setAprobacionPassword(e.target.value)}
+                  placeholder="Ingrese contraseña"
+                  className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 font-medium shadow-sm"
+                />
+              </div>
+              {aprobacionError && (
+                <div className="bg-red-100 border-l-4 border-red-500 p-3 rounded-r-lg">
+                  <p className="text-sm text-red-700 font-semibold">{aprobacionError}</p>
+                </div>
+              )}
             </div>
-            {aprobacionError && (
-              <p className="text-sm text-red-500">{aprobacionError}</p>
-            )}
-            <div className="flex justify-end gap-3">
+            <div className="bg-gray-50 border-t-2 border-gray-200 px-6 py-4 flex justify-end gap-3">
               <button
                 onClick={() => setMostrarAprobacion(false)}
-                className="px-3 py-2 border border-slate-200 rounded"
+                className="px-5 py-2.5 border-2 border-gray-400 text-gray-700 rounded-lg hover:bg-gray-100 font-bold shadow-sm hover:shadow-md transition-all uppercase tracking-wide"
               >
                 Cancelar
               </button>
               <button
                 onClick={confirmarAprobacion}
-                className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                className="px-5 py-2.5 bg-gradient-to-r from-green-500 to-green-600 text-white border-2 border-green-700 rounded-lg hover:from-green-600 hover:to-green-700 font-bold shadow-md hover:shadow-lg transition-all uppercase tracking-wide"
               >
-                Autorizar descuento
+                ✓ Autorizar Descuento
               </button>
             </div>
           </div>
