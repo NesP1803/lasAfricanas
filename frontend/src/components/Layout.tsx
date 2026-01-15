@@ -7,10 +7,12 @@ import {
   Boxes,
   FileText,
   LogOut,
+  Menu,
   ReceiptText,
   Settings,
   Share2,
   Wrench,
+  X,
 } from "lucide-react";
 
 type MenuItem = {
@@ -105,6 +107,10 @@ export default function Layout() {
   const { isAuthenticated, user, logout } = useAuth();
   const navigate = useNavigate();
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileExpanded, setMobileExpanded] = useState<Record<string, boolean>>(
+    {}
+  );
 
   // --- Menú principal con delay ---
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
@@ -245,6 +251,7 @@ export default function Layout() {
   const onSelectLeaf = (item: MenuItem) => {
     // Cierra todo el menú al seleccionar
     closeMenuNow();
+    setMobileMenuOpen(false);
 
     if (item.action) {
       item.action();
@@ -255,10 +262,53 @@ export default function Layout() {
     }
   };
 
+  const toggleMobileSection = (label: string) => {
+    setMobileExpanded((prev) => ({ ...prev, [label]: !prev[label] }));
+  };
+
+  const renderMobileItems = (items: MenuItem[], level = 0) => (
+    <div
+      className={
+        level === 0
+          ? "space-y-2"
+          : "mt-2 space-y-1 border-l border-white/20 pl-4"
+      }
+    >
+      {items.map((item) => {
+        const hasChildren = Boolean(item.items && item.items.length > 0);
+        const isExpanded = Boolean(mobileExpanded[item.label]);
+
+        return (
+          <div key={item.label}>
+            <button
+              type="button"
+              onClick={() => {
+                if (hasChildren) {
+                  toggleMobileSection(item.label);
+                } else {
+                  onSelectLeaf(item);
+                }
+              }}
+              className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm font-medium text-white/90 hover:bg-white/15"
+            >
+              <span>{item.label}</span>
+              {hasChildren && (
+                <span className="text-xs text-white/70">
+                  {isExpanded ? "−" : "+"}
+                </span>
+              )}
+            </button>
+            {hasChildren && isExpanded && renderMobileItems(item.items!, level + 1)}
+          </div>
+        );
+      })}
+    </div>
+  );
+
   return (
     <div className="flex min-h-screen flex-col bg-gray-100">
       <header className="sticky top-0 z-50 bg-blue-600 text-white shadow-lg">
-        <div className="flex items-center justify-between gap-6 px-6 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-3 sm:px-6">
           <div className="flex items-center gap-3">
             {logoUrl ? (
               <img
@@ -279,37 +329,6 @@ export default function Layout() {
             </div>
           </div>
 
-          <nav className="flex flex-1 items-center justify-center gap-2">
-            {menuItems.map((item) => (
-              <div
-                key={item.label}
-                className="relative"
-                onMouseEnter={() => openMenu(item.label)}
-                onMouseLeave={closeMenuWithDelay}
-              >
-                <button
-                  type="button"
-                  className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-white/90 transition hover:bg-white/15 hover:text-white"
-                >
-                  {renderMenuButton(item.label, item.icon)}
-                </button>
-
-                {activeMenu === item.label && (
-                  <div
-                    className="absolute left-0 mt-2 min-w-[220px] rounded-md border border-slate-200 bg-white shadow-xl"
-                    onMouseEnter={() => openMenu(item.label)}
-                    onMouseLeave={closeMenuWithDelay}
-                  >
-                    <DropdownList
-                      items={item.items ?? []}
-                      onSelectLeaf={onSelectLeaf}
-                    />
-                  </div>
-                )}
-              </div>
-            ))}
-          </nav>
-
           <div className="flex items-center gap-3">
             <div className="hidden text-right text-xs text-blue-100 sm:block">
               <p className="font-semibold text-white">{user?.username}</p>
@@ -328,12 +347,57 @@ export default function Layout() {
               <LogOut size={16} />
               <span className="hidden sm:inline">Salir</span>
             </button>
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen((prev) => !prev)}
+              className="rounded-md border border-white/30 p-2 text-white lg:hidden"
+              aria-label="Abrir menú"
+            >
+              {mobileMenuOpen ? <X size={18} /> : <Menu size={18} />}
+            </button>
           </div>
         </div>
+
+        <nav className="hidden flex-wrap items-center justify-center gap-2 border-t border-white/10 px-6 py-2 lg:flex">
+          {menuItems.map((item) => (
+            <div
+              key={item.label}
+              className="relative"
+              onMouseEnter={() => openMenu(item.label)}
+              onMouseLeave={closeMenuWithDelay}
+            >
+              <button
+                type="button"
+                className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-white/90 transition hover:bg-white/15 hover:text-white"
+              >
+                {renderMenuButton(item.label, item.icon)}
+              </button>
+
+              {activeMenu === item.label && (
+                <div
+                  className="absolute left-0 mt-2 min-w-[220px] rounded-md border border-slate-200 bg-white shadow-xl"
+                  onMouseEnter={() => openMenu(item.label)}
+                  onMouseLeave={closeMenuWithDelay}
+                >
+                  <DropdownList
+                    items={item.items ?? []}
+                    onSelectLeaf={onSelectLeaf}
+                  />
+                </div>
+              )}
+            </div>
+          ))}
+        </nav>
+
+        {mobileMenuOpen && (
+          <div className="border-t border-white/10 bg-blue-700 px-4 py-4 lg:hidden">
+            {renderMobileItems(menuItems)}
+          </div>
+        )}
       </header>
 
       <main className="flex-1 overflow-auto">
-        <div className="p-8">
+        <div className="p-4 sm:p-6 lg:p-8">
           <Outlet />
         </div>
       </main>
