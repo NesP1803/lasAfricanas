@@ -252,7 +252,7 @@ export default function PuntoVenta() {
 
   return (
     <div className="h-full flex flex-col bg-slate-50">
-      <div className="bg-blue-600 text-white p-4 flex flex-wrap items-center justify-between gap-4 shadow">
+      <div className="bg-blue-500 text-white p-4 flex flex-wrap items-center justify-between gap-4 shadow">
         <div className="flex flex-wrap items-end gap-4">
           <div>
             <label className="text-xs font-semibold block mb-1">DIGITE Nº/CC DEL CLIENTE</label>
