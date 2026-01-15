@@ -98,11 +98,26 @@ export const configuracionAPI = {
     return response.data.results;
   },
   obtenerUsuarios: async () => {
-    const response = await apiClient.get<UsuarioAdmin[]>('/usuarios/');
+    const response = await apiClient.get<
+      UsuarioAdmin[] | PaginatedResponse<UsuarioAdmin>
+    >('/usuarios/');
+    if (Array.isArray(response.data)) {
+      return response.data;
+    }
+    if (Array.isArray(response.data.results)) {
+      return response.data.results;
+    }
+    return [];
+  },
+  crearUsuario: async (data: Partial<UsuarioAdmin> & { password?: string }) => {
+    const response = await apiClient.post<UsuarioAdmin>('/usuarios/', data);
     return response.data;
   },
   actualizarUsuario: async (id: number, data: Partial<UsuarioAdmin>) => {
-    const response = await apiClient.put<UsuarioAdmin>(`/usuarios/${id}/`, data);
+    const response = await apiClient.patch<UsuarioAdmin>(
+      `/usuarios/${id}/`,
+      data
+    );
     return response.data;
   },
   cambiarClave: async (id: number, newPassword: string) => {
