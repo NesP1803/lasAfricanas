@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   FileSearch,
   Printer,
@@ -8,9 +8,8 @@ import {
   X,
   ChevronDown,
 } from 'lucide-react';
+import { ventasApi, type VentaListItem } from '../api/ventas';
 
-type RemisionEstado = 'REMISIONADA' | 'ANULADA';
-type RemisionMedioPago = 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'CREDITO';
 type DocumentoTipo = 'POS' | 'CARTA';
 
 type RemisionItem = {
@@ -18,8 +17,11 @@ type RemisionItem = {
   prefijo: string;
   numero: string;
   fechaHora: string;
-  estado: RemisionEstado;
-  medioPago: RemisionMedioPago;
+  fechaIso: string;
+  estado: string;
+  estadoDisplay: string;
+  medioPago: string;
+  medioPagoDisplay: string;
   total: number;
   nitCc: string;
   cliente: string;
@@ -37,76 +39,13 @@ type AnulacionData = {
   opcion: 'ANULAR_TODO' | 'USAR_DATOS';
 };
 
-const remisionesMock: RemisionItem[] = [
-  {
-    id: 1,
-    prefijo: 'REM',
-    numero: '500210',
-    fechaHora: '22/10/2025 16:42',
-    estado: 'REMISIONADA',
-    medioPago: 'EFECTIVO',
-    total: 28450,
-    nitCc: '222222',
-    cliente: 'Cliente General',
-    usuario: 'jorge',
-  },
-  {
-    id: 2,
-    prefijo: 'REM',
-    numero: '500209',
-    fechaHora: '22/10/2025 16:33',
-    estado: 'REMISIONADA',
-    medioPago: 'EFECTIVO',
-    total: 118900,
-    nitCc: '222222',
-    cliente: 'Cliente General',
-    usuario: 'jorge',
-  },
-  {
-    id: 3,
-    prefijo: 'REM',
-    numero: '500208',
-    fechaHora: '22/10/2025 16:12',
-    estado: 'REMISIONADA',
-    medioPago: 'EFECTIVO',
-    total: 72400,
-    nitCc: '222222',
-    cliente: 'Cliente General',
-    usuario: 'jorge',
-  },
-  {
-    id: 4,
-    prefijo: 'REM',
-    numero: '500207',
-    fechaHora: '22/10/2025 16:05',
-    estado: 'REMISIONADA',
-    medioPago: 'EFECTIVO',
-    total: 16150,
-    nitCc: '222222',
-    cliente: 'Cliente General',
-    usuario: 'jorge',
-  },
-  {
-    id: 5,
-    prefijo: 'REM',
-    numero: '500206',
-    fechaHora: '22/10/2025 15:54',
-    estado: 'REMISIONADA',
-    medioPago: 'EFECTIVO',
-    total: 44320,
-    nitCc: '222222',
-    cliente: 'Cliente General',
-    usuario: 'jorge',
-  },
-];
-
 const motivosAnulacion = [
-  'DEVOLUCION PARCIAL',
-  'DEVOLUCION TOTAL',
-  'ERROR CON PRECIOS EN LA REMISION',
-  'ERROR POR CONCEPTOS EN LA REMISION',
-  'EL COMPRADOR NO ACEPTA LOS ARTICULOS',
-  'OTROS',
+  { value: 'DEVOLUCION_PARCIAL', label: 'Devolución parcial' },
+  { value: 'DEVOLUCION_TOTAL', label: 'Devolución total' },
+  { value: 'ERROR_PRECIOS', label: 'Error con precios en la remisión' },
+  { value: 'ERROR_CONCEPTO', label: 'Error por conceptos en la remisión' },
+  { value: 'COMPRADOR_NO_ACEPTA', label: 'El comprador no acepta los artículos' },
+  { value: 'OTRO', label: 'Otro' },
 ];
 
 const currencyFormatter = new Intl.NumberFormat('es-CO', {
@@ -115,37 +54,115 @@ const currencyFormatter = new Intl.NumberFormat('es-CO', {
   minimumFractionDigits: 0,
 });
 
+const formatFechaHora = (fechaIso: string) => {
+  const date = new Date(fechaIso);
+  if (Number.isNaN(date.getTime())) return fechaIso;
+  return new Intl.DateTimeFormat('es-CO', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  }).format(date);
+};
+
+const splitNumeroComprobante = (numeroComprobante: string) => {
+  const [prefijo, ...rest] = numeroComprobante.split('-');
+  if (rest.length === 0) {
+    return { prefijo: numeroComprobante.slice(0, 3), numero: numeroComprobante };
+  }
+  return { prefijo, numero: rest.join('-') };
+};
+
+const mapVentaToRemisionItem = (venta: VentaListItem): RemisionItem => {
+  const { prefijo, numero } = splitNumeroComprobante(venta.numero_comprobante);
+  return {
+    id: venta.id,
+    prefijo,
+    numero,
+    fechaHora: formatFechaHora(venta.fecha),
+    fechaIso: venta.fecha,
+    estado: venta.estado,
+    estadoDisplay: venta.estado_display,
+    medioPago: venta.medio_pago,
+    medioPagoDisplay: venta.medio_pago_display,
+    total: Number(venta.total),
+    nitCc: venta.cliente_numero_documento,
+    cliente: venta.cliente_nombre,
+    usuario: venta.vendedor_nombre,
+  };
+};
+
 export default function Remisiones() {
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
-  const [remisiones, setRemisiones] = useState<RemisionItem[]>(remisionesMock);
+  const [remisiones, setRemisiones] = useState<RemisionItem[]>([]);
   const [busqueda, setBusqueda] = useState('');
+  const [estadoFiltro, setEstadoFiltro] = useState<'CONFIRMADA' | 'ANULADA' | 'TODAS'>(
+    'CONFIRMADA'
+  );
   const [fechaInicio, setFechaInicio] = useState('2025-10-22');
   const [fechaFin, setFechaFin] = useState('2025-10-22');
   const [documento, setDocumento] = useState<DocumentoSeleccionado | null>(null);
   const [anulacion, setAnulacion] = useState<RemisionItem | null>(null);
   const [anulacionData, setAnulacionData] = useState<AnulacionData>({
-    motivo: motivosAnulacion[0],
+    motivo: motivosAnulacion[0].value,
     numeroNuevaRemision: '',
     opcion: 'ANULAR_TODO',
   });
+  const [cargando, setCargando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [anulando, setAnulando] = useState(false);
 
   const remisionesFiltradas = useMemo(() => {
-    if (!busqueda.trim()) return remisiones;
     const query = busqueda.trim().toLowerCase();
-    return remisiones.filter((item) =>
-      [
-        item.numero,
-        item.cliente,
-        item.usuario,
-        item.nitCc,
-        item.estado,
-        item.medioPago,
-      ]
-        .join(' ')
-        .toLowerCase()
-        .includes(query)
-    );
-  }, [busqueda, remisiones]);
+    const inicio = fechaInicio ? new Date(`${fechaInicio}T00:00:00`) : null;
+    const fin = fechaFin ? new Date(`${fechaFin}T23:59:59`) : null;
+
+    return remisiones.filter((item) => {
+      const fecha = new Date(item.fechaIso);
+      const matchesSearch = !query
+        ? true
+        : [
+            item.numero,
+            item.cliente,
+            item.usuario,
+            item.nitCc,
+            item.estadoDisplay,
+            item.medioPagoDisplay,
+          ]
+            .join(' ')
+            .toLowerCase()
+            .includes(query);
+      const matchesInicio = inicio ? fecha >= inicio : true;
+      const matchesFin = fin ? fecha <= fin : true;
+      return matchesSearch && matchesInicio && matchesFin;
+    });
+  }, [busqueda, remisiones, fechaInicio, fechaFin]);
+
+  useEffect(() => {
+    let isActive = true;
+    const cargarRemisiones = async () => {
+      setCargando(true);
+      setError(null);
+      try {
+        const response = await ventasApi.getVentas({
+          tipoComprobante: 'REMISION',
+          estado: estadoFiltro === 'TODAS' ? undefined : estadoFiltro,
+        });
+        if (!isActive) return;
+        setRemisiones(response.map(mapVentaToRemisionItem));
+        setSelectedIds([]);
+      } catch (err) {
+        if (!isActive) return;
+        setRemisiones([]);
+        setError(err instanceof Error ? err.message : 'Error al cargar remisiones');
+      } finally {
+        if (isActive) setCargando(false);
+      }
+    };
+
+    cargarRemisiones();
+    return () => {
+      isActive = false;
+    };
+  }, [estadoFiltro]);
 
   const toggleSelect = (id: number) => {
     setSelectedIds((prev) =>
@@ -159,21 +176,56 @@ export default function Remisiones() {
     if (!selectedRemision) return;
     setAnulacion(selectedRemision);
     setAnulacionData({
-      motivo: motivosAnulacion[0],
+      motivo: motivosAnulacion[0].value,
       numeroNuevaRemision: '',
       opcion: 'ANULAR_TODO',
     });
   };
 
-  const confirmarAnulacion = () => {
+  const confirmarAnulacion = async () => {
     if (!anulacion) return;
-    setRemisiones((prev) =>
-      prev.map((item) =>
-        item.id === anulacion.id ? { ...item, estado: 'ANULADA' } : item
-      )
-    );
-    setSelectedIds((prev) => prev.filter((id) => id !== anulacion.id));
-    setAnulacion(null);
+    setAnulando(true);
+    setError(null);
+    try {
+      const descripcion = anulacionData.numeroNuevaRemision
+        ? `Nueva remisión: ${anulacionData.numeroNuevaRemision}`
+        : 'Anulación sin remisión de reemplazo.';
+      const ventaActualizada = await ventasApi.anularVenta(anulacion.id, {
+        motivo: anulacionData.motivo,
+        descripcion,
+        devuelve_inventario: anulacionData.opcion === 'ANULAR_TODO',
+      });
+      setRemisiones((prev) =>
+        prev.map((item) =>
+          item.id === ventaActualizada.id
+            ? mapVentaToRemisionItem({
+                id: ventaActualizada.id,
+                numero_comprobante: ventaActualizada.numero_comprobante,
+                tipo_comprobante: ventaActualizada.tipo_comprobante,
+                tipo_comprobante_display: ventaActualizada.tipo_comprobante_display,
+                fecha: ventaActualizada.fecha,
+                cliente: ventaActualizada.cliente,
+                cliente_nombre: ventaActualizada.cliente_info?.nombre ?? item.cliente,
+                cliente_numero_documento:
+                  ventaActualizada.cliente_info?.numero_documento ?? item.nitCc,
+                vendedor: ventaActualizada.vendedor,
+                vendedor_nombre: ventaActualizada.vendedor_nombre,
+                total: ventaActualizada.total,
+                medio_pago: ventaActualizada.medio_pago,
+                medio_pago_display: ventaActualizada.medio_pago_display,
+                estado: ventaActualizada.estado,
+                estado_display: ventaActualizada.estado_display,
+              })
+            : item
+        )
+      );
+      setSelectedIds((prev) => prev.filter((id) => id !== anulacion.id));
+      setAnulacion(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al anular remisión');
+    } finally {
+      setAnulando(false);
+    }
   };
 
   const abrirDocumento = (tipo: DocumentoTipo) => {
@@ -203,7 +255,7 @@ export default function Remisiones() {
               type="button"
               onClick={handleAnular}
               className="flex items-center gap-2 rounded border border-slate-300 px-3 py-1.5 text-xs font-semibold uppercase text-slate-600 disabled:opacity-50"
-              disabled={!selectedRemision}
+              disabled={!selectedRemision || selectedRemision?.estado === 'ANULADA' || anulando}
             >
               <Ban size={14} />
               Anular
@@ -240,6 +292,20 @@ export default function Remisiones() {
 
         <div className="mt-4 flex flex-wrap items-center gap-4 border-b border-slate-200 pb-4">
           <div className="flex flex-col gap-1">
+            <label className="text-xs font-semibold text-slate-500">Estado</label>
+            <select
+              value={estadoFiltro}
+              onChange={(event) =>
+                setEstadoFiltro(event.target.value as 'CONFIRMADA' | 'ANULADA' | 'TODAS')
+              }
+              className="rounded border border-slate-300 px-2 py-1 text-sm"
+            >
+              <option value="CONFIRMADA">Confirmadas</option>
+              <option value="ANULADA">Anuladas</option>
+              <option value="TODAS">Todas</option>
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
             <label className="text-xs font-semibold text-slate-500">Fecha inicio</label>
             <input
               type="date"
@@ -275,6 +341,11 @@ export default function Remisiones() {
         </div>
 
         <div className="mt-3 rounded border border-slate-200">
+          {error && (
+            <div className="border-b border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-600">
+              {error}
+            </div>
+          )}
           <div className="bg-yellow-100 px-3 py-2 text-xs font-semibold uppercase text-slate-600">
             Seleccione las filas deseadas, o presione en la esquina superior izquierda para
             seleccionar toda la tabla. Presione Ctrl + C para pegar en Excel.
@@ -309,39 +380,47 @@ export default function Remisiones() {
                 </tr>
               </thead>
               <tbody>
-                {remisionesFiltradas.map((remision) => {
-                  const selected = selectedIds.includes(remision.id);
-                  return (
-                    <tr
-                      key={remision.id}
-                      className={`border-t border-slate-200 ${
-                        selected ? 'bg-blue-50' : 'bg-white'
-                      }`}
-                    >
-                      <td className="px-2 py-2">
-                        <input
-                          type="checkbox"
-                          checked={selected}
-                          onChange={() => toggleSelect(remision.id)}
-                        />
-                      </td>
-                      <td className="px-2 py-2 font-semibold text-slate-700">
-                        {remision.prefijo}
-                      </td>
-                      <td className="px-2 py-2 text-slate-700">{remision.numero}</td>
-                      <td className="px-2 py-2 text-slate-600">{remision.fechaHora}</td>
-                      <td className="px-2 py-2 text-slate-600">{remision.estado}</td>
-                      <td className="px-2 py-2 text-slate-600">{remision.medioPago}</td>
-                      <td className="px-2 py-2 text-right text-rose-600">
-                        {currencyFormatter.format(remision.total)}
-                      </td>
-                      <td className="px-2 py-2 text-slate-600">{remision.nitCc}</td>
-                      <td className="px-2 py-2 text-slate-600">{remision.cliente}</td>
-                      <td className="px-2 py-2 text-slate-600">{remision.usuario}</td>
-                    </tr>
-                  );
-                })}
-                {remisionesFiltradas.length === 0 && (
+                {cargando && (
+                  <tr>
+                    <td colSpan={10} className="px-4 py-6 text-center text-sm text-slate-500">
+                      Cargando remisiones...
+                    </td>
+                  </tr>
+                )}
+                {!cargando &&
+                  remisionesFiltradas.map((remision) => {
+                    const selected = selectedIds.includes(remision.id);
+                    return (
+                      <tr
+                        key={remision.id}
+                        className={`border-t border-slate-200 ${
+                          selected ? 'bg-blue-50' : 'bg-white'
+                        }`}
+                      >
+                        <td className="px-2 py-2">
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            onChange={() => toggleSelect(remision.id)}
+                          />
+                        </td>
+                        <td className="px-2 py-2 font-semibold text-slate-700">
+                          {remision.prefijo}
+                        </td>
+                        <td className="px-2 py-2 text-slate-700">{remision.numero}</td>
+                        <td className="px-2 py-2 text-slate-600">{remision.fechaHora}</td>
+                        <td className="px-2 py-2 text-slate-600">{remision.estadoDisplay}</td>
+                        <td className="px-2 py-2 text-slate-600">{remision.medioPagoDisplay}</td>
+                        <td className="px-2 py-2 text-right text-rose-600">
+                          {currencyFormatter.format(remision.total)}
+                        </td>
+                        <td className="px-2 py-2 text-slate-600">{remision.nitCc}</td>
+                        <td className="px-2 py-2 text-slate-600">{remision.cliente}</td>
+                        <td className="px-2 py-2 text-slate-600">{remision.usuario}</td>
+                      </tr>
+                    );
+                  })}
+                {!cargando && remisionesFiltradas.length === 0 && (
                   <tr>
                     <td colSpan={10} className="px-4 py-6 text-center text-sm text-slate-500">
                       No hay remisiones para mostrar con los filtros actuales.
@@ -356,7 +435,7 @@ export default function Remisiones() {
           En el sistema hay: {remisiones.length} remisiones registradas. En la fecha seleccionada:{' '}
           {fechaInicio} - {fechaFin}. Remisionado (no incluye anuladas):{' '}
           {currencyFormatter.format(
-            remisiones.reduce(
+            remisionesFiltradas.reduce(
               (acc, item) => (item.estado === 'ANULADA' ? acc : acc + item.total),
               0
             )
@@ -410,9 +489,11 @@ export default function Remisiones() {
                   <div>
                     <p className="text-xs text-slate-500">Medio de pago</p>
                     <p className="font-semibold text-slate-700">
-                      {documento.remision.medioPago}
+                      {documento.remision.medioPagoDisplay}
                     </p>
-                    <p className="text-xs text-slate-500">Estado: {documento.remision.estado}</p>
+                    <p className="text-xs text-slate-500">
+                      Estado: {documento.remision.estadoDisplay}
+                    </p>
                   </div>
                 </div>
                 <div className="mt-4 border-t border-dashed border-slate-200 pt-4">
@@ -492,8 +573,8 @@ export default function Remisiones() {
                   className="mt-1 w-full rounded border border-slate-300 px-2 py-2 text-sm"
                 >
                   {motivosAnulacion.map((motivo) => (
-                    <option key={motivo} value={motivo}>
-                      {motivo}
+                    <option key={motivo.value} value={motivo.value}>
+                      {motivo.label}
                     </option>
                   ))}
                 </select>
@@ -546,9 +627,10 @@ export default function Remisiones() {
               <button
                 type="button"
                 onClick={confirmarAnulacion}
-                className="rounded bg-slate-200 px-6 py-2 text-sm font-semibold uppercase text-slate-700"
+                className="rounded bg-slate-200 px-6 py-2 text-sm font-semibold uppercase text-slate-700 disabled:opacity-50"
+                disabled={anulando}
               >
-                Anular
+                {anulando ? 'Anulando...' : 'Anular'}
               </button>
             </div>
           </div>
