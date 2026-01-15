@@ -151,10 +151,7 @@ export default function Layout() {
       {
         label: "Registrar",
         icon: <ReceiptText size={18} />,
-        items: [
-          { label: "Registro general", path: "/" },
-          { label: "Venta rápida", path: "/ventas" },
-        ],
+        items: [{ label: "Registro general", path: "/" }],
       },
       {
         label: "Listados",
@@ -188,6 +185,7 @@ export default function Layout() {
         label: "Facturación",
         icon: <FileText size={18} />,
         items: [
+          { label: "Venta rápida", path: "/ventas" },
           {
             label: "Cuentas",
             items: [
