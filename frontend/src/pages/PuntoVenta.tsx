@@ -17,10 +17,6 @@ const currency = new Intl.NumberFormat('es-CO', {
 });
 
 const toNumber = (value: string | number) => Number(value || 0);
-const CLIENTE_DEFECTO = {
-  documento: '0000000000',
-  nombre: 'Cliente General',
-};
 
 export default function PuntoVenta() {
   const { user } = useAuth();
@@ -88,31 +84,6 @@ export default function PuntoVenta() {
       setMensaje('Cliente cargado correctamente.');
     } catch (error) {
       setMensaje('Cliente no encontrado.');
-    }
-  };
-
-  const obtenerClientePorDefecto = async () => {
-    try {
-      const clienteEncontrado = await ventasApi.buscarCliente(CLIENTE_DEFECTO.documento);
-      setCliente(clienteEncontrado);
-      return clienteEncontrado;
-    } catch (error) {
-      try {
-        const nuevoCliente = await ventasApi.crearCliente({
-          tipo_documento: 'CC',
-          numero_documento: CLIENTE_DEFECTO.documento,
-          nombre: CLIENTE_DEFECTO.nombre,
-          telefono: '',
-          email: '',
-          direccion: '',
-          ciudad: '',
-        });
-        setCliente(nuevoCliente);
-        return nuevoCliente;
-      } catch (createError) {
-        setMensaje('No se pudo crear el cliente general.');
-        return null;
-      }
     }
   };
 
@@ -221,6 +192,10 @@ export default function PuntoVenta() {
   };
 
   const crearVenta = async (tipo: 'COTIZACION' | 'REMISION' | 'FACTURA') => {
+    if (!cliente) {
+      setMensaje('Debes seleccionar un cliente para continuar.');
+      return;
+    }
     if (ventaItems.length === 0) {
       setMensaje('Agrega productos antes de continuar.');
       return;
@@ -232,9 +207,6 @@ export default function PuntoVenta() {
     }
 
     try {
-      const clienteSeleccionado = cliente || (await obtenerClientePorDefecto());
-      if (!clienteSeleccionado) return;
-
       const detalles = ventaItems.map((item) => {
         const precio = toNumber(item.producto.precio_venta);
         const descuentoUnitario = (precio * descuentoNumero) / 100;
@@ -255,7 +227,7 @@ export default function PuntoVenta() {
 
       await ventasApi.crearVenta({
         tipo_comprobante: tipo,
-        cliente: clienteSeleccionado.id,
+        cliente: cliente.id,
         vendedor: user?.id || 0,
         subtotal: totales.subtotal.toFixed(2),
         descuento_porcentaje: descuentoNumero.toFixed(2),
