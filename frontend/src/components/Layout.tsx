@@ -189,7 +189,7 @@ export default function Layout() {
           {
             label: "Cuentas",
             items: [
-              { label: "Cuentas del día" },
+              { label: "Cuentas del día", path: "/ventas/cuentas-dia" },
               { label: "Detalles Cuentas del día" },
             ],
           },

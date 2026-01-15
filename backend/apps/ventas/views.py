@@ -3,7 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
-from django.db.models import Sum, Count
+from django.db.models import Sum, Count, Q
 from django.utils import timezone
 
 from .models import Cliente, Venta, DetalleVenta, VentaAnulada
@@ -209,9 +209,11 @@ class VentaViewSet(viewsets.ModelViewSet):
         stats = ventas.aggregate(
             total_ventas=Count('id'),
             total_facturado=Sum('total'),
-            total_cotizaciones=Count('id', filter=models.Q(tipo_comprobante='COTIZACION')),
-            total_remisiones=Count('id', filter=models.Q(tipo_comprobante='REMISION')),
-            total_facturas=Count('id', filter=models.Q(tipo_comprobante='FACTURA')),
+            total_cotizaciones=Count('id', filter=Q(tipo_comprobante='COTIZACION')),
+            total_remisiones=Count('id', filter=Q(tipo_comprobante='REMISION')),
+            total_facturas=Count('id', filter=Q(tipo_comprobante='FACTURA')),
+            total_facturas_valor=Sum('total', filter=Q(tipo_comprobante='FACTURA')),
+            total_remisiones_valor=Sum('total', filter=Q(tipo_comprobante='REMISION')),
         )
         
         return Response(stats)
