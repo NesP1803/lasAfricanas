@@ -1,6 +1,7 @@
 import { Outlet, Navigate, useNavigate } from "react-router-dom";
-import { useMemo, useState, useRef, type ReactNode } from "react";
+import { useEffect, useMemo, useState, useRef, type ReactNode } from "react";
 import { useAuth } from "../contexts/AuthContext";
+import { configuracionAPI } from "../api/configuracion";
 import {
   ClipboardList,
   Boxes,
@@ -103,6 +104,7 @@ function DropdownList({
 export default function Layout() {
   const { isAuthenticated, user, logout } = useAuth();
   const navigate = useNavigate();
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
 
   // --- Menú principal con delay ---
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
@@ -124,6 +126,28 @@ export default function Layout() {
     if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);
     setActiveMenu(null);
   };
+
+  useEffect(() => {
+    const storedLogo = localStorage.getItem("empresa_logo");
+    if (storedLogo) {
+      setLogoUrl(storedLogo);
+    }
+    const cargarLogo = async () => {
+      try {
+        const data = await configuracionAPI.obtenerEmpresa();
+        if (data?.logo) {
+          setLogoUrl(data.logo);
+          localStorage.setItem("empresa_logo", data.logo);
+        } else {
+          setLogoUrl(null);
+          localStorage.removeItem("empresa_logo");
+        }
+      } catch (error) {
+        console.error("Error cargando logo:", error);
+      }
+    };
+    cargarLogo();
+  }, []);
 
   if (!isAuthenticated) {
     return <Navigate to="/login" />;
@@ -236,9 +260,17 @@ export default function Layout() {
       <header className="sticky top-0 z-50 bg-blue-600 text-white shadow-lg">
         <div className="flex items-center justify-between gap-6 px-6 py-3">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/15 text-lg font-bold">
-              LA
-            </div>
+            {logoUrl ? (
+              <img
+                src={logoUrl}
+                alt="Logo de la empresa"
+                className="h-10 w-10 rounded-lg bg-white/15 object-cover"
+              />
+            ) : (
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/15 text-lg font-bold">
+                LA
+              </div>
+            )}
             <div>
               <h1 className="text-lg font-semibold leading-tight">
                 Las Africanas
