@@ -61,6 +61,12 @@ class ConfiguracionFacturacionViewSet(viewsets.ModelViewSet):
                 'numero_remision': 1,
                 'resolucion': '',
                 'notas_factura': '',
+                'plantilla_factura_carta': '',
+                'plantilla_factura_tirilla': '',
+                'plantilla_remision_carta': '',
+                'plantilla_remision_tirilla': '',
+                'plantilla_nota_credito_carta': '',
+                'plantilla_nota_credito_tirilla': '',
             },
         )
         serializer = self.get_serializer([configuracion], many=True)
