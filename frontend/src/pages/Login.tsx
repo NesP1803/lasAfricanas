@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -7,9 +7,37 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
   
   const { login } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const storedLogo = localStorage.getItem('empresa_logo');
+    if (storedLogo) {
+      setLogoUrl(storedLogo);
+      return;
+    }
+
+    const cargarLogo = async () => {
+      try {
+        const response = await fetch('/api/configuracion-empresa/');
+        if (!response.ok) {
+          return;
+        }
+        const data = await response.json();
+        const logo = data?.[0]?.logo ?? null;
+        if (logo) {
+          setLogoUrl(logo);
+          localStorage.setItem('empresa_logo', logo);
+        }
+      } catch (error) {
+        console.error('Error cargando logo:', error);
+      }
+    };
+
+    cargarLogo();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,9 +66,19 @@ export default function Login() {
       <div className="bg-white rounded-lg shadow-2xl w-full max-w-md p-8">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="w-32 h-32 mx-auto mb-4 bg-gradient-to-br from-blue-500 to-blue-700 rounded-full flex items-center justify-center">
-            <span className="text-white text-4xl font-bold">LA</span>
-          </div>
+          {logoUrl ? (
+            <div className="w-32 h-32 mx-auto mb-4 rounded-full overflow-hidden bg-blue-100">
+              <img
+                src={logoUrl}
+                alt="Logo de la empresa"
+                className="h-full w-full object-cover"
+              />
+            </div>
+          ) : (
+            <div className="w-32 h-32 mx-auto mb-4 bg-gradient-to-br from-blue-500 to-blue-700 rounded-full flex items-center justify-center">
+              <span className="text-white text-4xl font-bold">LA</span>
+            </div>
+          )}
           <h1 className="text-3xl font-bold text-gray-800">Las Africanas</h1>
           <p className="text-gray-600">Sistema de Gestión</p>
         </div>
@@ -91,11 +129,6 @@ export default function Login() {
           </button>
         </form>
 
-        {/* Credenciales de desarrollo */}
-        <div className="mt-6 text-center text-sm text-gray-500">
-          <p>Usuario de prueba: <strong>admin</strong></p>
-          <p>Contraseña: <strong>Admin123456789</strong></p>
-        </div>
       </div>
     </div>
   );
