@@ -68,9 +68,14 @@ class DetalleVentaSerializer(serializers.ModelSerializer):
 class VentaListSerializer(serializers.ModelSerializer):
     """Serializer ligero para listados de ventas"""
     cliente_nombre = serializers.CharField(source='cliente.nombre', read_only=True)
+    cliente_numero_documento = serializers.CharField(
+        source='cliente.numero_documento',
+        read_only=True
+    )
     vendedor_nombre = serializers.CharField(source='vendedor.username', read_only=True)
     tipo_comprobante_display = serializers.CharField(source='get_tipo_comprobante_display', read_only=True)
     estado_display = serializers.CharField(source='get_estado_display', read_only=True)
+    medio_pago_display = serializers.CharField(source='get_medio_pago_display', read_only=True)
     
     class Meta:
         model = Venta
@@ -82,9 +87,12 @@ class VentaListSerializer(serializers.ModelSerializer):
             'fecha',
             'cliente',
             'cliente_nombre',
+            'cliente_numero_documento',
             'vendedor',
             'vendedor_nombre',
             'total',
+            'medio_pago',
+            'medio_pago_display',
             'estado',
             'estado_display'
         ]
