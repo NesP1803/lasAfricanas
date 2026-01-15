@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   CheckCircle2,
@@ -28,6 +28,14 @@ type ConfigTab =
   | "usuarios"
   | "clave";
 
+type PlantillaField =
+  | "plantilla_factura_carta"
+  | "plantilla_factura_tirilla"
+  | "plantilla_remision_carta"
+  | "plantilla_remision_tirilla"
+  | "plantilla_nota_credito_carta"
+  | "plantilla_nota_credito_tirilla";
+
 const defaultEmpresa: ConfiguracionEmpresa = {
   id: 1,
   tipo_identificacion: "NIT",
@@ -55,6 +63,12 @@ const defaultFacturacion: ConfiguracionFacturacion = {
     "Resolución Facturación POS N°. 18764006081459 de 2020/10/22\nRango del 00001 al 50000.",
   notas_factura:
     "Para trámite de cambios y garantías, indispensable presentar la factura de venta. Tiene hasta 5 días para trámites. Los productos deben estar en perfecto estado y empaque original.",
+  plantilla_factura_carta: "",
+  plantilla_factura_tirilla: "",
+  plantilla_remision_carta: "",
+  plantilla_remision_tirilla: "",
+  plantilla_nota_credito_carta: "",
+  plantilla_nota_credito_tirilla: "",
 };
 
 const defaultImpuestos: Impuesto[] = [
@@ -75,6 +89,9 @@ export default function Configuracion() {
   const [logoRemoved, setLogoRemoved] = useState(false);
   const [facturacion, setFacturacion] =
     useState<ConfiguracionFacturacion>(defaultFacturacion);
+  const [plantillaActiva, setPlantillaActiva] =
+    useState<PlantillaField>("plantilla_factura_carta");
+  const editorRef = useRef<HTMLDivElement | null>(null);
   const [impuestos, setImpuestos] = useState<Impuesto[]>(defaultImpuestos);
   const [auditoria, setAuditoria] = useState<AuditoriaRegistro[]>([]);
   const [usuarios, setUsuarios] = useState<UsuarioAdmin[]>([]);
@@ -108,6 +125,36 @@ export default function Configuracion() {
       { id: "impuestos", label: "Impuestos", icon: <Plus size={18} /> },
       { id: "auditoria", label: "Auditoría", icon: <Users size={18} /> },
       { id: "clave", label: "Cambiar clave", icon: <UserCog size={18} /> },
+    ],
+    []
+  );
+
+  const plantillaOptions = useMemo(
+    () => [
+      {
+        id: "plantilla_factura_carta",
+        label: "Factura de venta · Carta",
+      },
+      {
+        id: "plantilla_factura_tirilla",
+        label: "Factura de venta · Tirilla",
+      },
+      {
+        id: "plantilla_remision_carta",
+        label: "Remisión · Carta",
+      },
+      {
+        id: "plantilla_remision_tirilla",
+        label: "Remisión · Tirilla",
+      },
+      {
+        id: "plantilla_nota_credito_carta",
+        label: "Nota crédito · Carta",
+      },
+      {
+        id: "plantilla_nota_credito_tirilla",
+        label: "Nota crédito · Tirilla",
+      },
     ],
     []
   );
@@ -194,6 +241,13 @@ export default function Configuracion() {
       URL.revokeObjectURL(objectUrl);
     };
   }, [logoFile]);
+
+  useEffect(() => {
+    if (!editorRef.current) {
+      return;
+    }
+    editorRef.current.innerHTML = facturacion[plantillaActiva] || "";
+  }, [facturacion, plantillaActiva]);
 
   const onTabChange = (tabId: ConfigTab) => {
     setActiveTab(tabId);
@@ -312,6 +366,22 @@ export default function Configuracion() {
     }
   };
 
+  const actualizarPlantilla = (value: string) => {
+    setFacturacion((prev) => ({
+      ...prev,
+      [plantillaActiva]: value,
+    }));
+  };
+
+  const aplicarFormato = (comando: string, valor?: string) => {
+    if (!editorRef.current) {
+      return;
+    }
+    editorRef.current.focus();
+    document.execCommand(comando, false, valor);
+    actualizarPlantilla(editorRef.current.innerHTML);
+  };
+
   return (
     <div className="space-y-6">
       <div className="rounded-2xl bg-white p-6 shadow-sm">
@@ -342,118 +412,242 @@ export default function Configuracion() {
 
       {activeTab === "facturacion" && (
         <section className="grid gap-6 lg:grid-cols-3">
-          <div className="rounded-2xl bg-white p-6 shadow-sm lg:col-span-2">
-            <div className="flex items-start justify-between">
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900">
-                  Numeración para facturas de venta
-                </h3>
-                <p className="text-sm text-slate-500">
-                  Esta sección se sincronizará con la cantidad de facturas del
-                  sistema.
-                </p>
+          <div className="space-y-6 lg:col-span-2">
+            <div className="rounded-2xl bg-white p-6 shadow-sm">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-900">
+                    Numeración para facturas de venta
+                  </h3>
+                  <p className="text-sm text-slate-500">
+                    Esta sección se sincronizará con la cantidad de facturas
+                    del sistema.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleGuardarFacturacion}
+                  className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-blue-700"
+                >
+                  <Save size={16} /> Guardar
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={handleGuardarFacturacion}
-                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-blue-700"
-              >
-                <Save size={16} /> Guardar
-              </button>
+
+              {mensajeFacturacion && (
+                <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+                  {mensajeFacturacion}
+                </div>
+              )}
+
+              <div className="mt-6 grid gap-4 md:grid-cols-2">
+                <label className="space-y-2 text-sm font-medium text-slate-700">
+                  Prefijo
+                  <input
+                    value={facturacion.prefijo_factura}
+                    onChange={(event) =>
+                      setFacturacion((prev) => ({
+                        ...prev,
+                        prefijo_factura: event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="space-y-2 text-sm font-medium text-slate-700">
+                  Número
+                  <input
+                    type="number"
+                    value={facturacion.numero_factura}
+                    onChange={(event) =>
+                      setFacturacion((prev) => ({
+                        ...prev,
+                        numero_factura: Number(event.target.value),
+                      }))
+                    }
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="space-y-2 text-sm font-medium text-slate-700">
+                  Prefijo remisión
+                  <input
+                    value={facturacion.prefijo_remision}
+                    onChange={(event) =>
+                      setFacturacion((prev) => ({
+                        ...prev,
+                        prefijo_remision: event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="space-y-2 text-sm font-medium text-slate-700">
+                  Número remisión
+                  <input
+                    type="number"
+                    value={facturacion.numero_remision}
+                    onChange={(event) =>
+                      setFacturacion((prev) => ({
+                        ...prev,
+                        numero_remision: Number(event.target.value),
+                      }))
+                    }
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  />
+                </label>
+              </div>
+
+              <div className="mt-6 grid gap-4">
+                <label className="space-y-2 text-sm font-medium text-slate-700">
+                  Resolución
+                  <textarea
+                    value={facturacion.resolucion}
+                    onChange={(event) =>
+                      setFacturacion((prev) => ({
+                        ...prev,
+                        resolucion: event.target.value,
+                      }))
+                    }
+                    rows={4}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="space-y-2 text-sm font-medium text-slate-700">
+                  Notas de la factura de venta
+                  <textarea
+                    value={facturacion.notas_factura}
+                    onChange={(event) =>
+                      setFacturacion((prev) => ({
+                        ...prev,
+                        notas_factura: event.target.value,
+                      }))
+                    }
+                    rows={3}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  />
+                </label>
+              </div>
             </div>
 
-            {mensajeFacturacion && (
-              <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
-                {mensajeFacturacion}
+            <div className="rounded-2xl bg-white p-6 shadow-sm">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-900">
+                    Diseño de documentos
+                  </h3>
+                  <p className="text-sm text-slate-500">
+                    Crea y acomoda las plantillas de factura, remisión y nota
+                    crédito en formato carta o tirilla.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleGuardarFacturacion}
+                  className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-blue-700"
+                >
+                  <Save size={16} /> Guardar
+                </button>
               </div>
-            )}
 
-            <div className="mt-6 grid gap-4 md:grid-cols-2">
-              <label className="space-y-2 text-sm font-medium text-slate-700">
-                Prefijo
-                <input
-                  value={facturacion.prefijo_factura}
-                  onChange={(event) =>
-                    setFacturacion((prev) => ({
-                      ...prev,
-                      prefijo_factura: event.target.value,
-                    }))
-                  }
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                />
-              </label>
-              <label className="space-y-2 text-sm font-medium text-slate-700">
-                Número
-                <input
-                  type="number"
-                  value={facturacion.numero_factura}
-                  onChange={(event) =>
-                    setFacturacion((prev) => ({
-                      ...prev,
-                      numero_factura: Number(event.target.value),
-                    }))
-                  }
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                />
-              </label>
-              <label className="space-y-2 text-sm font-medium text-slate-700">
-                Prefijo remisión
-                <input
-                  value={facturacion.prefijo_remision}
-                  onChange={(event) =>
-                    setFacturacion((prev) => ({
-                      ...prev,
-                      prefijo_remision: event.target.value,
-                    }))
-                  }
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                />
-              </label>
-              <label className="space-y-2 text-sm font-medium text-slate-700">
-                Número remisión
-                <input
-                  type="number"
-                  value={facturacion.numero_remision}
-                  onChange={(event) =>
-                    setFacturacion((prev) => ({
-                      ...prev,
-                      numero_remision: Number(event.target.value),
-                    }))
-                  }
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                />
-              </label>
-            </div>
+              <div className="mt-6 space-y-4">
+                <label className="text-sm font-medium text-slate-700">
+                  Plantilla a editar
+                  <select
+                    value={plantillaActiva}
+                    onChange={(event) =>
+                      setPlantillaActiva(event.target.value as PlantillaField)
+                    }
+                    className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  >
+                    {plantillaOptions.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
 
-            <div className="mt-6 grid gap-4">
-              <label className="space-y-2 text-sm font-medium text-slate-700">
-                Resolución
-                <textarea
-                  value={facturacion.resolucion}
-                  onChange={(event) =>
-                    setFacturacion((prev) => ({
-                      ...prev,
-                      resolucion: event.target.value,
-                    }))
+                <div className="flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
+                  <button
+                    type="button"
+                    onClick={() => aplicarFormato("bold")}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 hover:border-blue-200 hover:text-blue-600"
+                  >
+                    Negrita
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => aplicarFormato("italic")}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 hover:border-blue-200 hover:text-blue-600"
+                  >
+                    Cursiva
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => aplicarFormato("underline")}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 hover:border-blue-200 hover:text-blue-600"
+                  >
+                    Subrayado
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => aplicarFormato("justifyLeft")}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 hover:border-blue-200 hover:text-blue-600"
+                  >
+                    Izquierda
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => aplicarFormato("justifyCenter")}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 hover:border-blue-200 hover:text-blue-600"
+                  >
+                    Centrar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => aplicarFormato("justifyRight")}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 hover:border-blue-200 hover:text-blue-600"
+                  >
+                    Derecha
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => aplicarFormato("insertUnorderedList")}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 hover:border-blue-200 hover:text-blue-600"
+                  >
+                    Viñetas
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => aplicarFormato("insertOrderedList")}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 hover:border-blue-200 hover:text-blue-600"
+                  >
+                    Numeración
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => aplicarFormato("removeFormat")}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 hover:border-red-200 hover:text-red-600"
+                  >
+                    Limpiar formato
+                  </button>
+                </div>
+
+                <div
+                  ref={editorRef}
+                  onInput={(event) =>
+                    actualizarPlantilla(
+                      (event.target as HTMLDivElement).innerHTML
+                    )
                   }
-                  rows={4}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  contentEditable
+                  className="min-h-[280px] rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
                 />
-              </label>
-              <label className="space-y-2 text-sm font-medium text-slate-700">
-                Notas de la factura de venta
-                <textarea
-                  value={facturacion.notas_factura}
-                  onChange={(event) =>
-                    setFacturacion((prev) => ({
-                      ...prev,
-                      notas_factura: event.target.value,
-                    }))
-                  }
-                  rows={3}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                />
-              </label>
+              </div>
+
+              <p className="mt-4 text-xs text-slate-500">
+                Este editor guarda el contenido en HTML ligero para mantener el
+                diseño impreso sin cargar librerías pesadas.
+              </p>
             </div>
           </div>
 
