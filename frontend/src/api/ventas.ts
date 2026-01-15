@@ -292,14 +292,22 @@ export const ventasApi = {
     return response.json();
   },
 
-  async getEstadisticasHoy(): Promise<any> {
+  async getEstadisticasHoy(): Promise<EstadisticasVentas> {
+    const hoy = new Date().toISOString().split('T')[0];
     const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/ventas/estadisticas_hoy/`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
+    const queryParams = new URLSearchParams({
+      fecha_inicio: hoy,
+      fecha_fin: hoy,
     });
+    const response = await fetch(
+      `${API_URL}/ventas/estadisticas/?${queryParams.toString()}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
 
     if (!response.ok) throw new Error('Error al obtener estadísticas');
     return response.json();
