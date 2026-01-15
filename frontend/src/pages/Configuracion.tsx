@@ -70,6 +70,9 @@ export default function Configuracion() {
 
   const [activeTab, setActiveTab] = useState<ConfigTab>(initialTab);
   const [empresa, setEmpresa] = useState<ConfiguracionEmpresa>(defaultEmpresa);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoRemoved, setLogoRemoved] = useState(false);
   const [facturacion, setFacturacion] =
     useState<ConfiguracionFacturacion>(defaultFacturacion);
   const [impuestos, setImpuestos] = useState<Impuesto[]>(defaultImpuestos);
@@ -122,6 +125,12 @@ export default function Configuracion() {
         const data = await configuracionAPI.obtenerEmpresa();
         if (data) {
           setEmpresa(data);
+          setLogoPreview(data.logo);
+          if (data.logo) {
+            localStorage.setItem("empresa_logo", data.logo);
+          } else {
+            localStorage.removeItem("empresa_logo");
+          }
         }
       } catch (error) {
         console.error("Error cargando empresa:", error);
@@ -175,6 +184,17 @@ export default function Configuracion() {
     cargarUsuarios();
   }, [isAdmin]);
 
+  useEffect(() => {
+    if (!logoFile) {
+      return;
+    }
+    const objectUrl = URL.createObjectURL(logoFile);
+    setLogoPreview(objectUrl);
+    return () => {
+      URL.revokeObjectURL(objectUrl);
+    };
+  }, [logoFile]);
+
   const onTabChange = (tabId: ConfigTab) => {
     setActiveTab(tabId);
     setSearchParams({ tab: tabId });
@@ -184,9 +204,18 @@ export default function Configuracion() {
     try {
       const data = await configuracionAPI.actualizarEmpresa(
         empresa.id,
-        empresa
+        empresa,
+        { logoFile, removeLogo: logoRemoved }
       );
       setEmpresa(data);
+      setLogoFile(null);
+      setLogoRemoved(false);
+      setLogoPreview(data.logo);
+      if (data.logo) {
+        localStorage.setItem("empresa_logo", data.logo);
+      } else {
+        localStorage.removeItem("empresa_logo");
+      }
       setMensajeEmpresa("Los datos han sido actualizados correctamente.");
     } catch (error) {
       console.error("Error actualizando empresa:", error);
@@ -589,6 +618,54 @@ export default function Configuracion() {
           )}
 
           <div className="mt-6 grid gap-4 md:grid-cols-2">
+            <div className="space-y-2 text-sm font-medium text-slate-700 md:col-span-2">
+              Logo
+              <div className="flex flex-wrap items-center gap-4 rounded-lg border border-slate-200 p-4">
+                <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-base font-semibold text-slate-500">
+                  {logoPreview ? (
+                    <img
+                      src={logoPreview}
+                      alt="Logo actual"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    "LA"
+                  )}
+                </div>
+                <div className="flex flex-1 flex-col gap-2">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0] || null;
+                      setLogoFile(file);
+                      setLogoRemoved(false);
+                      if (!file) {
+                        setLogoPreview(empresa.logo);
+                      }
+                    }}
+                    className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-blue-600 hover:file:bg-blue-100"
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLogoFile(null);
+                        setLogoRemoved(true);
+                        setLogoPreview(null);
+                        setEmpresa((prev) => ({ ...prev, logo: null }));
+                      }}
+                      className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 hover:border-red-200 hover:text-red-600"
+                    >
+                      Quitar logo
+                    </button>
+                    <p className="text-xs text-slate-500">
+                      Recomendado: imagen cuadrada en PNG o JPG.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
             <label className="space-y-2 text-sm font-medium text-slate-700">
               Tipo de identificación
               <select
