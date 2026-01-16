@@ -8,10 +8,7 @@ import { useEffect, useMemo, useState, useRef, type ReactNode } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { configuracionAPI } from "../api/configuracion";
 import { DEFAULT_MODULE_ACCESS, type ModuleKey } from "../store/moduleAccess";
-import {
-  loadModuleAccess,
-  type ModuleKey,
-} from "../store/moduleAccess";
+
 import {
   ClipboardList,
   Boxes,
@@ -335,14 +332,14 @@ export default function Layout() {
             },
           ],
         });
-      }
-      if (moduleEnabled("reportes")) {
-        items.push({
-          label: "Reportes",
-          icon: <Share2 size={18} />,
-          items: [{ label: "Resumen diario" }, { label: "Resumen mensual" }],
-        });
-      }
+      } 
+      // if (moduleEnabled("reportes")) {
+      //   items.push({
+      //     label: "Reportes",
+      //     icon: <Share2 size={18} />,
+      //     items: [{ label: "Resumen diario" }, { label: "Resumen mensual" }],
+      //   });
+      // }
 
       return items;
     },
