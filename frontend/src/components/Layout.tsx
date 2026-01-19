@@ -270,7 +270,7 @@ export default function Layout() {
         items.push({
           label: "Registrar",
           icon: <ReceiptText size={18} />,
-          items: [{ label: "Registro general", path: "/" }],
+          path: "/",
         });
       }
       if (moduleEnabled("listados")) {
@@ -444,7 +444,12 @@ export default function Layout() {
     <div className="flex min-h-screen flex-col bg-gray-100">
       <header className="sticky top-0 z-50 bg-blue-600 text-white shadow-lg">
         <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-3 sm:px-6">
-          <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => navigate("/")}
+            className="flex items-center gap-3 text-left"
+            aria-label="Ir al dashboard"
+          >
             {logoUrl ? (
               <img
                 src={logoUrl}
@@ -462,7 +467,7 @@ export default function Layout() {
               </h1>
               <p className="text-xs text-blue-100">Sistema Integrado</p>
             </div>
-          </div>
+          </button>
 
           <div className="flex items-center gap-3">
             <div className="hidden text-right text-xs text-blue-100 sm:block">
@@ -503,6 +508,11 @@ export default function Layout() {
             >
               <button
                 type="button"
+                onClick={() => {
+                  if (!item.items || item.items.length === 0) {
+                    onSelectLeaf(item);
+                  }
+                }}
                 className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-white/90 transition hover:bg-white/15 hover:text-white"
               >
                 {renderMenuButton(item.label, item.icon)}
