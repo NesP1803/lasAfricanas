@@ -15,13 +15,13 @@ class Cliente(BaseModel):
     ]
     
     tipo_documento = models.CharField(
-        max_length=20,
+        max_length=50,
         choices=TIPO_DOCUMENTO,
         default='CC',
         verbose_name='Tipo de documento'
     )
     numero_documento = models.CharField(
-        max_length=20,
+        max_length=50,
         unique=True,
         db_index=True,
         verbose_name='Número de documento'
@@ -32,7 +32,7 @@ class Cliente(BaseModel):
         verbose_name='Nombre completo o razón social'
     )
     telefono = models.CharField(
-        max_length=20,
+        max_length=50,
         blank=True,
         verbose_name='Teléfono'
     )

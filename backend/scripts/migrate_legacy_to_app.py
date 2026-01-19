@@ -1,5 +1,13 @@
 #!/usr/bin/env python
-"""Migrate legacy staging tables (legacy_*) into Django app tables."""
+"""
+Migrate legacy staging tables (legacy_*) into Django app tables.
+
+Cambios clave:
+- Cruce correcto FACTURAS/REMISIONES con DETALLES usando:  prefijo + nofactura  (ej: "FAC-5000")
+- Soporta DRY-RUN real (rollback al final)
+- Evita duplicados por defecto (tablas *1). Puedes activarlos con --include-duplicates
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -12,7 +20,6 @@ from typing import Dict, Iterable, Optional
 import django
 from django.contrib.auth import get_user_model
 from django.db import connection, transaction
-
 
 LOGGER = logging.getLogger(__name__)
 
@@ -32,10 +39,16 @@ def setup_django() -> None:
     global Categoria, Cliente, DetalleVenta, Impuesto, Mecanico, Moto, Producto, Proveedor, Venta, VentaAnulada
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
     django.setup()
+
     from apps.core.models import Impuesto as ImpuestoModel
     from apps.inventario.models import Categoria as CategoriaModel, Producto as ProductoModel, Proveedor as ProveedorModel
     from apps.taller.models import Moto as MotoModel, Mecanico as MecanicoModel
-    from apps.ventas.models import Cliente as ClienteModel, DetalleVenta as DetalleVentaModel, Venta as VentaModel, VentaAnulada as VentaAnuladaModel
+    from apps.ventas.models import (
+        Cliente as ClienteModel,
+        DetalleVenta as DetalleVentaModel,
+        Venta as VentaModel,
+        VentaAnulada as VentaAnuladaModel,
+    )
 
     Categoria = CategoriaModel
     Cliente = ClienteModel
@@ -111,7 +124,7 @@ def iter_table_rows(table: str, batch: int = 500) -> Iterable[Dict[str, object]]
                 yield dict(zip(columns, row))
 
 
-def get_default_categoria() -> Categoria:
+def get_default_categoria() -> "Categoria":
     categoria, _ = Categoria.objects.get_or_create(
         nombre="Sin categoría",
         defaults={"descripcion": "Categoría por defecto para legacy", "orden": 0},
@@ -119,7 +132,7 @@ def get_default_categoria() -> Categoria:
     return categoria
 
 
-def get_default_proveedor() -> Proveedor:
+def get_default_proveedor() -> "Proveedor":
     proveedor, _ = Proveedor.objects.get_or_create(
         nombre="Proveedor Legacy",
         defaults={"nit": "", "telefono": "", "email": ""},
@@ -127,7 +140,7 @@ def get_default_proveedor() -> Proveedor:
     return proveedor
 
 
-def get_default_cliente() -> Cliente:
+def get_default_cliente() -> "Cliente":
     cliente, _ = Cliente.objects.get_or_create(
         numero_documento="0000000",
         defaults={
@@ -211,7 +224,7 @@ def import_clientes(table: str) -> int:
         row_map = build_row_map(row)
         numero_documento = value_from_row(
             row_map,
-            ["documento", "cedula", "nit", "numero_documento", "identificacion"],
+            ["documento", "cedula", "nit", "numero_documento", "identificacion", "idcliente", "clienteid"],
             default=f"LEGACY-{table}-{index}",
         )
         nombre = value_from_row(row_map, ["nombre", "razon_social", "cliente"], default="Cliente Legacy")
@@ -233,6 +246,7 @@ def import_clientes(table: str) -> int:
             },
         )
         created += int(was_created)
+
     LOGGER.info("Clientes importados desde %s: %s", table, created)
     return created
 
@@ -248,12 +262,15 @@ def import_usuarios(table: str) -> int:
         username = value_from_row(row_map, ["usuario", "login", "username", "nombre"])
         if not username:
             continue
+        # Respetar admin existente
         if username.lower() == "admin":
             continue
+
         email = value_from_row(row_map, ["email", "correo"])
         first_name = value_from_row(row_map, ["nombres", "nombre"], default="")
         last_name = value_from_row(row_map, ["apellidos", "apellido"], default="")
         tipo = value_from_row(row_map, ["tipo", "rol", "cargo"], default="VENDEDOR")
+
         user, was_created = User.objects.get_or_create(
             username=username,
             defaults={
@@ -267,6 +284,7 @@ def import_usuarios(table: str) -> int:
             user.set_unusable_password()
             user.save(update_fields=["password"])
         created += int(was_created)
+
     LOGGER.info("Usuarios importados desde %s: %s", table, created)
     return created
 
@@ -295,6 +313,7 @@ def import_mecanicos(table: str) -> int:
             },
         )
         created += int(was_created)
+
     LOGGER.info("Mecánicos importados desde %s: %s", table, created)
     return created
 
@@ -309,10 +328,11 @@ def import_productos(table: str) -> int:
 
     for row in iter_table_rows(table):
         row_map = build_row_map(row)
-        codigo = value_from_row(row_map, ["codigo", "sku", "referencia", "id"])
+        codigo = value_from_row(row_map, ["codigo", "sku", "referencia", "id", "cod"])
         nombre = value_from_row(row_map, ["nombre", "descripcion", "articulo"])
         if not codigo or not nombre:
             continue
+
         categoria_nombre = value_from_row(row_map, ["categoria", "linea", "grupo"], default="")
         categoria = default_categoria
         if categoria_nombre:
@@ -320,12 +340,14 @@ def import_productos(table: str) -> int:
                 nombre=categoria_nombre,
                 defaults={"descripcion": "", "orden": 0},
             )
+
         proveedor_nombre = value_from_row(row_map, ["proveedor", "marca", "fabricante"], default="")
         proveedor = default_proveedor
         if proveedor_nombre:
             proveedor, _ = Proveedor.objects.get_or_create(nombre=proveedor_nombre)
+
         precio_costo = to_decimal(value_from_row(row_map, ["costo", "precio_costo", "precio_compra"], default="1"), Decimal("1"))
-        precio_venta = to_decimal(value_from_row(row_map, ["precio", "precio_venta", "valor"], default="1"), Decimal("1"))
+        precio_venta = to_decimal(value_from_row(row_map, ["precio", "precio_venta", "valor", "precioventa"], default="1"), Decimal("1"))
         stock = to_int(value_from_row(row_map, ["stock", "existencias", "cantidad"], default="0"))
         iva = to_decimal(value_from_row(row_map, ["iva", "porcentaje"], default="19"), Decimal("19"))
         precio_venta_minimo = to_decimal(
@@ -345,13 +367,14 @@ def import_productos(table: str) -> int:
                 "precio_venta_minimo": precio_venta_minimo,
                 "stock": stock,
                 "stock_minimo": 5,
-                "unidad_medida": value_from_row(row_map, ["unidad", "unidad_medida"], default="UND"),
+                "unidad_medida": value_from_row(row_map, ["unidad", "unidad_medida", "um"], default="UND"),
                 "iva_porcentaje": iva,
                 "aplica_descuento": True,
                 "es_servicio": False,
             },
         )
         created += int(was_created)
+
     LOGGER.info("Productos importados desde %s: %s", table, created)
     return created
 
@@ -363,20 +386,23 @@ def import_motos(table: str) -> int:
     created = 0
     for row in iter_table_rows(table):
         row_map = build_row_map(row)
-        placa = value_from_row(row_map, ["placa", "matricula"])
+        placa = value_from_row(row_map, ["moto", "placa", "matricula"])
         if not placa:
             continue
         marca = value_from_row(row_map, ["marca"], default="")
         modelo = value_from_row(row_map, ["modelo"], default="")
         color = value_from_row(row_map, ["color"], default="")
-        cliente_doc = value_from_row(row_map, ["documento", "cedula", "nit", "cliente"], default="")
+
+        cliente_doc = value_from_row(row_map, ["documento", "cedula", "nit", "idcliente", "cliente"], default="")
         cliente = None
         if cliente_doc:
             cliente = Cliente.objects.filter(numero_documento=cliente_doc).first()
+
         mecanico_nombre = value_from_row(row_map, ["mecanico"], default="")
         mecanico = None
         if mecanico_nombre:
             mecanico = Mecanico.objects.filter(nombre__iexact=mecanico_nombre).first()
+
         _, was_created = Moto.objects.get_or_create(
             placa=placa,
             defaults={
@@ -391,44 +417,84 @@ def import_motos(table: str) -> int:
             },
         )
         created += int(was_created)
+
     LOGGER.info("Motos importadas desde %s: %s", table, created)
     return created
 
 
-def get_cliente_from_row(row_map: Dict[str, object]) -> Cliente:
-    doc = value_from_row(row_map, ["documento", "cedula", "nit", "cliente"], default="")
+def get_cliente_from_row(row_map: Dict[str, object]) -> "Cliente":
+    doc = value_from_row(row_map, ["documento", "cedula", "nit", "idcliente", "cliente"], default="")
     if doc:
         cliente = Cliente.objects.filter(numero_documento=doc).first()
         if cliente:
             return cliente
-    nombre = value_from_row(row_map, ["nombre", "razon_social"], default="")
+
+    nombre = value_from_row(row_map, ["cliente", "nombre", "razon_social"], default="")
     if nombre:
         cliente = Cliente.objects.filter(nombre__iexact=nombre).first()
         if cliente:
             return cliente
+
     return get_default_cliente()
+
+
+def legacy_numero_comprobante(row_map: Dict[str, object], tipo_comprobante: str, index: int) -> str:
+    """
+    FACTURA: prefijo + nofactura -> FAC-5000
+    REMISION: noremision/remision -> 1000
+    COTIZACION: lo que venga
+    """
+    # FACTURAS
+    if tipo_comprobante == "FACTURA":
+        prefijo = value_from_row(row_map, ["prefijo"], default="").strip()
+        nofactura = value_from_row(
+            row_map,
+            ["nofactura", "no_factura", "factura", "numero", "num", "numero_comprobante"],
+            default="",
+        ).strip()
+        if nofactura:
+            return f"{prefijo}-{nofactura}" if prefijo else nofactura
+
+    # REMISIONES (cabecera trae noremision; detalles/anulaciones traen remision)
+    if tipo_comprobante == "REMISION":
+        noremision = value_from_row(
+            row_map,
+            ["noremision", "no_remision", "remision", "numero", "num", "numero_comprobante"],
+            default="",
+        ).strip()
+        if noremision:
+            return noremision
+
+    # COTIZACION u otros
+    numero = value_from_row(
+        row_map,
+        ["numero", "cotizacion", "num", "numero_comprobante"],
+        default="",
+    ).strip()
+    return numero if numero else f"{tipo_comprobante}-{index}"
 
 
 def import_ventas(table: str, tipo_comprobante: str) -> int:
     if not table_exists(table):
         LOGGER.warning("Tabla %s no existe", table)
         return 0
+
     created = 0
     for index, row in enumerate(iter_table_rows(table), start=1):
         row_map = build_row_map(row)
-        numero = value_from_row(
-            row_map,
-            ["numero", "factura", "remision", "cotizacion", "num", "numero_comprobante"],
-            default=f"{tipo_comprobante}-{index}",
-        )
+
+        numero = legacy_numero_comprobante(row_map, tipo_comprobante, index)
         cliente = get_cliente_from_row(row_map)
+
         vendedor_nombre = value_from_row(row_map, ["vendedor", "usuario", "empleado"], default="")
         vendedor = find_user(vendedor_nombre)
+
         subtotal = to_decimal(value_from_row(row_map, ["subtotal"], default="0"))
-        descuento_valor = to_decimal(value_from_row(row_map, ["descuento", "descuento_valor"], default="0"))
-        iva = to_decimal(value_from_row(row_map, ["iva"], default="0"))
+        descuento_valor = to_decimal(value_from_row(row_map, ["descuento", "descuento_valor", "descuentos"], default="0"))
+        iva = to_decimal(value_from_row(row_map, ["iva", "impuestos"], default="0"))
         total = to_decimal(value_from_row(row_map, ["total", "valor"], default=str(subtotal + iva - descuento_valor)))
-        medio_pago = value_from_row(row_map, ["medio_pago", "pago", "forma_pago"], default="EFECTIVO")
+
+        medio_pago = value_from_row(row_map, ["medio_pago", "mediopago", "pago", "forma_pago"], default="EFECTIVO")
         estado = value_from_row(row_map, ["estado"], default="CONFIRMADA")
         observaciones = value_from_row(row_map, ["observaciones", "nota"], default="")
 
@@ -451,19 +517,22 @@ def import_ventas(table: str, tipo_comprobante: str) -> int:
             },
         )
         created += int(was_created)
+
     LOGGER.info("Ventas %s importadas desde %s: %s", tipo_comprobante, table, created)
     return created
 
 
-def find_producto(row_map: Dict[str, object]) -> Optional[Producto]:
+def find_producto(row_map: Dict[str, object]) -> Optional["Producto"]:
     codigo = value_from_row(row_map, ["codigo", "sku", "referencia", "id"], default="")
     if codigo:
         producto = Producto.objects.filter(codigo=codigo).first()
         if producto:
             return producto
-    nombre = value_from_row(row_map, ["producto", "nombre", "descripcion"], default="")
+
+    nombre = value_from_row(row_map, ["producto", "nombre", "descripcion", "articulo"], default="")
     if nombre:
         return Producto.objects.filter(nombre__iexact=nombre).first()
+
     return None
 
 
@@ -471,22 +540,35 @@ def import_detalles(table: str, tipo_comprobante: str) -> int:
     if not table_exists(table):
         LOGGER.warning("Tabla %s no existe", table)
         return 0
+
     created = 0
     for row in iter_table_rows(table):
         row_map = build_row_map(row)
-        numero = value_from_row(row_map, ["numero", "factura", "remision", "cotizacion", "num"], default="")
+
+        # Importante: detalles legacy suelen traer factura/remision como número (ej 5000) + prefijo FAC
+        numero = legacy_numero_comprobante(row_map, tipo_comprobante, index=0).strip()
         if not numero:
             continue
+
         venta = Venta.objects.filter(numero_comprobante=numero, tipo_comprobante=tipo_comprobante).first()
         if not venta:
             continue
+
         producto = find_producto(row_map)
         if not producto:
             continue
+
         cantidad = to_int(value_from_row(row_map, ["cantidad", "cant"], default="1"), default=1)
-        precio_unitario = to_decimal(value_from_row(row_map, ["precio", "valor", "precio_unitario"], default="1"), Decimal("1"))
-        descuento_unitario = to_decimal(value_from_row(row_map, ["descuento", "descuento_unitario"], default="0"))
+
+        # en legacy tienes PrecioVenta / Pventa_u / PrecioU
+        precio_unitario = to_decimal(
+            value_from_row(row_map, ["precioventa", "pventau", "preciou", "precio", "valor", "precio_unitario"], default="1"),
+            Decimal("1"),
+        )
+
+        descuento_unitario = to_decimal(value_from_row(row_map, ["descu_valor", "descuento", "descuento_unitario"], default="0"))
         iva_porcentaje = to_decimal(value_from_row(row_map, ["iva", "porcentaje"], default="19"), Decimal("19"))
+
         subtotal = precio_unitario * Decimal(cantidad)
         total = subtotal - (descuento_unitario * Decimal(cantidad))
 
@@ -504,26 +586,43 @@ def import_detalles(table: str, tipo_comprobante: str) -> int:
             },
         )
         created += int(was_created)
-    LOGGER.info("Detalles importados desde %s: %s", table, created)
+
+    LOGGER.info("Detalles %s importados desde %s: %s", tipo_comprobante, table, created)
     return created
 
 
-def import_anulaciones(table: str) -> int:
+def import_anulaciones(table: str, tipo_comprobante: str) -> int:
     if not table_exists(table):
         LOGGER.warning("Tabla %s no existe", table)
         return 0
+
     created = 0
     admin_user = get_admin_user()
+
     for row in iter_table_rows(table):
         row_map = build_row_map(row)
-        numero = value_from_row(row_map, ["numero", "factura", "remision", "num"], default="")
+
+        numero = legacy_numero_comprobante(
+            row_map,
+            tipo_comprobante=tipo_comprobante,
+            index=0,
+        ).strip()
+
         if not numero:
             continue
-        venta = Venta.objects.filter(numero_comprobante=numero).first()
+
+        venta = Venta.objects.filter(
+            numero_comprobante=numero,
+            tipo_comprobante=tipo_comprobante,
+        ).first()
+
         if not venta:
             continue
-        motivo = value_from_row(row_map, ["motivo", "razon"], default="OTRO")
-        descripcion = value_from_row(row_map, ["descripcion", "detalle", "observacion"], default="Anulación legacy")
+
+        # En anulaciones de remisiones tu excel usa "causa"
+        motivo = value_from_row(row_map, ["motivo", "razon", "causa"], default="OTRO")
+        descripcion = value_from_row(row_map, ["descripcion", "detalle", "observacion", "causa"], default="Anulación legacy")
+
         _, was_created = VentaAnulada.objects.get_or_create(
             venta=venta,
             defaults={
@@ -534,21 +633,20 @@ def import_anulaciones(table: str) -> int:
             },
         )
         created += int(was_created)
-    LOGGER.info("Anulaciones importadas desde %s: %s", table, created)
+
+    LOGGER.info("Anulaciones %s importadas desde %s: %s", tipo_comprobante, table, created)
     return created
+
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--commit", action="store_true", help="Aplica cambios en la base de datos")
+    parser.add_argument("--dry-run", action="store_true", help="Simula la migración (default)")
     parser.add_argument(
-        "--commit",
+        "--include-duplicates",
         action="store_true",
-        help="Aplica cambios en la base de datos",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Simula la migración (default)",
+        help="Incluye tablas duplicadas (*1). Por defecto se omiten para evitar duplicados.",
     )
     return parser.parse_args()
 
@@ -560,42 +658,70 @@ def main() -> None:
 
     setup_django()
 
-    steps = [
-        ("catalogos", [
-            ("legacy_dbo_impuestos", import_impuestos),
-            ("legacy_dbo_ivas", import_impuestos),
-            ("legacy_dbo_ivas_r", import_impuestos),
-            ("legacy_dbo_categorias", import_categorias),
-            ("legacy_dbo_categorias_fac", import_categorias),
-            ("legacy_dbo_rem_categorias", import_categorias),
-        ]),
-        ("maestros", [
-            ("legacy_dbo_usuarios", import_usuarios),
-            ("legacy_dbo_vendedores", import_usuarios),
-            ("legacy_dbo_empleados", import_mecanicos),
-            ("legacy_dbo_contactos", import_clientes),
-            ("legacy_dbo_contactos1", import_clientes),
-            ("legacy_migrarclientes", import_clientes),
-            ("legacy_dbo_articulos", import_productos),
-            ("legacy_dbo_articulos1", import_productos),
-            ("legacy_dbo_motos_registradas", import_motos),
-        ]),
-        ("documentos", [
-            ("legacy_dbo_facturas", lambda t: import_ventas(t, "FACTURA")),
-            ("legacy_dbo_remisiones", lambda t: import_ventas(t, "REMISION")),
-            ("legacy_dbo_remisiones1", lambda t: import_ventas(t, "REMISION")),
-            ("legacy_dbo_cotizaciones", lambda t: import_ventas(t, "COTIZACION")),
-        ]),
-        ("detalles", [
-            ("legacy_dbo_detallesfactura", lambda t: import_detalles(t, "FACTURA")),
-            ("legacy_dbo_detallesremision", lambda t: import_detalles(t, "REMISION")),
-            ("legacy_dbo_detallesremision1", lambda t: import_detalles(t, "REMISION")),
-        ]),
-        ("post_procesos", [
-            ("legacy_dbo_anulaciones_facturas", import_anulaciones),
-            ("legacy_dbo_anulaciones_remisiones", import_anulaciones),
-        ]),
+    include_dupes = bool(args.include_duplicates)
+
+    maestros_actions = [
+        ("legacy_dbo_usuarios", import_usuarios),
+        ("legacy_dbo_vendedores", import_usuarios),
+        ("legacy_dbo_empleados", import_mecanicos),
+
+        ("legacy_dbo_contactos", import_clientes),
+        ("legacy_migrarclientes", import_clientes),
+
+        ("legacy_dbo_articulos", import_productos),
+
+        ("legacy_dbo_motos_registradas", import_motos),
     ]
+
+    documentos_actions = [
+        ("legacy_dbo_facturas", lambda t: import_ventas(t, "FACTURA")),
+        ("legacy_dbo_remisiones", lambda t: import_ventas(t, "REMISION")),
+        ("legacy_dbo_cotizaciones", lambda t: import_ventas(t, "COTIZACION")),
+    ]
+
+    detalles_actions = [
+        ("legacy_dbo_detallesfactura", lambda t: import_detalles(t, "FACTURA")),
+        ("legacy_dbo_detallesremision", lambda t: import_detalles(t, "REMISION")),
+    ]
+
+    if include_dupes:
+        maestros_actions += [
+            ("legacy_dbo_contactos1", import_clientes),
+            ("legacy_dbo_articulos1", import_productos),
+        ]
+        documentos_actions += [
+            ("legacy_dbo_remisiones1", lambda t: import_ventas(t, "REMISION")),
+        ]
+        detalles_actions += [
+            ("legacy_dbo_detallesremision1", lambda t: import_detalles(t, "REMISION")),
+        ]
+
+    steps = [
+        (
+            "catalogos",
+            [
+                ("legacy_dbo_impuestos", import_impuestos),
+                ("legacy_dbo_ivas", import_impuestos),
+                ("legacy_dbo_ivas_r", import_impuestos),
+                ("legacy_dbo_categorias", import_categorias),
+                ("legacy_dbo_categorias_fac", import_categorias),
+                ("legacy_dbo_rem_categorias", import_categorias),
+            ],
+        ),
+        ("maestros", maestros_actions),
+        ("documentos", documentos_actions),
+        ("detalles", detalles_actions),
+        (
+            "post_procesos",
+            [
+                ("legacy_dbo_anulaciones_facturas", lambda t: import_anulaciones(t, "FACTURA")),
+                ("legacy_dbo_anulaciones_remisiones", lambda t: import_anulaciones(t, "REMISION")),
+            ],
+        ),
+    ]
+
+    LOGGER.info("Modo: %s", "COMMIT" if (args.commit and not args.dry_run) else "DRY-RUN")
+    LOGGER.info("Include duplicates (*1): %s", "SI" if include_dupes else "NO")
 
     with transaction.atomic():
         for etapa, acciones in steps:
