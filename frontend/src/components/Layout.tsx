@@ -266,13 +266,7 @@ export default function Layout() {
         return items;
       }
 
-      if (moduleEnabled("registrar")) {
-        items.push({
-          label: "Registrar",
-          icon: <ReceiptText size={18} />,
-          path: "/",
-        });
-      }
+      
       if (moduleEnabled("listados")) {
         items.push({
           label: "Listados",
