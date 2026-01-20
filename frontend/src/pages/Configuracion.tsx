@@ -399,7 +399,7 @@ export default function Configuracion() {
 
     const cargarMecanicos = async () => {
       try {
-        const data = await tallerApi.getMecanicos();
+      const data = await tallerApi.getMecanicos({ is_active: true });
         const parsed = Array.isArray(data) ? data : data.results ?? [];
         setMecanicosDisponibles(parsed);
       } catch (error) {

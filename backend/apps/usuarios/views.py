@@ -1,9 +1,10 @@
 from decimal import Decimal, InvalidOperation
 from django.contrib.auth import authenticate
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
+from django_filters.rest_framework import DjangoFilterBackend
 
 from .models import Usuario
 from .serializers import UsuarioSerializer
@@ -12,6 +13,11 @@ from .serializers import UsuarioSerializer
 class UsuarioViewSet(viewsets.ModelViewSet):
     queryset = Usuario.objects.all()
     serializer_class = UsuarioSerializer
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['is_active', 'tipo_usuario', 'sede']
+    search_fields = ['username', 'email', 'first_name', 'last_name']
+    ordering_fields = ['username', 'date_joined', 'last_login']
+    ordering = ['username']
 
     def get_permissions(self):
         if self.action == 'change_password':

@@ -15,10 +15,11 @@ from .serializers import MecanicoSerializer, MotoSerializer, OrdenTallerSerializ
 
 
 class MecanicoViewSet(viewsets.ModelViewSet):
-    queryset = Mecanico.objects.filter(is_active=True)
+    queryset = Mecanico.objects.all()
     serializer_class = MecanicoSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['is_active']
     search_fields = ['nombre', 'telefono', 'email', 'ciudad']
     ordering_fields = ['nombre', 'created_at']
     ordering = ['nombre']

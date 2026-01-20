@@ -13,13 +13,19 @@ import {
 } from 'lucide-react';
 import {
   inventarioApi,
+  type Categoria,
   type InventarioEstadisticas,
+  type PaginatedResponse,
   type Producto,
   type ProductoList,
+  type Proveedor,
 } from '../api/inventario';
 import ProductoForm from '../components/ProductoForm';
 
 type ArticulosTab = 'mercancia' | 'stock-bajo' |  'dar-de-baja';
+type EstadoFiltro = 'todos' | 'agotado' | 'bajo' | 'ok';
+
+const PAGE_SIZE = 50;
 
 const tabConfig: Array<{
   key: ArticulosTab;
@@ -49,6 +55,13 @@ const currency = new Intl.NumberFormat('es-CO', {
   maximumFractionDigits: 0,
 });
 
+const parseListado = <T,>(data: PaginatedResponse<T> | T[]) => {
+  if (Array.isArray(data)) {
+    return { items: data, count: data.length };
+  }
+  return { items: data.results, count: data.count };
+};
+
 export default function Articulos() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
@@ -64,7 +77,12 @@ export default function Articulos() {
   const [loading, setLoading] = useState(false);
   const [mercancia, setMercancia] = useState<ProductoList[]>([]);
   const [stockBajo, setStockBajo] = useState<ProductoList[]>([]);
+  const [categorias, setCategorias] = useState<Categoria[]>([]);
+  const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [search, setSearch] = useState('');
+  const [estadoFiltro, setEstadoFiltro] = useState<EstadoFiltro>('todos');
+  const [categoriaFiltro, setCategoriaFiltro] = useState('todos');
+  const [proveedorFiltro, setProveedorFiltro] = useState('todos');
   const [page, setPage] = useState(1);
   const [totalRegistros, setTotalRegistros] = useState(0);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -80,6 +98,7 @@ export default function Articulos() {
 
   useEffect(() => {
     loadEstadisticas();
+    loadFiltros();
   }, []);
 
   useEffect(() => {
@@ -97,7 +116,7 @@ export default function Articulos() {
       }
     }, 350);
     return () => clearTimeout(timeout);
-  }, [activeTab, search, page]);
+  }, [activeTab, search, page, categoriaFiltro, proveedorFiltro, estadoFiltro]);
 
   const loadEstadisticas = async () => {
     try {
@@ -108,10 +127,32 @@ export default function Articulos() {
     }
   };
 
+  const loadFiltros = async () => {
+    try {
+      const [categoriasData, proveedoresData] = await Promise.all([
+        inventarioApi.getCategorias({ is_active: true }),
+        inventarioApi.getProveedores({ is_active: true }),
+      ]);
+      setCategorias(parseListado(categoriasData).items);
+      setProveedores(parseListado(proveedoresData).items);
+    } catch (error) {
+      console.error('Error al cargar filtros:', error);
+    }
+  };
+
   const loadMercancia = async () => {
     try {
       setLoading(true);
-      const data = await inventarioApi.getProductos({ search, page });
+      const categoria =
+        categoriaFiltro !== 'todos' ? Number(categoriaFiltro) : undefined;
+      const proveedor =
+        proveedorFiltro !== 'todos' ? Number(proveedorFiltro) : undefined;
+      const data = await inventarioApi.getProductos({
+        search,
+        page,
+        categoria,
+        proveedor,
+      });
       setMercancia(data.results);
       setTotalRegistros(data.count);
     } catch (error) {
@@ -124,9 +165,10 @@ export default function Articulos() {
   const loadStockBajo = async () => {
     try {
       setLoading(true);
-      const data = await inventarioApi.getStockBajo();
-      setStockBajo(data);
-      setTotalRegistros(data.length);
+      const data = await inventarioApi.getStockBajo({ page });
+      const parsed = parseListado(data);
+      setStockBajo(parsed.items);
+      setTotalRegistros(parsed.count);
     } catch (error) {
       console.error('Error al cargar stock bajo:', error);
     } finally {
@@ -254,6 +296,14 @@ export default function Articulos() {
       </span>
     );
   };
+
+  const totalPages = Math.max(1, Math.ceil(totalRegistros / PAGE_SIZE));
+  const mercanciaFiltrada = mercancia.filter((producto) => {
+    if (estadoFiltro === 'todos') return true;
+    if (estadoFiltro === 'agotado') return producto.stock_estado === 'AGOTADO';
+    if (estadoFiltro === 'bajo') return producto.stock_estado === 'BAJO';
+    return producto.stock_estado === 'OK';
+  });
 
   return (
     <div className="space-y-6">
@@ -386,15 +436,63 @@ export default function Articulos() {
       {activeTab === 'mercancia' && (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2">
-              <Search size={16} className="text-slate-400" />
-              <input
-                type="text"
-                placeholder="Buscar por código o nombre"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                className="w-64 bg-transparent text-sm text-slate-700 outline-none"
-              />
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2">
+                <Search size={16} className="text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Buscar por código o nombre"
+                  value={search}
+                  onChange={(event) => {
+                    setSearch(event.target.value);
+                    setPage(1);
+                  }}
+                  className="w-64 bg-transparent text-sm text-slate-700 outline-none"
+                />
+              </div>
+              <select
+                value={categoriaFiltro}
+                onChange={(event) => {
+                  setCategoriaFiltro(event.target.value);
+                  setPage(1);
+                }}
+                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+              >
+                <option value="todos">Todas las categorías</option>
+                {categorias.map((categoria) => (
+                  <option key={categoria.id} value={categoria.id}>
+                    {categoria.nombre}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={proveedorFiltro}
+                onChange={(event) => {
+                  setProveedorFiltro(event.target.value);
+                  setPage(1);
+                }}
+                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+              >
+                <option value="todos">Todos los proveedores</option>
+                {proveedores.map((proveedor) => (
+                  <option key={proveedor.id} value={proveedor.id}>
+                    {proveedor.nombre}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={estadoFiltro}
+                onChange={(event) => {
+                  setEstadoFiltro(event.target.value as EstadoFiltro);
+                  setPage(1);
+                }}
+                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+              >
+                <option value="todos">Todos los estados</option>
+                <option value="ok">OK</option>
+                <option value="bajo">Stock bajo</option>
+                <option value="agotado">Agotado</option>
+              </select>
             </div>
             <div className="text-sm text-slate-500">
               Total: {totalRegistros} artículos
@@ -415,7 +513,7 @@ export default function Articulos() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {mercancia.map((producto) => (
+                {mercanciaFiltrada.map((producto) => (
                   <tr
                     key={producto.id}
                     onClick={() => setSelectedId(producto.id)}
@@ -445,7 +543,7 @@ export default function Articulos() {
                     <td className="px-4 py-3">{renderEstadoStock(producto.stock_estado)}</td>
                   </tr>
                 ))}
-                {mercancia.length === 0 && (
+                {mercanciaFiltrada.length === 0 && (
                   <tr>
                     <td colSpan={7} className="px-4 py-6 text-center text-slate-500">
                       {loading ? 'Cargando artículos...' : 'No hay artículos registrados.'}
@@ -465,10 +563,12 @@ export default function Articulos() {
             >
               Anterior
             </button>
-            <span>Página {page}</span>
+            <span>
+              Página {page} de {totalPages}
+            </span>
             <button
               type="button"
-              disabled={mercancia.length === 0 || mercancia.length < 10}
+              disabled={page >= totalPages}
               onClick={() => setPage((prev) => prev + 1)}
               className="rounded-md border border-slate-200 px-3 py-1 disabled:opacity-50"
             >
@@ -519,6 +619,30 @@ export default function Articulos() {
               </tbody>
             </table>
           </div>
+
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between text-sm text-slate-500">
+              <button
+                type="button"
+                disabled={page === 1}
+                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                className="rounded-md border border-slate-200 px-3 py-1 disabled:opacity-50"
+              >
+                Anterior
+              </button>
+              <span>
+                Página {page} de {totalPages}
+              </span>
+              <button
+                type="button"
+                disabled={page >= totalPages}
+                onClick={() => setPage((prev) => prev + 1)}
+                className="rounded-md border border-slate-200 px-3 py-1 disabled:opacity-50"
+              >
+                Siguiente
+              </button>
+            </div>
+          )}
         </div>
       )}
 

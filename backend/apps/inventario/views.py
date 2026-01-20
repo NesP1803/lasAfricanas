@@ -29,10 +29,11 @@ class CategoriaViewSet(viewsets.ModelViewSet):
     partial_update: Actualizar parcialmente
     destroy: Eliminar (soft delete)
     """
-    queryset = Categoria.objects.filter(is_active=True)
+    queryset = Categoria.objects.all()
     serializer_class = CategoriaSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['is_active']
     search_fields = ['nombre', 'descripcion']
     ordering_fields = ['nombre', 'orden', 'created_at']
     ordering = ['orden', 'nombre']
@@ -40,17 +41,18 @@ class CategoriaViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def activas(self, request):
         """Retorna solo categorías activas ordenadas"""
-        categorias = self.get_queryset().order_by('orden', 'nombre')
+        categorias = self.get_queryset().filter(is_active=True).order_by('orden', 'nombre')
         serializer = self.get_serializer(categorias, many=True)
         return Response(serializer.data)
 
 
 class ProveedorViewSet(viewsets.ModelViewSet):
     """ViewSet para gestionar proveedores"""
-    queryset = Proveedor.objects.filter(is_active=True)
+    queryset = Proveedor.objects.all()
     serializer_class = ProveedorSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['is_active']
     search_fields = ['nombre', 'nit', 'contacto', 'ciudad']
     ordering_fields = ['nombre', 'ciudad', 'created_at']
     ordering = ['nombre']
@@ -131,7 +133,11 @@ class ProductoViewSet(viewsets.ModelViewSet):
         productos = self.get_queryset().filter(
             stock__lte=models.F('stock_minimo')
         ).order_by('stock')
-        
+        page = self.paginate_queryset(productos)
+        if page is not None:
+            serializer = ProductoListSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
         serializer = ProductoListSerializer(productos, many=True)
         return Response(serializer.data)
 

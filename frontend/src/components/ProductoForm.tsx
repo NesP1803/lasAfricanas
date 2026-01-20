@@ -65,7 +65,7 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
 
   const loadCategorias = async () => {
     try {
-      const data = await inventarioApi.getCategorias();
+      const data = await inventarioApi.getCategorias({ is_active: true });
       setCategorias(Array.isArray(data) ? data : data.results);
     } catch (error) {
       console.error('Error al cargar categorías:', error);
@@ -74,7 +74,7 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
 
   const loadProveedores = async () => {
     try {
-      const data = await inventarioApi.getProveedores();
+      const data = await inventarioApi.getProveedores({ is_active: true });
       setProveedores(Array.isArray(data) ? data : data.results);
     } catch (error) {
       console.error('Error al cargar proveedores:', error);

@@ -101,12 +101,15 @@ export const ventasApi = {
     return response.json();
   },
 
-  async getClientes(params?: { search?: string; page?: number; ordering?: string }): Promise<PaginatedResponse<Cliente> | Cliente[]> {
+  async getClientes(
+    params?: { search?: string; page?: number; ordering?: string; is_active?: boolean }
+  ): Promise<PaginatedResponse<Cliente> | Cliente[]> {
     const token = localStorage.getItem('token');
     const queryParams = new URLSearchParams();
     if (params?.search) queryParams.append('search', params.search);
     if (params?.page) queryParams.append('page', params.page.toString());
     if (params?.ordering) queryParams.append('ordering', params.ordering);
+    if (params?.is_active !== undefined) queryParams.append('is_active', String(params.is_active));
     const query = queryParams.toString();
     const response = await fetch(`${API_URL}/clientes/${query ? `?${query}` : ''}`, {
       headers: {

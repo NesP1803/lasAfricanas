@@ -183,9 +183,14 @@ export const inventarioApi = {
     if (!response.ok) throw new Error('Error al eliminar producto');
   },
 
-  async getStockBajo(): Promise<ProductoList[]> {
+  async getStockBajo(
+    params?: { page?: number }
+  ): Promise<PaginatedResponse<ProductoList> | ProductoList[]> {
     const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/productos/stock_bajo/`, {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append('page', params.page.toString());
+    const query = queryParams.toString();
+    const response = await fetch(`${API_URL}/productos/stock_bajo/${query ? `?${query}` : ''}`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
@@ -228,12 +233,15 @@ export const inventarioApi = {
   },
 
   // Categorías
-  async getCategorias(params?: { search?: string; page?: number; ordering?: string }): Promise<Categoria[] | PaginatedResponse<Categoria>> {
+  async getCategorias(
+    params?: { search?: string; page?: number; ordering?: string; is_active?: boolean }
+  ): Promise<Categoria[] | PaginatedResponse<Categoria>> {
     const token = localStorage.getItem('token');
     const queryParams = new URLSearchParams();
     if (params?.search) queryParams.append('search', params.search);
     if (params?.page) queryParams.append('page', params.page.toString());
     if (params?.ordering) queryParams.append('ordering', params.ordering);
+    if (params?.is_active !== undefined) queryParams.append('is_active', String(params.is_active));
     const query = queryParams.toString();
     const response = await fetch(`${API_URL}/categorias/${query ? `?${query}` : ''}`, {
       headers: {
@@ -295,12 +303,15 @@ export const inventarioApi = {
   },
 
   // Proveedores
-  async getProveedores(params?: { search?: string; page?: number; ordering?: string }): Promise<Proveedor[] | PaginatedResponse<Proveedor>> {
+  async getProveedores(
+    params?: { search?: string; page?: number; ordering?: string; is_active?: boolean }
+  ): Promise<Proveedor[] | PaginatedResponse<Proveedor>> {
     const token = localStorage.getItem('token');
     const queryParams = new URLSearchParams();
     if (params?.search) queryParams.append('search', params.search);
     if (params?.page) queryParams.append('page', params.page.toString());
     if (params?.ordering) queryParams.append('ordering', params.ordering);
+    if (params?.is_active !== undefined) queryParams.append('is_active', String(params.is_active));
     const query = queryParams.toString();
     const response = await fetch(`${API_URL}/proveedores/${query ? `?${query}` : ''}`, {
       headers: {

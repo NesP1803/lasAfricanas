@@ -18,11 +18,11 @@ from .serializers import (
 
 class ClienteViewSet(viewsets.ModelViewSet):
     """ViewSet para gestionar clientes"""
-    queryset = Cliente.objects.filter(is_active=True)
+    queryset = Cliente.objects.all()
     serializer_class = ClienteSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['tipo_documento', 'ciudad']
+    filterset_fields = ['tipo_documento', 'ciudad', 'is_active']
     search_fields = ['numero_documento', 'nombre', 'telefono', 'email']
     ordering_fields = ['nombre', 'created_at']
     ordering = ['nombre']
