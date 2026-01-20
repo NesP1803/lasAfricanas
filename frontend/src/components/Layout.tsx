@@ -215,7 +215,6 @@ export default function Layout() {
             { label: "Cambiar Clave", path: "/configuracion?tab=clave" },
           ]
         : [
-            { label: "Mi perfil", path: "/configuracion?tab=perfil" },
             { label: "Cambiar Clave", path: "/configuracion?tab=clave" },
           ],
     [isAdmin]

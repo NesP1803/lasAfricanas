@@ -26,7 +26,6 @@ import {
 } from "../store/moduleAccess";
 
 type ConfigTab =
-  | "perfil"
   | "facturacion"
   | "empresa"
   | "impuestos"
@@ -88,7 +87,7 @@ export default function Configuracion() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const isAdmin = user?.role?.toUpperCase() === "ADMIN";
-  const defaultTab: ConfigTab = isAdmin ? "facturacion" : "perfil";
+  const defaultTab: ConfigTab = isAdmin ? "facturacion" : "clave";
   const initialTab =
     (searchParams.get("tab") as ConfigTab) || defaultTab;
 
@@ -141,14 +140,12 @@ export default function Configuracion() {
   const [mensajeImpuesto, setMensajeImpuesto] = useState("");
   const [mensajeUsuario, setMensajeUsuario] = useState("");
   const [mensajeNuevoUsuario, setMensajeNuevoUsuario] = useState("");
-  const [mensajePerfil, setMensajePerfil] = useState("");
   const [mensajeAccesos, setMensajeAccesos] = useState("");
 
   const [claveActual, setClaveActual] = useState("");
   const [nuevaClave, setNuevaClave] = useState("");
   const [confirmarClave, setConfirmarClave] = useState("");
 
-  const [perfil, setPerfil] = useState<UsuarioAdmin | null>(null);
   const [accesosModulos, setAccesosModulos] = useState<ModuleAccess>(
     DEFAULT_MODULE_ACCESS
   );
@@ -157,7 +154,6 @@ export default function Configuracion() {
   const tabs = useMemo(() => {
     if (!isAdmin) {
       return [
-        { id: "perfil", label: "Mi perfil", icon: <UserCog size={18} /> },
         { id: "clave", label: "Cambiar clave", icon: <UserCog size={18} /> },
       ];
     }
@@ -505,27 +501,6 @@ export default function Configuracion() {
     }
   };
 
-  const handleGuardarPerfil = async () => {
-    if (!perfil) {
-      return;
-    }
-
-    try {
-      const data = await configuracionAPI.actualizarUsuarioActual({
-        email: perfil.email,
-        first_name: perfil.first_name,
-        last_name: perfil.last_name,
-        telefono: perfil.telefono ?? "",
-        sede: perfil.sede ?? "",
-      });
-      setPerfil(data);
-      setMensajePerfil("Tus datos se actualizaron correctamente.");
-    } catch (error) {
-      console.error("Error actualizando perfil:", error);
-      setMensajePerfil("No se pudo actualizar tu perfil.");
-    }
-  };
-
   const handleGuardarAccesos = async () => {
     if (!accesosModulosId) {
       setMensajeAccesos("No se encontró la configuración de módulos.");
@@ -747,122 +722,6 @@ export default function Configuracion() {
           ))}
         </div>
       </div>
-
-      {activeTab === "perfil" && (
-        <section className="rounded-2xl bg-white p-6 shadow-sm">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h3 className="text-lg font-semibold text-slate-900">
-                Datos personales
-              </h3>
-              <p className="text-sm text-slate-500">
-                Mantén actualizada tu información de contacto.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={handleGuardarPerfil}
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-blue-700"
-              disabled={!perfil}
-            >
-              <Save size={16} /> Guardar
-            </button>
-          </div>
-
-          {mensajePerfil && (
-            <div className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-              {mensajePerfil}
-            </div>
-          )}
-
-          {!perfil ? (
-            <div className="mt-6 rounded-lg border border-slate-100 bg-slate-50 px-4 py-3 text-sm text-slate-500">
-              Cargando tu perfil...
-            </div>
-          ) : (
-            <div className="mt-6 grid gap-4 md:grid-cols-2">
-              <label className="space-y-2 text-sm font-medium text-slate-700">
-                Usuario
-                <input
-                  value={perfil.username}
-                  disabled
-                  className="w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-500"
-                />
-              </label>
-              <label className="space-y-2 text-sm font-medium text-slate-700">
-                Correo electrónico
-                <input
-                  value={perfil.email || ""}
-                  onChange={(event) =>
-                    setPerfil((prev) =>
-                      prev
-                        ? { ...prev, email: event.target.value }
-                        : prev
-                    )
-                  }
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                />
-              </label>
-              <label className="space-y-2 text-sm font-medium text-slate-700">
-                Nombres
-                <input
-                  value={perfil.first_name || ""}
-                  onChange={(event) =>
-                    setPerfil((prev) =>
-                      prev
-                        ? { ...prev, first_name: event.target.value }
-                        : prev
-                    )
-                  }
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                />
-              </label>
-              <label className="space-y-2 text-sm font-medium text-slate-700">
-                Apellidos
-                <input
-                  value={perfil.last_name || ""}
-                  onChange={(event) =>
-                    setPerfil((prev) =>
-                      prev
-                        ? { ...prev, last_name: event.target.value }
-                        : prev
-                    )
-                  }
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                />
-              </label>
-              <label className="space-y-2 text-sm font-medium text-slate-700">
-                Teléfono
-                <input
-                  value={perfil.telefono || ""}
-                  onChange={(event) =>
-                    setPerfil((prev) =>
-                      prev
-                        ? { ...prev, telefono: event.target.value }
-                        : prev
-                    )
-                  }
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                />
-              </label>
-              <label className="space-y-2 text-sm font-medium text-slate-700">
-                Sede
-                <input
-                  value={perfil.sede || ""}
-                  onChange={(event) =>
-                    setPerfil((prev) =>
-                      prev
-                        ? { ...prev, sede: event.target.value }
-                        : prev
-                    )
-                  }
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                />
-              </label>
-            </div>
-          )}
-        </section>
-      )}
 
       {activeTab === "facturacion" && (
         <section className="grid gap-6 lg:grid-cols-3">
