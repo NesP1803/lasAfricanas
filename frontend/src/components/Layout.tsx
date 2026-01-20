@@ -206,7 +206,6 @@ export default function Layout() {
     () =>
       isAdmin
         ? [
-            { label: "Mi perfil", path: "/configuracion?tab=perfil" },
             { label: "Facturación", path: "/configuracion?tab=facturacion" },
             { label: "Empresa", path: "/configuracion?tab=empresa" },
             { label: "Usuarios", path: "/configuracion?tab=usuarios" },
@@ -216,7 +215,6 @@ export default function Layout() {
             { label: "Cambiar Clave", path: "/configuracion?tab=clave" },
           ]
         : [
-            { label: "Mi perfil", path: "/configuracion?tab=perfil" },
             { label: "Cambiar Clave", path: "/configuracion?tab=clave" },
           ],
     [isAdmin]
