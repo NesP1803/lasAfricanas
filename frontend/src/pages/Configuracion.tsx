@@ -163,7 +163,6 @@ export default function Configuracion() {
     }
 
     return [
-      { id: "perfil", label: "Mi perfil", icon: <UserCog size={18} /> },
       {
         id: "facturacion",
         label: "Facturación",
@@ -341,7 +340,7 @@ export default function Configuracion() {
   }, [isAdmin]);
 
   useEffect(() => {
-    if (!user?.id) {
+    if (!user?.id || isAdmin) {
       return;
     }
 
@@ -355,7 +354,7 @@ export default function Configuracion() {
     };
 
     cargarPerfil();
-  }, [user?.id]);
+  }, [isAdmin, user?.id]);
 
   useEffect(() => {
     if (!isAdmin) {
@@ -374,23 +373,6 @@ export default function Configuracion() {
 
     cargarAccesos();
   }, [isAdmin]);
-
-  useEffect(() => {
-    if (!user?.id) {
-      return;
-    }
-
-    const cargarPerfil = async () => {
-      try {
-        const data = await configuracionAPI.obtenerUsuarioActual();
-        setPerfil(data);
-      } catch (error) {
-        console.error("Error cargando perfil:", error);
-      }
-    };
-
-    cargarPerfil();
-  }, [user?.id]);
 
   useEffect(() => {
     if (!isAdmin) {
