@@ -147,7 +147,7 @@ export default function Taller() {
   const loadMecanicos = async () => {
     try {
       setLoading(true);
-      const data = await tallerApi.getMecanicos();
+      const data = await tallerApi.getMecanicos({ is_active: true });
       const parsed = parseListado(data);
       setMecanicos(parsed.items);
     } catch (error) {
@@ -267,9 +267,9 @@ export default function Taller() {
   const loadMotoFormOptions = async () => {
     try {
       const [clientesResp, proveedoresResp, mecanicosResp] = await Promise.all([
-        ventasApi.getClientes({}),
-        inventarioApi.getProveedores(),
-        tallerApi.getMecanicos(),
+        ventasApi.getClientes({ is_active: true }),
+        inventarioApi.getProveedores({ is_active: true }),
+        tallerApi.getMecanicos({ is_active: true }),
       ]);
       setClientes(parseListado(clientesResp).items);
       setProveedores(parseListado(proveedoresResp).items);

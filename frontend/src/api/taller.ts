@@ -61,11 +61,14 @@ export interface OrdenTaller {
 const getToken = () => localStorage.getItem('token');
 
 export const tallerApi = {
-  async getMecanicos(params?: { search?: string; page?: number }): Promise<PaginatedResponse<Mecanico> | Mecanico[]> {
+  async getMecanicos(
+    params?: { search?: string; page?: number; is_active?: boolean }
+  ): Promise<PaginatedResponse<Mecanico> | Mecanico[]> {
     const token = getToken();
     const queryParams = new URLSearchParams();
     if (params?.search) queryParams.append('search', params.search);
     if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.is_active !== undefined) queryParams.append('is_active', String(params.is_active));
     const query = queryParams.toString();
     const response = await fetch(`${API_URL}/mecanicos/${query ? `?${query}` : ''}`, {
       headers: {

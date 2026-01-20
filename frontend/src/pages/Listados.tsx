@@ -24,6 +24,7 @@ import type { Cliente, PaginatedResponse, UsuarioAdmin } from '../types';
 type ActiveTab = 'clientes' | 'proveedores' | 'empleados' | 'categorias' | 'mecanicos';
 
 type FormMode = 'create' | 'edit';
+type EstadoFiltro = 'activos' | 'inactivos' | 'todos';
 
 type ListadoTab = {
   key: ActiveTab;
@@ -88,6 +89,8 @@ const parseListado = <T,>(data: PaginatedResponse<T> | T[]) => {
   return { items: data.results, count: data.count };
 };
 
+const PAGE_SIZE = 50;
+
 export default function Listados() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
@@ -103,6 +106,8 @@ export default function Listados() {
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [totalRegistros, setTotalRegistros] = useState(0);
+  const [page, setPage] = useState(1);
+  const [estadoFiltro, setEstadoFiltro] = useState<EstadoFiltro>('activos');
 
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
@@ -119,6 +124,8 @@ export default function Listados() {
   useEffect(() => {
     setSearch('');
     setSelectedId(null);
+    setPage(1);
+    setEstadoFiltro('activos');
   }, [activeTab]);
 
   useEffect(() => {
@@ -126,42 +133,44 @@ export default function Listados() {
       loadListado();
     }, 350);
     return () => clearTimeout(delay);
-  }, [activeTab, search]);
+  }, [activeTab, search, page, estadoFiltro]);
 
   const loadListado = async () => {
     try {
       setLoading(true);
       setFormError(null);
+      const is_active =
+        estadoFiltro === 'todos' ? undefined : estadoFiltro === 'activos';
       if (activeTab === 'clientes') {
-        const data = await ventasApi.getClientes({ search });
+        const data = await ventasApi.getClientes({ search, page, is_active });
         const parsed = parseListado(data);
         setClientes(parsed.items);
         setTotalRegistros(parsed.count);
         return;
       }
       if (activeTab === 'proveedores') {
-        const data = await inventarioApi.getProveedores({ search });
+        const data = await inventarioApi.getProveedores({ search, page, is_active });
         const parsed = parseListado(data);
         setProveedores(parsed.items);
         setTotalRegistros(parsed.count);
         return;
       }
       if (activeTab === 'categorias') {
-        const data = await inventarioApi.getCategorias({ search });
+        const data = await inventarioApi.getCategorias({ search, page, is_active });
         const parsed = parseListado(data);
         setCategorias(parsed.items);
         setTotalRegistros(parsed.count);
         return;
       }
       if (activeTab === 'empleados') {
-        const data = await usuariosApi.getUsuarios({ search });
+        const data = await usuariosApi.getUsuarios({ search, page, is_active });
         const parsed = parseListado(data);
         setUsuarios(parsed.items);
         setTotalRegistros(parsed.count);
         return;
       }
       if (activeTab === 'mecanicos') {
-        const data = await tallerApi.getMecanicos({ search });
+        const data = await tallerApi.getMecanicos({ search, page, is_active });
         const parsed = parseListado(data);
         setMecanicos(parsed.items);
         setTotalRegistros(parsed.count);
@@ -297,6 +306,8 @@ export default function Listados() {
     return 'Buscar...';
   }, [activeTab]);
 
+  const totalPages = Math.max(1, Math.ceil(totalRegistros / PAGE_SIZE));
+
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -349,15 +360,32 @@ export default function Listados() {
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-6 py-4">
-          <div className="flex flex-1 items-center gap-3 rounded-full border border-slate-200 bg-white px-4 py-2 shadow-sm">
-            <Search size={16} className="text-slate-400" />
-            <input
-              type="text"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder={searchPlaceholder}
-              className="flex-1 bg-transparent text-sm text-slate-700 outline-none"
-            />
+          <div className="flex flex-1 flex-wrap items-center gap-3">
+            <div className="flex flex-1 items-center gap-3 rounded-full border border-slate-200 bg-white px-4 py-2 shadow-sm">
+              <Search size={16} className="text-slate-400" />
+              <input
+                type="text"
+                value={search}
+                onChange={(event) => {
+                  setSearch(event.target.value);
+                  setPage(1);
+                }}
+                placeholder={searchPlaceholder}
+                className="flex-1 bg-transparent text-sm text-slate-700 outline-none"
+              />
+            </div>
+            <select
+              value={estadoFiltro}
+              onChange={(event) => {
+                setEstadoFiltro(event.target.value as EstadoFiltro);
+                setPage(1);
+              }}
+              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm"
+            >
+              <option value="activos">Activos</option>
+              <option value="inactivos">Inactivos</option>
+              <option value="todos">Todos</option>
+            </select>
           </div>
           <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
             <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
@@ -434,6 +462,27 @@ export default function Listados() {
               </tbody>
             </table>
           )}
+        </div>
+        <div className="flex items-center justify-between border-t border-slate-200 px-6 py-4 text-sm text-slate-500">
+          <button
+            type="button"
+            disabled={page === 1}
+            onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+            className="rounded-md border border-slate-200 px-3 py-1 disabled:opacity-50"
+          >
+            Anterior
+          </button>
+          <span>
+            Página {page} de {totalPages}
+          </span>
+          <button
+            type="button"
+            disabled={page >= totalPages}
+            onClick={() => setPage((prev) => prev + 1)}
+            className="rounded-md border border-slate-200 px-3 py-1 disabled:opacity-50"
+          >
+            Siguiente
+          </button>
         </div>
       </div>
 
