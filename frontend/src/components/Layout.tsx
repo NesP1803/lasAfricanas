@@ -7,7 +7,13 @@ import {
 import { useEffect, useMemo, useState, useRef, type ReactNode } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { configuracionAPI } from "../api/configuracion";
-import { DEFAULT_MODULE_ACCESS, type ModuleKey } from "../store/moduleAccess";
+import {
+  DEFAULT_MODULE_ACCESS,
+  isModuleEnabled,
+  isSectionEnabled,
+  normalizeModuleAccess,
+  type ModuleKey,
+} from "../store/moduleAccess";
 
 import {
   ClipboardList,
@@ -119,7 +125,9 @@ export default function Layout() {
   const [mobileExpanded, setMobileExpanded] = useState<Record<string, boolean>>(
     {}
   );
-  const [moduleAccess, setModuleAccess] = useState(DEFAULT_MODULE_ACCESS);
+  const [moduleAccess, setModuleAccess] = useState(() =>
+    normalizeModuleAccess(user?.modulos_permitidos ?? DEFAULT_MODULE_ACCESS)
+  );
 
   // --- Menú principal con delay ---
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
@@ -165,10 +173,18 @@ export default function Layout() {
   }, []);
 
   useEffect(() => {
+    if (!user?.id || user.role?.toUpperCase() === "ADMIN") {
+      return;
+    }
+
     const refreshAccess = async () => {
       try {
-        const data = await configuracionAPI.obtenerAccesosModulos();
-        setModuleAccess(data.access);
+        const data = await configuracionAPI.obtenerUsuarioActual();
+        setModuleAccess(
+          normalizeModuleAccess(
+            data.modulos_permitidos ?? DEFAULT_MODULE_ACCESS
+          )
+        );
       } catch (error) {
         console.error("Error cargando accesos de módulos:", error);
       }
@@ -179,7 +195,7 @@ export default function Layout() {
     return () => {
       window.removeEventListener("module-access-updated", refreshAccess);
     };
-  }, []);
+  }, [user?.id, user?.role]);
 
   if (!isAuthenticated) {
     return <Navigate to="/login" />;
@@ -199,7 +215,14 @@ export default function Layout() {
     if (isAdmin) {
       return true;
     }
-    return moduleAccess[key];
+    return isModuleEnabled(moduleAccess, key);
+  };
+
+  const sectionEnabled = (moduleKey: ModuleKey, sectionKey: string) => {
+    if (isAdmin) {
+      return true;
+    }
+    return isSectionEnabled(moduleAccess, moduleKey, sectionKey);
   };
 
   const configuracionItems = useMemo(
@@ -234,96 +257,150 @@ export default function Layout() {
 
       if (isVendedor) {
         if (moduleEnabled("taller")) {
-          items.push({
-            label: "Taller",
-            icon: <Wrench size={18} />,
-            items: [{ label: "Operaciones", path: "/taller?tab=ordenes" }],
-          });
+          const tallerItems = [
+            { label: "Operaciones", path: "/taller?tab=ordenes", key: "ordenes" },
+          ].filter((item) => sectionEnabled("taller", item.key));
+          if (tallerItems.length > 0) {
+            items.push({
+              label: "Taller",
+              icon: <Wrench size={18} />,
+              items: tallerItems.map(({ label, path }) => ({ label, path })),
+            });
+          }
         }
         if (moduleEnabled("facturacion")) {
-          items.push({
-            label: "Facturación",
-            icon: <FileText size={18} />,
-            items: [{ label: "Venta rápida", path: "/ventas" }],
-          });
+          const facturacionItems = [
+            {
+              label: "Venta rápida",
+              path: "/ventas",
+              key: "venta_rapida",
+            },
+          ].filter((item) => sectionEnabled("facturacion", item.key));
+          if (facturacionItems.length > 0) {
+            items.push({
+              label: "Facturación",
+              icon: <FileText size={18} />,
+              items: facturacionItems.map(({ label, path }) => ({ label, path })),
+            });
+          }
         }
         return items;
       }
 
       if (isMecanico) {
         if (moduleEnabled("taller")) {
-          items.push({
-            label: "Taller",
-            icon: <Wrench size={18} />,
-            items: [
-              { label: "Operaciones", path: "/taller?tab=ordenes" },
-              { label: "Registro de Motos", path: "/taller?tab=motos" },
-            ],
-          });
+          const tallerItems = [
+            { label: "Operaciones", path: "/taller?tab=ordenes", key: "ordenes" },
+            { label: "Registro de Motos", path: "/taller?tab=motos", key: "motos" },
+          ].filter((item) => sectionEnabled("taller", item.key));
+          if (tallerItems.length > 0) {
+            items.push({
+              label: "Taller",
+              icon: <Wrench size={18} />,
+              items: tallerItems.map(({ label, path }) => ({ label, path })),
+            });
+          }
         }
         return items;
       }
 
       
       if (moduleEnabled("listados")) {
-        items.push({
-          label: "Listados",
-          icon: <ClipboardList size={18} />,
-          items: [
-            { label: "Clientes", path: "/listados?tab=clientes" },
-            { label: "Proveedores", path: "/listados?tab=proveedores" },
-            { label: "Empleados", path: "/listados?tab=empleados" },
-            { label: "Categorias", path: "/listados?tab=categorias" },
-            { label: "Mecánicos", path: "/listados?tab=mecanicos" },
-          ],
-        });
+        const listadosItems = [
+          { label: "Clientes", path: "/listados?tab=clientes", key: "clientes" },
+          {
+            label: "Proveedores",
+            path: "/listados?tab=proveedores",
+            key: "proveedores",
+          },
+          {
+            label: "Empleados",
+            path: "/listados?tab=empleados",
+            key: "empleados",
+          },
+          {
+            label: "Categorias",
+            path: "/listados?tab=categorias",
+            key: "categorias",
+          },
+          { label: "Mecánicos", path: "/listados?tab=mecanicos", key: "mecanicos" },
+        ].filter((item) => sectionEnabled("listados", item.key));
+        if (listadosItems.length > 0) {
+          items.push({
+            label: "Listados",
+            icon: <ClipboardList size={18} />,
+            items: listadosItems.map(({ label, path }) => ({ label, path })),
+          });
+        }
       }
       if (moduleEnabled("articulos")) {
-        items.push({
-          label: "Artículos",
-          icon: <Boxes size={18} />,
-          items: [
-            { label: "Mercancia", path: "/articulos?tab=mercancia" },
-            { label: "Stock Bajo", path: "/articulos?tab=stock-bajo" },
-            { label: "Dar de Baja", path: "/articulos?tab=dar-de-baja" },
-          ],
-        });
+        const articulosItems = [
+          { label: "Mercancia", path: "/articulos?tab=mercancia", key: "mercancia" },
+          {
+            label: "Stock Bajo",
+            path: "/articulos?tab=stock-bajo",
+            key: "stock_bajo",
+          },
+          {
+            label: "Dar de Baja",
+            path: "/articulos?tab=dar-de-baja",
+            key: "dar_de_baja",
+          },
+        ].filter((item) => sectionEnabled("articulos", item.key));
+        if (articulosItems.length > 0) {
+          items.push({
+            label: "Artículos",
+            icon: <Boxes size={18} />,
+            items: articulosItems.map(({ label, path }) => ({ label, path })),
+          });
+        }
       }
       if (moduleEnabled("taller")) {
-        items.push({
-          label: "Taller",
-          icon: <Wrench size={18} />,
-          items: [
-            { label: "Operaciones", path: "/taller?tab=ordenes" },
-            { label: "Registro de Motos", path: "/taller?tab=motos" },
-          ],
-        });
+        const tallerItems = [
+          { label: "Operaciones", path: "/taller?tab=ordenes", key: "ordenes" },
+          { label: "Registro de Motos", path: "/taller?tab=motos", key: "motos" },
+        ].filter((item) => sectionEnabled("taller", item.key));
+        if (tallerItems.length > 0) {
+          items.push({
+            label: "Taller",
+            icon: <Wrench size={18} />,
+            items: tallerItems.map(({ label, path }) => ({ label, path })),
+          });
+        }
       }
       if (moduleEnabled("facturacion")) {
-        items.push({
-          label: "Facturación",
-          icon: <FileText size={18} />,
-          items: [
-            { label: "Venta rápida", path: "/ventas" },
-            {
-              label: "Cuentas",
-              items: [
-                { label: "Cuentas del día", path: "/ventas/cuentas-dia" },
-                {
-                  label: "Detalles cuentas",
-                  path: "/ventas/detalles-cuentas",
-                },
-              ],
-            },
-            {
-              label: "Listados",
-              items: [
-                { label: "Facturas", path: "/facturacion/facturas" },
-                { label: "Remisiones", path: "/facturacion/remisiones" },
-              ],
-            },
-          ],
-        });
+        const facturacionItems: MenuItem[] = [];
+        if (sectionEnabled("facturacion", "venta_rapida")) {
+          facturacionItems.push({ label: "Venta rápida", path: "/ventas" });
+        }
+        if (sectionEnabled("facturacion", "cuentas")) {
+          facturacionItems.push({
+            label: "Cuentas",
+            items: [
+              { label: "Cuentas del día", path: "/ventas/cuentas-dia" },
+              {
+                label: "Detalles cuentas",
+                path: "/ventas/detalles-cuentas",
+              },
+            ],
+          });
+        }
+        if (sectionEnabled("facturacion", "listados")) {
+          facturacionItems.push({
+            label: "Listados",
+            items: [
+              { label: "Facturas", path: "/facturacion/facturas" },
+              { label: "Remisiones", path: "/facturacion/remisiones" },
+            ],
+          });
+        }
+        if (facturacionItems.length > 0) {
+          items.push({
+            label: "Facturación",
+            icon: <FileText size={18} />,
+            items: facturacionItems,
+          });
+        }
       } 
       // if (moduleEnabled("reportes")) {
       //   items.push({
