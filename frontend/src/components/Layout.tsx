@@ -225,29 +225,31 @@ export default function Layout() {
     return isSectionEnabled(moduleAccess, moduleKey, sectionKey);
   };
 
-  const configuracionItems = useMemo(
-    () =>
-      isAdmin
-        ? [
-            { label: "Facturación", path: "/configuracion?tab=facturacion" },
-            { label: "Empresa", path: "/configuracion?tab=empresa" },
-            { label: "Usuarios", path: "/configuracion?tab=usuarios" },
-            { label: "Impuestos", path: "/configuracion?tab=impuestos" },
-            { label: "Auditoría", path: "/configuracion?tab=auditoria" },
-            { label: "Accesos", path: "/configuracion?tab=accesos" },
-            { label: "Cambiar Clave", path: "/configuracion?tab=clave" },
-          ]
-        : [
-            { label: "Cambiar Clave", path: "/configuracion?tab=clave" },
-          ],
-    [isAdmin]
-  );
+  const configuracionItems = useMemo(() => {
+    const sections = [
+      { label: "Facturación", path: "/configuracion?tab=facturacion", key: "facturacion" },
+      { label: "Empresa", path: "/configuracion?tab=empresa", key: "empresa" },
+      { label: "Usuarios", path: "/configuracion?tab=usuarios", key: "usuarios" },
+      { label: "Impuestos", path: "/configuracion?tab=impuestos", key: "impuestos" },
+      { label: "Auditoría", path: "/configuracion?tab=auditoria", key: "auditoria" },
+      { label: "Accesos", path: "/configuracion?tab=accesos", key: "accesos" },
+      { label: "Cambiar Clave", path: "/configuracion?tab=clave", key: "clave" },
+    ];
+
+    if (isAdmin) {
+      return sections.map(({ label, path }) => ({ label, path }));
+    }
+
+    return sections
+      .filter((section) => sectionEnabled("configuracion", section.key))
+      .map(({ label, path }) => ({ label, path }));
+  }, [isAdmin, moduleAccess]);
 
   const menuItems = useMemo<MenuItem[]>(
     () => {
       const items: MenuItem[] = [];
 
-      if (moduleEnabled("configuracion")) {
+      if (moduleEnabled("configuracion") && configuracionItems.length > 0) {
         items.push({
           label: "Configuración",
           icon: <Settings size={18} />,
