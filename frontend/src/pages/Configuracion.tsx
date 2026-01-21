@@ -211,7 +211,12 @@ export default function Configuracion() {
   );
 
   const moduleOptions = useMemo<
-    Array<{ key: keyof ModuleAccess; label: string; description: string }>
+    Array<{
+      key: keyof ModuleAccess;
+      label: string;
+      description: string;
+      isSubOption?: boolean;
+    }>
   >(
     () => [
       {
@@ -240,9 +245,39 @@ export default function Configuracion() {
         description: "Operaciones y registro de motos del taller.",
       },
       {
+        key: "taller_operaciones",
+        label: "Operaciones",
+        description: "Acceso a las operaciones del taller.",
+        isSubOption: true,
+      },
+      {
+        key: "taller_registro_motos",
+        label: "Registro de motos",
+        description: "Gestión del registro de motos del taller.",
+        isSubOption: true,
+      },
+      {
         key: "facturacion",
         label: "Facturación",
         description: "Venta rápida, cuentas y listados de facturas.",
+      },
+      {
+        key: "facturacion_venta_rapida",
+        label: "Venta rápida",
+        description: "Acceso al flujo de venta rápida.",
+        isSubOption: true,
+      },
+      {
+        key: "facturacion_cuentas",
+        label: "Cuentas",
+        description: "Gestión de cuentas dentro de facturación.",
+        isSubOption: true,
+      },
+      {
+        key: "facturacion_listado_facturas",
+        label: "Listado de facturas",
+        description: "Consulta y listado de facturas.",
+        isSubOption: true,
       },
       {
         key: "reportes",
@@ -1740,7 +1775,11 @@ export default function Configuracion() {
                 {moduleOptions.map((modulo) => (
                   <label
                     key={modulo.key}
-                    className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4"
+                    className={`flex items-center justify-between gap-4 rounded-xl border p-4 ${
+                      modulo.isSubOption
+                        ? "border-slate-100 bg-white pl-6"
+                        : "border-slate-200 bg-slate-50"
+                    }`}
                   >
                     <div>
                       <p className="text-sm font-semibold text-slate-900">

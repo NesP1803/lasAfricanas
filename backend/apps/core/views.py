@@ -1,7 +1,11 @@
 from rest_framework import viewsets
 from rest_framework.parsers import FormParser, MultiPartParser, JSONParser
 from rest_framework.response import Response
-from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
+from rest_framework.permissions import (
+    AllowAny,
+    BasePermission,
+    IsAuthenticated,
+)
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from .models import (
@@ -18,6 +22,16 @@ from .serializers import (
     ImpuestoSerializer,
     AuditoriaSerializer,
 )
+
+
+class IsAdminOrTipoAdmin(BasePermission):
+    def has_permission(self, request, view):
+        user = request.user
+        return bool(
+            user
+            and user.is_authenticated
+            and (user.is_staff or user.is_superuser or getattr(user, 'tipo_usuario', None) == 'ADMIN')
+        )
 
 
 class ConfiguracionEmpresaViewSet(viewsets.ModelViewSet):
@@ -88,7 +102,7 @@ class ConfiguracionModulosViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         if self.action in {"list", "retrieve"}:
             return [IsAuthenticated()]
-        return [IsAdminUser()]
+        return [IsAdminOrTipoAdmin()]
 
     def list(self, request, *args, **kwargs):
         configuracion, _ = ConfiguracionEmpresa.objects.get_or_create(id=1)
