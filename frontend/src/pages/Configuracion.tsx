@@ -1658,7 +1658,7 @@ export default function Configuracion() {
 
       {accessModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4 py-6">
-          <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+          <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
               <div>
                 <p className="text-xs font-semibold uppercase text-blue-500">
@@ -1690,7 +1690,7 @@ export default function Configuracion() {
                 </div>
               )}
 
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {moduleOptions.map((modulo) => {
                   const accessEntry = accesosModulos[modulo.key];
                   const sections = modulo.sections ?? [];
