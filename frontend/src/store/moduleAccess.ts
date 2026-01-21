@@ -110,12 +110,27 @@ const buildDefaultModuleAccess = (): ModuleAccess =>
     return acc;
   }, {} as ModuleAccess);
 
+const buildEmptyModuleAccess = (): ModuleAccess =>
+  MODULE_DEFINITIONS.reduce((acc, definition) => {
+    const sections =
+      definition.sections?.reduce<Record<string, boolean>>((sectionAcc, section) => {
+        sectionAcc[section.key] = false;
+        return sectionAcc;
+      }, {}) ?? {};
+
+    acc[definition.key] = {
+      enabled: false,
+      sections,
+    };
+    return acc;
+  }, {} as ModuleAccess);
+
 export const DEFAULT_MODULE_ACCESS: ModuleAccess = buildDefaultModuleAccess();
 
 export const normalizeModuleAccess = (
   access?: Partial<ModuleAccess> | null
 ): ModuleAccess => {
-  const base = buildDefaultModuleAccess();
+  const base = access ? buildEmptyModuleAccess() : buildDefaultModuleAccess();
   if (!access) {
     return base;
   }

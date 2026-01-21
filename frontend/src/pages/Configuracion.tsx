@@ -1658,7 +1658,7 @@ export default function Configuracion() {
 
       {accessModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4 py-6">
-          <div className="w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+          <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
               <div>
                 <p className="text-xs font-semibold uppercase text-blue-500">
@@ -1678,7 +1678,7 @@ export default function Configuracion() {
                 <X size={18} />
               </button>
             </div>
-            <div className="space-y-6 px-6 py-4">
+            <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-4">
               <p className="text-sm text-slate-500">
                 Activa o desactiva los módulos disponibles para los perfiles
                 operativos.
@@ -1690,7 +1690,7 @@ export default function Configuracion() {
                 </div>
               )}
 
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {moduleOptions.map((modulo) => {
                   const accessEntry = accesosModulos[modulo.key];
                   const sections = modulo.sections ?? [];
@@ -1803,22 +1803,22 @@ export default function Configuracion() {
                 {Object.keys(DEFAULT_MODULE_ACCESS).length} módulos habilitados.
               </div>
 
-              <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 pt-4">
-                <button
-                  type="button"
-                  onClick={closeAccessModal}
-                  className="rounded-full border border-slate-200 px-5 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={handleGuardarAccesos}
-                  className="inline-flex items-center gap-2 rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
-                >
-                  <Save size={16} /> Guardar accesos
-                </button>
-              </div>
+            </div>
+            <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 px-6 py-4">
+              <button
+                type="button"
+                onClick={closeAccessModal}
+                className="rounded-full border border-slate-200 px-5 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleGuardarAccesos}
+                className="inline-flex items-center gap-2 rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+              >
+                <Save size={16} /> Guardar accesos
+              </button>
             </div>
           </div>
         </div>
