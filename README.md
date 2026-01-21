@@ -5,7 +5,51 @@ Guía de instalación y configuración para el **backend** (Django) y el **front
 ## Requisitos
 
 - **Python 3.11+** (recomendado) y `pip`
+- Paso 1: Verificar si ya tienes pip
+
+- En la terminal (PowerShell o CMD):
+
+```pip --version```
+
+Paso 2: Si NO está instalado pip
+
+- Ejecuta:
+
+```python -m ensurepip --upgrade```
+
+- Luego actualízalo:
+
+```python -m pip install --upgrade pip```
+
+- Verifica:
+
+```pip --version```
+
 - **Node.js 20+** (recomendado) y `npm`
+- Paso 1: Verificar si tienes Node y npm
+```node -v```
+```npm -v```
+
+Paso 2: Instalar Node.js (incluye npm)
+
+- Descarga Node.js LTS desde:
+```https://nodejs.org```
+
+- Instálalo marcando esta opción:
+
+✅ Add to PATH
+
+- Cierra TODAS las terminales
+
+- Abre una nueva y verifica:
+
+```node -v```
+```npm -v```
+
+- Para instalar y ejecutar
+```npm install```
+```npm run dev```
+
 - **PostgreSQL 14+**
 
 ## Backend (Django)
@@ -21,13 +65,6 @@ source .venv/bin/activate
 > En Windows usa: `\.venv\Scripts\activate`
 
 **Si ya existe la carpeta del entorno virtual (por ejemplo `venv` o `.venv`):**
-
-```bash
-# Linux/macOS
-source venv/bin/activate
-# o, si el entorno se llama .venv
-source .venv/bin/activate
-```
 
 ```powershell
 # Windows (PowerShell)
