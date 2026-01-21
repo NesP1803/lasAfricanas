@@ -31,8 +31,7 @@ type ConfigTab =
   | "impuestos"
   | "auditoria"
   | "usuarios"
-  | "clave"
-  | "accesos";
+  | "clave";
 
 type PlantillaField =
   | "plantilla_factura_carta"
@@ -108,6 +107,10 @@ export default function Configuracion() {
     []
   );
   const [userModalOpen, setUserModalOpen] = useState(false);
+  const [accessModalOpen, setAccessModalOpen] = useState(false);
+  const [accessModalUser, setAccessModalUser] = useState<UsuarioAdmin | null>(
+    null
+  );
   const [userModalMode, setUserModalMode] = useState<"create" | "edit">(
     "create"
   );
@@ -168,7 +171,6 @@ export default function Configuracion() {
       { id: "usuarios", label: "Usuarios", icon: <Users size={18} /> },
       { id: "impuestos", label: "Impuestos", icon: <Plus size={18} /> },
       { id: "auditoria", label: "Auditoría", icon: <Users size={18} /> },
-      { id: "accesos", label: "Accesos", icon: <ShieldCheck size={18} /> },
       { id: "clave", label: "Cambiar clave", icon: <UserCog size={18} /> },
     ];
   }, [isAdmin]);
@@ -209,7 +211,12 @@ export default function Configuracion() {
   );
 
   const moduleOptions = useMemo<
-    Array<{ key: keyof ModuleAccess; label: string; description: string }>
+    Array<{
+      key: keyof ModuleAccess;
+      label: string;
+      description: string;
+      isSubOption?: boolean;
+    }>
   >(
     () => [
       {
@@ -238,9 +245,39 @@ export default function Configuracion() {
         description: "Operaciones y registro de motos del taller.",
       },
       {
+        key: "taller_operaciones",
+        label: "Operaciones",
+        description: "Acceso a las operaciones del taller.",
+        isSubOption: true,
+      },
+      {
+        key: "taller_registro_motos",
+        label: "Registro de motos",
+        description: "Gestión del registro de motos del taller.",
+        isSubOption: true,
+      },
+      {
         key: "facturacion",
         label: "Facturación",
         description: "Venta rápida, cuentas y listados de facturas.",
+      },
+      {
+        key: "facturacion_venta_rapida",
+        label: "Venta rápida",
+        description: "Acceso al flujo de venta rápida.",
+        isSubOption: true,
+      },
+      {
+        key: "facturacion_cuentas",
+        label: "Cuentas",
+        description: "Gestión de cuentas dentro de facturación.",
+        isSubOption: true,
+      },
+      {
+        key: "facturacion_listado_facturas",
+        label: "Listado de facturas",
+        description: "Consulta y listado de facturas.",
+        isSubOption: true,
       },
       {
         key: "reportes",
@@ -559,6 +596,18 @@ export default function Configuracion() {
     });
     setMensajeNuevoUsuario("");
     setUserModalOpen(true);
+  };
+
+  const openAccessModal = (usuario: UsuarioAdmin) => {
+    setAccessModalUser(usuario);
+    setMensajeAccesos("");
+    setAccessModalOpen(true);
+  };
+
+  const closeAccessModal = () => {
+    setAccessModalOpen(false);
+    setAccessModalUser(null);
+    setMensajeAccesos("");
   };
 
   const handleGuardarUsuarioModal = async () => {
@@ -1273,69 +1322,6 @@ export default function Configuracion() {
         </section>
       )}
 
-      {activeTab === "accesos" && (
-        <section className="rounded-2xl bg-white p-6 shadow-sm">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h3 className="text-lg font-semibold text-slate-900">
-                Accesos por módulos
-              </h3>
-              <p className="text-sm text-slate-500">
-                Activa o desactiva los módulos disponibles para los perfiles
-                operativos.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={handleGuardarAccesos}
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-blue-700"
-            >
-              <Save size={16} /> Guardar
-            </button>
-          </div>
-
-          {mensajeAccesos && (
-            <div className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-              {mensajeAccesos}
-            </div>
-          )}
-
-          <div className="mt-6 grid gap-4 md:grid-cols-2">
-            {moduleOptions.map((modulo) => (
-              <label
-                key={modulo.key}
-                className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4"
-              >
-                <div>
-                  <p className="text-sm font-semibold text-slate-900">
-                    {modulo.label}
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    {modulo.description}
-                  </p>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={accesosModulos[modulo.key]}
-                  onChange={(event) =>
-                    setAccesosModulos((prev) => ({
-                      ...prev,
-                      [modulo.key]: event.target.checked,
-                    }))
-                  }
-                  className="h-5 w-5 accent-blue-600"
-                />
-              </label>
-            ))}
-          </div>
-
-          <div className="mt-6 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
-            Estado por defecto:{" "}
-            {Object.keys(DEFAULT_MODULE_ACCESS).length} módulos habilitados.
-          </div>
-        </section>
-      )}
-
       {activeTab === "usuarios" && (
         <section className="rounded-2xl bg-white p-6 shadow-sm">
           <h3 className="text-lg font-semibold text-slate-900">Usuarios</h3>
@@ -1431,6 +1417,13 @@ export default function Configuracion() {
                             className="rounded-lg bg-slate-900 px-3 py-1 text-xs font-medium text-white hover:bg-slate-800"
                           >
                             Guardar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openAccessModal(usuario)}
+                            className="ml-2 rounded-lg border border-blue-200 px-3 py-1 text-xs font-medium text-blue-600 hover:border-blue-400"
+                          >
+                            Accesos
                           </button>
                           <button
                             type="button"
@@ -1737,6 +1730,99 @@ export default function Configuracion() {
                   className="rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
                 >
                   {userModalMode === "create" ? "Crear usuario" : "Guardar"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {accessModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4 py-6">
+          <div className="w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+              <div>
+                <p className="text-xs font-semibold uppercase text-blue-500">
+                  Accesos por módulos
+                </p>
+                <h2 className="text-lg font-semibold text-slate-900">
+                  {accessModalUser
+                    ? `Accesos de ${accessModalUser.username}`
+                    : "Configurar accesos"}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={closeAccessModal}
+                className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="space-y-6 px-6 py-4">
+              <p className="text-sm text-slate-500">
+                Activa o desactiva los módulos disponibles para los perfiles
+                operativos.
+              </p>
+
+              {mensajeAccesos && (
+                <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                  {mensajeAccesos}
+                </div>
+              )}
+
+              <div className="grid gap-4 md:grid-cols-2">
+                {moduleOptions.map((modulo) => (
+                  <label
+                    key={modulo.key}
+                    className={`flex items-center justify-between gap-4 rounded-xl border p-4 ${
+                      modulo.isSubOption
+                        ? "border-slate-100 bg-white pl-6"
+                        : "border-slate-200 bg-slate-50"
+                    }`}
+                  >
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">
+                        {modulo.label}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {modulo.description}
+                      </p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={accesosModulos[modulo.key]}
+                      onChange={(event) =>
+                        setAccesosModulos((prev) => ({
+                          ...prev,
+                          [modulo.key]: event.target.checked,
+                        }))
+                      }
+                      className="h-5 w-5 accent-blue-600"
+                    />
+                  </label>
+                ))}
+              </div>
+
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
+                Estado por defecto:{" "}
+                {Object.keys(DEFAULT_MODULE_ACCESS).length} módulos habilitados.
+              </div>
+
+              <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 pt-4">
+                <button
+                  type="button"
+                  onClick={closeAccessModal}
+                  className="rounded-full border border-slate-200 px-5 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleGuardarAccesos}
+                  className="inline-flex items-center gap-2 rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+                >
+                  <Save size={16} /> Guardar accesos
                 </button>
               </div>
             </div>
