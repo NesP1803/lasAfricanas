@@ -1,11 +1,13 @@
 import { createContext, useContext, useState } from 'react';
 import type { ReactNode } from 'react';
+import type { ModuleAccess } from '../store/moduleAccess';
 
 interface User {
   id: number;
   username: string;
   role: string;
   email?: string;
+  modulos_permitidos?: ModuleAccess;
 }
 
 interface AuthContextType {
@@ -47,13 +49,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       console.log('Response status:', response.status);
 
+      const parseResponseBody = async () => {
+        const text = await response.text();
+        if (!text) {
+          return null;
+        }
+        try {
+          return JSON.parse(text);
+        } catch (parseError) {
+          console.error('Error parsing login response:', parseError);
+          throw new Error('Respuesta inválida del servidor');
+        }
+      };
+
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Usuario o contraseña incorrectos');
+        const errorData = await parseResponseBody();
+        const message =
+          errorData?.detail ||
+          errorData?.error ||
+          `Error ${response.status}: ${response.statusText}`;
+        throw new Error(message || 'Usuario o contraseña incorrectos');
       }
 
       // Parsear la respuesta JSON directamente
-      const data = await response.json();
+      const data = await parseResponseBody();
+      if (!data) {
+        throw new Error('Respuesta del servidor vacía');
+      }
       console.log('Login exitoso:', data);
       
       // Verificar que tengamos los datos del usuario
@@ -71,6 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         username: data.user.username,
         role: data.user.role,
         email: data.user.email,
+        modulos_permitidos: data.user.modulos_permitidos,
       });
     } catch (error) {
       console.error('Error completo en login:', error);
