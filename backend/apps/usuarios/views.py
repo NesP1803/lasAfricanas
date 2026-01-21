@@ -2,12 +2,22 @@ from decimal import Decimal, InvalidOperation
 from django.contrib.auth import authenticate
 from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAdminUser, IsAuthenticated
+from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 
 from .models import Usuario
 from .serializers import UsuarioSerializer
+
+
+class IsAdminOrTipoAdmin(BasePermission):
+    def has_permission(self, request, view):
+        user = request.user
+        return bool(
+            user
+            and user.is_authenticated
+            and (user.is_staff or user.is_superuser or getattr(user, 'tipo_usuario', None) == 'ADMIN')
+        )
 
 
 class UsuarioViewSet(viewsets.ModelViewSet):
@@ -26,7 +36,7 @@ class UsuarioViewSet(viewsets.ModelViewSet):
             return [IsAuthenticated()]
         if self.action == 'validar_descuento':
             return [IsAuthenticated()]
-        return [IsAdminUser()]
+        return [IsAdminOrTipoAdmin()]
 
     @action(detail=True, methods=['post'])
     def change_password(self, request, pk=None):
