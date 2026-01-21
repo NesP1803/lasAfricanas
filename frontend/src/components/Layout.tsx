@@ -206,8 +206,6 @@ export default function Layout() {
 
   const role = user?.role?.toUpperCase() ?? "VENDEDOR";
   const isAdmin = role === "ADMIN";
-  const isVendedor = role === "VENDEDOR";
-  const isMecanico = role === "MECANICO";
 
   const moduleEnabled = (key: ModuleKey) => {
     if (isAdmin) {
@@ -306,15 +304,10 @@ export default function Layout() {
         }
       }
       if (moduleEnabled("taller")) {
-        const baseTallerItems = isVendedor
-          ? [{ label: "Operaciones", path: "/taller?tab=ordenes", key: "ordenes" }]
-          : [
-              { label: "Operaciones", path: "/taller?tab=ordenes", key: "ordenes" },
-              { label: "Registro de Motos", path: "/taller?tab=motos", key: "motos" },
-            ];
-        const tallerItems = baseTallerItems.filter((item) =>
-          sectionEnabled("taller", item.key)
-        );
+        const tallerItems = [
+          { label: "Operaciones", path: "/taller?tab=ordenes", key: "ordenes" },
+          { label: "Registro de Motos", path: "/taller?tab=motos", key: "motos" },
+        ].filter((item) => sectionEnabled("taller", item.key));
         if (tallerItems.length > 0) {
           items.push({
             label: "Taller",
@@ -328,7 +321,7 @@ export default function Layout() {
         if (sectionEnabled("facturacion", "venta_rapida")) {
           facturacionItems.push({ label: "Venta rápida", path: "/ventas" });
         }
-        if (!isVendedor && sectionEnabled("facturacion", "cuentas")) {
+        if (sectionEnabled("facturacion", "cuentas")) {
           facturacionItems.push({
             label: "Cuentas",
             items: [
@@ -340,7 +333,7 @@ export default function Layout() {
             ],
           });
         }
-        if (!isVendedor && sectionEnabled("facturacion", "listados")) {
+        if (sectionEnabled("facturacion", "listados")) {
           facturacionItems.push({
             label: "Listados",
             items: [
@@ -367,7 +360,7 @@ export default function Layout() {
 
       return items;
     },
-    [configuracionItems, isAdmin, isMecanico, isVendedor, moduleAccess]
+    [configuracionItems, isAdmin, moduleAccess]
   );
 
   const allowedPaths = useMemo(() => {
