@@ -123,12 +123,7 @@ class ConfiguracionModulos(models.Model):
     listados_enabled = models.BooleanField(default=True)
     articulos_enabled = models.BooleanField(default=True)
     taller_enabled = models.BooleanField(default=True)
-    taller_operaciones_enabled = models.BooleanField(default=True)
-    taller_registro_motos_enabled = models.BooleanField(default=True)
     facturacion_enabled = models.BooleanField(default=True)
-    facturacion_venta_rapida_enabled = models.BooleanField(default=True)
-    facturacion_cuentas_enabled = models.BooleanField(default=True)
-    facturacion_listado_facturas_enabled = models.BooleanField(default=True)
     reportes_enabled = models.BooleanField(default=True)
 
     class Meta:

@@ -17,12 +17,7 @@ type ConfiguracionModulosResponse = {
   listados_enabled: boolean;
   articulos_enabled: boolean;
   taller_enabled: boolean;
-  taller_operaciones_enabled: boolean;
-  taller_registro_motos_enabled: boolean;
   facturacion_enabled: boolean;
-  facturacion_venta_rapida_enabled: boolean;
-  facturacion_cuentas_enabled: boolean;
-  facturacion_listado_facturas_enabled: boolean;
   reportes_enabled: boolean;
 };
 
@@ -34,12 +29,7 @@ const mapModulosToAccess = (
   listados: data.listados_enabled,
   articulos: data.articulos_enabled,
   taller: data.taller_enabled,
-  taller_operaciones: data.taller_operaciones_enabled,
-  taller_registro_motos: data.taller_registro_motos_enabled,
   facturacion: data.facturacion_enabled,
-  facturacion_venta_rapida: data.facturacion_venta_rapida_enabled,
-  facturacion_cuentas: data.facturacion_cuentas_enabled,
-  facturacion_listado_facturas: data.facturacion_listado_facturas_enabled,
   reportes: data.reportes_enabled,
 });
 
@@ -49,12 +39,7 @@ const mapAccessToPayload = (data: ModuleAccess) => ({
   listados_enabled: data.listados,
   articulos_enabled: data.articulos,
   taller_enabled: data.taller,
-  taller_operaciones_enabled: data.taller_operaciones,
-  taller_registro_motos_enabled: data.taller_registro_motos,
   facturacion_enabled: data.facturacion,
-  facturacion_venta_rapida_enabled: data.facturacion_venta_rapida,
-  facturacion_cuentas_enabled: data.facturacion_cuentas,
-  facturacion_listado_facturas_enabled: data.facturacion_listado_facturas,
   reportes_enabled: data.reportes,
 });
 
