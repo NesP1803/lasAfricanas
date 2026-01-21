@@ -20,6 +20,12 @@ import { usuariosApi } from '../api/usuarios';
 import { tallerApi, type Mecanico } from '../api/taller';
 import type { Categoria, Proveedor } from '../api/inventario';
 import type { Cliente, PaginatedResponse, UsuarioAdmin } from '../types';
+import { useAuth } from '../contexts/AuthContext';
+import {
+  DEFAULT_MODULE_ACCESS,
+  isSectionEnabled,
+  normalizeModuleAccess,
+} from '../store/moduleAccess';
 
 type ActiveTab = 'clientes' | 'proveedores' | 'empleados' | 'categorias' | 'mecanicos';
 
@@ -92,14 +98,29 @@ const parseListado = <T,>(data: PaginatedResponse<T> | T[]) => {
 const PAGE_SIZE = 50;
 
 export default function Listados() {
+  const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
-  const activeTab: ActiveTab = tabs.some((tab) => tab.key === tabParam)
+  const isAdmin = user?.role?.toUpperCase() === 'ADMIN';
+  const moduleAccess = useMemo(
+    () => normalizeModuleAccess(user?.modulos_permitidos ?? DEFAULT_MODULE_ACCESS),
+    [user?.modulos_permitidos]
+  );
+  const allowedTabs = useMemo(() => {
+    if (isAdmin) {
+      return tabs;
+    }
+    return tabs.filter((tab) =>
+      isSectionEnabled(moduleAccess, 'listados', tab.key)
+    );
+  }, [isAdmin, moduleAccess]);
+  const fallbackTab = allowedTabs[0]?.key ?? 'clientes';
+  const activeTab: ActiveTab = allowedTabs.some((tab) => tab.key === tabParam)
     ? (tabParam as ActiveTab)
-    : 'clientes';
+    : fallbackTab;
   const activeTabConfig = useMemo(
-    () => tabs.find((tab) => tab.key === activeTab) ?? tabs[0],
-    [activeTab]
+    () => allowedTabs.find((tab) => tab.key === activeTab) ?? tabs[0],
+    [activeTab, allowedTabs]
   );
 
   const [loading, setLoading] = useState(false);
@@ -127,6 +148,15 @@ export default function Listados() {
     setPage(1);
     setEstadoFiltro('activos');
   }, [activeTab]);
+
+  useEffect(() => {
+    if (allowedTabs.length === 0) {
+      return;
+    }
+    if (!allowedTabs.some((tab) => tab.key === tabParam)) {
+      setSearchParams({ tab: allowedTabs[0].key });
+    }
+  }, [allowedTabs, setSearchParams, tabParam]);
 
   useEffect(() => {
     const delay = setTimeout(() => {
@@ -342,7 +372,7 @@ export default function Listados() {
         </div>
 
         <div className="flex flex-wrap gap-3 border-b border-slate-200 bg-slate-50 px-6 py-3">
-          {tabs.map((tab) => (
+          {allowedTabs.map((tab) => (
             <button
               key={tab.key}
               type="button"
