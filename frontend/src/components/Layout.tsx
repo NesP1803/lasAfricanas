@@ -21,9 +21,7 @@ import {
   FileText,
   LogOut,
   Menu,
-  ReceiptText,
   Settings,
-  Share2,
   Wrench,
   X,
 } from "lucide-react";
@@ -257,56 +255,6 @@ export default function Layout() {
         });
       }
 
-      if (isVendedor) {
-        if (moduleEnabled("taller")) {
-          const tallerItems = [
-            { label: "Operaciones", path: "/taller?tab=ordenes", key: "ordenes" },
-          ].filter((item) => sectionEnabled("taller", item.key));
-          if (tallerItems.length > 0) {
-            items.push({
-              label: "Taller",
-              icon: <Wrench size={18} />,
-              items: tallerItems.map(({ label, path }) => ({ label, path })),
-            });
-          }
-        }
-        if (moduleEnabled("facturacion")) {
-          const facturacionItems = [
-            {
-              label: "Venta rápida",
-              path: "/ventas",
-              key: "venta_rapida",
-            },
-          ].filter((item) => sectionEnabled("facturacion", item.key));
-          if (facturacionItems.length > 0) {
-            items.push({
-              label: "Facturación",
-              icon: <FileText size={18} />,
-              items: facturacionItems.map(({ label, path }) => ({ label, path })),
-            });
-          }
-        }
-        return items;
-      }
-
-      if (isMecanico) {
-        if (moduleEnabled("taller")) {
-          const tallerItems = [
-            { label: "Operaciones", path: "/taller?tab=ordenes", key: "ordenes" },
-            { label: "Registro de Motos", path: "/taller?tab=motos", key: "motos" },
-          ].filter((item) => sectionEnabled("taller", item.key));
-          if (tallerItems.length > 0) {
-            items.push({
-              label: "Taller",
-              icon: <Wrench size={18} />,
-              items: tallerItems.map(({ label, path }) => ({ label, path })),
-            });
-          }
-        }
-        return items;
-      }
-
-      
       if (moduleEnabled("listados")) {
         const listadosItems = [
           { label: "Clientes", path: "/listados?tab=clientes", key: "clientes" },
@@ -358,10 +306,15 @@ export default function Layout() {
         }
       }
       if (moduleEnabled("taller")) {
-        const tallerItems = [
-          { label: "Operaciones", path: "/taller?tab=ordenes", key: "ordenes" },
-          { label: "Registro de Motos", path: "/taller?tab=motos", key: "motos" },
-        ].filter((item) => sectionEnabled("taller", item.key));
+        const baseTallerItems = isVendedor
+          ? [{ label: "Operaciones", path: "/taller?tab=ordenes", key: "ordenes" }]
+          : [
+              { label: "Operaciones", path: "/taller?tab=ordenes", key: "ordenes" },
+              { label: "Registro de Motos", path: "/taller?tab=motos", key: "motos" },
+            ];
+        const tallerItems = baseTallerItems.filter((item) =>
+          sectionEnabled("taller", item.key)
+        );
         if (tallerItems.length > 0) {
           items.push({
             label: "Taller",
@@ -375,7 +328,7 @@ export default function Layout() {
         if (sectionEnabled("facturacion", "venta_rapida")) {
           facturacionItems.push({ label: "Venta rápida", path: "/ventas" });
         }
-        if (sectionEnabled("facturacion", "cuentas")) {
+        if (!isVendedor && sectionEnabled("facturacion", "cuentas")) {
           facturacionItems.push({
             label: "Cuentas",
             items: [
@@ -387,7 +340,7 @@ export default function Layout() {
             ],
           });
         }
-        if (sectionEnabled("facturacion", "listados")) {
+        if (!isVendedor && sectionEnabled("facturacion", "listados")) {
           facturacionItems.push({
             label: "Listados",
             items: [
@@ -403,7 +356,7 @@ export default function Layout() {
             items: facturacionItems,
           });
         }
-      } 
+      }
       // if (moduleEnabled("reportes")) {
       //   items.push({
       //     label: "Reportes",
