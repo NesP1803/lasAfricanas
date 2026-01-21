@@ -22,6 +22,8 @@ import type {
 import { useAuth } from "../contexts/AuthContext";
 import {
   DEFAULT_MODULE_ACCESS,
+  MODULE_DEFINITIONS,
+  normalizeModuleAccess,
   type ModuleAccess,
 } from "../store/moduleAccess";
 
@@ -152,7 +154,6 @@ export default function Configuracion() {
   const [accesosModulos, setAccesosModulos] = useState<ModuleAccess>(
     DEFAULT_MODULE_ACCESS
   );
-  const [accesosModulosId, setAccesosModulosId] = useState<number | null>(null);
 
   const tabs = useMemo(() => {
     if (!isAdmin) {
@@ -210,48 +211,7 @@ export default function Configuracion() {
     []
   );
 
-  const moduleOptions = useMemo<
-    Array<{ key: keyof ModuleAccess; label: string; description: string }>
-  >(
-    () => [
-      {
-        key: "configuracion",
-        label: "Configuración",
-        description: "Permite acceder a la información y ajustes del sistema.",
-      },
-      {
-        key: "registrar",
-        label: "Registrar",
-        description: "Habilita el registro general de operaciones.",
-      },
-      {
-        key: "listados",
-        label: "Listados",
-        description: "Acceso a clientes, proveedores, empleados y categorías.",
-      },
-      {
-        key: "articulos",
-        label: "Artículos",
-        description: "Inventario, stock y bajas de mercancía.",
-      },
-      {
-        key: "taller",
-        label: "Taller",
-        description: "Operaciones y registro de motos del taller.",
-      },
-      {
-        key: "facturacion",
-        label: "Facturación",
-        description: "Venta rápida, cuentas y listados de facturas.",
-      },
-      {
-        key: "reportes",
-        label: "Reportes",
-        description: "Visualización de reportes diarios y mensuales.",
-      },
-    ],
-    []
-  );
+  const moduleOptions = useMemo(() => MODULE_DEFINITIONS, []);
 
   useEffect(() => {
     const tabParam = searchParams.get("tab") as ConfigTab | null;
@@ -353,24 +313,6 @@ export default function Configuracion() {
 
     cargarPerfil();
   }, [isAdmin, user?.id]);
-
-  useEffect(() => {
-    if (!isAdmin) {
-      return;
-    }
-
-    const cargarAccesos = async () => {
-      try {
-        const data = await configuracionAPI.obtenerAccesosModulos();
-        setAccesosModulos(data.access);
-        setAccesosModulosId(data.id);
-      } catch (error) {
-        console.error("Error cargando accesos de módulos:", error);
-      }
-    };
-
-    cargarAccesos();
-  }, [isAdmin]);
 
   useEffect(() => {
     if (!isAdmin) {
@@ -504,19 +446,28 @@ export default function Configuracion() {
   };
 
   const handleGuardarAccesos = async () => {
-    if (!accesosModulosId) {
-      setMensajeAccesos("No se encontró la configuración de módulos.");
+    if (!accessModalUser) {
+      setMensajeAccesos("No se encontró el usuario para actualizar accesos.");
       return;
     }
 
     try {
-      const data = await configuracionAPI.actualizarAccesosModulos(
-        accesosModulosId,
-        accesosModulos
+      const data = await configuracionAPI.actualizarUsuario(
+        accessModalUser.id,
+        {
+          modulos_permitidos: accesosModulos,
+        }
       );
-      setAccesosModulos(data.access);
+      setUsuarios((prev) =>
+        prev.map((usuario) =>
+          usuario.id === data.id ? { ...usuario, ...data } : usuario
+        )
+      );
+      setAccessModalUser(data);
       setMensajeAccesos("Accesos de módulos actualizados.");
-      window.dispatchEvent(new Event("module-access-updated"));
+      if (user?.id === data.id) {
+        window.dispatchEvent(new Event("module-access-updated"));
+      }
     } catch (error) {
       console.error("Error actualizando accesos de módulos:", error);
       setMensajeAccesos("No se pudieron actualizar los accesos.");
@@ -565,6 +516,9 @@ export default function Configuracion() {
 
   const openAccessModal = (usuario: UsuarioAdmin) => {
     setAccessModalUser(usuario);
+    setAccesosModulos(
+      normalizeModuleAccess(usuario.modulos_permitidos ?? DEFAULT_MODULE_ACCESS)
+    );
     setMensajeAccesos("");
     setAccessModalOpen(true);
   };
@@ -1737,32 +1691,111 @@ export default function Configuracion() {
               )}
 
               <div className="grid gap-4 md:grid-cols-2">
-                {moduleOptions.map((modulo) => (
-                  <label
-                    key={modulo.key}
-                    className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4"
-                  >
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">
-                        {modulo.label}
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        {modulo.description}
-                      </p>
+                {moduleOptions.map((modulo) => {
+                  const accessEntry = accesosModulos[modulo.key];
+                  const sections = modulo.sections ?? [];
+                  const hasSections = sections.length > 0;
+                  const enabledSections = sections.filter(
+                    (section) => accessEntry.sections[section.key]
+                  );
+                  const allSectionsEnabled =
+                    hasSections && enabledSections.length === sections.length;
+                  const parentChecked = hasSections
+                    ? allSectionsEnabled
+                    : accessEntry.enabled;
+
+                  return (
+                    <div
+                      key={modulo.key}
+                      className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">
+                            {modulo.label}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            {modulo.description}
+                          </p>
+                          {hasSections && (
+                            <p className="mt-1 text-[11px] text-slate-400">
+                              Seleccionadas: {enabledSections.length}/
+                              {sections.length}
+                            </p>
+                          )}
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={parentChecked}
+                          onChange={(event) =>
+                            setAccesosModulos((prev) => {
+                              const entry = prev[modulo.key];
+                              if (!hasSections) {
+                                return {
+                                  ...prev,
+                                  [modulo.key]: {
+                                    ...entry,
+                                    enabled: event.target.checked,
+                                  },
+                                };
+                              }
+                              const nextSections = { ...entry.sections };
+                              sections.forEach((section) => {
+                                nextSections[section.key] = event.target.checked;
+                              });
+                              return {
+                                ...prev,
+                                [modulo.key]: {
+                                  ...entry,
+                                  enabled: event.target.checked,
+                                  sections: nextSections,
+                                },
+                              };
+                            })
+                          }
+                          className="mt-1 h-5 w-5 accent-blue-600"
+                        />
+                      </div>
+                      {hasSections && (
+                        <div className="mt-3 space-y-2 border-t border-slate-200 pt-3">
+                          {sections.map((section) => (
+                            <label
+                              key={section.key}
+                              className="flex items-center justify-between gap-2 text-xs text-slate-600"
+                            >
+                              <span>{section.label}</span>
+                              <input
+                                type="checkbox"
+                                checked={accessEntry.sections[section.key]}
+                                onChange={(event) =>
+                                  setAccesosModulos((prev) => {
+                                    const entry = prev[modulo.key];
+                                    const nextSections = {
+                                      ...entry.sections,
+                                      [section.key]: event.target.checked,
+                                    };
+                                    const anyEnabled = Object.values(
+                                      nextSections
+                                    ).some(Boolean);
+                                    return {
+                                      ...prev,
+                                      [modulo.key]: {
+                                        ...entry,
+                                        sections: nextSections,
+                                        enabled: anyEnabled,
+                                      },
+                                    };
+                                  })
+                                }
+                                className="h-4 w-4 accent-blue-600"
+                              />
+                            </label>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    <input
-                      type="checkbox"
-                      checked={accesosModulos[modulo.key]}
-                      onChange={(event) =>
-                        setAccesosModulos((prev) => ({
-                          ...prev,
-                          [modulo.key]: event.target.checked,
-                        }))
-                      }
-                      className="h-5 w-5 accent-blue-600"
-                    />
-                  </label>
-                ))}
+                  );
+                })}
               </div>
 
               <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">

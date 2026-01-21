@@ -3,6 +3,55 @@ from django.db import models
 from apps.core.models import BaseModel
 
 
+def default_modulos_permitidos():
+    return {
+        "configuracion": {
+            "enabled": True,
+            "sections": {
+                "facturacion": True,
+                "empresa": True,
+                "usuarios": True,
+                "impuestos": True,
+                "auditoria": True,
+                "accesos": True,
+                "clave": True,
+            },
+        },
+        "registrar": {"enabled": True, "sections": {}},
+        "listados": {
+            "enabled": True,
+            "sections": {
+                "clientes": True,
+                "proveedores": True,
+                "empleados": True,
+                "categorias": True,
+                "mecanicos": True,
+            },
+        },
+        "articulos": {
+            "enabled": True,
+            "sections": {
+                "mercancia": True,
+                "stock_bajo": True,
+                "dar_de_baja": True,
+            },
+        },
+        "taller": {
+            "enabled": True,
+            "sections": {"ordenes": True, "motos": True},
+        },
+        "facturacion": {
+            "enabled": True,
+            "sections": {
+                "venta_rapida": True,
+                "cuentas": True,
+                "listados": True,
+            },
+        },
+        "reportes": {"enabled": True, "sections": {}},
+    }
+
+
 class Usuario(AbstractUser):
     """
     Usuario extendido del sistema.
@@ -35,6 +84,10 @@ class Usuario(AbstractUser):
         choices=SEDE_CHOICES,
         blank=True,
         verbose_name='Sede'
+    )
+    modulos_permitidos = models.JSONField(
+        default=default_modulos_permitidos,
+        verbose_name='Módulos permitidos',
     )
     
     class Meta:
