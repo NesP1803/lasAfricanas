@@ -14,10 +14,13 @@ export interface Usuario {
 
 export type ModulosPermitidos = Record<
   string,
-  {
-    enabled?: boolean;
-    sections?: Record<string, boolean>;
-  }
+  | boolean
+  | string[]
+  | Record<string, boolean>
+  | {
+      enabled?: boolean;
+      sections?: Record<string, boolean> | string[];
+    }
 >;
 
 export interface LoginResponse {

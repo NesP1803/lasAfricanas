@@ -122,12 +122,57 @@ export const normalizeModuleAccess = (
     if (!incoming) {
       return;
     }
-    normalized[moduleDef.key].enabled = Boolean(incoming.enabled);
-    (moduleDef.sections ?? []).forEach((section) => {
-      normalized[moduleDef.key].sections[section.key] = Boolean(
-        incoming.sections?.[section.key]
-      );
-    });
+    const moduleState = normalized[moduleDef.key];
+    const sections = moduleDef.sections ?? [];
+
+    if (typeof incoming === "boolean") {
+      moduleState.enabled = incoming;
+      sections.forEach((section) => {
+        moduleState.sections[section.key] = incoming;
+      });
+      return;
+    }
+
+    if (Array.isArray(incoming)) {
+      sections.forEach((section) => {
+        moduleState.sections[section.key] = incoming.includes(section.key);
+      });
+      moduleState.enabled = Object.values(moduleState.sections).some(Boolean);
+      return;
+    }
+
+    if (typeof incoming === "object") {
+      const incomingRecord = incoming as Record<string, unknown>;
+      const enabledValue = incomingRecord.enabled;
+      if (typeof enabledValue === "boolean") {
+        moduleState.enabled = enabledValue;
+      }
+
+      const incomingSections = incomingRecord.sections;
+      if (Array.isArray(incomingSections)) {
+        sections.forEach((section) => {
+          moduleState.sections[section.key] = incomingSections.includes(
+            section.key
+          );
+        });
+      } else if (incomingSections && typeof incomingSections === "object") {
+        sections.forEach((section) => {
+          moduleState.sections[section.key] = Boolean(
+            (incomingSections as Record<string, boolean | undefined>)[section.key]
+          );
+        });
+      } else {
+        sections.forEach((section) => {
+          if (section.key in incomingRecord) {
+            moduleState.sections[section.key] = Boolean(incomingRecord[section.key]);
+          }
+        });
+      }
+
+      if (Object.values(moduleState.sections).some(Boolean)) {
+        moduleState.enabled = true;
+      }
+    }
   });
 
   return normalized;
