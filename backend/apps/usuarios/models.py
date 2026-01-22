@@ -14,11 +14,11 @@ class Usuario(AbstractUser):
         ('MECANICO', 'Mecánico'),
         ('BODEGUERO', 'Bodeguero'),
     ]
-    
+
     SEDE_CHOICES = [
         ('GAIRA', 'Gaira - Santa Marta'),
     ]
-    
+
     tipo_usuario = models.CharField(
         max_length=20,
         choices=TIPO_USUARIO,
@@ -35,6 +35,13 @@ class Usuario(AbstractUser):
         choices=SEDE_CHOICES,
         blank=True,
         verbose_name='Sede'
+    )
+    modulos_permitidos = models.JSONField(
+        null=True,
+        blank=True,
+        default=None,
+        verbose_name='Módulos permitidos',
+        help_text='Configuración de acceso a módulos y secciones del sistema'
     )
     class Meta:
         db_table = 'usuarios'
