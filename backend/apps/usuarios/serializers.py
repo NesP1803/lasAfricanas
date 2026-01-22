@@ -7,7 +7,7 @@ from .models import Usuario
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
         data = super().validate(attrs)
-        
+
         # Agregar información del usuario
         role = 'ADMIN' if self.user.is_superuser else self.user.tipo_usuario
         data['user'] = {
@@ -15,8 +15,9 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'username': self.user.username,
             'email': self.user.email,
             'role': role,
+            'modulos_permitidos': self.user.modulos_permitidos,
         }
-        
+
         return data
 
 class CustomTokenObtainPairView(TokenObtainPairView):
@@ -41,6 +42,7 @@ class UsuarioSerializer(serializers.ModelSerializer):
             'password',
             'last_login',
             'date_joined',
+            'modulos_permitidos',
         ]
         read_only_fields = ['id', 'last_login', 'date_joined']
 
