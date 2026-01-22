@@ -139,6 +139,7 @@ export default function Configuracion() {
   const [claveActual, setClaveActual] = useState("");
   const [nuevaClave, setNuevaClave] = useState("");
   const [confirmarClave, setConfirmarClave] = useState("");
+  const [mostrarClaveActual, setMostrarClaveActual] = useState(false);
 
 
   const tabs = useMemo(() => {
@@ -158,7 +159,6 @@ export default function Configuracion() {
       { id: "usuarios", label: "Usuarios", icon: <Users size={18} /> },
       { id: "impuestos", label: "Impuestos", icon: <Plus size={18} /> },
       { id: "auditoria", label: "Auditoría", icon: <Users size={18} /> },
-      { id: "clave", label: "Cambiar clave", icon: <UserCog size={18} /> },
     ];
   }, [isAdmin]);
 
@@ -423,6 +423,7 @@ export default function Configuracion() {
       is_active: true,
       password: "",
     });
+    setMostrarClaveActual(false);
     setMecanicoSeleccionado("");
     setOrigenUsuario("manual");
     setEditingUserId(null);
@@ -550,6 +551,11 @@ export default function Configuracion() {
   const handleCambiarClave = async () => {
     if (!user?.id) {
       setMensajeClave("No se pudo identificar el usuario actual.");
+      return;
+    }
+
+    if (!claveActual) {
+      setMensajeClave("Debes ingresar la clave actual.");
       return;
     }
 
@@ -1177,6 +1183,58 @@ export default function Configuracion() {
             </div>
           ) : (
             <>
+              <div className="mt-6 rounded-2xl border border-slate-100 bg-slate-50 p-5">
+                <h4 className="text-base font-semibold text-slate-900">
+                  Cambiar clave de tu usuario
+                </h4>
+                <p className="text-sm text-slate-500">
+                  Ingresa tu clave actual y define una nueva contraseña.
+                </p>
+
+                {mensajeClave && (
+                  <div className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                    {mensajeClave}
+                  </div>
+                )}
+
+                <div className="mt-4 grid gap-4 md:grid-cols-3">
+                  <label className="space-y-2 text-sm font-medium text-slate-700">
+                    Clave actual
+                    <input
+                      type="password"
+                      value={claveActual}
+                      onChange={(event) => setClaveActual(event.target.value)}
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    />
+                  </label>
+                  <label className="space-y-2 text-sm font-medium text-slate-700">
+                    Nueva clave
+                    <input
+                      type="password"
+                      value={nuevaClave}
+                      onChange={(event) => setNuevaClave(event.target.value)}
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    />
+                  </label>
+                  <label className="space-y-2 text-sm font-medium text-slate-700">
+                    Confirmar nueva clave
+                    <input
+                      type="password"
+                      value={confirmarClave}
+                      onChange={(event) => setConfirmarClave(event.target.value)}
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    />
+                  </label>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCambiarClave}
+                  className="mt-4 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-blue-700"
+                >
+                  <Save size={16} /> Guardar nueva clave
+                </button>
+              </div>
+
               <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                 <div>
                   <h4 className="text-sm font-semibold text-slate-700">
@@ -1505,31 +1563,66 @@ export default function Configuracion() {
                     <option value="BODEGUERO">Bodeguero</option>
                   </select>
                 </label>
-                <label className="space-y-2 text-xs font-medium text-slate-700">
-                  Contraseña
-                  <input
-                    type="password"
-                    value={nuevoUsuario.password}
-                    onChange={(event) =>
-                      setNuevoUsuario((prev) => ({
-                        ...prev,
-                        password: event.target.value,
-                      }))
-                    }
-                    placeholder={
-                      userModalMode === "edit"
-                        ? "Dejar en blanco para mantener"
-                        : ""
-                    }
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                  />
-                  {userModalMode === "edit" && (
-                    <p className="text-[11px] font-normal text-slate-500">
-                      Por seguridad no se muestra la contraseña actual. Ingresa
-                      una nueva si deseas actualizarla.
-                    </p>
-                  )}
-                </label>
+                {userModalMode === "edit" ? (
+                  <>
+                    <label className="space-y-2 text-xs font-medium text-slate-700">
+                      Clave actual
+                      <div className="flex items-center gap-2">
+                        <input
+                          type={mostrarClaveActual ? "text" : "password"}
+                          value="********"
+                          readOnly
+                          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setMostrarClaveActual((prev) => !prev)
+                          }
+                          className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:border-blue-200 hover:text-blue-600"
+                        >
+                          {mostrarClaveActual ? "Ocultar" : "Mostrar"}
+                        </button>
+                      </div>
+                      <p className="text-[11px] font-normal text-slate-500">
+                        Clave fija de referencia, no editable.
+                      </p>
+                    </label>
+                    <label className="space-y-2 text-xs font-medium text-slate-700">
+                      Nueva clave
+                      <input
+                        type="password"
+                        value={nuevoUsuario.password}
+                        onChange={(event) =>
+                          setNuevoUsuario((prev) => ({
+                            ...prev,
+                            password: event.target.value,
+                          }))
+                        }
+                        placeholder="Ingresa una nueva clave"
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                      />
+                      <p className="text-[11px] font-normal text-slate-500">
+                        Deja en blanco para mantener la clave actual.
+                      </p>
+                    </label>
+                  </>
+                ) : (
+                  <label className="space-y-2 text-xs font-medium text-slate-700">
+                    Contraseña
+                    <input
+                      type="password"
+                      value={nuevoUsuario.password}
+                      onChange={(event) =>
+                        setNuevoUsuario((prev) => ({
+                          ...prev,
+                          password: event.target.value,
+                        }))
+                      }
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    />
+                  </label>
+                )}
                 <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
                   <input
                     type="checkbox"
