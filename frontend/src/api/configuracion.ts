@@ -119,6 +119,10 @@ export const configuracionAPI = {
     );
     return response.data;
   },
+  obtenerUsuario: async (id: number) => {
+    const response = await apiClient.get<UsuarioAdmin>(`/usuarios/${id}/`);
+    return response.data;
+  },
   obtenerUsuarioActual: async () => {
     const response = await apiClient.get<UsuarioAdmin>('/usuarios/me/');
     return response.data;

@@ -119,6 +119,7 @@ export default function Configuracion() {
   const [accessSeleccionado, setAccessSeleccionado] =
     useState<ModuleAccessState>(createEmptyModuleAccess());
   const [mensajeAccesos, setMensajeAccesos] = useState("");
+  const [accessLoading, setAccessLoading] = useState(false);
   const [origenUsuario, setOrigenUsuario] = useState<"manual" | "mecanico">(
     "manual"
   );
@@ -451,13 +452,27 @@ export default function Configuracion() {
     }
   };
 
-  const openAccessModal = (usuario: UsuarioAdmin) => {
+  const openAccessModal = async (usuario: UsuarioAdmin) => {
+    setAccessLoading(true);
     setAccessUsuario(usuario);
     setAccessSeleccionado(
       normalizeModuleAccess(usuario.modulos_permitidos ?? null)
     );
     setMensajeAccesos("");
     setAccessModalOpen(true);
+
+    try {
+      const data = await configuracionAPI.obtenerUsuario(usuario.id);
+      setAccessUsuario(data);
+      setAccessSeleccionado(
+        normalizeModuleAccess(data.modulos_permitidos ?? null)
+      );
+    } catch (error) {
+      console.error("Error cargando accesos del usuario:", error);
+      setMensajeAccesos("No se pudieron cargar los accesos actuales.");
+    } finally {
+      setAccessLoading(false);
+    }
   };
 
   const closeAccessModal = () => {
@@ -523,10 +538,16 @@ export default function Configuracion() {
     }
     setMensajeAccesos("");
     try {
-      await configuracionAPI.actualizarUsuario(accessUsuario.id, {
+      const data = await configuracionAPI.actualizarUsuario(accessUsuario.id, {
         modulos_permitidos: accessSeleccionado,
       });
-      await cargarUsuarios();
+      setUsuarios((prev) =>
+        prev.map((item) =>
+          item.id === data.id
+            ? { ...item, modulos_permitidos: data.modulos_permitidos ?? null }
+            : item
+        )
+      );
       closeAccessModal();
       setMensajeUsuario("Accesos actualizados correctamente.");
     } catch (error) {
@@ -1763,6 +1784,11 @@ export default function Configuracion() {
               {mensajeAccesos && (
                 <div className="rounded-lg border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-700">
                   {mensajeAccesos}
+                </div>
+              )}
+              {accessLoading && (
+                <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+                  Cargando accesos del usuario...
                 </div>
               )}
               <p className="text-sm text-slate-600">
