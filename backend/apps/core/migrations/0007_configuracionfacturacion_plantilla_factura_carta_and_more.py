@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('core', '0006_configuracion_modulos'),
+        ('core', '0005_remove_plantillas_facturacion'),
     ]
 
     operations = [
@@ -39,10 +39,5 @@ class Migration(migrations.Migration):
             model_name='configuracionfacturacion',
             name='plantilla_remision_tirilla',
             field=models.TextField(blank=True),
-        ),
-        migrations.AlterField(
-            model_name='configuracionmodulos',
-            name='id',
-            field=models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID'),
         ),
     ]

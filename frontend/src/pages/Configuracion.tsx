@@ -1283,8 +1283,7 @@ export default function Configuracion() {
             Cambiar clave
           </h3>
           <p className="text-sm text-slate-500">
-            Actualiza tu clave de acceso. Esta acción quedará registrada en
-            auditoría.
+            Actualiza tu clave. Esta acción quedará registrada en auditoría.
           </p>
 
           {mensajeClave && (
