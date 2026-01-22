@@ -26,8 +26,7 @@ type ConfigTab =
   | "empresa"
   | "impuestos"
   | "auditoria"
-  | "usuarios"
-  | "clave";
+  | "usuarios";
 
 type PlantillaField =
   | "plantilla_factura_carta"
@@ -82,9 +81,10 @@ export default function Configuracion() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const isAdmin = user?.role?.toUpperCase() === "ADMIN";
-  const defaultTab: ConfigTab = isAdmin ? "facturacion" : "clave";
+  const defaultTab: ConfigTab = isAdmin ? "facturacion" : "usuarios";
+  const rawTab = searchParams.get("tab");
   const initialTab =
-    (searchParams.get("tab") as ConfigTab) || defaultTab;
+    (rawTab === "clave" ? "usuarios" : (rawTab as ConfigTab)) || defaultTab;
 
   const [activeTab, setActiveTab] = useState<ConfigTab>(initialTab);
   const [empresa, setEmpresa] = useState<ConfiguracionEmpresa>(defaultEmpresa);
@@ -145,7 +145,7 @@ export default function Configuracion() {
   const tabs = useMemo(() => {
     if (!isAdmin) {
       return [
-        { id: "clave", label: "Cambiar clave", icon: <UserCog size={18} /> },
+        { id: "usuarios", label: "Cambiar clave", icon: <UserCog size={18} /> },
       ];
     }
 
@@ -198,10 +198,15 @@ export default function Configuracion() {
   );
 
   useEffect(() => {
-    const tabParam = searchParams.get("tab") as ConfigTab | null;
-    if (tabParam && availableTabs.includes(tabParam)) {
-      if (tabParam !== activeTab) {
-        setActiveTab(tabParam);
+    const tabParam = searchParams.get("tab");
+    const resolvedTab =
+      tabParam === "clave" ? "usuarios" : (tabParam as ConfigTab | null);
+    if (resolvedTab && availableTabs.includes(resolvedTab)) {
+      if (resolvedTab !== activeTab) {
+        setActiveTab(resolvedTab);
+      }
+      if (tabParam === "clave") {
+        setSearchParams({ tab: "usuarios" });
       }
       return;
     }
@@ -1172,69 +1177,69 @@ export default function Configuracion() {
 
       {activeTab === "usuarios" && (
         <section className="rounded-2xl bg-white p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-slate-900">Usuarios</h3>
+          <h3 className="text-lg font-semibold text-slate-900">
+            {isAdmin ? "Usuarios" : "Cambiar clave"}
+          </h3>
           <p className="text-sm text-slate-500">
-            Solo los administradores pueden administrar usuarios.
+            {isAdmin
+              ? "Administra usuarios y actualiza tu clave desde esta sección."
+              : "Actualiza tu clave de acceso desde tu perfil."}
           </p>
 
-          {!isAdmin ? (
-            <div className="mt-6 rounded-lg border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-              Tu perfil no tiene permisos para administrar usuarios.
-            </div>
-          ) : (
-            <>
-              <div className="mt-6 rounded-2xl border border-slate-100 bg-slate-50 p-5">
-                <h4 className="text-base font-semibold text-slate-900">
-                  Cambiar clave de tu usuario
-                </h4>
-                <p className="text-sm text-slate-500">
-                  Ingresa tu clave actual y define una nueva contraseña.
-                </p>
+          <div className="mt-6 rounded-2xl border border-slate-100 bg-slate-50 p-5">
+            <h4 className="text-base font-semibold text-slate-900">
+              {isAdmin ? "Cambiar clave de tu usuario" : "Cambiar clave"}
+            </h4>
+            <p className="text-sm text-slate-500">
+              Ingresa tu clave actual y define una nueva contraseña.
+            </p>
 
-                {mensajeClave && (
-                  <div className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-                    {mensajeClave}
-                  </div>
-                )}
-
-                <div className="mt-4 grid gap-4 md:grid-cols-3">
-                  <label className="space-y-2 text-sm font-medium text-slate-700">
-                    Clave actual
-                    <input
-                      type="password"
-                      value={claveActual}
-                      onChange={(event) => setClaveActual(event.target.value)}
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                    />
-                  </label>
-                  <label className="space-y-2 text-sm font-medium text-slate-700">
-                    Nueva clave
-                    <input
-                      type="password"
-                      value={nuevaClave}
-                      onChange={(event) => setNuevaClave(event.target.value)}
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                    />
-                  </label>
-                  <label className="space-y-2 text-sm font-medium text-slate-700">
-                    Confirmar nueva clave
-                    <input
-                      type="password"
-                      value={confirmarClave}
-                      onChange={(event) => setConfirmarClave(event.target.value)}
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                    />
-                  </label>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleCambiarClave}
-                  className="mt-4 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-blue-700"
-                >
-                  <Save size={16} /> Guardar nueva clave
-                </button>
+            {mensajeClave && (
+              <div className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                {mensajeClave}
               </div>
+            )}
 
+            <div className="mt-4 grid gap-4 md:grid-cols-3">
+              <label className="space-y-2 text-sm font-medium text-slate-700">
+                Clave actual
+                <input
+                  type="password"
+                  value={claveActual}
+                  onChange={(event) => setClaveActual(event.target.value)}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="space-y-2 text-sm font-medium text-slate-700">
+                Nueva clave
+                <input
+                  type="password"
+                  value={nuevaClave}
+                  onChange={(event) => setNuevaClave(event.target.value)}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="space-y-2 text-sm font-medium text-slate-700">
+                Confirmar nueva clave
+                <input
+                  type="password"
+                  value={confirmarClave}
+                  onChange={(event) => setConfirmarClave(event.target.value)}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+              </label>
+            </div>
+            <button
+              type="button"
+              onClick={handleCambiarClave}
+              className="mt-4 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-blue-700"
+            >
+              <Save size={16} /> Guardar nueva clave
+            </button>
+          </div>
+
+          {isAdmin && (
+            <>
               <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                 <div>
                   <h4 className="text-sm font-semibold text-slate-700">
@@ -1332,60 +1337,6 @@ export default function Configuracion() {
               </div>
             </>
           )}
-        </section>
-      )}
-
-      {activeTab === "clave" && (
-        <section className="rounded-2xl bg-white p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-slate-900">
-            Cambiar clave
-          </h3>
-          <p className="text-sm text-slate-500">
-            Actualiza tu clave. Esta acción quedará registrada en auditoría.
-          </p>
-
-          {mensajeClave && (
-            <div className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-              {mensajeClave}
-            </div>
-          )}
-
-          <div className="mt-6 grid gap-4 md:grid-cols-3">
-            <label className="space-y-2 text-sm font-medium text-slate-700">
-              Clave actual
-              <input
-                type="password"
-                value={claveActual}
-                onChange={(event) => setClaveActual(event.target.value)}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-              />
-            </label>
-            <label className="space-y-2 text-sm font-medium text-slate-700">
-              Nueva clave
-              <input
-                type="password"
-                value={nuevaClave}
-                onChange={(event) => setNuevaClave(event.target.value)}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-              />
-            </label>
-            <label className="space-y-2 text-sm font-medium text-slate-700">
-              Confirmar nueva clave
-              <input
-                type="password"
-                value={confirmarClave}
-                onChange={(event) => setConfirmarClave(event.target.value)}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-              />
-            </label>
-          </div>
-          <button
-            type="button"
-            onClick={handleCambiarClave}
-            className="mt-4 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-blue-700"
-          >
-            <Save size={16} /> Guardar nueva clave
-          </button>
         </section>
       )}
 

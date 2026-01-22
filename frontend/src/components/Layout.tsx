@@ -177,7 +177,13 @@ export default function Layout() {
       { label: "Impuestos", path: "/configuracion?tab=impuestos", key: "impuestos" },
       { label: "Auditoría", path: "/configuracion?tab=auditoria", key: "auditoria" },
       ...(!isAdmin
-        ? [{ label: "Cambiar Clave", path: "/configuracion?tab=clave", key: "clave" }]
+        ? [
+            {
+              label: "Cambiar Clave",
+              path: "/configuracion?tab=usuarios",
+              key: "usuarios",
+            },
+          ]
         : []),
     ];
 
