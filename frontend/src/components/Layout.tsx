@@ -8,7 +8,7 @@ import { useEffect, useMemo, useState, useRef, type ReactNode } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { configuracionAPI } from "../api/configuracion";
 import {
-  EMPTY_MODULE_ACCESS,
+  DEFAULT_MODULE_ACCESS,
   isModuleEnabled,
   isSectionEnabled,
   normalizeModuleAccess,
@@ -124,7 +124,9 @@ export default function Layout() {
     {}
   );
   const [moduleAccess, setModuleAccess] = useState(() =>
-    normalizeModuleAccess(user?.modulos_permitidos ?? EMPTY_MODULE_ACCESS)
+    user?.role?.toUpperCase() === "ADMIN"
+      ? DEFAULT_MODULE_ACCESS
+      : normalizeModuleAccess(user?.modulos_permitidos ?? null)
   );
 
   // --- Menú principal con delay ---
@@ -176,9 +178,11 @@ export default function Layout() {
     }
 
     setModuleAccess(
-      normalizeModuleAccess(user?.modulos_permitidos ?? EMPTY_MODULE_ACCESS)
+      user?.role?.toUpperCase() === "ADMIN"
+        ? DEFAULT_MODULE_ACCESS
+        : normalizeModuleAccess(user?.modulos_permitidos ?? null)
     );
-  }, [user?.id, user?.modulos_permitidos]);
+  }, [user?.id, user?.modulos_permitidos, user?.role]);
 
   useEffect(() => {
     if (!user?.id) {
@@ -189,9 +193,9 @@ export default function Layout() {
       try {
         const data = await configuracionAPI.obtenerUsuarioActual();
         setModuleAccess(
-          normalizeModuleAccess(
-            data.modulos_permitidos ?? EMPTY_MODULE_ACCESS
-          )
+          user?.role?.toUpperCase() === "ADMIN"
+            ? DEFAULT_MODULE_ACCESS
+            : normalizeModuleAccess(data.modulos_permitidos ?? null)
         );
       } catch (error) {
         console.error("Error cargando accesos de módulos:", error);
@@ -203,7 +207,7 @@ export default function Layout() {
     return () => {
       window.removeEventListener("module-access-updated", refreshAccess);
     };
-  }, [user?.id]);
+  }, [user?.id, user?.role]);
 
   if (!isAuthenticated) {
     return <Navigate to="/login" />;
