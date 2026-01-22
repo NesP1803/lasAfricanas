@@ -1,5 +1,6 @@
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
+import { configuracionAPI } from '../api/configuracion';
 import type { ModuleAccess } from '../store/moduleAccess';
 
 interface User {
@@ -34,6 +35,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     return null;
   });
+
+  const persistUser = (nextUser: User | null) => {
+    if (!nextUser) {
+      localStorage.removeItem('user');
+      setUser(null);
+      return;
+    }
+    localStorage.setItem('user', JSON.stringify(nextUser));
+    setUser(nextUser);
+  };
 
   const login = async (username: string, password: string) => {
     try {
@@ -85,10 +96,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       // Guardar el token y datos del usuario
       localStorage.setItem('token', data.access);
+      localStorage.setItem('access_token', data.access);
       localStorage.setItem('refresh_token', data.refresh);
-      localStorage.setItem('user', JSON.stringify(data.user));
-      
-      setUser({
+      persistUser({
         id: data.user.id,
         username: data.user.username,
         role: data.user.role,
@@ -103,10 +113,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     localStorage.removeItem('token');
+    localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
-    localStorage.removeItem('user');
-    setUser(null);
+    persistUser(null);
   };
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    let isMounted = true;
+
+    const refreshUser = async () => {
+      const token = localStorage.getItem('access_token') || localStorage.getItem('token');
+      if (!token) {
+        return;
+      }
+      try {
+        const data = await configuracionAPI.obtenerUsuarioActual();
+        if (!isMounted) {
+          return;
+        }
+        const updatedUser: User = {
+          id: data.id,
+          username: data.username,
+          role: data.tipo_usuario ?? user.role,
+          email: data.email,
+          modulos_permitidos: data.modulos_permitidos,
+        };
+        persistUser(updatedUser);
+      } catch (error) {
+        console.error('Error actualizando usuario actual:', error);
+      }
+    };
+
+    refreshUser();
+    const intervalId = window.setInterval(refreshUser, 60000);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshUser();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      isMounted = false;
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [user]);
 
   return (
     <AuthContext.Provider

@@ -171,7 +171,7 @@ export default function Layout() {
   }, []);
 
   useEffect(() => {
-    if (!user?.id || user.role?.toUpperCase() === "ADMIN") {
+    if (!user?.id) {
       return;
     }
 
@@ -193,7 +193,7 @@ export default function Layout() {
     return () => {
       window.removeEventListener("module-access-updated", refreshAccess);
     };
-  }, [user?.id, user?.role]);
+  }, [user?.id]);
 
   if (!isAuthenticated) {
     return <Navigate to="/login" />;
