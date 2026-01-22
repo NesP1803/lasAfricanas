@@ -167,6 +167,8 @@ export default function Layout() {
     navigate("/login");
   };
 
+  const isAdmin = user?.role?.toUpperCase() === "ADMIN";
+
   const configuracionItems = useMemo(() => {
     const sections = [
       { label: "Facturación", path: "/configuracion?tab=facturacion", key: "facturacion" },
@@ -174,11 +176,13 @@ export default function Layout() {
       { label: "Usuarios", path: "/configuracion?tab=usuarios", key: "usuarios" },
       { label: "Impuestos", path: "/configuracion?tab=impuestos", key: "impuestos" },
       { label: "Auditoría", path: "/configuracion?tab=auditoria", key: "auditoria" },
-      { label: "Cambiar Clave", path: "/configuracion?tab=clave", key: "clave" },
+      ...(!isAdmin
+        ? [{ label: "Cambiar Clave", path: "/configuracion?tab=clave", key: "clave" }]
+        : []),
     ];
 
     return sections.map(({ label, path }) => ({ label, path }));
-  }, []);
+  }, [isAdmin]);
 
   const menuItems = useMemo<MenuItem[]>(
     () => {
