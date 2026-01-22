@@ -126,6 +126,7 @@ const buildEmptyModuleAccess = (): ModuleAccess =>
   }, {} as ModuleAccess);
 
 export const DEFAULT_MODULE_ACCESS: ModuleAccess = buildDefaultModuleAccess();
+export const EMPTY_MODULE_ACCESS: ModuleAccess = buildEmptyModuleAccess();
 
 export const normalizeModuleAccess = (
   access?: Partial<ModuleAccess> | null
