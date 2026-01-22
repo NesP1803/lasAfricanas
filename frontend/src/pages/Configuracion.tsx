@@ -517,7 +517,7 @@ export default function Configuracion() {
   const openAccessModal = (usuario: UsuarioAdmin) => {
     setAccessModalUser(usuario);
     setAccesosModulos(
-      normalizeModuleAccess(usuario.modulos_permitidos ?? DEFAULT_MODULE_ACCESS)
+      normalizeModuleAccess(usuario.modulos_permitidos ?? null)
     );
     setMensajeAccesos("");
     setAccessModalOpen(true);
