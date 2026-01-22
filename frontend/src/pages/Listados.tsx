@@ -20,6 +20,12 @@ import { usuariosApi } from '../api/usuarios';
 import { tallerApi, type Mecanico } from '../api/taller';
 import type { Categoria, Proveedor } from '../api/inventario';
 import type { Cliente, PaginatedResponse, UsuarioAdmin } from '../types';
+import { useAuth } from '../contexts/AuthContext';
+import {
+  createFullModuleAccess,
+  isSectionEnabled,
+  normalizeModuleAccess,
+} from '../store/moduleAccess';
 
 type ActiveTab = 'clientes' | 'proveedores' | 'empleados' | 'categorias' | 'mecanicos';
 
@@ -92,15 +98,31 @@ const parseListado = <T,>(data: PaginatedResponse<T> | T[]) => {
 const PAGE_SIZE = 50;
 
 export default function Listados() {
+  const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
+
+  const isAdmin = user?.role?.toUpperCase() === 'ADMIN';
+  const moduleAccess = useMemo(
+    () =>
+      isAdmin
+        ? createFullModuleAccess()
+        : normalizeModuleAccess(user?.modulos_permitidos ?? null),
+    [isAdmin, user?.modulos_permitidos]
+  );
+
+  const allowedTabs = useMemo(
+    () => tabs.filter((tab) => isSectionEnabled(moduleAccess, 'listados', tab.key)),
+    [moduleAccess]
+  );
+
   const tabParam = searchParams.get('tab');
-  const fallbackTab = tabs[0]?.key ?? 'clientes';
-  const activeTab: ActiveTab = tabs.some((tab) => tab.key === tabParam)
+  const fallbackTab = allowedTabs[0]?.key ?? 'clientes';
+  const activeTab: ActiveTab = allowedTabs.some((tab) => tab.key === tabParam)
     ? (tabParam as ActiveTab)
     : fallbackTab;
   const activeTabConfig = useMemo(
-    () => tabs.find((tab) => tab.key === activeTab) ?? tabs[0],
-    [activeTab]
+    () => allowedTabs.find((tab) => tab.key === activeTab) ?? allowedTabs[0],
+    [activeTab, allowedTabs]
   );
 
   const [loading, setLoading] = useState(false);
@@ -130,10 +152,10 @@ export default function Listados() {
   }, [activeTab]);
 
   useEffect(() => {
-    if (!tabs.some((tab) => tab.key === tabParam)) {
+    if (!allowedTabs.some((tab) => tab.key === tabParam)) {
       setSearchParams({ tab: fallbackTab });
     }
-  }, [fallbackTab, setSearchParams, tabParam]);
+  }, [allowedTabs, fallbackTab, setSearchParams, tabParam]);
 
   useEffect(() => {
     const delay = setTimeout(() => {

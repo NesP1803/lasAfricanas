@@ -21,8 +21,14 @@ import {
   type Proveedor,
 } from '../api/inventario';
 import ProductoForm from '../components/ProductoForm';
+import { useAuth } from '../contexts/AuthContext';
+import {
+  createFullModuleAccess,
+  isSectionEnabled,
+  normalizeModuleAccess,
+} from '../store/moduleAccess';
 
-type ArticulosTab = 'mercancia' | 'stock-bajo' |  'dar-de-baja';
+type ArticulosTab = 'mercancia' | 'stock_bajo' |  'dar_de_baja';
 type EstadoFiltro = 'todos' | 'agotado' | 'bajo' | 'ok';
 
 const PAGE_SIZE = 50;
@@ -38,12 +44,12 @@ const tabConfig: Array<{
     description: 'Catálogo completo de artículos disponibles.',
   },
   {
-    key: 'stock-bajo',
+    key: 'stock_bajo',
     label: 'Stock bajo',
     description: 'Artículos con alerta de inventario.',
   },
   {
-    key: 'dar-de-baja',
+    key: 'dar_de_baja',
     label: 'Dar de baja',
     description: 'Registra salidas por daños o pérdidas.',
   },
@@ -63,15 +69,31 @@ const parseListado = <T,>(data: PaginatedResponse<T> | T[]) => {
 };
 
 export default function Articulos() {
+  const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
+
+  const isAdmin = user?.role?.toUpperCase() === 'ADMIN';
+  const moduleAccess = useMemo(
+    () =>
+      isAdmin
+        ? createFullModuleAccess()
+        : normalizeModuleAccess(user?.modulos_permitidos ?? null),
+    [isAdmin, user?.modulos_permitidos]
+  );
+
+  const allowedTabs = useMemo(
+    () => tabConfig.filter((tab) => isSectionEnabled(moduleAccess, 'articulos', tab.key)),
+    [moduleAccess]
+  );
+
   const tabParam = searchParams.get('tab');
-  const fallbackTab = tabConfig[0]?.key ?? 'mercancia';
-  const activeTab: ArticulosTab = tabConfig.some((tab) => tab.key === tabParam)
+  const fallbackTab = allowedTabs[0]?.key ?? 'mercancia';
+  const activeTab: ArticulosTab = allowedTabs.some((tab) => tab.key === tabParam)
     ? (tabParam as ArticulosTab)
     : fallbackTab;
   const activeTabConfig = useMemo(
-    () => tabConfig.find((tab) => tab.key === activeTab) ?? tabConfig[0],
-    [activeTab]
+    () => allowedTabs.find((tab) => tab.key === activeTab) ?? allowedTabs[0],
+    [activeTab, allowedTabs]
   );
 
   const [estadisticas, setEstadisticas] = useState<InventarioEstadisticas | null>(null);
@@ -103,10 +125,10 @@ export default function Articulos() {
   }, []);
 
   useEffect(() => {
-    if (!tabConfig.some((tab) => tab.key === tabParam)) {
+    if (!allowedTabs.some((tab) => tab.key === tabParam)) {
       setSearchParams({ tab: fallbackTab });
     }
-  }, [fallbackTab, setSearchParams, tabParam]);
+  }, [allowedTabs, fallbackTab, setSearchParams, tabParam]);
 
   useEffect(() => {
     setPage(1);
@@ -118,7 +140,7 @@ export default function Articulos() {
       if (activeTab === 'mercancia') {
         loadMercancia();
       }
-      if (activeTab === 'stock-bajo') {
+      if (activeTab === 'stock_bajo') {
         loadStockBajo();
       }
     }, 350);
@@ -188,7 +210,7 @@ export default function Articulos() {
     if (activeTab === 'mercancia') {
       await loadMercancia();
     }
-    if (activeTab === 'stock-bajo') {
+    if (activeTab === 'stock_bajo') {
       await loadStockBajo();
     }
   };
@@ -585,7 +607,7 @@ export default function Articulos() {
         </div>
       )}
 
-      {activeTab === 'stock-bajo' && (
+      {activeTab === 'stock_bajo' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between text-sm text-slate-500">
             <p>Artículos con niveles críticos de inventario.</p>
@@ -653,7 +675,7 @@ export default function Articulos() {
         </div>
       )}
 
-      {activeTab === 'dar-de-baja' && (
+      {activeTab === 'dar_de_baja' && (
         <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
           <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="text-lg font-semibold text-slate-900">

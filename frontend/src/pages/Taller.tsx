@@ -17,6 +17,12 @@ import { ventasApi } from '../api/ventas';
 import { tallerApi, type Mecanico, type Moto, type OrdenTaller } from '../api/taller';
 import type { Cliente, PaginatedResponse } from '../types';
 import type { Proveedor } from '../api/inventario';
+import { useAuth } from '../contexts/AuthContext';
+import {
+  createFullModuleAccess,
+  isSectionEnabled,
+  normalizeModuleAccess,
+} from '../store/moduleAccess';
 
 const parseListado = <T,>(data: PaginatedResponse<T> | T[]) => {
   if (Array.isArray(data)) {
@@ -72,15 +78,31 @@ const createDefaultMotoForm = (): MotoFormData => ({
 });
 
 export default function Taller() {
+  const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
+
+  const isAdmin = user?.role?.toUpperCase() === 'ADMIN';
+  const moduleAccess = useMemo(
+    () =>
+      isAdmin
+        ? createFullModuleAccess()
+        : normalizeModuleAccess(user?.modulos_permitidos ?? null),
+    [isAdmin, user?.modulos_permitidos]
+  );
+
+  const allowedTabs = useMemo(
+    () => tabs.filter((tab) => isSectionEnabled(moduleAccess, 'taller', tab.key)),
+    [moduleAccess]
+  );
+
   const tabParam = searchParams.get('tab');
-  const fallbackTab = tabs[0]?.key ?? 'ordenes';
-  const activeTab: ActiveTab = tabs.some((tab) => tab.key === tabParam)
+  const fallbackTab = allowedTabs[0]?.key ?? 'ordenes';
+  const activeTab: ActiveTab = allowedTabs.some((tab) => tab.key === tabParam)
     ? (tabParam as ActiveTab)
     : fallbackTab;
   const activeTabConfig = useMemo(
-    () => tabs.find((tab) => tab.key === activeTab) ?? tabs[0],
-    [activeTab]
+    () => allowedTabs.find((tab) => tab.key === activeTab) ?? allowedTabs[0],
+    [activeTab, allowedTabs]
   );
 
   const [loading, setLoading] = useState(false);
@@ -110,10 +132,10 @@ export default function Taller() {
   }, []);
 
   useEffect(() => {
-    if (!tabs.some((tab) => tab.key === tabParam)) {
+    if (!allowedTabs.some((tab) => tab.key === tabParam)) {
       setSearchParams({ tab: fallbackTab });
     }
-  }, [fallbackTab, setSearchParams, tabParam]);
+  }, [allowedTabs, fallbackTab, setSearchParams, tabParam]);
 
   useEffect(() => {
     if (activeTab !== 'ordenes') return;
