@@ -65,9 +65,10 @@ const parseListado = <T,>(data: PaginatedResponse<T> | T[]) => {
 export default function Articulos() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
+  const fallbackTab = tabConfig[0]?.key ?? 'mercancia';
   const activeTab: ArticulosTab = tabConfig.some((tab) => tab.key === tabParam)
     ? (tabParam as ArticulosTab)
-    : 'mercancia';
+    : fallbackTab;
   const activeTabConfig = useMemo(
     () => tabConfig.find((tab) => tab.key === activeTab) ?? tabConfig[0],
     [activeTab]
@@ -100,6 +101,12 @@ export default function Articulos() {
     loadEstadisticas();
     loadFiltros();
   }, []);
+
+  useEffect(() => {
+    if (!tabConfig.some((tab) => tab.key === tabParam)) {
+      setSearchParams({ tab: fallbackTab });
+    }
+  }, [fallbackTab, setSearchParams, tabParam]);
 
   useEffect(() => {
     setPage(1);
@@ -417,7 +424,7 @@ export default function Articulos() {
       </div>
 
       <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 pb-4">
-        {tabConfig.map((tab) => (
+        {allowedTabs.map((tab) => (
           <button
             key={tab.key}
             type="button"

@@ -94,9 +94,10 @@ const PAGE_SIZE = 50;
 export default function Listados() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
+  const fallbackTab = tabs[0]?.key ?? 'clientes';
   const activeTab: ActiveTab = tabs.some((tab) => tab.key === tabParam)
     ? (tabParam as ActiveTab)
-    : 'clientes';
+    : fallbackTab;
   const activeTabConfig = useMemo(
     () => tabs.find((tab) => tab.key === activeTab) ?? tabs[0],
     [activeTab]
@@ -127,6 +128,12 @@ export default function Listados() {
     setPage(1);
     setEstadoFiltro('activos');
   }, [activeTab]);
+
+  useEffect(() => {
+    if (!tabs.some((tab) => tab.key === tabParam)) {
+      setSearchParams({ tab: fallbackTab });
+    }
+  }, [fallbackTab, setSearchParams, tabParam]);
 
   useEffect(() => {
     const delay = setTimeout(() => {
@@ -342,7 +349,7 @@ export default function Listados() {
         </div>
 
         <div className="flex flex-wrap gap-3 border-b border-slate-200 bg-slate-50 px-6 py-3">
-          {tabs.map((tab) => (
+          {allowedTabs.map((tab) => (
             <button
               key={tab.key}
               type="button"

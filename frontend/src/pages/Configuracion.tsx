@@ -20,12 +20,6 @@ import type {
   UsuarioAdmin,
 } from "../types";
 import { useAuth } from "../contexts/AuthContext";
-import {
-  DEFAULT_MODULE_ACCESS,
-  MODULE_DEFINITIONS,
-  normalizeModuleAccess,
-  type ModuleAccess,
-} from "../store/moduleAccess";
 
 type ConfigTab =
   | "facturacion"
@@ -109,10 +103,6 @@ export default function Configuracion() {
     []
   );
   const [userModalOpen, setUserModalOpen] = useState(false);
-  const [accessModalOpen, setAccessModalOpen] = useState(false);
-  const [accessModalUser, setAccessModalUser] = useState<UsuarioAdmin | null>(
-    null
-  );
   const [userModalMode, setUserModalMode] = useState<"create" | "edit">(
     "create"
   );
@@ -145,15 +135,11 @@ export default function Configuracion() {
   const [mensajeImpuesto, setMensajeImpuesto] = useState("");
   const [mensajeUsuario, setMensajeUsuario] = useState("");
   const [mensajeNuevoUsuario, setMensajeNuevoUsuario] = useState("");
-  const [mensajeAccesos, setMensajeAccesos] = useState("");
 
   const [claveActual, setClaveActual] = useState("");
   const [nuevaClave, setNuevaClave] = useState("");
   const [confirmarClave, setConfirmarClave] = useState("");
 
-  const [accesosModulos, setAccesosModulos] = useState<ModuleAccess>(
-    DEFAULT_MODULE_ACCESS
-  );
 
   const tabs = useMemo(() => {
     if (!isAdmin) {
@@ -172,7 +158,6 @@ export default function Configuracion() {
       { id: "usuarios", label: "Usuarios", icon: <Users size={18} /> },
       { id: "impuestos", label: "Impuestos", icon: <Plus size={18} /> },
       { id: "auditoria", label: "Auditoría", icon: <Users size={18} /> },
-      { id: "clave", label: "Cambiar clave", icon: <UserCog size={18} /> },
     ];
   }, [isAdmin]);
 
@@ -210,8 +195,6 @@ export default function Configuracion() {
     ],
     []
   );
-
-  const moduleOptions = useMemo(() => MODULE_DEFINITIONS, []);
 
   useEffect(() => {
     const tabParam = searchParams.get("tab") as ConfigTab | null;
@@ -296,23 +279,6 @@ export default function Configuracion() {
 
     cargarUsuarios();
   }, [isAdmin]);
-
-  useEffect(() => {
-    if (!user?.id || isAdmin) {
-      return;
-    }
-
-    const cargarPerfil = async () => {
-      try {
-        const data = await configuracionAPI.obtenerUsuarioActual();
-        setPerfil(data);
-      } catch (error) {
-        console.error("Error cargando perfil:", error);
-      }
-    };
-
-    cargarPerfil();
-  }, [isAdmin, user?.id]);
 
   useEffect(() => {
     if (!isAdmin) {
@@ -445,35 +411,6 @@ export default function Configuracion() {
     }
   };
 
-  const handleGuardarAccesos = async () => {
-    if (!accessModalUser) {
-      setMensajeAccesos("No se encontró el usuario para actualizar accesos.");
-      return;
-    }
-
-    try {
-      const data = await configuracionAPI.actualizarUsuario(
-        accessModalUser.id,
-        {
-          modulos_permitidos: accesosModulos,
-        }
-      );
-      setUsuarios((prev) =>
-        prev.map((usuario) =>
-          usuario.id === data.id ? { ...usuario, ...data } : usuario
-        )
-      );
-      setAccessModalUser(data);
-      setMensajeAccesos("Accesos de módulos actualizados.");
-      if (user?.id === data.id) {
-        window.dispatchEvent(new Event("module-access-updated"));
-      }
-    } catch (error) {
-      console.error("Error actualizando accesos de módulos:", error);
-      setMensajeAccesos("No se pudieron actualizar los accesos.");
-    }
-  };
-
   const resetNuevoUsuario = () => {
     setNuevoUsuario({
       username: "",
@@ -512,21 +449,6 @@ export default function Configuracion() {
     });
     setMensajeNuevoUsuario("");
     setUserModalOpen(true);
-  };
-
-  const openAccessModal = (usuario: UsuarioAdmin) => {
-    setAccessModalUser(usuario);
-    setAccesosModulos(
-      normalizeModuleAccess(usuario.modulos_permitidos ?? DEFAULT_MODULE_ACCESS)
-    );
-    setMensajeAccesos("");
-    setAccessModalOpen(true);
-  };
-
-  const closeAccessModal = () => {
-    setAccessModalOpen(false);
-    setAccessModalUser(null);
-    setMensajeAccesos("");
   };
 
   const handleGuardarUsuarioModal = async () => {
@@ -627,6 +549,11 @@ export default function Configuracion() {
   const handleCambiarClave = async () => {
     if (!user?.id) {
       setMensajeClave("No se pudo identificar el usuario actual.");
+      return;
+    }
+
+    if (!claveActual) {
+      setMensajeClave("Debes ingresar la clave actual.");
       return;
     }
 
@@ -1245,8 +1172,7 @@ export default function Configuracion() {
         <section className="rounded-2xl bg-white p-6 shadow-sm">
           <h3 className="text-lg font-semibold text-slate-900">Usuarios</h3>
           <p className="text-sm text-slate-500">
-            Solo los administradores pueden administrar accesos y permisos de
-            los usuarios.
+            Solo los administradores pueden administrar usuarios.
           </p>
 
           {!isAdmin ? (
@@ -1255,6 +1181,58 @@ export default function Configuracion() {
             </div>
           ) : (
             <>
+              <div className="mt-6 rounded-2xl border border-slate-100 bg-slate-50 p-5">
+                <h4 className="text-base font-semibold text-slate-900">
+                  Cambiar clave de tu usuario
+                </h4>
+                <p className="text-sm text-slate-500">
+                  Ingresa tu clave actual y define una nueva contraseña.
+                </p>
+
+                {mensajeClave && (
+                  <div className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                    {mensajeClave}
+                  </div>
+                )}
+
+                <div className="mt-4 grid gap-4 md:grid-cols-3">
+                  <label className="space-y-2 text-sm font-medium text-slate-700">
+                    Clave actual
+                    <input
+                      type="password"
+                      value={claveActual}
+                      onChange={(event) => setClaveActual(event.target.value)}
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    />
+                  </label>
+                  <label className="space-y-2 text-sm font-medium text-slate-700">
+                    Nueva clave
+                    <input
+                      type="password"
+                      value={nuevaClave}
+                      onChange={(event) => setNuevaClave(event.target.value)}
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    />
+                  </label>
+                  <label className="space-y-2 text-sm font-medium text-slate-700">
+                    Confirmar nueva clave
+                    <input
+                      type="password"
+                      value={confirmarClave}
+                      onChange={(event) => setConfirmarClave(event.target.value)}
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    />
+                  </label>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCambiarClave}
+                  className="mt-4 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-blue-700"
+                >
+                  <Save size={16} /> Guardar nueva clave
+                </button>
+              </div>
+
               <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                 <div>
                   <h4 className="text-sm font-semibold text-slate-700">
@@ -1339,13 +1317,6 @@ export default function Configuracion() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => openAccessModal(usuario)}
-                            className="ml-2 rounded-lg border border-blue-200 px-3 py-1 text-xs font-medium text-blue-600 hover:border-blue-400"
-                          >
-                            Accesos
-                          </button>
-                          <button
-                            type="button"
                             onClick={() => openEditUserModal(usuario)}
                             className="ml-2 rounded-lg border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 hover:border-blue-200 hover:text-blue-600"
                           >
@@ -1368,8 +1339,7 @@ export default function Configuracion() {
             Cambiar clave
           </h3>
           <p className="text-sm text-slate-500">
-            Actualiza tu clave de acceso. Esta acción quedará registrada en
-            auditoría.
+            Actualiza tu clave. Esta acción quedará registrada en auditoría.
           </p>
 
           {mensajeClave && (
@@ -1656,173 +1626,6 @@ export default function Configuracion() {
         </div>
       )}
 
-      {accessModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4 py-6">
-          <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
-              <div>
-                <p className="text-xs font-semibold uppercase text-blue-500">
-                  Accesos por módulos
-                </p>
-                <h2 className="text-lg font-semibold text-slate-900">
-                  {accessModalUser
-                    ? `Accesos de ${accessModalUser.username}`
-                    : "Configurar accesos"}
-                </h2>
-              </div>
-              <button
-                type="button"
-                onClick={closeAccessModal}
-                className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100"
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-4">
-              <p className="text-sm text-slate-500">
-                Activa o desactiva los módulos disponibles para los perfiles
-                operativos.
-              </p>
-
-              {mensajeAccesos && (
-                <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-                  {mensajeAccesos}
-                </div>
-              )}
-
-              <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
-                {moduleOptions.map((modulo) => {
-                  const accessEntry = accesosModulos[modulo.key];
-                  const sections = modulo.sections ?? [];
-                  const hasSections = sections.length > 0;
-                  const enabledSections = sections.filter(
-                    (section) => accessEntry.sections[section.key]
-                  );
-                  const allSectionsEnabled =
-                    hasSections && enabledSections.length === sections.length;
-                  const parentChecked = hasSections
-                    ? allSectionsEnabled
-                    : accessEntry.enabled;
-
-                  return (
-                    <div
-                      key={modulo.key}
-                      className="rounded-xl border border-slate-200 bg-slate-50 p-4"
-                    >
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <p className="text-sm font-semibold text-slate-900">
-                            {modulo.label}
-                          </p>
-                          <p className="text-xs text-slate-500">
-                            {modulo.description}
-                          </p>
-                          {hasSections && (
-                            <p className="mt-1 text-[11px] text-slate-400">
-                              Seleccionadas: {enabledSections.length}/
-                              {sections.length}
-                            </p>
-                          )}
-                        </div>
-                        <input
-                          type="checkbox"
-                          checked={parentChecked}
-                          onChange={(event) =>
-                            setAccesosModulos((prev) => {
-                              const entry = prev[modulo.key];
-                              if (!hasSections) {
-                                return {
-                                  ...prev,
-                                  [modulo.key]: {
-                                    ...entry,
-                                    enabled: event.target.checked,
-                                  },
-                                };
-                              }
-                              const nextSections = { ...entry.sections };
-                              sections.forEach((section) => {
-                                nextSections[section.key] = event.target.checked;
-                              });
-                              return {
-                                ...prev,
-                                [modulo.key]: {
-                                  ...entry,
-                                  enabled: event.target.checked,
-                                  sections: nextSections,
-                                },
-                              };
-                            })
-                          }
-                          className="mt-1 h-5 w-5 accent-blue-600"
-                        />
-                      </div>
-                      {hasSections && (
-                        <div className="mt-3 space-y-2 border-t border-slate-200 pt-3">
-                          {sections.map((section) => (
-                            <label
-                              key={section.key}
-                              className="flex items-center justify-between gap-2 text-xs text-slate-600"
-                            >
-                              <span>{section.label}</span>
-                              <input
-                                type="checkbox"
-                                checked={accessEntry.sections[section.key]}
-                                onChange={(event) =>
-                                  setAccesosModulos((prev) => {
-                                    const entry = prev[modulo.key];
-                                    const nextSections = {
-                                      ...entry.sections,
-                                      [section.key]: event.target.checked,
-                                    };
-                                    const anyEnabled = Object.values(
-                                      nextSections
-                                    ).some(Boolean);
-                                    return {
-                                      ...prev,
-                                      [modulo.key]: {
-                                        ...entry,
-                                        sections: nextSections,
-                                        enabled: anyEnabled,
-                                      },
-                                    };
-                                  })
-                                }
-                                className="h-4 w-4 accent-blue-600"
-                              />
-                            </label>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
-                Estado por defecto:{" "}
-                {Object.keys(DEFAULT_MODULE_ACCESS).length} módulos habilitados.
-              </div>
-
-            </div>
-            <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 px-6 py-4">
-              <button
-                type="button"
-                onClick={closeAccessModal}
-                className="rounded-full border border-slate-200 px-5 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleGuardarAccesos}
-                className="inline-flex items-center gap-2 rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
-              >
-                <Save size={16} /> Guardar accesos
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

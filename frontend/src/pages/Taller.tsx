@@ -74,9 +74,10 @@ const createDefaultMotoForm = (): MotoFormData => ({
 export default function Taller() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
+  const fallbackTab = tabs[0]?.key ?? 'ordenes';
   const activeTab: ActiveTab = tabs.some((tab) => tab.key === tabParam)
     ? (tabParam as ActiveTab)
-    : 'ordenes';
+    : fallbackTab;
   const activeTabConfig = useMemo(
     () => tabs.find((tab) => tab.key === activeTab) ?? tabs[0],
     [activeTab]
@@ -107,6 +108,12 @@ export default function Taller() {
   useEffect(() => {
     loadMecanicos();
   }, []);
+
+  useEffect(() => {
+    if (!tabs.some((tab) => tab.key === tabParam)) {
+      setSearchParams({ tab: fallbackTab });
+    }
+  }, [fallbackTab, setSearchParams, tabParam]);
 
   useEffect(() => {
     if (activeTab !== 'ordenes') return;
@@ -404,7 +411,7 @@ export default function Taller() {
         </div>
 
         <div className="flex flex-wrap gap-3 border-b border-slate-200 bg-slate-50 px-6 py-3">
-          {tabs.map((tab) => (
+          {allowedTabs.map((tab) => (
             <button
               key={tab.key}
               type="button"

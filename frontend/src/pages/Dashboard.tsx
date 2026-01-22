@@ -136,7 +136,7 @@ export default function Dashboard() {
 
         <div className="bg-white rounded-lg shadow-md p-6">
           <h2 className="text-xl font-semibold text-gray-900 mb-4">
-            Accesos Rápidos
+            Atajos rápidos
           </h2>
           <div className="space-y-2">
             <button className="w-full text-left px-4 py-2 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 transition-colors">
