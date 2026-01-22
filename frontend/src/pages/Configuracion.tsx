@@ -298,23 +298,6 @@ export default function Configuracion() {
   }, [isAdmin]);
 
   useEffect(() => {
-    if (!user?.id || isAdmin) {
-      return;
-    }
-
-    const cargarPerfil = async () => {
-      try {
-        const data = await configuracionAPI.obtenerUsuarioActual();
-        setPerfil(data);
-      } catch (error) {
-        console.error("Error cargando perfil:", error);
-      }
-    };
-
-    cargarPerfil();
-  }, [isAdmin, user?.id]);
-
-  useEffect(() => {
     if (!isAdmin) {
       return;
     }
