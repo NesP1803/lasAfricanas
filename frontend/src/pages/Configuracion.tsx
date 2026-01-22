@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   CheckCircle2,
@@ -20,6 +20,13 @@ import type {
   UsuarioAdmin,
 } from "../types";
 import { useAuth } from "../contexts/AuthContext";
+import {
+  MODULE_DEFINITIONS,
+  createEmptyModuleAccess,
+  isSectionEnabled,
+  normalizeModuleAccess,
+  type ModuleAccessState,
+} from "../store/moduleAccess";
 
 type ConfigTab =
   | "facturacion"
@@ -107,6 +114,11 @@ export default function Configuracion() {
     "create"
   );
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
+  const [accessModalOpen, setAccessModalOpen] = useState(false);
+  const [accessUsuario, setAccessUsuario] = useState<UsuarioAdmin | null>(null);
+  const [accessSeleccionado, setAccessSeleccionado] =
+    useState<ModuleAccessState>(createEmptyModuleAccess());
+  const [mensajeAccesos, setMensajeAccesos] = useState("");
   const [origenUsuario, setOrigenUsuario] = useState<"manual" | "mecanico">(
     "manual"
   );
@@ -141,26 +153,48 @@ export default function Configuracion() {
   const [confirmarClave, setConfirmarClave] = useState("");
   const [mostrarClaveActual, setMostrarClaveActual] = useState(false);
 
-
+  const moduleAccess = useMemo(
+    () =>
+      isAdmin
+        ? createEmptyModuleAccess()
+        : normalizeModuleAccess(user?.modulos_permitidos ?? null),
+    [isAdmin, user?.modulos_permitidos]
+  );
+  const configuracionSections =
+    MODULE_DEFINITIONS.find((moduleDef) => moduleDef.key === "configuracion")
+      ?.sections ?? [];
   const tabs = useMemo(() => {
-    if (!isAdmin) {
-      return [
-        { id: "usuarios", label: "Cambiar clave", icon: <UserCog size={18} /> },
-      ];
-    }
+    const visibleSections = isAdmin
+      ? configuracionSections
+      : configuracionSections.filter((section) =>
+          isSectionEnabled(moduleAccess, "configuracion", section.key)
+        );
 
-    return [
-      {
-        id: "facturacion",
-        label: "Facturación",
-        icon: <ShieldCheck size={18} />,
-      },
-      { id: "empresa", label: "Empresa", icon: <UserCog size={18} /> },
-      { id: "usuarios", label: "Usuarios", icon: <Users size={18} /> },
-      { id: "impuestos", label: "Impuestos", icon: <Plus size={18} /> },
-      { id: "auditoria", label: "Auditoría", icon: <Users size={18} /> },
-    ];
-  }, [isAdmin]);
+    return visibleSections.map((section) => ({
+      id: section.key as ConfigTab,
+      label:
+        section.key === "usuarios" && !isAdmin
+          ? "Cambiar clave"
+          : section.label,
+      icon:
+        section.key === "facturacion" ? (
+          <ShieldCheck size={18} />
+        ) : section.key === "empresa" ? (
+          <UserCog size={18} />
+        ) : section.key === "usuarios" ? (
+          <Users size={18} />
+        ) : section.key === "impuestos" ? (
+          <Plus size={18} />
+        ) : (
+          <Users size={18} />
+        ),
+    }));
+  }, [configuracionSections, isAdmin, moduleAccess]);
+
+  const canViewImpuestos =
+    isAdmin || isSectionEnabled(moduleAccess, "configuracion", "impuestos");
+  const canViewAuditoria =
+    isAdmin || isSectionEnabled(moduleAccess, "configuracion", "auditoria");
 
   const availableTabs = useMemo(
     () => tabs.map((tab) => tab.id as ConfigTab),
@@ -243,48 +277,48 @@ export default function Configuracion() {
         console.error("Error cargando facturación:", error);
       }
 
-      if (!isAdmin) {
-        return;
+      if (canViewImpuestos) {
+        try {
+          const data = await configuracionAPI.obtenerImpuestos();
+          if (data?.length) {
+            setImpuestos(data);
+          }
+        } catch (error) {
+          console.error("Error cargando impuestos:", error);
+        }
       }
 
-      try {
-        const data = await configuracionAPI.obtenerImpuestos();
-        if (data?.length) {
-          setImpuestos(data);
+      if (canViewAuditoria) {
+        try {
+          const data = await configuracionAPI.obtenerAuditoria();
+          if (data?.length) {
+            setAuditoria(data);
+          }
+        } catch (error) {
+          console.error("Error cargando auditoría:", error);
         }
-      } catch (error) {
-        console.error("Error cargando impuestos:", error);
-      }
-
-      try {
-        const data = await configuracionAPI.obtenerAuditoria();
-        if (data?.length) {
-          setAuditoria(data);
-        }
-      } catch (error) {
-        console.error("Error cargando auditoría:", error);
       }
     };
 
     cargarDatos();
-  }, [isAdmin]);
+  }, [canViewAuditoria, canViewImpuestos, isAdmin]);
+
+  const cargarUsuarios = useCallback(async () => {
+    try {
+      const data = await configuracionAPI.obtenerUsuarios();
+      setUsuarios(data);
+    } catch (error) {
+      console.error("Error cargando usuarios:", error);
+    }
+  }, []);
 
   useEffect(() => {
     if (!isAdmin) {
       return;
     }
 
-    const cargarUsuarios = async () => {
-      try {
-        const data = await configuracionAPI.obtenerUsuarios();
-        setUsuarios(data);
-      } catch (error) {
-        console.error("Error cargando usuarios:", error);
-      }
-    };
-
     cargarUsuarios();
-  }, [isAdmin]);
+  }, [cargarUsuarios, isAdmin]);
 
   useEffect(() => {
     if (!isAdmin) {
@@ -414,6 +448,90 @@ export default function Configuracion() {
     } catch (error) {
       console.error("Error actualizando usuario:", error);
       setMensajeUsuario("No se pudo actualizar el usuario.");
+    }
+  };
+
+  const openAccessModal = (usuario: UsuarioAdmin) => {
+    setAccessUsuario(usuario);
+    setAccessSeleccionado(
+      normalizeModuleAccess(usuario.modulos_permitidos ?? null)
+    );
+    setMensajeAccesos("");
+    setAccessModalOpen(true);
+  };
+
+  const closeAccessModal = () => {
+    setAccessModalOpen(false);
+    setAccessUsuario(null);
+    setAccessSeleccionado(createEmptyModuleAccess());
+    setMensajeAccesos("");
+  };
+
+  const toggleAccessModule = (moduleKey: string, enabled: boolean) => {
+    setAccessSeleccionado((prev) => {
+      const moduleDef = MODULE_DEFINITIONS.find(
+        (definition) => definition.key === moduleKey
+      );
+      if (!moduleDef) {
+        return prev;
+      }
+      const current = prev[moduleKey];
+      const nextSections = { ...current.sections };
+      (moduleDef.sections ?? []).forEach((section) => {
+        nextSections[section.key] = enabled;
+      });
+      return {
+        ...prev,
+        [moduleKey]: {
+          ...current,
+          enabled,
+          sections: nextSections,
+        },
+      };
+    });
+  };
+
+  const toggleAccessSection = (
+    moduleKey: string,
+    sectionKey: string,
+    enabled: boolean
+  ) => {
+    setAccessSeleccionado((prev) => {
+      const current = prev[moduleKey];
+      if (!current) {
+        return prev;
+      }
+      const nextSections = {
+        ...current.sections,
+        [sectionKey]: enabled,
+      };
+      const hasAnySelected = Object.values(nextSections).some(Boolean);
+      return {
+        ...prev,
+        [moduleKey]: {
+          ...current,
+          enabled: hasAnySelected,
+          sections: nextSections,
+        },
+      };
+    });
+  };
+
+  const handleGuardarAccesos = async () => {
+    if (!accessUsuario) {
+      return;
+    }
+    setMensajeAccesos("");
+    try {
+      await configuracionAPI.actualizarUsuario(accessUsuario.id, {
+        modulos_permitidos: accessSeleccionado,
+      });
+      await cargarUsuarios();
+      closeAccessModal();
+      setMensajeUsuario("Accesos actualizados correctamente.");
+    } catch (error) {
+      console.error("Error actualizando accesos:", error);
+      setMensajeAccesos("No se pudieron guardar los accesos.");
     }
   };
 
@@ -1329,6 +1447,13 @@ export default function Configuracion() {
                           >
                             Editar
                           </button>
+                          <button
+                            type="button"
+                            onClick={() => openAccessModal(usuario)}
+                            className="ml-2 rounded-lg border border-blue-200 px-3 py-1 text-xs font-medium text-blue-600 hover:border-blue-300 hover:text-blue-700"
+                          >
+                            Accesos
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -1607,6 +1732,129 @@ export default function Configuracion() {
                   className="rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
                 >
                   {userModalMode === "create" ? "Crear usuario" : "Guardar"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {accessModalOpen && accessUsuario && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4 py-6">
+          <div className="w-full max-w-5xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+              <div>
+                <p className="text-xs font-semibold uppercase text-blue-500">
+                  Accesos por módulos
+                </p>
+                <h2 className="text-lg font-semibold text-slate-900">
+                  Accesos de {accessUsuario.username}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={closeAccessModal}
+                className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="space-y-6 px-6 py-4">
+              {mensajeAccesos && (
+                <div className="rounded-lg border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                  {mensajeAccesos}
+                </div>
+              )}
+              <p className="text-sm text-slate-600">
+                Activa o desactiva los módulos disponibles para este usuario.
+              </p>
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {MODULE_DEFINITIONS.map((moduleDef) => {
+                  const moduleState = accessSeleccionado[moduleDef.key];
+                  const totalSections =
+                    moduleDef.sections && moduleDef.sections.length > 0
+                      ? moduleDef.sections.length
+                      : 1;
+                  const selectedSections =
+                    moduleDef.sections && moduleDef.sections.length > 0
+                      ? moduleDef.sections.filter(
+                          (section) => moduleState.sections[section.key]
+                        ).length
+                      : moduleState.enabled
+                      ? 1
+                      : 0;
+
+                  return (
+                    <div
+                      key={moduleDef.key}
+                      className="rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm"
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <h3 className="text-sm font-semibold text-slate-800">
+                            {moduleDef.label}
+                          </h3>
+                          {moduleDef.description && (
+                            <p className="text-xs text-slate-500">
+                              {moduleDef.description}
+                            </p>
+                          )}
+                          <p className="mt-2 text-xs text-slate-400">
+                            Seleccionadas: {selectedSections}/{totalSections}
+                          </p>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={moduleState.enabled}
+                          onChange={(event) =>
+                            toggleAccessModule(
+                              moduleDef.key,
+                              event.target.checked
+                            )
+                          }
+                        />
+                      </div>
+                      {moduleDef.sections && moduleDef.sections.length > 0 && (
+                        <div className="mt-4 space-y-2 border-t border-slate-200 pt-3">
+                          {moduleDef.sections.map((section) => (
+                            <label
+                              key={section.key}
+                              className="flex items-center justify-between text-xs text-slate-600"
+                            >
+                              {section.label}
+                              <input
+                                type="checkbox"
+                                checked={moduleState.sections[section.key]}
+                                onChange={(event) =>
+                                  toggleAccessSection(
+                                    moduleDef.key,
+                                    section.key,
+                                    event.target.checked
+                                  )
+                                }
+                              />
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 pt-4">
+                <button
+                  type="button"
+                  onClick={closeAccessModal}
+                  className="rounded-full border border-slate-200 px-5 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleGuardarAccesos}
+                  className="inline-flex items-center gap-2 rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+                >
+                  <Save size={16} /> Guardar accesos
                 </button>
               </div>
             </div>
