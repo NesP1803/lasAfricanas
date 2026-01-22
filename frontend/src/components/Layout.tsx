@@ -2,10 +2,17 @@ import {
   Outlet,
   Navigate,
   useNavigate,
+  useLocation,
 } from "react-router-dom";
 import { useEffect, useMemo, useState, useRef, type ReactNode } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { configuracionAPI } from "../api/configuracion";
+import {
+  createFullModuleAccess,
+  isModuleEnabled,
+  isSectionEnabled,
+  normalizeModuleAccess,
+} from "../store/moduleAccess";
 
 import {
   ClipboardList,
@@ -109,6 +116,7 @@ function DropdownList({
 export default function Layout() {
   const { isAuthenticated, user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileExpanded, setMobileExpanded] = useState<Record<string, boolean>>(
@@ -168,27 +176,122 @@ export default function Layout() {
   };
 
   const isAdmin = user?.role?.toUpperCase() === "ADMIN";
+  const moduleAccess = useMemo(
+    () =>
+      isAdmin
+        ? createFullModuleAccess()
+        : normalizeModuleAccess(user?.modulos_permitidos ?? null),
+    [isAdmin, user?.modulos_permitidos]
+  );
+  const moduleEnabled = (key: string) => isModuleEnabled(moduleAccess, key);
+  const sectionEnabled = (moduleKey: string, sectionKey: string) =>
+    isSectionEnabled(moduleAccess, moduleKey, sectionKey);
 
   const configuracionItems = useMemo(() => {
     const sections = [
       { label: "Facturación", path: "/configuracion?tab=facturacion", key: "facturacion" },
       { label: "Empresa", path: "/configuracion?tab=empresa", key: "empresa" },
-      { label: "Usuarios", path: "/configuracion?tab=usuarios", key: "usuarios" },
+      { label: isAdmin ? "Usuarios" : "Cambiar clave", path: "/configuracion?tab=usuarios", key: "usuarios" },
       { label: "Impuestos", path: "/configuracion?tab=impuestos", key: "impuestos" },
       { label: "Auditoría", path: "/configuracion?tab=auditoria", key: "auditoria" },
-      ...(!isAdmin
-        ? [
-            {
-              label: "Cambiar Clave",
-              path: "/configuracion?tab=usuarios",
-              key: "usuarios",
-            },
-          ]
-        : []),
     ];
 
-    return sections.map(({ label, path }) => ({ label, path }));
-  }, [isAdmin]);
+    const filtered = isAdmin
+      ? sections
+      : sections.filter((section) => sectionEnabled("configuracion", section.key));
+
+    return filtered.map(({ label, path }) => ({ label, path }));
+  }, [isAdmin, moduleAccess]);
+
+  useEffect(() => {
+    if (isAdmin) {
+      return;
+    }
+
+    const resolveRouteAccess = (
+      pathname: string,
+      search: string
+    ): { moduleKey: string; sectionKey?: string } | null => {
+      if (pathname === "/" || pathname === "") {
+        return null;
+      }
+
+      if (pathname.startsWith("/configuracion")) {
+        const params = new URLSearchParams(search);
+        const tab = params.get("tab");
+        const resolvedTab = tab === "clave" ? "usuarios" : tab ?? undefined;
+        return { moduleKey: "configuracion", sectionKey: resolvedTab };
+      }
+
+      if (pathname.startsWith("/listados")) {
+        const params = new URLSearchParams(search);
+        const tab = params.get("tab") ?? undefined;
+        return { moduleKey: "listados", sectionKey: tab };
+      }
+
+      if (pathname.startsWith("/articulos")) {
+        const params = new URLSearchParams(search);
+        const tab = params.get("tab");
+        const mappedTab =
+          tab === "stock-bajo"
+            ? "stock_bajo"
+            : tab === "dar-de-baja"
+            ? "dar_de_baja"
+            : tab ?? undefined;
+        return { moduleKey: "articulos", sectionKey: mappedTab };
+      }
+
+      if (pathname.startsWith("/taller")) {
+        const params = new URLSearchParams(search);
+        const tab = params.get("tab") ?? undefined;
+        return { moduleKey: "taller", sectionKey: tab };
+      }
+
+      if (pathname.startsWith("/ventas/detalles-cuentas")) {
+        return { moduleKey: "facturacion", sectionKey: "cuentas" };
+      }
+
+      if (pathname.startsWith("/ventas/cuentas-dia")) {
+        return { moduleKey: "facturacion", sectionKey: "cuentas" };
+      }
+
+      if (pathname.startsWith("/ventas")) {
+        return { moduleKey: "facturacion", sectionKey: "venta_rapida" };
+      }
+
+      if (pathname.startsWith("/facturacion/facturas")) {
+        return { moduleKey: "facturacion", sectionKey: "listados" };
+      }
+
+      if (pathname.startsWith("/facturacion/remisiones")) {
+        return { moduleKey: "facturacion", sectionKey: "listados" };
+      }
+
+      return null;
+    };
+
+    const requirement = resolveRouteAccess(
+      location.pathname,
+      location.search
+    );
+    if (!requirement) {
+      return;
+    }
+
+    const allowed = requirement.sectionKey
+      ? sectionEnabled(requirement.moduleKey, requirement.sectionKey)
+      : moduleEnabled(requirement.moduleKey);
+
+    if (!allowed) {
+      navigate("/");
+    }
+  }, [
+    isAdmin,
+    location.pathname,
+    location.search,
+    moduleAccess,
+    navigate,
+  ]);
 
   const menuItems = useMemo<MenuItem[]>(
     () => {
@@ -222,11 +325,16 @@ export default function Layout() {
           },
           { label: "Mecánicos", path: "/listados?tab=mecanicos", key: "mecanicos" },
         ];
-        if (listadosItems.length > 0) {
+        const filtered = isAdmin
+          ? listadosItems
+          : listadosItems.filter((item) =>
+              sectionEnabled("listados", item.key)
+            );
+        if (filtered.length > 0) {
           items.push({
             label: "Listados",
             icon: <ClipboardList size={18} />,
-            items: listadosItems.map(({ label, path }) => ({ label, path })),
+            items: filtered.map(({ label, path }) => ({ label, path })),
           });
         }
       }
@@ -244,11 +352,16 @@ export default function Layout() {
             key: "dar_de_baja",
           },
         ];
-        if (articulosItems.length > 0) {
+        const filtered = isAdmin
+          ? articulosItems
+          : articulosItems.filter((item) =>
+              sectionEnabled("articulos", item.key)
+            );
+        if (filtered.length > 0) {
           items.push({
             label: "Artículos",
             icon: <Boxes size={18} />,
-            items: articulosItems.map(({ label, path }) => ({ label, path })),
+            items: filtered.map(({ label, path }) => ({ label, path })),
           });
         }
       }
@@ -257,18 +370,24 @@ export default function Layout() {
           { label: "Operaciones", path: "/taller?tab=ordenes", key: "ordenes" },
           { label: "Registro de Motos", path: "/taller?tab=motos", key: "motos" },
         ];
-        if (tallerItems.length > 0) {
+        const filtered = isAdmin
+          ? tallerItems
+          : tallerItems.filter((item) => sectionEnabled("taller", item.key));
+        if (filtered.length > 0) {
           items.push({
             label: "Taller",
             icon: <Wrench size={18} />,
-            items: tallerItems.map(({ label, path }) => ({ label, path })),
+            items: filtered.map(({ label, path }) => ({ label, path })),
           });
         }
       }
       {
-        const facturacionItems: MenuItem[] = [
-          { label: "Venta rápida", path: "/ventas" },
-          {
+        const facturacionItems: MenuItem[] = [];
+        if (isAdmin || sectionEnabled("facturacion", "venta_rapida")) {
+          facturacionItems.push({ label: "Venta rápida", path: "/ventas" });
+        }
+        if (isAdmin || sectionEnabled("facturacion", "cuentas")) {
+          facturacionItems.push({
             label: "Cuentas",
             items: [
               { label: "Cuentas del día", path: "/ventas/cuentas-dia" },
@@ -277,15 +396,17 @@ export default function Layout() {
                 path: "/ventas/detalles-cuentas",
               },
             ],
-          },
-          {
+          });
+        }
+        if (isAdmin || sectionEnabled("facturacion", "listados")) {
+          facturacionItems.push({
             label: "Listados",
             items: [
               { label: "Facturas", path: "/facturacion/facturas" },
               { label: "Remisiones", path: "/facturacion/remisiones" },
             ],
-          },
-        ];
+          });
+        }
         if (facturacionItems.length > 0) {
           items.push({
             label: "Facturación",
