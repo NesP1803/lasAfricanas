@@ -1,14 +1,12 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { configuracionAPI } from '../api/configuracion';
-import type { ModuleAccess } from '../store/moduleAccess';
 
 interface User {
   id: number;
   username: string;
   role: string;
   email?: string;
-  modulos_permitidos?: ModuleAccess;
 }
 
 interface AuthContextType {
@@ -103,7 +101,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         username: data.user.username,
         role: data.user.role,
         email: data.user.email,
-        modulos_permitidos: data.user.modulos_permitidos,
       });
     } catch (error) {
       console.error('Error completo en login:', error);
@@ -140,7 +137,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           username: data.username,
           role: data.tipo_usuario ?? user.role,
           email: data.email,
-          modulos_permitidos: data.modulos_permitidos,
         };
         persistUser(updatedUser);
       } catch (error) {

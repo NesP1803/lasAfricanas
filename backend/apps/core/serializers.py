@@ -3,7 +3,6 @@ from rest_framework import serializers
 from .models import (
     ConfiguracionEmpresa,
     ConfiguracionFacturacion,
-    ConfiguracionModulos,
     Impuesto,
     Auditoria,
 )
@@ -18,12 +17,6 @@ class ConfiguracionEmpresaSerializer(serializers.ModelSerializer):
 class ConfiguracionFacturacionSerializer(serializers.ModelSerializer):
     class Meta:
         model = ConfiguracionFacturacion
-        fields = '__all__'
-
-
-class ConfiguracionModulosSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = ConfiguracionModulos
         fields = '__all__'
 
 

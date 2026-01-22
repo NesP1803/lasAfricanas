@@ -2,18 +2,10 @@ import {
   Outlet,
   Navigate,
   useNavigate,
-  useLocation,
 } from "react-router-dom";
 import { useEffect, useMemo, useState, useRef, type ReactNode } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { configuracionAPI } from "../api/configuracion";
-import {
-  DEFAULT_MODULE_ACCESS,
-  isModuleEnabled,
-  isSectionEnabled,
-  normalizeModuleAccess,
-  type ModuleKey,
-} from "../store/moduleAccess";
 
 import {
   ClipboardList,
@@ -117,16 +109,10 @@ function DropdownList({
 export default function Layout() {
   const { isAuthenticated, user, logout } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileExpanded, setMobileExpanded] = useState<Record<string, boolean>>(
     {}
-  );
-  const [moduleAccess, setModuleAccess] = useState(() =>
-    user?.role?.toUpperCase() === "ADMIN"
-      ? DEFAULT_MODULE_ACCESS
-      : normalizeModuleAccess(user?.modulos_permitidos ?? null)
   );
 
   // --- Menú principal con delay ---
@@ -172,43 +158,6 @@ export default function Layout() {
     cargarLogo();
   }, []);
 
-  useEffect(() => {
-    if (!user?.id) {
-      return;
-    }
-
-    setModuleAccess(
-      user?.role?.toUpperCase() === "ADMIN"
-        ? DEFAULT_MODULE_ACCESS
-        : normalizeModuleAccess(user?.modulos_permitidos ?? null)
-    );
-  }, [user?.id, user?.modulos_permitidos, user?.role]);
-
-  useEffect(() => {
-    if (!user?.id) {
-      return;
-    }
-
-    const refreshAccess = async () => {
-      try {
-        const data = await configuracionAPI.obtenerUsuarioActual();
-        setModuleAccess(
-          user?.role?.toUpperCase() === "ADMIN"
-            ? DEFAULT_MODULE_ACCESS
-            : normalizeModuleAccess(data.modulos_permitidos ?? null)
-        );
-      } catch (error) {
-        console.error("Error cargando accesos de módulos:", error);
-      }
-    };
-
-    refreshAccess();
-    window.addEventListener("module-access-updated", refreshAccess);
-    return () => {
-      window.removeEventListener("module-access-updated", refreshAccess);
-    };
-  }, [user?.id, user?.role]);
-
   if (!isAuthenticated) {
     return <Navigate to="/login" />;
   }
@@ -218,23 +167,6 @@ export default function Layout() {
     navigate("/login");
   };
 
-  const role = user?.role?.toUpperCase() ?? "VENDEDOR";
-  const isAdmin = role === "ADMIN";
-
-  const moduleEnabled = (key: ModuleKey) => {
-    if (isAdmin) {
-      return true;
-    }
-    return isModuleEnabled(moduleAccess, key);
-  };
-
-  const sectionEnabled = (moduleKey: ModuleKey, sectionKey: string) => {
-    if (isAdmin) {
-      return true;
-    }
-    return isSectionEnabled(moduleAccess, moduleKey, sectionKey);
-  };
-
   const configuracionItems = useMemo(() => {
     const sections = [
       { label: "Facturación", path: "/configuracion?tab=facturacion", key: "facturacion" },
@@ -242,24 +174,17 @@ export default function Layout() {
       { label: "Usuarios", path: "/configuracion?tab=usuarios", key: "usuarios" },
       { label: "Impuestos", path: "/configuracion?tab=impuestos", key: "impuestos" },
       { label: "Auditoría", path: "/configuracion?tab=auditoria", key: "auditoria" },
-      { label: "Accesos", path: "/configuracion?tab=accesos", key: "accesos" },
       { label: "Cambiar Clave", path: "/configuracion?tab=clave", key: "clave" },
     ];
 
-    if (isAdmin) {
-      return sections.map(({ label, path }) => ({ label, path }));
-    }
-
-    return sections
-      .filter((section) => sectionEnabled("configuracion", section.key))
-      .map(({ label, path }) => ({ label, path }));
-  }, [isAdmin, moduleAccess]);
+    return sections.map(({ label, path }) => ({ label, path }));
+  }, []);
 
   const menuItems = useMemo<MenuItem[]>(
     () => {
       const items: MenuItem[] = [];
 
-      if (moduleEnabled("configuracion") && configuracionItems.length > 0) {
+      if (configuracionItems.length > 0) {
         items.push({
           label: "Configuración",
           icon: <Settings size={18} />,
@@ -267,7 +192,7 @@ export default function Layout() {
         });
       }
 
-      if (moduleEnabled("listados")) {
+      {
         const listadosItems = [
           { label: "Clientes", path: "/listados?tab=clientes", key: "clientes" },
           {
@@ -286,7 +211,7 @@ export default function Layout() {
             key: "categorias",
           },
           { label: "Mecánicos", path: "/listados?tab=mecanicos", key: "mecanicos" },
-        ].filter((item) => sectionEnabled("listados", item.key));
+        ];
         if (listadosItems.length > 0) {
           items.push({
             label: "Listados",
@@ -295,7 +220,7 @@ export default function Layout() {
           });
         }
       }
-      if (moduleEnabled("articulos")) {
+      {
         const articulosItems = [
           { label: "Mercancia", path: "/articulos?tab=mercancia", key: "mercancia" },
           {
@@ -308,7 +233,7 @@ export default function Layout() {
             path: "/articulos?tab=dar-de-baja",
             key: "dar_de_baja",
           },
-        ].filter((item) => sectionEnabled("articulos", item.key));
+        ];
         if (articulosItems.length > 0) {
           items.push({
             label: "Artículos",
@@ -317,11 +242,11 @@ export default function Layout() {
           });
         }
       }
-      if (moduleEnabled("taller")) {
+      {
         const tallerItems = [
           { label: "Operaciones", path: "/taller?tab=ordenes", key: "ordenes" },
           { label: "Registro de Motos", path: "/taller?tab=motos", key: "motos" },
-        ].filter((item) => sectionEnabled("taller", item.key));
+        ];
         if (tallerItems.length > 0) {
           items.push({
             label: "Taller",
@@ -330,13 +255,10 @@ export default function Layout() {
           });
         }
       }
-      if (moduleEnabled("facturacion")) {
-        const facturacionItems: MenuItem[] = [];
-        if (sectionEnabled("facturacion", "venta_rapida")) {
-          facturacionItems.push({ label: "Venta rápida", path: "/ventas" });
-        }
-        if (sectionEnabled("facturacion", "cuentas")) {
-          facturacionItems.push({
+      {
+        const facturacionItems: MenuItem[] = [
+          { label: "Venta rápida", path: "/ventas" },
+          {
             label: "Cuentas",
             items: [
               { label: "Cuentas del día", path: "/ventas/cuentas-dia" },
@@ -345,17 +267,15 @@ export default function Layout() {
                 path: "/ventas/detalles-cuentas",
               },
             ],
-          });
-        }
-        if (sectionEnabled("facturacion", "listados")) {
-          facturacionItems.push({
+          },
+          {
             label: "Listados",
             items: [
               { label: "Facturas", path: "/facturacion/facturas" },
               { label: "Remisiones", path: "/facturacion/remisiones" },
             ],
-          });
-        }
+          },
+        ];
         if (facturacionItems.length > 0) {
           items.push({
             label: "Facturación",
@@ -374,38 +294,8 @@ export default function Layout() {
 
       return items;
     },
-    [configuracionItems, isAdmin, moduleAccess]
+    [configuracionItems]
   );
-
-  const allowedPaths = useMemo(() => {
-    const paths: string[] = [];
-    const collectPaths = (items: MenuItem[]) => {
-      items.forEach((item) => {
-        if (item.path) {
-          paths.push(item.path.split("?")[0]);
-        }
-        if (item.items) {
-          collectPaths(item.items);
-        }
-      });
-    };
-    collectPaths(menuItems);
-    return paths;
-  }, [menuItems]);
-
-  useEffect(() => {
-    if (isAdmin) {
-      return;
-    }
-    if (allowedPaths.length === 0) {
-      return;
-    }
-    const currentPath = location.pathname;
-    const isAllowed = allowedPaths.some((path) => path === currentPath);
-    if (!isAllowed) {
-      navigate(allowedPaths[0]);
-    }
-  }, [allowedPaths, isAdmin, location.pathname, navigate]);
 
   const renderMenuButton = (label: string, icon?: ReactNode) => (
     <>

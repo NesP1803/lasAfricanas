@@ -21,12 +21,6 @@ import {
   type Proveedor,
 } from '../api/inventario';
 import ProductoForm from '../components/ProductoForm';
-import { useAuth } from '../contexts/AuthContext';
-import {
-  EMPTY_MODULE_ACCESS,
-  isSectionEnabled,
-  normalizeModuleAccess,
-} from '../store/moduleAccess';
 
 type ArticulosTab = 'mercancia' | 'stock-bajo' |  'dar-de-baja';
 type EstadoFiltro = 'todos' | 'agotado' | 'bajo' | 'ok';
@@ -55,12 +49,6 @@ const tabConfig: Array<{
   },
 ];
 
-const accessSectionByTab: Record<ArticulosTab, string> = {
-  mercancia: 'mercancia',
-  'stock-bajo': 'stock_bajo',
-  'dar-de-baja': 'dar_de_baja',
-};
-
 const currency = new Intl.NumberFormat('es-CO', {
   style: 'currency',
   currency: 'COP',
@@ -75,29 +63,15 @@ const parseListado = <T,>(data: PaginatedResponse<T> | T[]) => {
 };
 
 export default function Articulos() {
-  const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
-  const isAdmin = user?.role?.toUpperCase() === 'ADMIN';
-  const moduleAccess = useMemo(
-    () => normalizeModuleAccess(user?.modulos_permitidos ?? EMPTY_MODULE_ACCESS),
-    [user?.modulos_permitidos]
-  );
-  const allowedTabs = useMemo(() => {
-    if (isAdmin) {
-      return tabConfig;
-    }
-    return tabConfig.filter((tab) =>
-      isSectionEnabled(moduleAccess, 'articulos', accessSectionByTab[tab.key])
-    );
-  }, [isAdmin, moduleAccess]);
-  const fallbackTab = allowedTabs[0]?.key ?? 'mercancia';
-  const activeTab: ArticulosTab = allowedTabs.some((tab) => tab.key === tabParam)
+  const fallbackTab = tabConfig[0]?.key ?? 'mercancia';
+  const activeTab: ArticulosTab = tabConfig.some((tab) => tab.key === tabParam)
     ? (tabParam as ArticulosTab)
     : fallbackTab;
   const activeTabConfig = useMemo(
-    () => allowedTabs.find((tab) => tab.key === activeTab) ?? tabConfig[0],
-    [activeTab, allowedTabs]
+    () => tabConfig.find((tab) => tab.key === activeTab) ?? tabConfig[0],
+    [activeTab]
   );
 
   const [estadisticas, setEstadisticas] = useState<InventarioEstadisticas | null>(null);
@@ -129,13 +103,10 @@ export default function Articulos() {
   }, []);
 
   useEffect(() => {
-    if (allowedTabs.length === 0) {
-      return;
+    if (!tabConfig.some((tab) => tab.key === tabParam)) {
+      setSearchParams({ tab: fallbackTab });
     }
-    if (!allowedTabs.some((tab) => tab.key === tabParam)) {
-      setSearchParams({ tab: allowedTabs[0].key });
-    }
-  }, [allowedTabs, setSearchParams, tabParam]);
+  }, [fallbackTab, setSearchParams, tabParam]);
 
   useEffect(() => {
     setPage(1);

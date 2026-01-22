@@ -19,7 +19,6 @@ from apps.ventas.views import (
 from apps.core.views import (
     ConfiguracionEmpresaViewSet,
     ConfiguracionFacturacionViewSet,
-    ConfiguracionModulosViewSet,
     ImpuestoViewSet,
     AuditoriaViewSet,
 )
@@ -44,7 +43,6 @@ router.register(r'ventas', VentaViewSet, basename='venta')
 # Registrar Configuración y Auditoría
 router.register(r'configuracion-empresa', ConfiguracionEmpresaViewSet, basename='configuracion-empresa')
 router.register(r'configuracion-facturacion', ConfiguracionFacturacionViewSet, basename='configuracion-facturacion')
-router.register(r'configuracion-modulos', ConfiguracionModulosViewSet, basename='configuracion-modulos')
 router.register(r'impuestos', ImpuestoViewSet, basename='impuesto')
 router.register(r'auditoria', AuditoriaViewSet, basename='auditoria')
 
