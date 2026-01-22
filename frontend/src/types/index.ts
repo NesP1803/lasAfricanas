@@ -12,6 +12,14 @@ export interface Usuario {
   is_active: boolean;
 }
 
+export type ModulosPermitidos = Record<
+  string,
+  {
+    enabled?: boolean;
+    sections?: Record<string, boolean>;
+  }
+>;
+
 export interface LoginResponse {
   access: string;
   refresh: string;
@@ -181,6 +189,7 @@ export interface UsuarioAdmin {
   is_active: boolean;
   last_login: string | null;
   date_joined: string;
+  modulos_permitidos?: ModulosPermitidos | null;
 }
 
 // ============================================
