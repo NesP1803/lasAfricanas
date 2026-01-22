@@ -8,7 +8,7 @@ import { useEffect, useMemo, useState, useRef, type ReactNode } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { configuracionAPI } from "../api/configuracion";
 import {
-  DEFAULT_MODULE_ACCESS,
+  EMPTY_MODULE_ACCESS,
   isModuleEnabled,
   isSectionEnabled,
   normalizeModuleAccess,
@@ -124,7 +124,7 @@ export default function Layout() {
     {}
   );
   const [moduleAccess, setModuleAccess] = useState(() =>
-    normalizeModuleAccess(user?.modulos_permitidos ?? DEFAULT_MODULE_ACCESS)
+    normalizeModuleAccess(user?.modulos_permitidos ?? EMPTY_MODULE_ACCESS)
   );
 
   // --- Menú principal con delay ---
@@ -175,12 +175,22 @@ export default function Layout() {
       return;
     }
 
+    setModuleAccess(
+      normalizeModuleAccess(user?.modulos_permitidos ?? EMPTY_MODULE_ACCESS)
+    );
+  }, [user?.id, user?.modulos_permitidos]);
+
+  useEffect(() => {
+    if (!user?.id) {
+      return;
+    }
+
     const refreshAccess = async () => {
       try {
         const data = await configuracionAPI.obtenerUsuarioActual();
         setModuleAccess(
           normalizeModuleAccess(
-            data.modulos_permitidos ?? DEFAULT_MODULE_ACCESS
+            data.modulos_permitidos ?? EMPTY_MODULE_ACCESS
           )
         );
       } catch (error) {

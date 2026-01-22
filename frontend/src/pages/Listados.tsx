@@ -22,7 +22,7 @@ import type { Categoria, Proveedor } from '../api/inventario';
 import type { Cliente, PaginatedResponse, UsuarioAdmin } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import {
-  DEFAULT_MODULE_ACCESS,
+  EMPTY_MODULE_ACCESS,
   isSectionEnabled,
   normalizeModuleAccess,
 } from '../store/moduleAccess';
@@ -103,7 +103,7 @@ export default function Listados() {
   const tabParam = searchParams.get('tab');
   const isAdmin = user?.role?.toUpperCase() === 'ADMIN';
   const moduleAccess = useMemo(
-    () => normalizeModuleAccess(user?.modulos_permitidos ?? DEFAULT_MODULE_ACCESS),
+    () => normalizeModuleAccess(user?.modulos_permitidos ?? EMPTY_MODULE_ACCESS),
     [user?.modulos_permitidos]
   );
   const allowedTabs = useMemo(() => {
