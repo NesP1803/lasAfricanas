@@ -43,7 +43,7 @@ class UsuarioAdmin(BaseUserAdmin):
     
     # Configuración de los fieldsets (cómo se agrupan los campos en el formulario)
     fieldsets = (
-        ('Información de acceso', {
+        ('Credenciales', {
             'fields': ('username', 'password')
         }),
         ('Información personal', {
