@@ -1,5 +1,3 @@
-import type { ModuleAccess } from '../store/moduleAccess';
-
 // ============================================
 // TIPOS DE USUARIO
 // ============================================
@@ -181,7 +179,6 @@ export interface UsuarioAdmin {
   telefono?: string;
   sede?: string;
   is_active: boolean;
-  modulos_permitidos?: ModuleAccess;
   last_login: string | null;
   date_joined: string;
 }
