@@ -109,6 +109,7 @@ export default function Articulos() {
   const [page, setPage] = useState(1);
   const [totalRegistros, setTotalRegistros] = useState(0);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedResumen, setSelectedResumen] = useState<ProductoList | null>(null);
   const [selectedProducto, setSelectedProducto] = useState<Producto | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [loadingProducto, setLoadingProducto] = useState(false);
@@ -133,6 +134,7 @@ export default function Articulos() {
   useEffect(() => {
     setPage(1);
     setSelectedId(null);
+    setSelectedResumen(null);
   }, [activeTab]);
 
   useEffect(() => {
@@ -220,12 +222,23 @@ export default function Articulos() {
     setModalOpen(true);
   };
 
-  const openEditById = async (id: number) => {
+  const openEditById = async (id: number, codigo?: string) => {
     try {
       setLoadingProducto(true);
-      const producto = await inventarioApi.getProducto(id);
-      setSelectedProducto(producto);
-      setModalOpen(true);
+      try {
+        const producto = await inventarioApi.getProducto(id);
+        setSelectedProducto(producto);
+        setModalOpen(true);
+        return;
+      } catch (error) {
+        if (codigo) {
+          const producto = await inventarioApi.buscarPorCodigo(codigo);
+          setSelectedProducto(producto);
+          setModalOpen(true);
+          return;
+        }
+        throw error;
+      }
     } catch (error) {
       console.error('Error al cargar producto:', error);
       alert('No se pudo cargar el artículo seleccionado.');
@@ -354,7 +367,15 @@ export default function Articulos() {
           </button>
           <button
             type="button"
-            onClick={() => selectedId && openEditById(selectedId)}
+            onClick={() => {
+              if (selectedResumen) {
+                void openEditById(selectedResumen.id, selectedResumen.codigo);
+                return;
+              }
+              if (selectedId) {
+                void openEditById(selectedId);
+              }
+            }}
             className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
             disabled={!selectedId || loadingProducto}
           >
@@ -545,8 +566,11 @@ export default function Articulos() {
                 {mercanciaFiltrada.map((producto) => (
                   <tr
                     key={producto.id}
-                    onClick={() => setSelectedId(producto.id)}
-                    onDoubleClick={() => openEditById(producto.id)}
+                    onClick={() => {
+                      setSelectedId(producto.id);
+                      setSelectedResumen(producto);
+                    }}
+                    onDoubleClick={() => openEditById(producto.id, producto.codigo)}
                     className={`cursor-pointer transition ${
                       selectedId === producto.id
                         ? 'bg-blue-50'
