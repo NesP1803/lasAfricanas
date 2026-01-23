@@ -84,9 +84,11 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
   const loadImpuestos = async () => {
     try {
       const data = await configuracionAPI.obtenerImpuestos();
-      setImpuestos(data);
-      if (!producto && data.length > 0) {
-        const impuestoBase = data.find((item) => item.is_active !== false) ?? data[0];
+      const impuestosList = Array.isArray(data) ? data : data?.results ?? [];
+      setImpuestos(impuestosList);
+      if (!producto && impuestosList.length > 0) {
+        const impuestoBase =
+          impuestosList.find((item) => item.is_active !== false) ?? impuestosList[0];
         const porcentaje =
           impuestoBase.porcentaje ?? (impuestoBase.valor && impuestoBase.valor !== 'E'
             ? impuestoBase.valor
