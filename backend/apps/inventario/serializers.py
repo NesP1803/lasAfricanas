@@ -1,3 +1,4 @@
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from rest_framework import serializers
 from .models import Categoria, Proveedor, Producto, MovimientoInventario
 
@@ -88,16 +89,8 @@ class ProductoDetailSerializer(serializers.ModelSerializer):
     """Serializer completo para detalle de producto"""
     categoria_nombre = serializers.CharField(source='categoria.nombre', read_only=True)
     proveedor_nombre = serializers.CharField(source='proveedor.nombre', read_only=True)
-    margen_utilidad = serializers.DecimalField(
-        max_digits=5, 
-        decimal_places=2, 
-        read_only=True
-    )
-    valor_inventario = serializers.DecimalField(
-        max_digits=12, 
-        decimal_places=2, 
-        read_only=True
-    )
+    margen_utilidad = serializers.SerializerMethodField()
+    valor_inventario = serializers.SerializerMethodField()
     stock_bajo = serializers.BooleanField(read_only=True)
     
     class Meta:
@@ -128,6 +121,21 @@ class ProductoDetailSerializer(serializers.ModelSerializer):
             'updated_at'
         ]
         read_only_fields = ['created_at', 'updated_at']
+
+    def _format_decimal(self, value):
+        if value is None:
+            return None
+        try:
+            decimal_value = value if isinstance(value, Decimal) else Decimal(str(value))
+            return str(decimal_value.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+        except (InvalidOperation, TypeError, ValueError):
+            return None
+
+    def get_margen_utilidad(self, obj):
+        return self._format_decimal(obj.margen_utilidad)
+
+    def get_valor_inventario(self, obj):
+        return self._format_decimal(obj.valor_inventario)
 
 
 class ProductoCreateUpdateSerializer(serializers.ModelSerializer):
