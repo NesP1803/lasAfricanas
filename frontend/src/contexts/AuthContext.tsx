@@ -36,14 +36,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return null;
   });
 
+  const isSameUser = (current: User | null, next: User | null) => {
+    if (!current || !next) {
+      return false;
+    }
+    const currentModules = JSON.stringify(current.modulos_permitidos ?? null);
+    const nextModules = JSON.stringify(next.modulos_permitidos ?? null);
+    return (
+      current.id === next.id &&
+      current.username === next.username &&
+      current.role === next.role &&
+      current.email === next.email &&
+      currentModules === nextModules
+    );
+  };
+
   const persistUser = (nextUser: User | null) => {
     if (!nextUser) {
       localStorage.removeItem('user');
       setUser(null);
       return;
     }
-    localStorage.setItem('user', JSON.stringify(nextUser));
-    setUser(nextUser);
+
+    setUser((current) => {
+      if (isSameUser(current, nextUser)) {
+        return current;
+      }
+      localStorage.setItem('user', JSON.stringify(nextUser));
+      return nextUser;
+    });
   };
 
   const login = async (username: string, password: string) => {
