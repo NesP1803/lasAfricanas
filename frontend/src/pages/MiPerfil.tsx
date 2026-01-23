@@ -23,10 +23,8 @@ export default function MiPerfil() {
   const [form, setForm] = useState<PerfilForm>(emptyPerfil);
   const [mensajePerfil, setMensajePerfil] = useState("");
   const [mensajeClave, setMensajeClave] = useState("");
-  const [claveActual, setClaveActual] = useState("");
   const [nuevaClave, setNuevaClave] = useState("");
   const [confirmarClave, setConfirmarClave] = useState("");
-  const [mostrarClaveActual, setMostrarClaveActual] = useState(false);
   const [mostrarNuevaClave, setMostrarNuevaClave] = useState(false);
   const [mostrarConfirmarClave, setMostrarConfirmarClave] = useState(false);
 
@@ -75,11 +73,6 @@ export default function MiPerfil() {
       return;
     }
 
-    if (!claveActual) {
-      setMensajeClave("Debes ingresar tu clave actual.");
-      return;
-    }
-
     if (!nuevaClave || nuevaClave !== confirmarClave) {
       setMensajeClave("La nueva clave y la confirmación no coinciden.");
       return;
@@ -87,7 +80,6 @@ export default function MiPerfil() {
 
     try {
       await configuracionAPI.cambiarClave(perfil?.id ?? user!.id, nuevaClave);
-      setClaveActual("");
       setNuevaClave("");
       setConfirmarClave("");
       setMensajeClave("La clave ha sido actualizada correctamente.");
@@ -200,7 +192,7 @@ export default function MiPerfil() {
               Cambiar contraseña
             </h3>
             <p className="text-sm text-slate-500">
-              Ingresa tu clave actual y define una nueva contraseña.
+              Define una nueva contraseña para tu cuenta.
             </p>
           </div>
           <button
@@ -218,28 +210,7 @@ export default function MiPerfil() {
           </div>
         )}
 
-        <div className="mt-6 grid gap-4 md:grid-cols-3">
-          <label className="space-y-2 text-sm font-medium text-slate-700">
-            Clave actual
-            <div className="flex items-center gap-2">
-              <input
-                type={mostrarClaveActual ? "text" : "password"}
-                value={claveActual}
-                onChange={(event) => setClaveActual(event.target.value)}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-              />
-              <button
-                type="button"
-                onClick={() => setMostrarClaveActual((prev) => !prev)}
-                className="rounded-lg border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600 hover:border-blue-200 hover:text-blue-600"
-                aria-label={
-                  mostrarClaveActual ? "Ocultar clave" : "Mostrar clave"
-                }
-              >
-                {mostrarClaveActual ? <EyeOff size={14} /> : <Eye size={14} />}
-              </button>
-            </div>
-          </label>
+        <div className="mt-6 grid gap-4 md:grid-cols-2">
           <label className="space-y-2 text-sm font-medium text-slate-700">
             Nueva clave
             <div className="flex items-center gap-2">

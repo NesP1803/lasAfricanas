@@ -568,12 +568,22 @@ export default function Layout() {
         </div>
 
         <nav className="hidden flex-wrap items-center justify-center gap-2 border-t border-white/10 px-6 py-2 lg:flex">
-          {menuItems.map((item) => (
+          {menuItems.map((item) => {
+            const hasChildren = Boolean(item.items && item.items.length > 0);
+            return (
             <div
               key={item.label}
               className="relative"
-              onMouseEnter={() => openMenu(item.label)}
-              onMouseLeave={closeMenuWithDelay}
+              onMouseEnter={() => {
+                if (hasChildren) {
+                  openMenu(item.label);
+                }
+              }}
+              onMouseLeave={() => {
+                if (hasChildren) {
+                  closeMenuWithDelay();
+                }
+              }}
             >
               <button
                 type="button"
@@ -587,7 +597,7 @@ export default function Layout() {
                 {renderMenuButton(item.label, item.icon)}
               </button>
 
-              {activeMenu === item.label && (
+              {hasChildren && activeMenu === item.label && (
                 <div
                   className="absolute left-0 mt-2 min-w-[220px] rounded-md border border-slate-200 bg-white shadow-xl"
                   onMouseEnter={() => openMenu(item.label)}
@@ -600,7 +610,8 @@ export default function Layout() {
                 </div>
               )}
             </div>
-          ))}
+            );
+          })}
         </nav>
 
         {mobileMenuOpen && (
