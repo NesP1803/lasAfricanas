@@ -126,14 +126,29 @@ export const inventarioApi = {
 
   async buscarPorCodigo(codigo: string): Promise<Producto> {
     const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/productos/buscar_por_codigo/?codigo=${codigo}`, {
+    const trimmedCodigo = codigo.trim();
+    const queryParams = new URLSearchParams({ codigo: trimmedCodigo });
+    const response = await fetch(`${API_URL}/productos/buscar_por_codigo/?${queryParams}`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
     });
 
-    if (!response.ok) throw new Error('Producto no encontrado');
+    if (!response.ok) {
+      let errorMessage = 'Producto no encontrado';
+      try {
+        const errorData = await response.json();
+        if (errorData?.error || errorData?.detail) {
+          errorMessage = errorData.error ?? errorData.detail;
+        } else {
+          errorMessage = `Error al buscar producto (${response.status})`;
+        }
+      } catch (parseError) {
+        errorMessage = `Error al buscar producto (${response.status})`;
+      }
+      throw new Error(errorMessage);
+    }
     return response.json();
   },
 
