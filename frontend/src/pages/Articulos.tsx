@@ -60,6 +60,10 @@ const currency = new Intl.NumberFormat('es-CO', {
   currency: 'COP',
   maximumFractionDigits: 0,
 });
+const dateFormatter = new Intl.DateTimeFormat('es-CO', {
+  dateStyle: 'short',
+  timeStyle: 'short',
+});
 
 const parseListado = <T,>(data: PaginatedResponse<T> | T[]) => {
   if (Array.isArray(data)) {
@@ -225,6 +229,7 @@ export default function Articulos() {
   const openEditById = async (id: number, codigo?: string) => {
     try {
       setLoadingProducto(true);
+      setSelectedResumen(null);
       try {
         const producto = await inventarioApi.getProducto(id);
         setSelectedProducto(producto);
@@ -245,6 +250,29 @@ export default function Articulos() {
     } finally {
       setLoadingProducto(false);
     }
+  };
+
+  const openEditFromSelection = async () => {
+    if (!selectedId) {
+      return;
+    }
+    const resumen = selectedResumen;
+    if (resumen?.id === selectedId) {
+      void openEditById(resumen.id, resumen.codigo);
+      return;
+    }
+    const selectedRecord = mercancia.find((producto) => producto.id === selectedId);
+    if (selectedRecord) {
+      void openEditById(selectedRecord.id, selectedRecord.codigo);
+      return;
+    }
+    void openEditById(selectedId);
+  };
+
+  const formatUltimaCompra = (producto: ProductoList) => {
+    const lastDate = producto.updated_at ?? producto.created_at;
+    if (!lastDate) return 'Sin registro';
+    return dateFormatter.format(new Date(lastDate));
   };
 
   const handleDelete = async () => {
@@ -367,15 +395,7 @@ export default function Articulos() {
           </button>
           <button
             type="button"
-            onClick={() => {
-              if (selectedResumen) {
-                void openEditById(selectedResumen.id, selectedResumen.codigo);
-                return;
-              }
-              if (selectedId) {
-                void openEditById(selectedId);
-              }
-            }}
+            onClick={openEditFromSelection}
             className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
             disabled={!selectedId || loadingProducto}
           >
@@ -557,6 +577,7 @@ export default function Articulos() {
                   <th className="px-4 py-3">Artículo</th>
                   <th className="px-4 py-3">Categoría</th>
                   <th className="px-4 py-3">Proveedor</th>
+                  <th className="px-4 py-3">Última compra</th>
                   <th className="px-4 py-3 text-right">Precio</th>
                   <th className="px-4 py-3 text-right">Stock</th>
                   <th className="px-4 py-3">Estado</th>
@@ -587,6 +608,9 @@ export default function Articulos() {
                     <td className="px-4 py-3 text-slate-500">
                       {producto.proveedor_nombre}
                     </td>
+                    <td className="px-4 py-3 text-slate-500">
+                      {formatUltimaCompra(producto)}
+                    </td>
                     <td className="px-4 py-3 text-right font-semibold text-slate-700">
                       {currency.format(Number(producto.precio_venta))}
                     </td>
@@ -598,7 +622,7 @@ export default function Articulos() {
                 ))}
                 {mercanciaFiltrada.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-4 py-6 text-center text-slate-500">
+                    <td colSpan={8} className="px-4 py-6 text-center text-slate-500">
                       {loading ? 'Cargando artículos...' : 'No hay artículos registrados.'}
                     </td>
                   </tr>
