@@ -21,6 +21,7 @@ import {
   LogOut,
   Menu,
   Settings,
+  User,
   Wrench,
   X,
 } from "lucide-react";
@@ -191,14 +192,18 @@ export default function Layout() {
     const sections = [
       { label: "Facturación", path: "/configuracion?tab=facturacion", key: "facturacion" },
       { label: "Empresa", path: "/configuracion?tab=empresa", key: "empresa" },
-      { label: isAdmin ? "Usuarios" : "Cambiar clave", path: "/configuracion?tab=usuarios", key: "usuarios" },
+      { label: "Usuarios", path: "/configuracion?tab=usuarios", key: "usuarios" },
       { label: "Impuestos", path: "/configuracion?tab=impuestos", key: "impuestos" },
       { label: "Auditoría", path: "/configuracion?tab=auditoria", key: "auditoria" },
     ];
 
     const filtered = isAdmin
       ? sections
-      : sections.filter((section) => sectionEnabled("configuracion", section.key));
+      : sections.filter(
+          (section) =>
+            section.key !== "usuarios" &&
+            sectionEnabled("configuracion", section.key)
+        );
 
     return filtered.map(({ label, path }) => ({ label, path }));
   }, [isAdmin, moduleAccess]);
@@ -221,6 +226,10 @@ export default function Layout() {
         const tab = params.get("tab");
         const resolvedTab = tab === "clave" ? "usuarios" : tab ?? undefined;
         return { moduleKey: "configuracion", sectionKey: resolvedTab };
+      }
+
+      if (pathname.startsWith("/mi-perfil")) {
+        return null;
       }
 
       if (pathname.startsWith("/listados")) {
@@ -302,6 +311,14 @@ export default function Layout() {
           label: "Configuración",
           icon: <Settings size={18} />,
           items: configuracionItems,
+        });
+      }
+
+      if (!isAdmin) {
+        items.unshift({
+          label: "Mi perfil",
+          icon: <User size={18} />,
+          path: "/mi-perfil",
         });
       }
 
@@ -425,7 +442,7 @@ export default function Layout() {
 
       return items;
     },
-    [configuracionItems]
+    [configuracionItems, isAdmin]
   );
 
   const renderMenuButton = (label: string, icon?: ReactNode) => (
@@ -551,12 +568,22 @@ export default function Layout() {
         </div>
 
         <nav className="hidden flex-wrap items-center justify-center gap-2 border-t border-white/10 px-6 py-2 lg:flex">
-          {menuItems.map((item) => (
+          {menuItems.map((item) => {
+            const hasChildren = Boolean(item.items && item.items.length > 0);
+            return (
             <div
               key={item.label}
               className="relative"
-              onMouseEnter={() => openMenu(item.label)}
-              onMouseLeave={closeMenuWithDelay}
+              onMouseEnter={() => {
+                if (hasChildren) {
+                  openMenu(item.label);
+                }
+              }}
+              onMouseLeave={() => {
+                if (hasChildren) {
+                  closeMenuWithDelay();
+                }
+              }}
             >
               <button
                 type="button"
@@ -570,7 +597,7 @@ export default function Layout() {
                 {renderMenuButton(item.label, item.icon)}
               </button>
 
-              {activeMenu === item.label && (
+              {hasChildren && activeMenu === item.label && (
                 <div
                   className="absolute left-0 mt-2 min-w-[220px] rounded-md border border-slate-200 bg-white shadow-xl"
                   onMouseEnter={() => openMenu(item.label)}
@@ -583,7 +610,8 @@ export default function Layout() {
                 </div>
               )}
             </div>
-          ))}
+            );
+          })}
         </nav>
 
         {mobileMenuOpen && (

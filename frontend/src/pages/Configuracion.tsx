@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   CheckCircle2,
+  Eye,
+  EyeOff,
   Plus,
   Save,
   ShieldCheck,
@@ -88,7 +90,7 @@ export default function Configuracion() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const isAdmin = user?.role?.toUpperCase() === "ADMIN";
-  const defaultTab: ConfigTab = isAdmin ? "facturacion" : "usuarios";
+  const defaultTab: ConfigTab = "facturacion";
   const rawTab = searchParams.get("tab");
   const initialTab =
     (rawTab === "clave" ? "usuarios" : (rawTab as ConfigTab)) || defaultTab;
@@ -143,16 +145,15 @@ export default function Configuracion() {
   });
 
   const [mensajeEmpresa, setMensajeEmpresa] = useState("");
-  const [mensajeClave, setMensajeClave] = useState("");
   const [mensajeFacturacion, setMensajeFacturacion] = useState("");
   const [mensajeImpuesto, setMensajeImpuesto] = useState("");
   const [mensajeUsuario, setMensajeUsuario] = useState("");
   const [mensajeNuevoUsuario, setMensajeNuevoUsuario] = useState("");
 
-  const [claveActual, setClaveActual] = useState("");
-  const [nuevaClave, setNuevaClave] = useState("");
-  const [confirmarClave, setConfirmarClave] = useState("");
-  const [mostrarClaveActual, setMostrarClaveActual] = useState(false);
+  const [confirmarNuevaClave, setConfirmarNuevaClave] = useState("");
+  const [mostrarNuevaClave, setMostrarNuevaClave] = useState(false);
+  const [mostrarConfirmarClave, setMostrarConfirmarClave] = useState(false);
+  const [mostrarClaveCreacion, setMostrarClaveCreacion] = useState(false);
 
   const moduleAccess = useMemo(
     () =>
@@ -167,16 +168,15 @@ export default function Configuracion() {
   const tabs = useMemo(() => {
     const visibleSections = isAdmin
       ? configuracionSections
-      : configuracionSections.filter((section) =>
-          isSectionEnabled(moduleAccess, "configuracion", section.key)
+      : configuracionSections.filter(
+          (section) =>
+            section.key !== "usuarios" &&
+            isSectionEnabled(moduleAccess, "configuracion", section.key)
         );
 
     return visibleSections.map((section) => ({
       id: section.key as ConfigTab,
-      label:
-        section.key === "usuarios" && !isAdmin
-          ? "Cambiar clave"
-          : section.label,
+      label: section.label,
       icon:
         section.key === "facturacion" ? (
           <ShieldCheck size={18} />
@@ -567,7 +567,10 @@ export default function Configuracion() {
       is_active: true,
       password: "",
     });
-    setMostrarClaveActual(false);
+    setConfirmarNuevaClave("");
+    setMostrarNuevaClave(false);
+    setMostrarConfirmarClave(false);
+    setMostrarClaveCreacion(false);
     setMecanicoSeleccionado("");
     setOrigenUsuario("manual");
     setEditingUserId(null);
@@ -593,6 +596,9 @@ export default function Configuracion() {
       is_active: usuario.is_active,
       password: "",
     });
+    setConfirmarNuevaClave("");
+    setMostrarNuevaClave(false);
+    setMostrarConfirmarClave(false);
     setMensajeNuevoUsuario("");
     setUserModalOpen(true);
   };
@@ -603,8 +609,13 @@ export default function Configuracion() {
       return;
     }
 
-    if (userModalMode === "create" && !nuevoUsuario.password) {
-      setMensajeNuevoUsuario("Debes asignar una contraseña al usuario.");
+    if (userModalMode === "create") {
+      if (!nuevoUsuario.password) {
+        setMensajeNuevoUsuario("Debes asignar una contraseña al usuario.");
+        return;
+      }
+    } else if (nuevoUsuario.password && nuevoUsuario.password !== confirmarNuevaClave) {
+      setMensajeNuevoUsuario("La nueva clave y la confirmación no coinciden.");
       return;
     }
 
@@ -639,10 +650,16 @@ export default function Configuracion() {
           tipo_usuario: nuevoUsuario.tipo_usuario,
           is_active: nuevoUsuario.is_active,
         };
+        const data = await configuracionAPI.actualizarUsuario(
+          editingUserId,
+          payload
+        );
         if (nuevoUsuario.password) {
-          payload.password = nuevoUsuario.password;
+          await configuracionAPI.cambiarClave(
+            editingUserId,
+            nuevoUsuario.password
+          );
         }
-        const data = await configuracionAPI.actualizarUsuario(editingUserId, payload);
         setUsuarios((prev) =>
           prev.map((item) => (item.id === data.id ? data : item))
         );
@@ -691,34 +708,6 @@ export default function Configuracion() {
     origenUsuario,
     userModalMode,
   ]);
-
-  const handleCambiarClave = async () => {
-    if (!user?.id) {
-      setMensajeClave("No se pudo identificar el usuario actual.");
-      return;
-    }
-
-    if (!claveActual) {
-      setMensajeClave("Debes ingresar la clave actual.");
-      return;
-    }
-
-    if (!nuevaClave || nuevaClave !== confirmarClave) {
-      setMensajeClave("La nueva clave y la confirmación no coinciden.");
-      return;
-    }
-
-    try {
-      await configuracionAPI.cambiarClave(user.id, nuevaClave);
-      setClaveActual("");
-      setNuevaClave("");
-      setConfirmarClave("");
-      setMensajeClave("La clave ha sido actualizada correctamente.");
-    } catch (error) {
-      console.error("Error cambiando clave:", error);
-      setMensajeClave("No se pudo actualizar la clave.");
-    }
-  };
 
   const actualizarPlantilla = (value: string) => {
     setFacturacion((prev) => ({
@@ -1317,172 +1306,114 @@ export default function Configuracion() {
       {activeTab === "usuarios" && (
         <section className="rounded-2xl bg-white p-6 shadow-sm">
           <h3 className="text-lg font-semibold text-slate-900">
-            {isAdmin ? "Usuarios" : "Cambiar clave"}
+            Usuarios
           </h3>
           <p className="text-sm text-slate-500">
-            {isAdmin
-              ? "Administra usuarios y actualiza tu clave desde esta sección."
-              : "Actualiza tu clave de acceso desde tu perfil."}
+            Administra usuarios desde esta sección.
           </p>
 
-          <div className="mt-6 rounded-2xl border border-slate-100 bg-slate-50 p-5">
-            <h4 className="text-base font-semibold text-slate-900">
-              {isAdmin ? "Cambiar clave de tu usuario" : "Cambiar clave"}
-            </h4>
-            <p className="text-sm text-slate-500">
-              Ingresa tu clave actual y define una nueva contraseña.
-            </p>
-
-            {mensajeClave && (
-              <div className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-                {mensajeClave}
-              </div>
-            )}
-
-            <div className="mt-4 grid gap-4 md:grid-cols-3">
-              <label className="space-y-2 text-sm font-medium text-slate-700">
-                Clave actual
-                <input
-                  type="password"
-                  value={claveActual}
-                  onChange={(event) => setClaveActual(event.target.value)}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                />
-              </label>
-              <label className="space-y-2 text-sm font-medium text-slate-700">
-                Nueva clave
-                <input
-                  type="password"
-                  value={nuevaClave}
-                  onChange={(event) => setNuevaClave(event.target.value)}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                />
-              </label>
-              <label className="space-y-2 text-sm font-medium text-slate-700">
-                Confirmar nueva clave
-                <input
-                  type="password"
-                  value={confirmarClave}
-                  onChange={(event) => setConfirmarClave(event.target.value)}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                />
-              </label>
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <div>
+              <h4 className="text-sm font-semibold text-slate-700">
+                Gestiona usuarios
+              </h4>
+              <p className="text-xs text-slate-500">
+                Crea usuarios desde cero o usando mecánicos existentes.
+              </p>
             </div>
             <button
               type="button"
-              onClick={handleCambiarClave}
-              className="mt-4 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-blue-700"
+              onClick={openCreateUserModal}
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow hover:bg-blue-700"
             >
-              <Save size={16} /> Guardar nueva clave
+              <Plus size={14} /> Crear usuario
             </button>
           </div>
 
-          {isAdmin && (
-            <>
-              <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <div>
-                  <h4 className="text-sm font-semibold text-slate-700">
-                    Gestiona usuarios
-                  </h4>
-                  <p className="text-xs text-slate-500">
-                    Crea usuarios desde cero o usando mecánicos existentes.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={openCreateUserModal}
-                  className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow hover:bg-blue-700"
-                >
-                  <Plus size={14} /> Crear usuario
-                </button>
-              </div>
-
-              {mensajeUsuario && (
-                <div className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-                  {mensajeUsuario}
-                </div>
-              )}
-              <div className="mt-6 overflow-hidden rounded-xl border border-slate-200">
-                <table className="min-w-full divide-y divide-slate-200 text-sm">
-                  <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
-                    <tr>
-                      <th className="px-4 py-3">Usuario</th>
-                      <th className="px-4 py-3">Rol</th>
-                      <th className="px-4 py-3">Estado</th>
-                      <th className="px-4 py-3">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {usuarios.map((usuario) => (
-                      <tr key={usuario.id} className="text-slate-700">
-                        <td className="px-4 py-3">
-                          <p className="font-medium">{usuario.username}</p>
-                          <p className="text-xs text-slate-500">
-                            {usuario.email}
-                          </p>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="inline-flex rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600">
-                            {usuario.tipo_usuario === "ADMIN"
-                              ? "Administrador"
-                              : usuario.tipo_usuario === "VENDEDOR"
-                              ? "Vendedor"
-                              : usuario.tipo_usuario === "MECANICO"
-                              ? "Mecánico"
-                              : "Bodeguero"}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <label className="inline-flex items-center gap-2 text-xs text-slate-600">
-                            <input
-                              type="checkbox"
-                              checked={usuario.is_active}
-                              onChange={(event) =>
-                                setUsuarios((prev) =>
-                                  prev.map((item) =>
-                                    item.id === usuario.id
-                                      ? {
-                                          ...item,
-                                          is_active: event.target.checked,
-                                        }
-                                      : item
-                                  )
-                                )
-                              }
-                            />
-                            {usuario.is_active ? "Activo" : "Inactivo"}
-                          </label>
-                        </td>
-                        <td className="px-4 py-3">
-                          <button
-                            type="button"
-                            onClick={() => handleActualizarUsuario(usuario)}
-                            className="rounded-lg bg-slate-900 px-3 py-1 text-xs font-medium text-white hover:bg-slate-800"
-                          >
-                            Guardar
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => openEditUserModal(usuario)}
-                            className="ml-2 rounded-lg border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 hover:border-blue-200 hover:text-blue-600"
-                          >
-                            Editar
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => openAccessModal(usuario)}
-                            className="ml-2 rounded-lg border border-blue-200 px-3 py-1 text-xs font-medium text-blue-600 hover:border-blue-300 hover:text-blue-700"
-                          >
-                            Accesos
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
+          {mensajeUsuario && (
+            <div className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+              {mensajeUsuario}
+            </div>
           )}
+          <div className="mt-6 overflow-hidden rounded-xl border border-slate-200">
+            <table className="min-w-full divide-y divide-slate-200 text-sm">
+              <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
+                <tr>
+                  <th className="px-4 py-3">Usuario</th>
+                  <th className="px-4 py-3">Rol</th>
+                  <th className="px-4 py-3">Estado</th>
+                  <th className="px-4 py-3">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {usuarios.map((usuario) => (
+                  <tr key={usuario.id} className="text-slate-700">
+                    <td className="px-4 py-3">
+                      <p className="font-medium">{usuario.username}</p>
+                      <p className="text-xs text-slate-500">
+                        {usuario.email}
+                      </p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="inline-flex rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600">
+                        {usuario.tipo_usuario === "ADMIN"
+                          ? "Administrador"
+                          : usuario.tipo_usuario === "VENDEDOR"
+                          ? "Vendedor"
+                          : usuario.tipo_usuario === "MECANICO"
+                          ? "Mecánico"
+                          : "Bodeguero"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <label className="inline-flex items-center gap-2 text-xs text-slate-600">
+                        <input
+                          type="checkbox"
+                          checked={usuario.is_active}
+                          onChange={(event) =>
+                            setUsuarios((prev) =>
+                              prev.map((item) =>
+                                item.id === usuario.id
+                                  ? {
+                                      ...item,
+                                      is_active: event.target.checked,
+                                    }
+                                  : item
+                              )
+                            )
+                          }
+                        />
+                        {usuario.is_active ? "Activo" : "Inactivo"}
+                      </label>
+                    </td>
+                    <td className="px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() => handleActualizarUsuario(usuario)}
+                        className="rounded-lg bg-slate-900 px-3 py-1 text-xs font-medium text-white hover:bg-slate-800"
+                      >
+                        Guardar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openEditUserModal(usuario)}
+                        className="ml-2 rounded-lg border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 hover:border-blue-200 hover:text-blue-600"
+                      >
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openAccessModal(usuario)}
+                        className="ml-2 rounded-lg border border-blue-200 px-3 py-1 text-xs font-medium text-blue-600 hover:border-blue-300 hover:text-blue-700"
+                      >
+                        Accesos
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       )}
 
@@ -1663,32 +1594,82 @@ export default function Configuracion() {
                 {userModalMode === "edit" ? (
                   <>
                     <label className="space-y-2 text-xs font-medium text-slate-700">
-                      Clave actual
+                      Nueva clave
                       <div className="flex items-center gap-2">
                         <input
-                          type={mostrarClaveActual ? "text" : "password"}
-                          value="********"
-                          readOnly
+                          type={mostrarNuevaClave ? "text" : "password"}
+                          value={nuevoUsuario.password}
+                          onChange={(event) =>
+                            setNuevoUsuario((prev) => ({
+                              ...prev,
+                              password: event.target.value,
+                            }))
+                          }
+                          placeholder="Ingresa una nueva clave"
                           className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                         />
                         <button
                           type="button"
                           onClick={() =>
-                            setMostrarClaveActual((prev) => !prev)
+                            setMostrarNuevaClave((prev) => !prev)
                           }
-                          className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:border-blue-200 hover:text-blue-600"
+                          className="rounded-lg border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600 hover:border-blue-200 hover:text-blue-600"
+                          aria-label={
+                            mostrarNuevaClave
+                              ? "Ocultar clave"
+                              : "Mostrar clave"
+                          }
                         >
-                          {mostrarClaveActual ? "Ocultar" : "Mostrar"}
+                          {mostrarNuevaClave ? (
+                            <EyeOff size={14} />
+                          ) : (
+                            <Eye size={14} />
+                          )}
                         </button>
                       </div>
                       <p className="text-[11px] font-normal text-slate-500">
-                        Clave fija de referencia, no editable.
+                        Deja en blanco para mantener la clave actual.
                       </p>
                     </label>
                     <label className="space-y-2 text-xs font-medium text-slate-700">
-                      Nueva clave
+                      Confirmar nueva clave
+                      <div className="flex items-center gap-2">
+                        <input
+                          type={mostrarConfirmarClave ? "text" : "password"}
+                          value={confirmarNuevaClave}
+                          onChange={(event) =>
+                            setConfirmarNuevaClave(event.target.value)
+                          }
+                          placeholder="Repite la nueva clave"
+                          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setMostrarConfirmarClave((prev) => !prev)
+                          }
+                          className="rounded-lg border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600 hover:border-blue-200 hover:text-blue-600"
+                          aria-label={
+                            mostrarConfirmarClave
+                              ? "Ocultar clave"
+                              : "Mostrar clave"
+                          }
+                        >
+                          {mostrarConfirmarClave ? (
+                            <EyeOff size={14} />
+                          ) : (
+                            <Eye size={14} />
+                          )}
+                        </button>
+                      </div>
+                    </label>
+                  </>
+                ) : (
+                  <label className="space-y-2 text-xs font-medium text-slate-700">
+                    Contraseña
+                    <div className="flex items-center gap-2">
                       <input
-                        type="password"
+                        type={mostrarClaveCreacion ? "text" : "password"}
                         value={nuevoUsuario.password}
                         onChange={(event) =>
                           setNuevoUsuario((prev) => ({
@@ -1696,28 +1677,27 @@ export default function Configuracion() {
                             password: event.target.value,
                           }))
                         }
-                        placeholder="Ingresa una nueva clave"
                         className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                       />
-                      <p className="text-[11px] font-normal text-slate-500">
-                        Deja en blanco para mantener la clave actual.
-                      </p>
-                    </label>
-                  </>
-                ) : (
-                  <label className="space-y-2 text-xs font-medium text-slate-700">
-                    Contraseña
-                    <input
-                      type="password"
-                      value={nuevoUsuario.password}
-                      onChange={(event) =>
-                        setNuevoUsuario((prev) => ({
-                          ...prev,
-                          password: event.target.value,
-                        }))
-                      }
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                    />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setMostrarClaveCreacion((prev) => !prev)
+                        }
+                        className="rounded-lg border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600 hover:border-blue-200 hover:text-blue-600"
+                        aria-label={
+                          mostrarClaveCreacion
+                            ? "Ocultar clave"
+                            : "Mostrar clave"
+                        }
+                      >
+                        {mostrarClaveCreacion ? (
+                          <EyeOff size={14} />
+                        ) : (
+                          <Eye size={14} />
+                        )}
+                      </button>
+                    </div>
                   </label>
                 )}
                 <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
