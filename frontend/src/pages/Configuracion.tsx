@@ -83,9 +83,9 @@ const defaultFacturacion: ConfiguracionFacturacion = {
 };
 
 const defaultImpuestos: Impuesto[] = [
-  { id: -1, nombre: "IVA", valor: "0", porcentaje: "0", es_exento: true },
-  { id: -2, nombre: "IVA", valor: "19", porcentaje: "19", es_exento: false },
-  { id: -3, nombre: "IVA", valor: "E", porcentaje: null, es_exento: true },
+  { id: -1, nombre: "IVA 0%" },
+  { id: -2, nombre: "IVA 19%" },
+  { id: -3, nombre: "Exento" },
 ];
 
 const AUDITORIA_PAGE_SIZE = 50;
@@ -151,9 +151,7 @@ export default function Configuracion() {
     password: "",
   });
   const [nuevoImpuesto, setNuevoImpuesto] = useState<Partial<Impuesto>>({
-    nombre: "IVA",
-    valor: "",
-    porcentaje: "",
+    nombre: "",
   });
 
   const [mensajeEmpresa, setMensajeEmpresa] = useState("");
@@ -460,20 +458,17 @@ export default function Configuracion() {
   };
 
   const handleAgregarImpuesto = async () => {
-    if (!nuevoImpuesto.nombre || !nuevoImpuesto.valor) {
-      setMensajeImpuesto("Completa el nombre y el valor del impuesto.");
+    if (!nuevoImpuesto.nombre) {
+      setMensajeImpuesto("Completa el nombre del impuesto.");
       return;
     }
 
     try {
       const nuevo = await configuracionAPI.crearImpuesto({
         nombre: nuevoImpuesto.nombre,
-        valor: nuevoImpuesto.valor,
-        porcentaje: nuevoImpuesto.porcentaje || null,
-        es_exento: nuevoImpuesto.valor === "E",
       });
       setImpuestos((prev) => [...prev, nuevo]);
-      setNuevoImpuesto({ nombre: "IVA", valor: "", porcentaje: "" });
+      setNuevoImpuesto({ nombre: "" });
       setMensajeImpuesto("Impuesto agregado correctamente.");
     } catch (error) {
       console.error("Error agregando impuesto:", error);
@@ -981,25 +976,13 @@ export default function Configuracion() {
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
                     Impuesto
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                    Tipo
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                    Valor
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                    Porcentaje
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                    Estado
-                  </th>
                   <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">
                     Acciones
                   </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-slate-200">
-                {impuestos.map((impuesto, index) => {
+                {impuestos.map((impuesto) => {
                   const esFijo = impuesto.id < 0; // IDs negativos son impuestos por defecto
                   return (
                     <tr key={impuesto.id} className="hover:bg-slate-50 transition-colors">
@@ -1012,32 +995,6 @@ export default function Configuracion() {
                             {impuesto.nombre}
                           </span>
                         </div>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <span className="text-sm text-slate-600">
-                          {impuesto.es_exento ? "Exento" : "Gravado"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center whitespace-nowrap">
-                        <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-md bg-slate-100 text-sm font-medium text-slate-700">
-                          {impuesto.valor}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center whitespace-nowrap">
-                        <span className="text-sm text-slate-600">
-                          {impuesto.es_exento ? "—" : `${impuesto.porcentaje ?? "0"}%`}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center whitespace-nowrap">
-                        {impuesto.es_exento ? (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
-                            E
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
-                            Activo
-                          </span>
-                        )}
                       </td>
                       <td className="px-4 py-3 text-center whitespace-nowrap">
                         {!esFijo && (
@@ -1066,7 +1023,7 @@ export default function Configuracion() {
             <h4 className="text-sm font-semibold text-slate-700 mb-4">
               Agregar nuevo impuesto
             </h4>
-            <div className="grid gap-4 md:grid-cols-4">
+            <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1.5">
                   Nombre
@@ -1080,42 +1037,7 @@ export default function Configuracion() {
                       nombre: event.target.value,
                     }))
                   }
-                  placeholder="Ej: IVA"
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1.5">
-                  Valor
-                </label>
-                <input
-                  type="text"
-                  value={nuevoImpuesto.valor}
-                  onChange={(event) =>
-                    setNuevoImpuesto((prev) => ({
-                      ...prev,
-                      valor: event.target.value,
-                    }))
-                  }
-                  placeholder="Ej: 19, E"
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1.5">
-                  Porcentaje
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={nuevoImpuesto.porcentaje ?? ""}
-                  onChange={(event) =>
-                    setNuevoImpuesto((prev) => ({
-                      ...prev,
-                      porcentaje: event.target.value,
-                    }))
-                  }
-                  placeholder="Ej: 19.00"
+                  placeholder="Ej: IVA 19%, IVA 5%, Exento"
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 />
               </div>

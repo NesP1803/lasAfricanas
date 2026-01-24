@@ -163,9 +163,6 @@ export interface ConfiguracionFacturacion {
 export interface Impuesto {
   id: number;
   nombre: string;
-  valor: string;
-  porcentaje?: string | null;
-  es_exento?: boolean;
   is_active?: boolean;
 }
 

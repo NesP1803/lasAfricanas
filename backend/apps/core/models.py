@@ -114,9 +114,6 @@ class ConfiguracionFacturacion(models.Model):
 
 class Impuesto(BaseModel):
     nombre = models.CharField(max_length=50)
-    valor = models.CharField(max_length=10)
-    porcentaje = models.DecimalField(max_digits=5, decimal_places=2, blank=True, null=True)
-    es_exento = models.BooleanField(default=False)
 
     class Meta:
         verbose_name = 'Impuesto'
@@ -124,7 +121,7 @@ class Impuesto(BaseModel):
         db_table = 'impuestos'
 
     def __str__(self):
-        return f"{self.nombre} {self.valor}"
+        return self.nombre
 
 
 class Auditoria(models.Model):

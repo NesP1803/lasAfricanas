@@ -89,11 +89,10 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
       if (!producto && impuestosList.length > 0) {
         const impuestoBase =
           impuestosList.find((item) => item.is_active !== false) ?? impuestosList[0];
-        const porcentaje =
-          impuestoBase.porcentaje ?? (impuestoBase.valor && impuestoBase.valor !== 'E'
-            ? impuestoBase.valor
-            : '0');
-        setFormData((prev) => ({ ...prev, iva_porcentaje: porcentaje ?? '0' }));
+        // Extraer el porcentaje del nombre del impuesto (ej: "IVA 19%" -> "19")
+        const match = impuestoBase.nombre.match(/(\d+(?:\.\d+)?)/);
+        const porcentaje = match ? match[1] : '0';
+        setFormData((prev) => ({ ...prev, iva_porcentaje: porcentaje }));
       }
     } catch (error) {
       console.error('Error al cargar impuestos:', error);
@@ -282,15 +281,12 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
                   <option value="">Sin impuestos configurados</option>
                 )}
                 {impuestos.map((impuesto) => {
-                  const porcentaje =
-                    impuesto.porcentaje ??
-                    (impuesto.valor && impuesto.valor !== 'E' ? impuesto.valor : '0');
-                  const label = impuesto.es_exento
-                    ? `${impuesto.nombre} (Exento)`
-                    : `${impuesto.nombre} ${porcentaje ?? '0'}%`;
+                  // Extraer el porcentaje del nombre del impuesto (ej: "IVA 19%" -> "19")
+                  const match = impuesto.nombre.match(/(\d+(?:\.\d+)?)/);
+                  const porcentaje = match ? match[1] : '0';
                   return (
-                    <option key={impuesto.id} value={porcentaje ?? '0'}>
-                      {label}
+                    <option key={impuesto.id} value={porcentaje}>
+                      {impuesto.nombre}
                     </option>
                   );
                 })}
