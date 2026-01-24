@@ -119,6 +119,8 @@ export default function Configuracion() {
   const [auditoriaRetention, setAuditoriaRetention] =
     useState<AuditoriaRetention | null>(null);
   const [auditoriaLoading, setAuditoriaLoading] = useState(false);
+  const [auditoriaCleanupLoading, setAuditoriaCleanupLoading] = useState(false);
+  const [auditoriaCleanupMessage, setAuditoriaCleanupMessage] = useState("");
   const [usuarios, setUsuarios] = useState<UsuarioAdmin[]>([]);
   const [mecanicosDisponibles, setMecanicosDisponibles] = useState<Mecanico[]>(
     []
@@ -358,6 +360,29 @@ export default function Configuracion() {
     auditoriaSearch,
     canViewAuditoria,
   ]);
+
+  const limpiarAuditoria = async () => {
+    const confirmacion = window.confirm(
+      "Esto archivará los registros antiguos y limpiará el histórico según la política de retención. ¿Deseas continuar?"
+    );
+    if (!confirmacion) {
+      return;
+    }
+    setAuditoriaCleanupLoading(true);
+    setAuditoriaCleanupMessage("");
+    try {
+      const result = await configuracionAPI.archivarAuditoria();
+      setAuditoriaCleanupMessage(
+        `Archivados: ${result.archived}. Eliminados del histórico: ${result.purged}.`
+      );
+      setAuditoriaPage(1);
+    } catch (error) {
+      console.error("Error limpiando auditoría:", error);
+      setAuditoriaCleanupMessage("No se pudo ejecutar la limpieza.");
+    } finally {
+      setAuditoriaCleanupLoading(false);
+    }
+  };
 
   const cargarUsuarios = useCallback(async () => {
     try {
@@ -1323,6 +1348,21 @@ export default function Configuracion() {
               días en el archivo histórico.
             </p>
           )}
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={limpiarAuditoria}
+              disabled={auditoriaCleanupLoading}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {auditoriaCleanupLoading ? "Limpiando..." : "Limpiar auditoría"}
+            </button>
+            {auditoriaCleanupMessage && (
+              <span className="text-xs text-slate-500">
+                {auditoriaCleanupMessage}
+              </span>
+            )}
+          </div>
 
           <div className="mt-5 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
             <label className="space-y-1 text-xs font-semibold text-slate-600">

@@ -120,6 +120,14 @@ export const configuracionAPI = {
     );
     return response.data;
   },
+  archivarAuditoria: async (batchSize = 1000) => {
+    const response = await apiClient.post<{
+      archived: number;
+      purged: number;
+      total_to_archive: number;
+    }>('/auditoria/archivar/', { batch_size: batchSize });
+    return response.data;
+  },
   obtenerUsuarios: async () => {
     const response = await apiClient.get<
       UsuarioAdmin[] | PaginatedResponse<UsuarioAdmin>

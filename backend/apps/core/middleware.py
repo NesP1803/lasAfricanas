@@ -14,6 +14,8 @@ class AuditoriaMiddleware:
         if request.path.startswith('/api/') and request.method in {'POST', 'PUT', 'PATCH', 'DELETE'}:
             if request.path.startswith('/api/auth/refresh/'):
                 return response
+            if request.path.startswith('/api/auth/login/'):
+                return response
 
             if response.status_code < 400:
                 accion = self._map_action(request)
