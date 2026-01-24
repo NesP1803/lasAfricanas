@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   Eye,
   EyeOff,
+  Lock,
   Plus,
   Save,
   ShieldCheck,
@@ -897,8 +898,7 @@ export default function Configuracion() {
                 Impuestos
               </h3>
               <p className="text-sm text-slate-500">
-                Los impuestos principales permanecen fijos, pero puedes agregar
-                o quitar adicionales.
+                Gestiona los impuestos del sistema
               </p>
             </div>
             <button
@@ -917,47 +917,106 @@ export default function Configuracion() {
             </div>
           )}
 
-          <div className="mt-6 grid gap-4 md:grid-cols-3">
-            {impuestos.map((impuesto) => (
-              <div
-                key={impuesto.id}
-                className="rounded-xl border border-slate-100 bg-slate-50 p-4"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">
-                      {impuesto.nombre}
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      Valor: {impuesto.valor}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleEliminarImpuesto(impuesto)}
-                    className="rounded-full border border-transparent p-1 text-slate-400 hover:border-red-200 hover:text-red-600"
-                    title="Quitar impuesto"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-                <p className="mt-3 text-xs text-slate-500">
-                  {impuesto.es_exento
-                    ? "Exento"
-                    : `Porcentaje: ${impuesto.porcentaje ?? "N/A"}%`}
-                </p>
-              </div>
-            ))}
+          {/* Tabla de impuestos */}
+          <div className="mt-6 overflow-hidden rounded-lg border border-slate-200">
+            <table className="w-full">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                    Impuesto
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                    Tipo
+                  </th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                    Valor
+                  </th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                    Porcentaje
+                  </th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                    Estado
+                  </th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                    Acciones
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-slate-200">
+                {impuestos.map((impuesto, index) => {
+                  const esFijo = impuesto.id < 0; // IDs negativos son impuestos por defecto
+                  return (
+                    <tr key={impuesto.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          {esFijo && (
+                            <Lock size={14} className="text-slate-400" />
+                          )}
+                          <span className="text-sm font-medium text-slate-900">
+                            {impuesto.nombre}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className="text-sm text-slate-600">
+                          {impuesto.es_exento ? "Exento" : "Gravado"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center whitespace-nowrap">
+                        <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-md bg-slate-100 text-sm font-medium text-slate-700">
+                          {impuesto.valor}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center whitespace-nowrap">
+                        <span className="text-sm text-slate-600">
+                          {impuesto.es_exento ? "—" : `${impuesto.porcentaje ?? "0"}%`}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center whitespace-nowrap">
+                        {impuesto.es_exento ? (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                            E
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
+                            Activo
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-center whitespace-nowrap">
+                        {!esFijo && (
+                          <button
+                            type="button"
+                            onClick={() => handleEliminarImpuesto(impuesto)}
+                            className="inline-flex items-center justify-center rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                            title="Eliminar impuesto"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
+                        {esFijo && (
+                          <span className="text-xs text-slate-400">Fijo</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
 
-          <div className="mt-8 rounded-xl border border-dashed border-slate-200 p-4">
-            <h4 className="text-sm font-semibold text-slate-700">
-              Agregar impuesto
+          {/* Formulario para agregar impuesto */}
+          <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <h4 className="text-sm font-semibold text-slate-700 mb-4">
+              Agregar nuevo impuesto
             </h4>
-            <div className="mt-4 grid gap-4 md:grid-cols-3">
-              <label className="space-y-2 text-sm font-medium text-slate-700">
-                Nombre
+            <div className="grid gap-4 md:grid-cols-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1.5">
+                  Nombre
+                </label>
                 <input
+                  type="text"
                   value={nuevoImpuesto.nombre}
                   onChange={(event) =>
                     setNuevoImpuesto((prev) => ({
@@ -965,12 +1024,16 @@ export default function Configuracion() {
                       nombre: event.target.value,
                     }))
                   }
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  placeholder="Ej: IVA"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 />
-              </label>
-              <label className="space-y-2 text-sm font-medium text-slate-700">
-                Valor
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1.5">
+                  Valor
+                </label>
                 <input
+                  type="text"
                   value={nuevoImpuesto.valor}
                   onChange={(event) =>
                     setNuevoImpuesto((prev) => ({
@@ -978,12 +1041,17 @@ export default function Configuracion() {
                       valor: event.target.value,
                     }))
                   }
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  placeholder="Ej: 19, E"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 />
-              </label>
-              <label className="space-y-2 text-sm font-medium text-slate-700">
-                Porcentaje
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1.5">
+                  Porcentaje
+                </label>
                 <input
+                  type="number"
+                  step="0.01"
                   value={nuevoImpuesto.porcentaje ?? ""}
                   onChange={(event) =>
                     setNuevoImpuesto((prev) => ({
@@ -991,17 +1059,20 @@ export default function Configuracion() {
                       porcentaje: event.target.value,
                     }))
                   }
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  placeholder="Ej: 19.00"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 />
-              </label>
+              </div>
+              <div className="flex items-end">
+                <button
+                  type="button"
+                  onClick={handleAgregarImpuesto}
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
+                >
+                  <Plus size={16} /> Agregar
+                </button>
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={handleAgregarImpuesto}
-              className="mt-4 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-blue-700"
-            >
-              <Plus size={16} /> Agregar impuesto
-            </button>
           </div>
         </section>
       )}
