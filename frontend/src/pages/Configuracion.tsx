@@ -16,6 +16,7 @@ import { configuracionAPI } from "../api/configuracion";
 import { tallerApi, type Mecanico } from "../api/taller";
 import type {
   AuditoriaRegistro,
+  AuditoriaRetention,
   ConfiguracionEmpresa,
   ConfiguracionFacturacion,
   Impuesto,
@@ -86,6 +87,8 @@ const defaultImpuestos: Impuesto[] = [
   { id: -3, nombre: "IVA", valor: "E", porcentaje: null, es_exento: true },
 ];
 
+const AUDITORIA_PAGE_SIZE = 50;
+
 export default function Configuracion() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -107,6 +110,14 @@ export default function Configuracion() {
   const editorRef = useRef<HTMLDivElement | null>(null);
   const [impuestos, setImpuestos] = useState<Impuesto[]>(defaultImpuestos);
   const [auditoria, setAuditoria] = useState<AuditoriaRegistro[]>([]);
+  const [auditoriaTotal, setAuditoriaTotal] = useState(0);
+  const [auditoriaPage, setAuditoriaPage] = useState(1);
+  const [auditoriaSearch, setAuditoriaSearch] = useState("");
+  const [auditoriaFechaInicio, setAuditoriaFechaInicio] = useState("");
+  const [auditoriaFechaFin, setAuditoriaFechaFin] = useState("");
+  const [auditoriaRetention, setAuditoriaRetention] =
+    useState<AuditoriaRetention | null>(null);
+  const [auditoriaLoading, setAuditoriaLoading] = useState(false);
   const [usuarios, setUsuarios] = useState<UsuarioAdmin[]>([]);
   const [mecanicosDisponibles, setMecanicosDisponibles] = useState<Mecanico[]>(
     []
@@ -289,20 +300,65 @@ export default function Configuracion() {
         }
       }
 
-      if (canViewAuditoria) {
-        try {
-          const data = await configuracionAPI.obtenerAuditoria();
-          if (data?.length) {
-            setAuditoria(data);
-          }
-        } catch (error) {
-          console.error("Error cargando auditoría:", error);
-        }
-      }
     };
 
     cargarDatos();
   }, [canViewAuditoria, canViewImpuestos, isAdmin]);
+
+  useEffect(() => {
+    if (!canViewAuditoria) {
+      return;
+    }
+
+    const cargarRetention = async () => {
+      try {
+        const data = await configuracionAPI.obtenerAuditoriaRetention();
+        setAuditoriaRetention(data);
+      } catch (error) {
+        console.error("Error cargando retención de auditoría:", error);
+      }
+    };
+
+    cargarRetention();
+  }, [canViewAuditoria]);
+
+  useEffect(() => {
+    if (!canViewAuditoria) {
+      return;
+    }
+
+    const cargarAuditoria = async () => {
+      setAuditoriaLoading(true);
+      try {
+        const fechaInicio = auditoriaFechaInicio
+          ? `${auditoriaFechaInicio}T00:00:00`
+          : undefined;
+        const fechaFin = auditoriaFechaFin
+          ? `${auditoriaFechaFin}T23:59:59`
+          : undefined;
+        const data = await configuracionAPI.obtenerAuditoria({
+          page: auditoriaPage,
+          search: auditoriaSearch || undefined,
+          fechaInicio,
+          fechaFin,
+        });
+        setAuditoria(data.results);
+        setAuditoriaTotal(data.count);
+      } catch (error) {
+        console.error("Error cargando auditoría:", error);
+      } finally {
+        setAuditoriaLoading(false);
+      }
+    };
+
+    cargarAuditoria();
+  }, [
+    auditoriaFechaFin,
+    auditoriaFechaInicio,
+    auditoriaPage,
+    auditoriaSearch,
+    canViewAuditoria,
+  ]);
 
   const cargarUsuarios = useCallback(async () => {
     try {
@@ -1267,6 +1323,57 @@ export default function Configuracion() {
             Cada movimiento entre módulos y cambios de usuarios se registra
             automáticamente.
           </p>
+          {auditoriaRetention && (
+            <p className="mt-2 text-xs text-slate-500">
+              Se conservan {auditoriaRetention.retention_days} días en la
+              auditoría activa y {auditoriaRetention.archive_retention_days}{" "}
+              días en el archivo histórico.
+            </p>
+          )}
+
+          <div className="mt-5 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <label className="space-y-1 text-xs font-semibold text-slate-600">
+              Buscar
+              <input
+                value={auditoriaSearch}
+                onChange={(event) => {
+                  setAuditoriaSearch(event.target.value);
+                  setAuditoriaPage(1);
+                }}
+                placeholder="Usuario, acción o notas"
+                className="w-64 rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal text-slate-700"
+              />
+            </label>
+            <label className="space-y-1 text-xs font-semibold text-slate-600">
+              Desde
+              <input
+                type="date"
+                value={auditoriaFechaInicio}
+                onChange={(event) => {
+                  setAuditoriaFechaInicio(event.target.value);
+                  setAuditoriaPage(1);
+                }}
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal text-slate-700"
+              />
+            </label>
+            <label className="space-y-1 text-xs font-semibold text-slate-600">
+              Hasta
+              <input
+                type="date"
+                value={auditoriaFechaFin}
+                onChange={(event) => {
+                  setAuditoriaFechaFin(event.target.value);
+                  setAuditoriaPage(1);
+                }}
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal text-slate-700"
+              />
+            </label>
+            <div className="ml-auto text-xs text-slate-500">
+              {auditoriaTotal > 0
+                ? `Total registros: ${auditoriaTotal}`
+                : "Sin registros"}
+            </div>
+          </div>
 
           <div className="mt-6 overflow-hidden rounded-xl border border-slate-200">
             <table className="min-w-full divide-y divide-slate-200 text-sm">
@@ -1279,14 +1386,20 @@ export default function Configuracion() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {auditoria.length === 0 ? (
+                {auditoriaLoading ? (
+                  <tr>
+                    <td className="px-4 py-4 text-slate-500" colSpan={4}>
+                      Cargando auditoría...
+                    </td>
+                  </tr>
+                ) : auditoria.length === 0 ? (
                   <tr>
                     <td className="px-4 py-4 text-slate-500" colSpan={4}>
                       Aún no hay movimientos registrados.
                     </td>
                   </tr>
                 ) : (
-                  auditoria.slice(0, 10).map((registro) => (
+                  auditoria.map((registro) => (
                     <tr key={registro.id} className="text-slate-700">
                       <td className="px-4 py-3">
                         {new Date(registro.fecha_hora).toLocaleString()}
@@ -1299,6 +1412,42 @@ export default function Configuracion() {
                 )}
               </tbody>
             </table>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
+            <span>
+              Página {auditoriaPage} de{" "}
+              {Math.max(1, Math.ceil(auditoriaTotal / AUDITORIA_PAGE_SIZE))}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  setAuditoriaPage((prev) => Math.max(1, prev - 1))
+                }
+                disabled={auditoriaPage === 1}
+                className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 disabled:opacity-50"
+              >
+                Anterior
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setAuditoriaPage((prev) =>
+                    prev < Math.ceil(auditoriaTotal / AUDITORIA_PAGE_SIZE)
+                      ? prev + 1
+                      : prev
+                  )
+                }
+                disabled={
+                  auditoriaPage >=
+                  Math.ceil(auditoriaTotal / AUDITORIA_PAGE_SIZE)
+                }
+                className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 disabled:opacity-50"
+              >
+                Siguiente
+              </button>
+            </div>
           </div>
         </section>
       )}
