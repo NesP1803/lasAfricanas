@@ -137,7 +137,7 @@ class Auditoria(models.Model):
         ('OTRO', 'Otro'),
     ]
 
-    fecha_hora = models.DateTimeField(auto_now_add=True)
+    fecha_hora = models.DateTimeField(auto_now_add=True, db_index=True)
     usuario = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -146,9 +146,9 @@ class Auditoria(models.Model):
         blank=True,
     )
     usuario_nombre = models.CharField(max_length=150)
-    accion = models.CharField(max_length=20, choices=ACCION_CHOICES)
-    modelo = models.CharField(max_length=100, blank=True)
-    objeto_id = models.CharField(max_length=100, blank=True)
+    accion = models.CharField(max_length=20, choices=ACCION_CHOICES, db_index=True)
+    modelo = models.CharField(max_length=100, blank=True, db_index=True)
+    objeto_id = models.CharField(max_length=100, blank=True, db_index=True)
     notas = models.TextField()
     ip_address = models.GenericIPAddressField(blank=True, null=True)
 
@@ -157,6 +157,43 @@ class Auditoria(models.Model):
         verbose_name_plural = 'Registros de Auditoría'
         db_table = 'auditoria'
         ordering = ['-fecha_hora']
+        indexes = [
+            models.Index(fields=['-fecha_hora'], name='auditoria_fh_idx'),
+            models.Index(fields=['usuario', '-fecha_hora'], name='auditoria_user_fh_idx'),
+            models.Index(fields=['accion', '-fecha_hora'], name='auditoria_act_fh_idx'),
+        ]
 
     def __str__(self):
         return f"{self.usuario_nombre} - {self.accion}"
+
+
+class AuditoriaArchivo(models.Model):
+    fecha_hora = models.DateTimeField(db_index=True)
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name='auditorias_archivo',
+        null=True,
+        blank=True,
+    )
+    usuario_nombre = models.CharField(max_length=150)
+    accion = models.CharField(max_length=20, choices=Auditoria.ACCION_CHOICES, db_index=True)
+    modelo = models.CharField(max_length=100, blank=True, db_index=True)
+    objeto_id = models.CharField(max_length=100, blank=True, db_index=True)
+    notas = models.TextField()
+    ip_address = models.GenericIPAddressField(blank=True, null=True)
+    archivado_en = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        verbose_name = 'Registro de Auditoría Archivado'
+        verbose_name_plural = 'Registros de Auditoría Archivados'
+        db_table = 'auditoria_archivo'
+        ordering = ['-fecha_hora']
+        indexes = [
+            models.Index(fields=['-fecha_hora'], name='aud_arch_fh_idx'),
+            models.Index(fields=['usuario', '-fecha_hora'], name='aud_arch_user_fh_idx'),
+            models.Index(fields=['accion', '-fecha_hora'], name='aud_arch_act_fh_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.usuario_nombre} - {self.accion} (archivado)"

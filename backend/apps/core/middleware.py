@@ -14,19 +14,23 @@ class AuditoriaMiddleware:
         if request.path.startswith('/api/') and request.method in {'POST', 'PUT', 'PATCH', 'DELETE'}:
             if request.path.startswith('/api/auth/refresh/'):
                 return response
+            if request.path.startswith('/api/auth/login/'):
+                return response
 
             if response.status_code < 400:
                 accion = self._map_action(request)
                 usuario = request.user if request.user.is_authenticated else None
                 usuario_nombre = self._get_usuario_nombre(request, usuario)
+                objeto_id = self._get_objeto_id(request, response)
+                modelo = request.resolver_match.view_name if request.resolver_match else ''
 
                 Auditoria.objects.create(
                     usuario=usuario,
                     usuario_nombre=usuario_nombre,
                     accion=accion,
-                    modelo=request.resolver_match.view_name if request.resolver_match else '',
-                    objeto_id='',
-                    notas=f"{request.method} {request.path}",
+                    modelo=modelo,
+                    objeto_id=objeto_id,
+                    notas=self._build_notas(request, response, accion, modelo, objeto_id),
                     ip_address=self._get_ip(request),
                 )
 
@@ -76,3 +80,55 @@ class AuditoriaMiddleware:
 
     def _get_ip(self, request):
         return request.META.get('REMOTE_ADDR')
+
+    def _get_objeto_id(self, request, response):
+        if request.resolver_match and request.resolver_match.kwargs.get('pk'):
+            return str(request.resolver_match.kwargs.get('pk'))
+        if hasattr(response, 'data') and isinstance(response.data, dict):
+            possible_id = response.data.get('id') or response.data.get('pk')
+            if possible_id is not None:
+                return str(possible_id)
+        return ''
+
+    def _build_notas(self, request, response, accion, modelo, objeto_id):
+        if request.path.startswith('/api/auth/login/'):
+            return 'Inicio de sesión'
+
+        etiqueta = self._get_etiqueta_objeto(response)
+        descripcion_modelo = self._humanize_modelo(modelo) or 'registro'
+        accion_texto = {
+            'CREAR': 'Se creó',
+            'ACTUALIZAR': 'Se actualizó',
+            'ELIMINAR': 'Se eliminó',
+            'LOGIN': 'Inicio de sesión',
+            'LOGOUT': 'Cierre de sesión',
+        }.get(accion, 'Se realizó una acción')
+
+        if etiqueta:
+            return f"{accion_texto} {descripcion_modelo}: {etiqueta}"
+        if objeto_id:
+            return f"{accion_texto} {descripcion_modelo} (ID {objeto_id})"
+        return f"{accion_texto} {descripcion_modelo}"
+
+    def _get_etiqueta_objeto(self, response):
+        if not hasattr(response, 'data') or not isinstance(response.data, dict):
+            return ''
+        data = response.data
+        for key in ('nombre', 'razon_social', 'descripcion', 'titulo', 'codigo', 'sku'):
+            value = data.get(key)
+            if value:
+                return str(value)
+        if data.get('prefijo_factura') and data.get('numero_factura'):
+            return f"{data.get('prefijo_factura')}-{data.get('numero_factura')}"
+        return ''
+
+    def _humanize_modelo(self, modelo):
+        if not modelo:
+            return ''
+        return (
+            modelo.replace('_', ' ')
+            .replace('-', ' ')
+            .replace('api:', '')
+            .replace('viewset', '')
+            .strip()
+        )
