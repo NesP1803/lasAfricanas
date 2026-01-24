@@ -1,8 +1,11 @@
 from rest_framework import viewsets
+from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, MultiPartParser, JSONParser
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
+
+from django.conf import settings
 
 from .models import (
     ConfiguracionEmpresa,
@@ -88,3 +91,32 @@ class AuditoriaViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Auditoria.objects.all()
     serializer_class = AuditoriaSerializer
     permission_classes = [IsAuthenticated]
+    search_fields = [
+        'usuario_nombre',
+        'accion',
+        'modelo',
+        'objeto_id',
+        'notas',
+        'ip_address',
+    ]
+    ordering_fields = [
+        'fecha_hora',
+        'usuario_nombre',
+        'accion',
+        'modelo',
+    ]
+    ordering = ['-fecha_hora']
+    filterset_fields = {
+        'fecha_hora': ['gte', 'lte'],
+        'accion': ['exact'],
+        'usuario_nombre': ['exact', 'icontains'],
+    }
+
+    @action(detail=False, methods=['get'])
+    def retention(self, request):
+        return Response({
+            'retention_days': getattr(settings, 'AUDITORIA_RETENTION_DAYS', 365),
+            'archive_retention_days': getattr(
+                settings, 'AUDITORIA_ARCHIVE_RETENTION_DAYS', 3650
+            ),
+        })
