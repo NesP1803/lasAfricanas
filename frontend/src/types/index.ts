@@ -180,6 +180,11 @@ export interface AuditoriaRegistro {
   ip_address: string | null;
 }
 
+export interface AuditoriaRetention {
+  retention_days: number;
+  archive_retention_days: number;
+}
+
 export interface UsuarioAdmin {
   id: number;
   username: string;

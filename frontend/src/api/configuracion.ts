@@ -6,6 +6,7 @@ import type {
   AuditoriaRegistro,
   UsuarioAdmin,
   PaginatedResponse,
+  AuditoriaRetention,
 } from '../types';
 const buildEmpresaFormData = (
   data: ConfiguracionEmpresa,
@@ -87,14 +88,37 @@ export const configuracionAPI = {
   eliminarImpuesto: async (id: number) => {
     await apiClient.delete(`/impuestos/${id}/`);
   },
-  obtenerAuditoria: async () => {
-    const response = await apiClient.get<PaginatedResponse<AuditoriaRegistro> | AuditoriaRegistro[]>(
-      '/auditoria/'
-    );
+  obtenerAuditoria: async (params?: {
+    page?: number;
+    search?: string;
+    fechaInicio?: string;
+    fechaFin?: string;
+  }) => {
+    const response = await apiClient.get<
+      PaginatedResponse<AuditoriaRegistro> | AuditoriaRegistro[]
+    >('/auditoria/', {
+      params: {
+        page: params?.page,
+        search: params?.search || undefined,
+        fecha_hora__gte: params?.fechaInicio || undefined,
+        fecha_hora__lte: params?.fechaFin || undefined,
+      },
+    });
     if (Array.isArray(response.data)) {
-      return response.data;
+      return {
+        count: response.data.length,
+        next: null,
+        previous: null,
+        results: response.data,
+      };
     }
-    return response.data.results;
+    return response.data;
+  },
+  obtenerAuditoriaRetention: async () => {
+    const response = await apiClient.get<AuditoriaRetention>(
+      '/auditoria/retention/'
+    );
+    return response.data;
   },
   obtenerUsuarios: async () => {
     const response = await apiClient.get<
