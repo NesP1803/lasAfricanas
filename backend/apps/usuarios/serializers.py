@@ -48,6 +48,15 @@ class UsuarioSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         password = validated_data.pop('password', None)
+
+        # Si no se especifica modulos_permitidos, asignar valor por defecto
+        if 'modulos_permitidos' not in validated_data or validated_data.get('modulos_permitidos') is None:
+            tipo_usuario = validated_data.get('tipo_usuario', 'VENDEDOR')
+            # Para usuarios no-admin, asignar objeto vacío (solo tendrán acceso a Mi perfil)
+            # Para admin, null significa acceso completo
+            if tipo_usuario != 'ADMIN':
+                validated_data['modulos_permitidos'] = {}
+
         usuario = Usuario(**validated_data)
         if password:
             usuario.set_password(password)
