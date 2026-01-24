@@ -171,6 +171,10 @@ REST_FRAMEWORK = {
     ],
 }
 
+# Auditoría
+AUDITORIA_RETENTION_DAYS = 365  # Días que se mantienen en la tabla principal
+AUDITORIA_ARCHIVE_RETENTION_DAYS = 3650  # Días a conservar en el archivo histórico
+
 # JWT Settings
 from datetime import timedelta
 

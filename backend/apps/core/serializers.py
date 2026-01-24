@@ -27,6 +27,8 @@ class ImpuestoSerializer(serializers.ModelSerializer):
 
 
 class AuditoriaSerializer(serializers.ModelSerializer):
+    ip_address = serializers.CharField(allow_null=True, required=False)
+
     class Meta:
         model = Auditoria
         fields = '__all__'
