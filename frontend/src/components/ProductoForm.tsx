@@ -19,6 +19,14 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<any>({});
 
+  const normalizeIva = (value: string | number) => {
+    const numericValue = Number(value);
+    if (!Number.isFinite(numericValue)) {
+      return '0.00';
+    }
+    return numericValue.toFixed(2);
+  };
+
   const [formData, setFormData] = useState({
     codigo: '',
     nombre: '',
@@ -31,7 +39,7 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
     stock: '0',
     stock_minimo: '5',
     unidad_medida: 'UND',
-    iva_porcentaje: '19',
+    iva_porcentaje: '19.00',
     aplica_descuento: true,
     es_servicio: false,
     is_active: true,
@@ -55,7 +63,7 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
         stock: producto.stock.toString(),
         stock_minimo: producto.stock_minimo.toString(),
         unidad_medida: producto.unidad_medida,
-        iva_porcentaje: producto.iva_porcentaje,
+        iva_porcentaje: normalizeIva(producto.iva_porcentaje),
         aplica_descuento: producto.aplica_descuento,
         es_servicio: producto.es_servicio,
         is_active: producto.is_active,
@@ -91,7 +99,7 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
           impuestosList.find((item) => item.is_active !== false) ?? impuestosList[0];
         // Extraer el porcentaje del nombre del impuesto (ej: "IVA 19%" -> "19")
         const match = impuestoBase.nombre.match(/(\d+(?:\.\d+)?)/);
-        const porcentaje = match ? match[1] : '0';
+        const porcentaje = normalizeIva(match ? match[1] : '0');
         setFormData((prev) => ({ ...prev, iva_porcentaje: porcentaje }));
       }
     } catch (error) {
@@ -122,8 +130,9 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
         proveedor: Number(formData.proveedor),
         stock: Number(formData.stock),
         stock_minimo: Number(formData.stock_minimo),
-        precio_costo: formData.precio_costo || "0",
-        precio_venta_minimo: formData.precio_venta_minimo || "0",
+        precio_costo: formData.precio_costo || '0.01',
+        precio_venta_minimo: formData.precio_venta_minimo || '0',
+        iva_porcentaje: normalizeIva(formData.iva_porcentaje),
       };
 
       if (producto) {
@@ -283,7 +292,7 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
                 {impuestos.map((impuesto) => {
                   // Extraer el porcentaje del nombre del impuesto (ej: "IVA 19%" -> "19")
                   const match = impuesto.nombre.match(/(\d+(?:\.\d+)?)/);
-                  const porcentaje = match ? match[1] : '0';
+                  const porcentaje = normalizeIva(match ? match[1] : '0');
                   return (
                     <option key={impuesto.id} value={porcentaje}>
                       {impuesto.nombre}
@@ -342,6 +351,25 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="flex items-center gap-2 font-semibold text-gray-800 mb-1">
+                Precio costo *
+                <HelpCircle size={14} className="text-gray-500" />
+              </label>
+              <input
+                type="number"
+                name="precio_costo"
+                value={formData.precio_costo}
+                onChange={handleChange}
+                step="0.01"
+                min="0.01"
+                className="w-full px-2 py-1 border border-gray-400 rounded bg-white"
+                required
+              />
+              {errors.precio_costo && (
+                <p className="text-red-500 text-xs mt-1">{errors.precio_costo}</p>
+              )}
+            </div>
             <div>
               <label className="flex items-center gap-2 font-semibold text-gray-800 mb-1">
                 Precio *
