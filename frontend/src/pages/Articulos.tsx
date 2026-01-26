@@ -110,6 +110,7 @@ export default function Articulos() {
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [search, setSearch] = useState('');
   const [estadoFiltro, setEstadoFiltro] = useState<EstadoFiltro>('todos');
+  const [disponibilidadFiltro, setDisponibilidadFiltro] = useState('todos');
   const [categoriaFiltro, setCategoriaFiltro] = useState('todos');
   const [proveedorFiltro, setProveedorFiltro] = useState('todos');
   const [page, setPage] = useState(1);
@@ -143,6 +144,7 @@ export default function Articulos() {
     setPage(1);
     setSelectedId(null);
     setSelectedResumen(null);
+    setDisponibilidadFiltro('todos');
   }, [activeTab]);
 
   useEffect(() => {
@@ -398,6 +400,10 @@ export default function Articulos() {
     if (estadoFiltro === 'agotado') return producto.stock_estado === 'AGOTADO';
     if (estadoFiltro === 'bajo') return producto.stock_estado === 'BAJO';
     return producto.stock_estado === 'OK';
+  }).filter((producto) => {
+    if (disponibilidadFiltro === 'todos') return true;
+    if (disponibilidadFiltro === 'sin_stock') return Number(producto.stock) <= 0;
+    return Number(producto.stock) > 0;
   });
 
   return (
@@ -588,9 +594,21 @@ export default function Articulos() {
                 <option value="bajo">Stock bajo</option>
                 <option value="agotado">Agotado</option>
               </select>
+              <select
+                value={disponibilidadFiltro}
+                onChange={(event) => {
+                  setDisponibilidadFiltro(event.target.value);
+                  setPage(1);
+                }}
+                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+              >
+                <option value="todos">Toda la disponibilidad</option>
+                <option value="con_stock">Con stock</option>
+                <option value="sin_stock">Sin stock</option>
+              </select>
             </div>
             <div className="text-sm text-slate-500">
-              Total: {totalRegistros} artículos
+              Mostrando {mercanciaFiltrada.length} de {totalRegistros} artículos
             </div>
           </div>
 
@@ -619,7 +637,7 @@ export default function Articulos() {
                     onDoubleClick={() => openEditById(producto.id, producto.codigo)}
                     className={`cursor-pointer transition ${
                       selectedId === producto.id
-                        ? 'bg-blue-50'
+                        ? 'bg-blue-100'
                         : 'hover:bg-slate-50'
                     }`}
                   >

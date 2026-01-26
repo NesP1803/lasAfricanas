@@ -394,7 +394,7 @@ export default function Remisiones() {
                       <tr
                         key={remision.id}
                         className={`border-t border-slate-200 ${
-                          selected ? 'bg-blue-50' : 'bg-white'
+                          selected ? 'bg-blue-100' : 'bg-white'
                         }`}
                       >
                         <td className="px-2 py-2">

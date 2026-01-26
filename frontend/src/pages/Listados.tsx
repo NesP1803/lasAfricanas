@@ -133,6 +133,13 @@ export default function Listados() {
   const [totalRegistros, setTotalRegistros] = useState(0);
   const [page, setPage] = useState(1);
   const [estadoFiltro, setEstadoFiltro] = useState<EstadoFiltro>('activos');
+  const [documentoFiltro, setDocumentoFiltro] = useState('todos');
+  const [ciudadClienteFiltro, setCiudadClienteFiltro] = useState('todos');
+  const [ciudadProveedorFiltro, setCiudadProveedorFiltro] = useState('todos');
+  const [rolFiltro, setRolFiltro] = useState('todos');
+  const [sedeFiltro, setSedeFiltro] = useState('todos');
+  const [productosFiltro, setProductosFiltro] = useState('todos');
+  const [ciudadMecanicoFiltro, setCiudadMecanicoFiltro] = useState('todos');
 
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
@@ -153,6 +160,13 @@ export default function Listados() {
     setSelectedId(null);
     setPage(1);
     setEstadoFiltro('activos');
+    setDocumentoFiltro('todos');
+    setCiudadClienteFiltro('todos');
+    setCiudadProveedorFiltro('todos');
+    setRolFiltro('todos');
+    setSedeFiltro('todos');
+    setProductosFiltro('todos');
+    setCiudadMecanicoFiltro('todos');
   }, [activeTab]);
 
   useEffect(() => {
@@ -351,6 +365,99 @@ export default function Listados() {
     return [];
   }, [activeTab, categorias, clientes, proveedores, usuarios, mecanicos]);
 
+  const ciudadesClientes = useMemo(
+    () =>
+      [...new Set(clientes.map((cliente) => cliente.ciudad).filter(Boolean))].sort(),
+    [clientes]
+  );
+  const ciudadesProveedores = useMemo(
+    () =>
+      [
+        ...new Set(
+          proveedores.map((proveedor) => proveedor.ciudad).filter(Boolean)
+        ),
+      ].sort(),
+    [proveedores]
+  );
+  const rolesUsuarios = useMemo(
+    () =>
+      [...new Set(usuarios.map((usuario) => usuario.tipo_usuario).filter(Boolean))].sort(),
+    [usuarios]
+  );
+  const sedesUsuarios = useMemo(
+    () =>
+      [...new Set(usuarios.map((usuario) => usuario.sede).filter(Boolean))].sort(),
+    [usuarios]
+  );
+  const ciudadesMecanicos = useMemo(
+    () =>
+      [...new Set(mecanicos.map((mecanico) => mecanico.ciudad).filter(Boolean))].sort(),
+    [mecanicos]
+  );
+
+  const clientesFiltrados = useMemo(() => {
+    let filtered = clientes;
+    if (documentoFiltro !== 'todos') {
+      filtered = filtered.filter(
+        (cliente) => cliente.tipo_documento === documentoFiltro
+      );
+    }
+    if (ciudadClienteFiltro !== 'todos') {
+      filtered = filtered.filter((cliente) => cliente.ciudad === ciudadClienteFiltro);
+    }
+    return filtered;
+  }, [clientes, ciudadClienteFiltro, documentoFiltro]);
+
+  const proveedoresFiltrados = useMemo(() => {
+    if (ciudadProveedorFiltro === 'todos') return proveedores;
+    return proveedores.filter(
+      (proveedor) => proveedor.ciudad === ciudadProveedorFiltro
+    );
+  }, [proveedores, ciudadProveedorFiltro]);
+
+  const categoriasFiltradas = useMemo(() => {
+    if (productosFiltro === 'todos') return categorias;
+    if (productosFiltro === 'con_productos') {
+      return categorias.filter((categoria) => categoria.total_productos > 0);
+    }
+    return categorias.filter((categoria) => categoria.total_productos === 0);
+  }, [categorias, productosFiltro]);
+
+  const usuariosFiltrados = useMemo(() => {
+    let filtered = usuarios;
+    if (rolFiltro !== 'todos') {
+      filtered = filtered.filter((usuario) => usuario.tipo_usuario === rolFiltro);
+    }
+    if (sedeFiltro !== 'todos') {
+      filtered = filtered.filter((usuario) => usuario.sede === sedeFiltro);
+    }
+    return filtered;
+  }, [usuarios, rolFiltro, sedeFiltro]);
+
+  const mecanicosFiltrados = useMemo(() => {
+    if (ciudadMecanicoFiltro === 'todos') return mecanicos;
+    return mecanicos.filter(
+      (mecanico) => mecanico.ciudad === ciudadMecanicoFiltro
+    );
+  }, [mecanicos, ciudadMecanicoFiltro]);
+
+  const registrosFiltrados = useMemo(() => {
+    if (activeTab === 'clientes') return clientesFiltrados.length;
+    if (activeTab === 'proveedores') return proveedoresFiltrados.length;
+    if (activeTab === 'categorias') return categoriasFiltradas.length;
+    if (activeTab === 'empleados') return usuariosFiltrados.length;
+    if (activeTab === 'mecanicos') return mecanicosFiltrados.length;
+    return currentList.length;
+  }, [
+    activeTab,
+    categoriasFiltradas.length,
+    clientesFiltrados.length,
+    currentList.length,
+    mecanicosFiltrados.length,
+    proveedoresFiltrados.length,
+    usuariosFiltrados.length,
+  ]);
+
   const searchPlaceholder = useMemo(() => {
     if (activeTab === 'clientes') return 'Buscar por nombre, documento o teléfono...';
     if (activeTab === 'proveedores') return 'Buscar por proveedor, NIT o ciudad...';
@@ -440,10 +547,105 @@ export default function Listados() {
               <option value="inactivos">Inactivos</option>
               <option value="todos">Todos</option>
             </select>
+            {activeTab === 'clientes' && (
+              <>
+                <select
+                  value={documentoFiltro}
+                  onChange={(event) => setDocumentoFiltro(event.target.value)}
+                  className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm"
+                >
+                  <option value="todos">Todos los documentos</option>
+                  {documentoOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={ciudadClienteFiltro}
+                  onChange={(event) => setCiudadClienteFiltro(event.target.value)}
+                  className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm"
+                >
+                  <option value="todos">Todas las ciudades</option>
+                  {ciudadesClientes.map((ciudad) => (
+                    <option key={ciudad} value={ciudad}>
+                      {ciudad}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
+            {activeTab === 'proveedores' && (
+              <select
+                value={ciudadProveedorFiltro}
+                onChange={(event) => setCiudadProveedorFiltro(event.target.value)}
+                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm"
+              >
+                <option value="todos">Todas las ciudades</option>
+                {ciudadesProveedores.map((ciudad) => (
+                  <option key={ciudad} value={ciudad}>
+                    {ciudad}
+                  </option>
+                ))}
+              </select>
+            )}
+            {activeTab === 'empleados' && (
+              <>
+                <select
+                  value={rolFiltro}
+                  onChange={(event) => setRolFiltro(event.target.value)}
+                  className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm"
+                >
+                  <option value="todos">Todos los roles</option>
+                  {rolesUsuarios.map((rol) => (
+                    <option key={rol} value={rol}>
+                      {rol}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={sedeFiltro}
+                  onChange={(event) => setSedeFiltro(event.target.value)}
+                  className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm"
+                >
+                  <option value="todos">Todas las sedes</option>
+                  {sedesUsuarios.map((sede) => (
+                    <option key={sede} value={sede}>
+                      {sede}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
+            {activeTab === 'categorias' && (
+              <select
+                value={productosFiltro}
+                onChange={(event) => setProductosFiltro(event.target.value)}
+                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm"
+              >
+                <option value="todos">Todas las categorías</option>
+                <option value="con_productos">Con productos</option>
+                <option value="sin_productos">Sin productos</option>
+              </select>
+            )}
+            {activeTab === 'mecanicos' && (
+              <select
+                value={ciudadMecanicoFiltro}
+                onChange={(event) => setCiudadMecanicoFiltro(event.target.value)}
+                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm"
+              >
+                <option value="todos">Todas las ciudades</option>
+                {ciudadesMecanicos.map((ciudad) => (
+                  <option key={ciudad} value={ciudad}>
+                    {ciudad}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
           <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
             <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-              {totalRegistros} registros
+              Mostrando {registrosFiltrados} de {totalRegistros} registros
             </span>
             <span className="text-xs text-slate-400">
               Doble clic sobre un registro para editar
@@ -495,7 +697,7 @@ export default function Listados() {
             <div className="p-8 text-center text-sm text-slate-500">
               Cargando información...
             </div>
-          ) : currentList.length === 0 ? (
+          ) : registrosFiltrados === 0 ? (
             <div className="p-8 text-center text-sm text-slate-500">
               No hay registros para mostrar.
             </div>
@@ -507,11 +709,11 @@ export default function Listados() {
               <tbody className="divide-y divide-slate-200">
                 {renderTableRows({
                   activeTab,
-                  clientes,
-                  proveedores,
-                  categorias,
-                  usuarios,
-                  mecanicos,
+                  clientes: clientesFiltrados,
+                  proveedores: proveedoresFiltrados,
+                  categorias: categoriasFiltradas,
+                  usuarios: usuariosFiltrados,
+                  mecanicos: mecanicosFiltrados,
                   selectedId,
                   onSelect: handleRowSelect,
                   onDoubleClick: openEdit,
@@ -873,7 +1075,7 @@ const renderTableRows = ({
 }) => {
   const baseRowClasses = (isSelected: boolean) =>
     `cursor-pointer transition ${
-      isSelected ? 'bg-blue-50' : 'hover:bg-slate-50'
+      isSelected ? 'bg-blue-100' : 'hover:bg-slate-50'
     }`;
 
   if (activeTab === 'clientes') {

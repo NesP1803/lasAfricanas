@@ -530,7 +530,7 @@ export default function Taller() {
                             onClick={() => setSelectedMecanicoId(mecanico.id)}
                             className={`flex w-full items-center justify-between px-4 py-3 text-left text-sm transition ${
                               selectedMecanicoId === mecanico.id
-                                ? 'bg-blue-50 text-blue-700'
+                                ? 'bg-blue-100 text-blue-700'
                                 : 'hover:bg-slate-50'
                             }`}
                           >
@@ -578,7 +578,7 @@ export default function Taller() {
                           <tr
                             key={moto.id}
                             className={`cursor-pointer transition ${
-                              selectedMotoId === moto.id ? 'bg-blue-50' : 'hover:bg-slate-50'
+                              selectedMotoId === moto.id ? 'bg-blue-100' : 'hover:bg-slate-50'
                             }`}
                             onClick={() => handleSelectMoto(moto)}
                             onDoubleClick={() => handleSelectMoto(moto)}
@@ -824,7 +824,7 @@ export default function Taller() {
                       <tr
                         key={moto.id}
                         className={`cursor-pointer transition ${
-                          selectedMotoListId === moto.id ? 'bg-blue-50' : 'hover:bg-slate-50'
+                          selectedMotoListId === moto.id ? 'bg-blue-100' : 'hover:bg-slate-50'
                         }`}
                         onClick={() => setSelectedMotoListId(moto.id)}
                         onDoubleClick={() => openEditMoto(moto)}
