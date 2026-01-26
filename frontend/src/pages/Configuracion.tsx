@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { configuracionAPI } from "../api/configuracion";
 import { tallerApi, type Mecanico } from "../api/taller";
+import { usuariosApi } from "../api/usuarios";
 import ConfirmModal from "../components/ConfirmModal";
 import type {
   AuditoriaRegistro,
@@ -141,6 +142,8 @@ export default function Configuracion() {
   const [mensajeAccesos, setMensajeAccesos] = useState("");
   const [accessLoading, setAccessLoading] = useState(false);
   const { showNotification } = useNotification();
+  const [confirmUserDeleteOpen, setConfirmUserDeleteOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<UsuarioAdmin | null>(null);
   const [origenUsuario, setOrigenUsuario] = useState<"manual" | "mecanico">(
     "manual"
   );
@@ -541,27 +544,31 @@ export default function Configuracion() {
     }
   };
 
-  const handleActualizarUsuario = async (usuario: UsuarioAdmin) => {
+  const requestDeleteUsuario = (usuario: UsuarioAdmin) => {
+    setUserToDelete(usuario);
+    setConfirmUserDeleteOpen(true);
+  };
+
+  const confirmDeleteUsuario = async () => {
+    if (!userToDelete) return;
     try {
-      const data = await configuracionAPI.actualizarUsuario(usuario.id, {
-        tipo_usuario: usuario.tipo_usuario,
-        is_active: usuario.is_active,
-      });
-      setUsuarios((prev) =>
-        prev.map((item) => (item.id === data.id ? data : item))
-      );
-      setMensajeUsuario("Cambios guardados para el usuario.");
+      await usuariosApi.deleteUsuario(userToDelete.id);
+      setUsuarios((prev) => prev.filter((item) => item.id !== userToDelete.id));
+      setMensajeUsuario("Usuario eliminado correctamente.");
       showNotification({
-        message: "Cambios guardados para el usuario.",
+        message: "Usuario eliminado correctamente.",
         type: "success",
       });
     } catch (error) {
-      console.error("Error actualizando usuario:", error);
-      setMensajeUsuario("No se pudo actualizar el usuario.");
+      console.error("Error eliminando usuario:", error);
+      setMensajeUsuario("No se pudo eliminar el usuario.");
       showNotification({
-        message: "No se pudo actualizar el usuario.",
+        message: "No se pudo eliminar el usuario.",
         type: "error",
       });
+    } finally {
+      setConfirmUserDeleteOpen(false);
+      setUserToDelete(null);
     }
   };
 
@@ -1619,10 +1626,10 @@ export default function Configuracion() {
                     <td className="px-4 py-3">
                       <button
                         type="button"
-                        onClick={() => handleActualizarUsuario(usuario)}
-                        className="rounded-lg bg-slate-900 px-3 py-1 text-xs font-medium text-white hover:bg-slate-800"
+                        onClick={() => requestDeleteUsuario(usuario)}
+                        className="rounded-lg bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-700"
                       >
-                        Guardar
+                        Eliminar
                       </button>
                       <button
                         type="button"
@@ -2106,6 +2113,22 @@ export default function Configuracion() {
         onConfirm={confirmLimpiarAuditoria}
         onCancel={() => setConfirmAuditoriaCleanupOpen(false)}
         loading={auditoriaCleanupLoading}
+      />
+      <ConfirmModal
+        open={confirmUserDeleteOpen}
+        title="Eliminar usuario"
+        description={
+          userToDelete
+            ? `Se eliminará el usuario ${userToDelete.username}. ¿Deseas continuar?`
+            : "¿Deseas continuar?"
+        }
+        confirmLabel="Eliminar"
+        confirmVariant="danger"
+        onConfirm={confirmDeleteUsuario}
+        onCancel={() => {
+          setConfirmUserDeleteOpen(false);
+          setUserToDelete(null);
+        }}
       />
     </div>
   );
