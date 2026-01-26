@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { configuracionAPI } from "../api/configuracion";
 import { tallerApi, type Mecanico } from "../api/taller";
+import ConfirmModal from "../components/ConfirmModal";
 import type {
   AuditoriaRegistro,
   AuditoriaRetention,
@@ -24,6 +25,7 @@ import type {
   UsuarioAdmin,
 } from "../types";
 import { useAuth } from "../contexts/AuthContext";
+import { useNotification } from "../contexts/NotificationContext";
 import {
   MODULE_DEFINITIONS,
   createEmptyModuleAccess,
@@ -121,6 +123,8 @@ export default function Configuracion() {
   const [auditoriaLoading, setAuditoriaLoading] = useState(false);
   const [auditoriaCleanupLoading, setAuditoriaCleanupLoading] = useState(false);
   const [auditoriaCleanupMessage, setAuditoriaCleanupMessage] = useState("");
+  const [confirmAuditoriaCleanupOpen, setConfirmAuditoriaCleanupOpen] =
+    useState(false);
   const [usuarios, setUsuarios] = useState<UsuarioAdmin[]>([]);
   const [mecanicosDisponibles, setMecanicosDisponibles] = useState<Mecanico[]>(
     []
@@ -136,6 +140,7 @@ export default function Configuracion() {
     useState<ModuleAccessState>(createEmptyModuleAccess());
   const [mensajeAccesos, setMensajeAccesos] = useState("");
   const [accessLoading, setAccessLoading] = useState(false);
+  const { showNotification } = useNotification();
   const [origenUsuario, setOrigenUsuario] = useState<"manual" | "mecanico">(
     "manual"
   );
@@ -362,12 +367,10 @@ export default function Configuracion() {
   ]);
 
   const limpiarAuditoria = async () => {
-    const confirmacion = window.confirm(
-      "Esto archivará los registros antiguos y limpiará el histórico según la política de retención. ¿Deseas continuar?"
-    );
-    if (!confirmacion) {
-      return;
-    }
+    setConfirmAuditoriaCleanupOpen(true);
+  };
+
+  const confirmLimpiarAuditoria = async () => {
     setAuditoriaCleanupLoading(true);
     setAuditoriaCleanupMessage("");
     try {
@@ -376,11 +379,20 @@ export default function Configuracion() {
         `Archivados: ${result.archived}. Eliminados del histórico: ${result.purged}.`
       );
       setAuditoriaPage(1);
+      showNotification({
+        message: "Limpieza de auditoría completada.",
+        type: "success",
+      });
     } catch (error) {
       console.error("Error limpiando auditoría:", error);
       setAuditoriaCleanupMessage("No se pudo ejecutar la limpieza.");
+      showNotification({
+        message: "No se pudo ejecutar la limpieza.",
+        type: "error",
+      });
     } finally {
       setAuditoriaCleanupLoading(false);
+      setConfirmAuditoriaCleanupOpen(false);
     }
   };
 
@@ -495,9 +507,17 @@ export default function Configuracion() {
       setImpuestos((prev) => [...prev, nuevo]);
       setNuevoImpuesto({ nombre: "" });
       setMensajeImpuesto("Impuesto agregado correctamente.");
+      showNotification({
+        message: "Impuesto agregado correctamente.",
+        type: "success",
+      });
     } catch (error) {
       console.error("Error agregando impuesto:", error);
       setMensajeImpuesto("No se pudo agregar el impuesto.");
+      showNotification({
+        message: "No se pudo agregar el impuesto.",
+        type: "error",
+      });
     }
   };
 
@@ -507,9 +527,17 @@ export default function Configuracion() {
         await configuracionAPI.eliminarImpuesto(impuesto.id);
       }
       setImpuestos((prev) => prev.filter((item) => item.id !== impuesto.id));
+      showNotification({
+        message: "Impuesto eliminado correctamente.",
+        type: "success",
+      });
     } catch (error) {
       console.error("Error eliminando impuesto:", error);
       setMensajeImpuesto("No se pudo quitar el impuesto.");
+      showNotification({
+        message: "No se pudo quitar el impuesto.",
+        type: "error",
+      });
     }
   };
 
@@ -523,9 +551,17 @@ export default function Configuracion() {
         prev.map((item) => (item.id === data.id ? data : item))
       );
       setMensajeUsuario("Cambios guardados para el usuario.");
+      showNotification({
+        message: "Cambios guardados para el usuario.",
+        type: "success",
+      });
     } catch (error) {
       console.error("Error actualizando usuario:", error);
       setMensajeUsuario("No se pudo actualizar el usuario.");
+      showNotification({
+        message: "No se pudo actualizar el usuario.",
+        type: "error",
+      });
     }
   };
 
@@ -711,6 +747,10 @@ export default function Configuracion() {
         const data = await configuracionAPI.crearUsuario(payload);
         setUsuarios((prev) => [data, ...prev]);
         setMensajeNuevoUsuario("Usuario creado correctamente.");
+        showNotification({
+          message: "Usuario creado correctamente.",
+          type: "success",
+        });
       } else {
         if (!editingUserId) {
           setMensajeNuevoUsuario(
@@ -741,12 +781,20 @@ export default function Configuracion() {
           prev.map((item) => (item.id === data.id ? data : item))
         );
         setMensajeNuevoUsuario("Usuario actualizado correctamente.");
+        showNotification({
+          message: "Usuario actualizado correctamente.",
+          type: "success",
+        });
       }
       setUserModalOpen(false);
       resetNuevoUsuario();
     } catch (error) {
       console.error("Error guardando usuario:", error);
       setMensajeNuevoUsuario("No se pudo guardar el usuario.");
+      showNotification({
+        message: "No se pudo guardar el usuario.",
+        type: "error",
+      });
     }
   };
 
@@ -2049,7 +2097,16 @@ export default function Configuracion() {
           </div>
         </div>
       )}
-
+      <ConfirmModal
+        open={confirmAuditoriaCleanupOpen}
+        title="Limpiar auditoría"
+        description="Esto archivará los registros antiguos y limpiará el histórico según la política de retención. ¿Deseas continuar?"
+        confirmLabel="Continuar"
+        confirmVariant="danger"
+        onConfirm={confirmLimpiarAuditoria}
+        onCancel={() => setConfirmAuditoriaCleanupOpen(false)}
+        loading={auditoriaCleanupLoading}
+      />
     </div>
   );
 }
