@@ -4,6 +4,7 @@ import { inventarioApi } from '../api/inventario';
 import { configuracionAPI } from '../api/configuracion';
 import type { Producto, Categoria, Proveedor} from "../api/inventario";
 import type { Impuesto } from '../types';
+import { useNotification } from '../contexts/NotificationContext';
 
 
 interface ProductoFormProps {
@@ -13,6 +14,7 @@ interface ProductoFormProps {
 }
 
 export default function ProductoForm({ producto, onClose, onSuccess }: ProductoFormProps) {
+  const { showNotification } = useNotification();
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [impuestos, setImpuestos] = useState<Impuesto[]>([]);
@@ -149,7 +151,10 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
         const errorData = JSON.parse(error.message);
         setErrors(errorData);
       } catch {
-        alert('Error al guardar el producto');
+        showNotification({
+          message: 'Error al guardar el producto.',
+          type: 'error',
+        });
       }
     } finally {
       setLoading(false);

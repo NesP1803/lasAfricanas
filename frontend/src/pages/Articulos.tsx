@@ -21,7 +21,9 @@ import {
   type Proveedor,
 } from '../api/inventario';
 import ProductoForm from '../components/ProductoForm';
+import ConfirmModal from '../components/ConfirmModal';
 import { useAuth } from '../contexts/AuthContext';
+import { useNotification } from '../contexts/NotificationContext';
 import {
   createFullModuleAccess,
   isSectionEnabled,
@@ -116,6 +118,7 @@ export default function Articulos() {
   const [selectedResumen, setSelectedResumen] = useState<ProductoList | null>(null);
   const [selectedProducto, setSelectedProducto] = useState<Producto | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [loadingProducto, setLoadingProducto] = useState(false);
 
   const [codigoBaja, setCodigoBaja] = useState('');
@@ -123,6 +126,7 @@ export default function Articulos() {
   const [cantidadBaja, setCantidadBaja] = useState('');
   const [motivoBaja, setMotivoBaja] = useState('');
   const [bajaError, setBajaError] = useState<string | null>(null);
+  const { showNotification } = useNotification();
 
   useEffect(() => {
     loadEstadisticas();
@@ -246,7 +250,10 @@ export default function Articulos() {
       }
     } catch (error) {
       console.error('Error al cargar producto:', error);
-      alert('No se pudo cargar el artículo seleccionado.');
+      showNotification({
+        message: 'No se pudo cargar el artículo seleccionado.',
+        type: 'error',
+      });
     } finally {
       setLoadingProducto(false);
     }
@@ -277,21 +284,35 @@ export default function Articulos() {
 
   const handleDelete = async () => {
     if (!selectedId) {
-      alert('Selecciona un artículo para eliminar.');
+      showNotification({
+        message: 'Selecciona un artículo para eliminar.',
+        type: 'error',
+      });
       return;
     }
-    if (!confirm('¿Deseas eliminar este artículo?')) return;
+    setConfirmDeleteOpen(true);
+  };
 
+  const confirmDelete = async () => {
+    if (!selectedId) return;
     try {
       setLoading(true);
       await inventarioApi.deleteProducto(selectedId);
       setSelectedId(null);
       await refreshCurrent();
+      showNotification({
+        message: 'Artículo eliminado correctamente.',
+        type: 'success',
+      });
     } catch (error) {
       console.error('Error al eliminar producto:', error);
-      alert('No se pudo eliminar el artículo.');
+      showNotification({
+        message: 'No se pudo eliminar el artículo.',
+        type: 'error',
+      });
     } finally {
       setLoading(false);
+      setConfirmDeleteOpen(false);
     }
   };
 
@@ -337,6 +358,10 @@ export default function Articulos() {
       setMotivoBaja('');
       setBajaError(null);
       await refreshCurrent();
+      showNotification({
+        message: 'Baja registrada correctamente.',
+        type: 'success',
+      });
     } catch (error) {
       console.error('Error al dar de baja:', error);
       setBajaError('No se pudo registrar la baja.');
@@ -836,9 +861,25 @@ export default function Articulos() {
           onSuccess={async () => {
             setModalOpen(false);
             await refreshCurrent();
+            showNotification({
+              message: selectedProducto
+                ? 'Artículo actualizado correctamente.'
+                : 'Artículo creado correctamente.',
+              type: 'success',
+            });
           }}
         />
       )}
+      <ConfirmModal
+        open={confirmDeleteOpen}
+        title="Eliminar artículo"
+        description="Esta acción eliminará el artículo seleccionado. ¿Deseas continuar?"
+        confirmLabel="Eliminar"
+        confirmVariant="danger"
+        onConfirm={confirmDelete}
+        onCancel={() => setConfirmDeleteOpen(false)}
+        loading={loading}
+      />
     </div>
   );
 }
