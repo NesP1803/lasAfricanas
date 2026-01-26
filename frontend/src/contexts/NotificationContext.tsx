@@ -50,7 +50,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     }
     timeoutRef.current = window.setTimeout(() => {
       setNotification((prev) => ({ ...prev, open: false }));
-    }, 2000);
+    }, 1000);
   }, []);
 
   useEffect(() => {
