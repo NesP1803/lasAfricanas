@@ -21,6 +21,8 @@ import { tallerApi, type Mecanico } from '../api/taller';
 import type { Categoria, Proveedor } from '../api/inventario';
 import type { Cliente, PaginatedResponse, UsuarioAdmin } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import ConfirmModal from '../components/ConfirmModal';
+import { useNotification } from '../contexts/NotificationContext';
 import {
   createFullModuleAccess,
   isSectionEnabled,
@@ -143,6 +145,8 @@ export default function Listados() {
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const { showNotification } = useNotification();
 
   useEffect(() => {
     setSearch('');
@@ -236,11 +240,17 @@ export default function Listados() {
 
   const handleDelete = async () => {
     if (!selectedId) {
-      alert('Selecciona un registro para eliminar.');
+      showNotification({
+        message: 'Selecciona un registro para eliminar.',
+        type: 'error',
+      });
       return;
     }
-    if (!confirm('¿Deseas eliminar este registro?')) return;
+    setConfirmDeleteOpen(true);
+  };
 
+  const confirmDelete = async () => {
+    if (!selectedId) return;
     try {
       setLoading(true);
       if (activeTab === 'clientes') {
@@ -256,11 +266,19 @@ export default function Listados() {
       }
       setSelectedId(null);
       await loadListado();
+      showNotification({
+        message: 'Registro eliminado correctamente.',
+        type: 'success',
+      });
     } catch (error) {
       console.error('Error al eliminar:', error);
-      alert('No se pudo eliminar el registro.');
+      showNotification({
+        message: 'No se pudo eliminar el registro.',
+        type: 'error',
+      });
     } finally {
       setLoading(false);
+      setConfirmDeleteOpen(false);
     }
   };
 
@@ -305,6 +323,13 @@ export default function Listados() {
       setModalOpen(false);
       setFormData({});
       await loadListado();
+      showNotification({
+        message:
+          formMode === 'create'
+            ? 'Registro creado correctamente.'
+            : 'Registro actualizado correctamente.',
+        type: 'success',
+      });
     } catch (error: any) {
       console.error('Error al guardar:', error);
       setFormError('No se pudo guardar la información. Revisa los datos.');
@@ -442,7 +467,10 @@ export default function Listados() {
                 (record: any) => record.id === selectedId
               );
               if (!selectedRecord) {
-                alert('Selecciona un registro para editar.');
+                showNotification({
+                  message: 'Selecciona un registro para editar.',
+                  type: 'error',
+                });
                 return;
               }
               openEdit(selectedRecord);
@@ -564,6 +592,16 @@ export default function Listados() {
           </div>
         </div>
       )}
+      <ConfirmModal
+        open={confirmDeleteOpen}
+        title="Eliminar registro"
+        description="Esta acción eliminará el registro seleccionado. ¿Deseas continuar?"
+        confirmLabel="Eliminar"
+        confirmVariant="danger"
+        onConfirm={confirmDelete}
+        onCancel={() => setConfirmDeleteOpen(false)}
+        loading={loading}
+      />
     </div>
   );
 }

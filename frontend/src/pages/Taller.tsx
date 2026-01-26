@@ -18,6 +18,8 @@ import { tallerApi, type Mecanico, type Moto, type OrdenTaller } from '../api/ta
 import type { Cliente, PaginatedResponse } from '../types';
 import type { Proveedor } from '../api/inventario';
 import { useAuth } from '../contexts/AuthContext';
+import ConfirmModal from '../components/ConfirmModal';
+import { useNotification } from '../contexts/NotificationContext';
 import {
   createFullModuleAccess,
   isSectionEnabled,
@@ -115,6 +117,7 @@ export default function Taller() {
   const [repuestos, setRepuestos] = useState<ProductoList[]>([]);
   const [cantidades, setCantidades] = useState<Record<number, number>>({});
   const [facturando, setFacturando] = useState(false);
+  const [confirmFacturarOpen, setConfirmFacturarOpen] = useState(false);
 
   const [motosListado, setMotosListado] = useState<Moto[]>([]);
   const [searchMoto, setSearchMoto] = useState('');
@@ -126,6 +129,8 @@ export default function Taller() {
   const [savingMoto, setSavingMoto] = useState(false);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const { showNotification } = useNotification();
 
   useEffect(() => {
     loadMecanicos();
@@ -236,7 +241,10 @@ export default function Taller() {
 
   const handleAgregarRepuesto = async (productoId: number) => {
     if (!ordenActual) {
-      alert('Selecciona una moto para crear una orden.');
+      showNotification({
+        message: 'Selecciona una moto para crear una orden.',
+        type: 'error',
+      });
       return;
     }
     const cantidad = cantidades[productoId] ?? 1;
@@ -247,9 +255,16 @@ export default function Taller() {
       });
       setOrdenActual(orden);
       setCantidades((prev) => ({ ...prev, [productoId]: 1 }));
+      showNotification({
+        message: 'Repuesto agregado correctamente.',
+        type: 'success',
+      });
     } catch (error) {
       console.error('Error al agregar repuesto:', error);
-      alert('No se pudo agregar el repuesto.');
+      showNotification({
+        message: 'No se pudo agregar el repuesto.',
+        type: 'error',
+      });
     }
   };
 
@@ -258,25 +273,43 @@ export default function Taller() {
     try {
       const orden = await tallerApi.quitarRepuesto(ordenActual.id, { repuesto_id: repuestoId });
       setOrdenActual(orden);
+      showNotification({
+        message: 'Repuesto eliminado correctamente.',
+        type: 'success',
+      });
     } catch (error) {
       console.error('Error al quitar repuesto:', error);
-      alert('No se pudo quitar el repuesto.');
+      showNotification({
+        message: 'No se pudo quitar el repuesto.',
+        type: 'error',
+      });
     }
   };
 
   const handleFacturar = async () => {
     if (!ordenActual) return;
-    if (!confirm('¿Deseas enviar esta orden a facturación?')) return;
+    setConfirmFacturarOpen(true);
+  };
+
+  const confirmFacturar = async () => {
+    if (!ordenActual) return;
     try {
       setFacturando(true);
       const orden = await tallerApi.facturarOrden(ordenActual.id, { tipo_comprobante: 'REMISION' });
       setOrdenActual(orden);
-      alert('Orden enviada a facturación.');
+      showNotification({
+        message: 'Orden enviada a facturación.',
+        type: 'success',
+      });
     } catch (error: any) {
       console.error('Error al facturar:', error);
-      alert(error?.message || 'No se pudo facturar la orden.');
+      showNotification({
+        message: error?.message || 'No se pudo facturar la orden.',
+        type: 'error',
+      });
     } finally {
       setFacturando(false);
+      setConfirmFacturarOpen(false);
     }
   };
 
@@ -369,6 +402,13 @@ export default function Taller() {
       }
       closeMotoModal();
       await loadMotosListado();
+      showNotification({
+        message:
+          motoFormMode === 'create'
+            ? 'Moto creada correctamente.'
+            : 'Moto actualizada correctamente.',
+        type: 'success',
+      });
     } catch (error: any) {
       console.error('Error al guardar moto:', error);
       setMotoFormError('No se pudo guardar la información.');
@@ -379,20 +419,35 @@ export default function Taller() {
 
   const handleMotoDelete = async () => {
     if (!selectedMotoListId) {
-      alert('Selecciona una moto para eliminar.');
+      showNotification({
+        message: 'Selecciona una moto para eliminar.',
+        type: 'error',
+      });
       return;
     }
-    if (!confirm('¿Deseas eliminar esta moto?')) return;
+    setConfirmDeleteOpen(true);
+  };
+
+  const confirmMotoDelete = async () => {
+    if (!selectedMotoListId) return;
     try {
       setLoading(true);
       await tallerApi.deleteMoto(selectedMotoListId);
       setSelectedMotoListId(null);
       await loadMotosListado();
+      showNotification({
+        message: 'Moto eliminada correctamente.',
+        type: 'success',
+      });
     } catch (error) {
       console.error('Error al eliminar moto:', error);
-      alert('No se pudo eliminar la moto.');
+      showNotification({
+        message: 'No se pudo eliminar la moto.',
+        type: 'error',
+      });
     } finally {
       setLoading(false);
+      setConfirmDeleteOpen(false);
     }
   };
 
@@ -704,16 +759,19 @@ export default function Taller() {
                 <Plus size={14} />
                 Registrar
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const selected = motosListado.find((moto) => moto.id === selectedMotoListId);
-                  if (!selected) {
-                    alert('Selecciona una moto para editar.');
-                    return;
-                  }
-                  openEditMoto(selected);
-                }}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const selected = motosListado.find((moto) => moto.id === selectedMotoListId);
+                      if (!selected) {
+                        showNotification({
+                          message: 'Selecciona una moto para editar.',
+                          type: 'error',
+                        });
+                        return;
+                      }
+                      openEditMoto(selected);
+                    }}
                 className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-blue-200 hover:text-blue-600"
               >
                 <Pencil size={14} />
@@ -926,6 +984,26 @@ export default function Taller() {
           </div>
         </div>
       )}
+      <ConfirmModal
+        open={confirmFacturarOpen}
+        title="Enviar a facturación"
+        description="La orden será enviada a facturación. ¿Deseas continuar?"
+        confirmLabel="Enviar"
+        confirmVariant="primary"
+        onConfirm={confirmFacturar}
+        onCancel={() => setConfirmFacturarOpen(false)}
+        loading={facturando}
+      />
+      <ConfirmModal
+        open={confirmDeleteOpen}
+        title="Eliminar moto"
+        description="Esta acción eliminará la moto seleccionada. ¿Deseas continuar?"
+        confirmLabel="Eliminar"
+        confirmVariant="danger"
+        onConfirm={confirmMotoDelete}
+        onCancel={() => setConfirmDeleteOpen(false)}
+        loading={loading}
+      />
     </div>
   );
 }
