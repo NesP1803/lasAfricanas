@@ -63,7 +63,7 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
         nombre: producto.nombre,
         descripcion: producto.descripcion || '',
         categoria: producto.categoria.toString(),
-        proveedor: producto.proveedor.toString(),
+        proveedor: producto.proveedor ? producto.proveedor.toString() : '',
         precio_venta: producto.precio_venta,
         precio_venta_minimo: producto.precio_venta_minimo,
         stock: producto.stock.toString(),
@@ -212,7 +212,7 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
       const data = {
         ...formData,
         categoria: Number(formData.categoria),
-        proveedor: Number(formData.proveedor),
+        proveedor: formData.proveedor ? Number(formData.proveedor) : null,
         stock: Number(formData.stock),
         stock_minimo: Number(formData.stock_minimo),
         precio_costo: formData.precio_venta || '0.01',
@@ -408,7 +408,6 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
                 value={formData.proveedor}
                 onChange={handleChange}
                 className="w-full px-2 py-1 border border-gray-400 rounded bg-white"
-                required
               >
                 <option value="">Seleccione un proveedor</option>
                 {proveedores.map((prov) => (

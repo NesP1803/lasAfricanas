@@ -114,7 +114,9 @@ class Producto(BaseModel):
         Proveedor,
         on_delete=models.PROTECT,
         related_name='productos',
-        verbose_name='Proveedor'
+        verbose_name='Proveedor',
+        null=True,
+        blank=True,
     )
     
     # Precios
