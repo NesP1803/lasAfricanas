@@ -14,19 +14,8 @@ def generar_numero_comprobante(sender, instance, **kwargs):
             'REMISION': 'REM',
             'FACTURA': 'FAC'
         }[instance.tipo_comprobante]
-        
-        ultimo = Venta.objects.filter(
-            tipo_comprobante=instance.tipo_comprobante,
-            fecha__year=fecha.year,
-            fecha__month=fecha.month
-        ).order_by('-numero_comprobante').first()
-        
-        if ultimo and ultimo.numero_comprobante:
-            ultimo_num = int(ultimo.numero_comprobante.split('-')[-1])
-            nuevo_num = ultimo_num + 1
-        else:
-            nuevo_num = 100000 if instance.tipo_comprobante == 'FACTURA' else 150000
-        
+        base = 100000 if instance.tipo_comprobante == 'FACTURA' else 150000
+        nuevo_num = Venta.obtener_siguiente_numero(instance.tipo_comprobante, fecha, prefijo, base)
         instance.numero_comprobante = f"{prefijo}-{nuevo_num}"
 
 

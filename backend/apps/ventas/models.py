@@ -1,4 +1,6 @@
 from django.db import models
+from django.db.models import IntegerField, Max
+from django.db.models.functions import Cast, Substr
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.core.exceptions import ValidationError
 from apps.core.models import BaseModel
@@ -247,6 +249,26 @@ class Venta(BaseModel):
             models.Index(fields=['cliente', 'fecha']),
             models.Index(fields=['estado', 'fecha']),
         ]
+
+    @classmethod
+    def obtener_siguiente_numero(cls, tipo_comprobante: str, fecha, prefijo: str, base: int) -> int:
+        start_index = len(prefijo) + 2
+        ultimo_numero = (
+            cls.objects.filter(
+                tipo_comprobante=tipo_comprobante,
+                fecha__year=fecha.year,
+                fecha__month=fecha.month,
+                numero_comprobante__regex=rf'^{prefijo}-\\d+$',
+            )
+            .annotate(
+                numero_int=Cast(Substr('numero_comprobante', start_index), IntegerField())
+            )
+            .aggregate(max_numero=Max('numero_int'))
+            .get('max_numero')
+        )
+        if ultimo_numero is None:
+            return base
+        return ultimo_numero + 1
     
     def __str__(self):
         return f"{self.get_tipo_comprobante_display()} {self.numero_comprobante}"
@@ -293,18 +315,7 @@ class Venta(BaseModel):
         # Generar número de factura
         from django.utils import timezone
         fecha = timezone.now()
-        ultimo = Venta.objects.filter(
-            tipo_comprobante='FACTURA',
-            fecha__year=fecha.year,
-            fecha__month=fecha.month
-        ).order_by('-numero_comprobante').first()
-        
-        if ultimo:
-            ultimo_num = int(ultimo.numero_comprobante.split('-')[1])
-            nuevo_num = ultimo_num + 1
-        else:
-            nuevo_num = 100000
-        
+        nuevo_num = self.obtener_siguiente_numero('FACTURA', fecha, 'FAC', 100000)
         numero_factura = f"FAC-{nuevo_num}"
         
         # Crear factura
