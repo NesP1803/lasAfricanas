@@ -57,7 +57,7 @@ export interface Producto {
   descripcion: string;
   categoria: number;
   categoria_nombre: string;
-  proveedor: number;
+  proveedor: number | null;
   proveedor_nombre: string;
   precio_costo: string;
   precio_venta: string;
@@ -67,6 +67,7 @@ export interface Producto {
   stock_bajo: boolean;
   unidad_medida: string;
   iva_porcentaje: string;
+  iva_exento?: boolean;
   aplica_descuento: boolean;
   es_servicio: boolean;
   margen_utilidad: string;

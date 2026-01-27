@@ -114,7 +114,9 @@ class Producto(BaseModel):
         Proveedor,
         on_delete=models.PROTECT,
         related_name='productos',
-        verbose_name='Proveedor'
+        verbose_name='Proveedor',
+        null=True,
+        blank=True,
     )
     
     # Precios
@@ -162,6 +164,10 @@ class Producto(BaseModel):
         decimal_places=2,
         default=19,
         verbose_name='IVA (%)'
+    )
+    iva_exento = models.BooleanField(
+        default=False,
+        verbose_name='IVA exento'
     )
     
     # Flags

@@ -112,6 +112,7 @@ class ProductoDetailSerializer(serializers.ModelSerializer):
             'stock_bajo',
             'unidad_medida',
             'iva_porcentaje',
+            'iva_exento',
             'aplica_descuento',
             'es_servicio',
             'margen_utilidad',
@@ -156,6 +157,7 @@ class ProductoCreateUpdateSerializer(serializers.ModelSerializer):
             'stock_minimo',
             'unidad_medida',
             'iva_porcentaje',
+            'iva_exento',
             'aplica_descuento',
             'es_servicio',
             'is_active'
