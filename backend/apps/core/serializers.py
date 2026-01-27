@@ -32,6 +32,7 @@ class ImpuestoSerializer(serializers.ModelSerializer):
         match = re.search(r'(\d+(?:\.\d+)?)', raw)
         if match:
             porcentaje = match.group(1)
+            porcentaje = porcentaje.rstrip('0').rstrip('.') or '0'
             if lower.startswith('iva') or raw.replace('%', '').strip().isdigit():
                 return f'IVA {porcentaje}%'
         return raw

@@ -76,39 +76,63 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
     }
   }, [producto]);
 
+  const formatPorcentaje = (porcentaje: string) => {
+    const numeric = Number(porcentaje);
+    if (!Number.isFinite(numeric)) {
+      return porcentaje;
+    }
+    if (Number.isInteger(numeric)) {
+      return numeric.toString();
+    }
+    return numeric.toString();
+  };
+
   const formatImpuestoLabel = (nombre: string, porcentaje: string) => {
     const raw = nombre?.trim() ?? '';
     const lower = raw.toLowerCase();
+    const porcentajeLabel = formatPorcentaje(porcentaje);
     if (!raw) {
-      return `IVA ${porcentaje}%`;
+      return `IVA ${porcentajeLabel}%`;
     }
     if (lower === 'e' || lower.includes('exento') || lower.includes('excento')) {
       return 'Exento';
     }
     if (/^\d+(\.\d+)?%?$/.test(raw)) {
-      return `IVA ${porcentaje}%`;
+      return `IVA ${porcentajeLabel}%`;
     }
     if (raw.length <= 3 && !lower.includes('iva')) {
-      return `IVA ${porcentaje}%`;
+      return `IVA ${porcentajeLabel}%`;
     }
     if (lower === 'iva') {
-      return `IVA ${porcentaje}%`;
+      return `IVA ${porcentajeLabel}%`;
+    }
+    if (lower.startsWith('iva')) {
+      return `IVA ${porcentajeLabel}%`;
     }
     return raw;
   };
 
   const impuestoOpciones = useMemo(() => {
-    return impuestos.map((impuesto) => {
+    const unique = new Map<string, (typeof impuestos)[number] & {
+      porcentaje: string;
+      label: string;
+    }>();
+    impuestos.forEach((impuesto) => {
       const match = impuesto.nombre.match(/(\d+(?:\.\d+)?)/);
       const porcentaje = normalizeIva(match ? match[1] : '0');
       const esExento = impuesto.nombre.toLowerCase().includes('exento');
       const porcentajeFinal = esExento ? '0.00' : porcentaje;
-      return {
-        ...impuesto,
-        porcentaje: porcentajeFinal,
-        label: formatImpuestoLabel(impuesto.nombre, porcentajeFinal),
-      };
+      const label = formatImpuestoLabel(impuesto.nombre, porcentajeFinal);
+      const key = label.toLowerCase();
+      if (!unique.has(key)) {
+        unique.set(key, {
+          ...impuesto,
+          porcentaje: porcentajeFinal,
+          label,
+        });
+      }
     });
+    return Array.from(unique.values());
   }, [impuestos]);
 
   const loadCategorias = async () => {
