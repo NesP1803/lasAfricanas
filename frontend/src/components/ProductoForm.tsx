@@ -25,6 +25,7 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
   const [mostrarProveedorRapido, setMostrarProveedorRapido] = useState(false);
   const [nuevoProveedor, setNuevoProveedor] = useState('');
   const [creandoProveedor, setCreandoProveedor] = useState(false);
+  const [proveedorFiltro, setProveedorFiltro] = useState('');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<any>({});
 
@@ -154,6 +155,7 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
     try {
       const data = await inventarioApi.getProveedores({ is_active: true });
       setProveedores(Array.isArray(data) ? data : data.results);
+      setProveedorFiltro('');
     } catch (error) {
       console.error('Error al cargar proveedores:', error);
     }
@@ -169,17 +171,11 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
           impuestosList.find((item) => item.is_active !== false) ?? impuestosList[0];
         if (producto) {
           const porcentajeProducto = normalizeIva(producto.iva_porcentaje);
-          const impuestoProducto =
-            (porcentajeProducto === '0.00'
-              ? impuestosList.find((item) =>
-                  item.nombre.toLowerCase().includes('exento')
-                )
-              : null) ||
-            impuestosList.find((item) => {
-              const match = item.nombre.match(/(\d+(?:\.\d+)?)/);
-              const porcentaje = normalizeIva(match ? match[1] : '0');
-              return porcentajeProducto === porcentaje;
-            });
+          const impuestoProducto = impuestosList.find((item) => {
+            const match = item.nombre.match(/(\d+(?:\.\d+)?)/);
+            const porcentaje = normalizeIva(match ? match[1] : '0');
+            return porcentajeProducto === porcentaje;
+          });
           setImpuestoSeleccionado(
             impuestoProducto ? String(impuestoProducto.id) : String(impuestoBase.id)
           );
@@ -288,6 +284,7 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
       setFormData((prev) => ({ ...prev, proveedor: String(created.id) }));
       setNuevoProveedor('');
       setMostrarProveedorRapido(false);
+      setProveedorFiltro('');
       showNotification({ message: 'Proveedor creado.', type: 'success' });
     } catch (error) {
       console.error('Error al crear proveedor:', error);
@@ -410,6 +407,13 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
               <label className="flex items-center gap-2 font-semibold text-gray-800 mb-1">
                 Proveedor
               </label>
+              <input
+                type="text"
+                value={proveedorFiltro}
+                onChange={(event) => setProveedorFiltro(event.target.value)}
+                placeholder="Buscar proveedor..."
+                className="mb-2 w-full px-2 py-1 border border-gray-300 rounded bg-white text-xs"
+              />
               <select
                 name="proveedor"
                 value={formData.proveedor}
@@ -417,7 +421,11 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
                 className="w-full px-2 py-1 border border-gray-400 rounded bg-white"
               >
                 <option value="">Seleccione un proveedor</option>
-                {proveedores.map((prov) => (
+                {proveedores
+                  .filter((prov) =>
+                    prov.nombre.toLowerCase().includes(proveedorFiltro.toLowerCase())
+                  )
+                  .map((prov) => (
                   <option key={prov.id} value={prov.id}>
                     {prov.nombre}
                   </option>
