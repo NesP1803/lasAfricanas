@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { X, HelpCircle, Info } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { X, Plus } from 'lucide-react';
 import { inventarioApi } from '../api/inventario';
 import { configuracionAPI } from '../api/configuracion';
 import type { Producto, Categoria, Proveedor} from "../api/inventario";
@@ -18,6 +18,13 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [impuestos, setImpuestos] = useState<Impuesto[]>([]);
+  const [impuestoSeleccionado, setImpuestoSeleccionado] = useState('');
+  const [mostrarCategoriaRapida, setMostrarCategoriaRapida] = useState(false);
+  const [nuevaCategoria, setNuevaCategoria] = useState('');
+  const [creandoCategoria, setCreandoCategoria] = useState(false);
+  const [mostrarProveedorRapido, setMostrarProveedorRapido] = useState(false);
+  const [nuevoProveedor, setNuevoProveedor] = useState('');
+  const [creandoProveedor, setCreandoProveedor] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<any>({});
 
@@ -35,13 +42,11 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
     descripcion: '',
     categoria: '',
     proveedor: '',
-    precio_costo: '',
     precio_venta: '',
     precio_venta_minimo: '',
     stock: '0',
     stock_minimo: '5',
     unidad_medida: 'UND',
-    iva_porcentaje: '19.00',
     aplica_descuento: true,
     es_servicio: false,
     is_active: true,
@@ -59,19 +64,52 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
         descripcion: producto.descripcion || '',
         categoria: producto.categoria.toString(),
         proveedor: producto.proveedor.toString(),
-        precio_costo: producto.precio_costo,
         precio_venta: producto.precio_venta,
         precio_venta_minimo: producto.precio_venta_minimo,
         stock: producto.stock.toString(),
         stock_minimo: producto.stock_minimo.toString(),
         unidad_medida: producto.unidad_medida,
-        iva_porcentaje: normalizeIva(producto.iva_porcentaje),
         aplica_descuento: producto.aplica_descuento,
         es_servicio: producto.es_servicio,
         is_active: producto.is_active,
       });
     }
   }, [producto]);
+
+  const formatImpuestoLabel = (nombre: string, porcentaje: string) => {
+    const raw = nombre?.trim() ?? '';
+    const lower = raw.toLowerCase();
+    if (!raw) {
+      return `IVA ${porcentaje}%`;
+    }
+    if (lower === 'e' || lower.includes('exento') || lower.includes('excento')) {
+      return 'Exento';
+    }
+    if (/^\d+(\.\d+)?%?$/.test(raw)) {
+      return `IVA ${porcentaje}%`;
+    }
+    if (raw.length <= 3 && !lower.includes('iva')) {
+      return `IVA ${porcentaje}%`;
+    }
+    if (lower === 'iva') {
+      return `IVA ${porcentaje}%`;
+    }
+    return raw;
+  };
+
+  const impuestoOpciones = useMemo(() => {
+    return impuestos.map((impuesto) => {
+      const match = impuesto.nombre.match(/(\d+(?:\.\d+)?)/);
+      const porcentaje = normalizeIva(match ? match[1] : '0');
+      const esExento = impuesto.nombre.toLowerCase().includes('exento');
+      const porcentajeFinal = esExento ? '0.00' : porcentaje;
+      return {
+        ...impuesto,
+        porcentaje: porcentajeFinal,
+        label: formatImpuestoLabel(impuesto.nombre, porcentajeFinal),
+      };
+    });
+  }, [impuestos]);
 
   const loadCategorias = async () => {
     try {
@@ -96,13 +134,21 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
       const data = await configuracionAPI.obtenerImpuestos();
       const impuestosList = Array.isArray(data) ? data : data?.results ?? [];
       setImpuestos(impuestosList);
-      if (!producto && impuestosList.length > 0) {
+      if (impuestosList.length > 0) {
         const impuestoBase =
           impuestosList.find((item) => item.is_active !== false) ?? impuestosList[0];
-        // Extraer el porcentaje del nombre del impuesto (ej: "IVA 19%" -> "19")
-        const match = impuestoBase.nombre.match(/(\d+(?:\.\d+)?)/);
-        const porcentaje = normalizeIva(match ? match[1] : '0');
-        setFormData((prev) => ({ ...prev, iva_porcentaje: porcentaje }));
+        if (producto) {
+          const impuestoProducto = impuestosList.find((item) => {
+            const match = item.nombre.match(/(\d+(?:\.\d+)?)/);
+            const porcentaje = normalizeIva(match ? match[1] : '0');
+            return normalizeIva(producto.iva_porcentaje) === porcentaje;
+          });
+          setImpuestoSeleccionado(
+            impuestoProducto ? String(impuestoProducto.id) : String(impuestoBase.id)
+          );
+        } else {
+          setImpuestoSeleccionado(String(impuestoBase.id));
+        }
       }
     } catch (error) {
       console.error('Error al cargar impuestos:', error);
@@ -115,6 +161,8 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
     if (type === 'checkbox') {
       const checked = (e.target as HTMLInputElement).checked;
       setFormData(prev => ({ ...prev, [name]: checked }));
+    } else if (name === 'iva_porcentaje') {
+      setImpuestoSeleccionado(value);
     } else {
       setFormData(prev => ({ ...prev, [name]: value }));
     }
@@ -126,15 +174,20 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
     setErrors({});
 
     try {
+      const impuestoActual = impuestoOpciones.find(
+        (item) => String(item.id) === impuestoSeleccionado
+      );
+      const porcentajeIva = normalizeIva(impuestoActual?.porcentaje ?? '0');
+
       const data = {
         ...formData,
         categoria: Number(formData.categoria),
         proveedor: Number(formData.proveedor),
         stock: Number(formData.stock),
         stock_minimo: Number(formData.stock_minimo),
-        precio_costo: formData.precio_costo || '0.01',
+        precio_costo: formData.precio_venta || '0.01',
         precio_venta_minimo: formData.precio_venta_minimo || '0',
-        iva_porcentaje: normalizeIva(formData.iva_porcentaje),
+        iva_porcentaje: porcentajeIva,
       };
 
       if (producto) {
@@ -158,6 +211,52 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCrearCategoria = async () => {
+    if (!nuevaCategoria.trim()) {
+      showNotification({ message: 'Ingresa el nombre de la categoría.', type: 'error' });
+      return;
+    }
+    setCreandoCategoria(true);
+    try {
+      const created = await inventarioApi.createCategoria({
+        nombre: nuevaCategoria.trim(),
+      });
+      await loadCategorias();
+      setFormData((prev) => ({ ...prev, categoria: String(created.id) }));
+      setNuevaCategoria('');
+      setMostrarCategoriaRapida(false);
+      showNotification({ message: 'Categoría creada.', type: 'success' });
+    } catch (error) {
+      console.error('Error al crear categoría:', error);
+      showNotification({ message: 'No se pudo crear la categoría.', type: 'error' });
+    } finally {
+      setCreandoCategoria(false);
+    }
+  };
+
+  const handleCrearProveedor = async () => {
+    if (!nuevoProveedor.trim()) {
+      showNotification({ message: 'Ingresa el nombre del proveedor.', type: 'error' });
+      return;
+    }
+    setCreandoProveedor(true);
+    try {
+      const created = await inventarioApi.createProveedor({
+        nombre: nuevoProveedor.trim(),
+      });
+      await loadProveedores();
+      setFormData((prev) => ({ ...prev, proveedor: String(created.id) }));
+      setNuevoProveedor('');
+      setMostrarProveedorRapido(false);
+      showNotification({ message: 'Proveedor creado.', type: 'success' });
+    } catch (error) {
+      console.error('Error al crear proveedor:', error);
+      showNotification({ message: 'No se pudo crear el proveedor.', type: 'error' });
+    } finally {
+      setCreandoProveedor(false);
     }
   };
 
@@ -186,8 +285,7 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <label className="flex items-center gap-2 font-semibold text-gray-800 mb-1">
-                Código *
-                <HelpCircle size={14} className="text-gray-500" />
+                Código
               </label>
               <input
                 type="text"
@@ -204,8 +302,7 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
 
             <div>
               <label className="flex items-center gap-2 font-semibold text-gray-800 mb-1">
-                Nombre *
-                <HelpCircle size={14} className="text-gray-500" />
+                Nombre
               </label>
               <input
                 type="text"
@@ -219,8 +316,7 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
 
             <div>
               <label className="flex items-center gap-2 font-semibold text-gray-800 mb-1">
-                Categoría *
-                <HelpCircle size={14} className="text-gray-500" />
+                Categoría
               </label>
               <select
                 name="categoria"
@@ -236,12 +332,46 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
                   </option>
                 ))}
               </select>
+              <div className="mt-2 rounded border border-dashed border-blue-200 bg-blue-50 px-2 py-2 text-xs text-blue-700">
+                <div className="flex items-center justify-between">
+                  <span>
+                    {categorias.length === 0
+                      ? 'No hay categorías registradas.'
+                      : '¿No encuentras la categoría?'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setMostrarCategoriaRapida((prev) => !prev)}
+                    className="inline-flex items-center gap-1 font-semibold text-blue-700 hover:text-blue-900"
+                  >
+                    <Plus size={12} /> Agregar rápida
+                  </button>
+                </div>
+                {mostrarCategoriaRapida && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={nuevaCategoria}
+                      onChange={(event) => setNuevaCategoria(event.target.value)}
+                      placeholder="Nombre de la categoría"
+                      className="flex-1 rounded border border-blue-200 bg-white px-2 py-1 text-xs text-slate-700"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleCrearCategoria}
+                      disabled={creandoCategoria}
+                      className="rounded bg-blue-600 px-2 py-1 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+                    >
+                      {creandoCategoria ? 'Creando...' : 'Crear'}
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div>
               <label className="flex items-center gap-2 font-semibold text-gray-800 mb-1">
-                Proveedor *
-                <HelpCircle size={14} className="text-gray-500" />
+                Proveedor
               </label>
               <select
                 name="proveedor"
@@ -257,6 +387,41 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
                   </option>
                 ))}
               </select>
+              <div className="mt-2 rounded border border-dashed border-blue-200 bg-blue-50 px-2 py-2 text-xs text-blue-700">
+                <div className="flex items-center justify-between">
+                  <span>
+                    {proveedores.length === 0
+                      ? 'No hay proveedores registrados.'
+                      : '¿No encuentras el proveedor?'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setMostrarProveedorRapido((prev) => !prev)}
+                    className="inline-flex items-center gap-1 font-semibold text-blue-700 hover:text-blue-900"
+                  >
+                    <Plus size={12} /> Agregar rápida
+                  </button>
+                </div>
+                {mostrarProveedorRapido && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={nuevoProveedor}
+                      onChange={(event) => setNuevoProveedor(event.target.value)}
+                      placeholder="Nombre del proveedor"
+                      className="flex-1 rounded border border-blue-200 bg-white px-2 py-1 text-xs text-slate-700"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleCrearProveedor}
+                      disabled={creandoProveedor}
+                      className="rounded bg-blue-600 px-2 py-1 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+                    >
+                      {creandoProveedor ? 'Creando...' : 'Crear'}
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div>
@@ -283,34 +448,27 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
             <div>
               <label className="flex items-center gap-2 font-semibold text-gray-800 mb-1">
                 IVA (%)
-                <HelpCircle size={14} className="text-gray-500" />
               </label>
               <select
                 name="iva_porcentaje"
-                value={formData.iva_porcentaje}
+                value={impuestoSeleccionado}
                 onChange={handleChange}
                 className="w-full px-2 py-1 border border-gray-400 rounded bg-white"
               >
                 {impuestos.length === 0 && (
                   <option value="">Sin impuestos configurados</option>
                 )}
-                {impuestos.map((impuesto) => {
-                  // Extraer el porcentaje del nombre del impuesto (ej: "IVA 19%" -> "19")
-                  const match = impuesto.nombre.match(/(\d+(?:\.\d+)?)/);
-                  const porcentaje = normalizeIva(match ? match[1] : '0');
-                  return (
-                    <option key={impuesto.id} value={porcentaje}>
-                      {impuesto.nombre}
-                    </option>
-                  );
-                })}
+                {impuestoOpciones.map((impuesto) => (
+                  <option key={impuesto.id} value={String(impuesto.id)}>
+                    {impuesto.label}
+                  </option>
+                ))}
               </select>
             </div>
 
             <div>
               <label className="flex items-center gap-2 font-semibold text-gray-800 mb-1">
-                Cantidad *
-                <HelpCircle size={14} className="text-gray-500" />
+                Cantidad
               </label>
               <input
                 type="number"
@@ -325,8 +483,7 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
 
             <div>
               <label className="flex items-center gap-2 font-semibold text-gray-800 mb-1">
-                Aviso *
-                <HelpCircle size={14} className="text-gray-500" />
+                Aviso
               </label>
               <input
                 type="number"
@@ -342,7 +499,6 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
             <div className="md:col-span-2">
               <label className="flex items-center gap-2 font-semibold text-gray-800 mb-1">
                 Estante
-                <HelpCircle size={14} className="text-gray-500" />
               </label>
               <input
                 type="text"
@@ -358,27 +514,7 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <label className="flex items-center gap-2 font-semibold text-gray-800 mb-1">
-                Precio costo *
-                <HelpCircle size={14} className="text-gray-500" />
-              </label>
-              <input
-                type="number"
-                name="precio_costo"
-                value={formData.precio_costo}
-                onChange={handleChange}
-                step="0.01"
-                min="0.01"
-                className="w-full px-2 py-1 border border-gray-400 rounded bg-white"
-                required
-              />
-              {errors.precio_costo && (
-                <p className="text-red-500 text-xs mt-1">{errors.precio_costo}</p>
-              )}
-            </div>
-            <div>
-              <label className="flex items-center gap-2 font-semibold text-gray-800 mb-1">
-                Precio *
-                <HelpCircle size={14} className="text-gray-500" />
+                Precio
               </label>
               <input
                 type="number"
@@ -390,6 +526,9 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
                 className="w-full px-2 py-1 border border-gray-400 rounded bg-white"
                 required
               />
+              {errors.precio_costo && (
+                <p className="text-red-500 text-xs mt-1">{errors.precio_costo}</p>
+              )}
             </div>
             <div className="flex items-end">
               <div className="w-full bg-gray-100 border border-gray-300 rounded px-3 py-2 text-lg font-bold text-gray-900 text-center">
@@ -433,30 +572,21 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
             </label>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-gray-200">
+          <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-gray-200">
+            <button
+              type="submit"
+              disabled={loading}
+              className="px-4 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-xs font-semibold"
+            >
+              {loading ? 'Guardando...' : 'Guardar'}
+            </button>
             <button
               type="button"
-              className="px-3 py-1 border border-gray-400 rounded text-gray-700 hover:bg-gray-100 transition-colors text-xs font-semibold flex items-center gap-2"
+              onClick={onClose}
+              className="px-4 py-1 border border-gray-400 rounded text-gray-700 hover:bg-gray-100 transition-colors text-xs font-semibold"
             >
-              <Info size={14} />
-              Ayuda
+              Cerrar
             </button>
-            <div className="flex items-center gap-2">
-              <button
-                type="submit"
-                disabled={loading}
-                className="px-4 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-xs font-semibold"
-              >
-                {loading ? 'Guardando...' : 'Guardar'}
-              </button>
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-1 border border-gray-400 rounded text-gray-700 hover:bg-gray-100 transition-colors text-xs font-semibold"
-              >
-                Cerrar
-              </button>
-            </div>
           </div>
         </form>
       </div>
