@@ -14,6 +14,10 @@ import { inventarioApi, type Producto, type ProductoList } from '../api/inventar
 import { ventasApi } from '../api/ventas';
 import { configuracionAPI } from '../api/configuracion';
 import { useAuth } from '../contexts/AuthContext';
+import ComprobanteTemplate, {
+  type DocumentoDetalle,
+} from '../components/ComprobanteTemplate';
+import type { ConfiguracionEmpresa } from '../types';
 import type { ConfiguracionFacturacion } from '../types';
 
 type CartItem = {
@@ -34,6 +38,24 @@ type DocumentoGenerado = {
   total: string;
 };
 
+type DocumentoPreview = {
+  tipo: 'COTIZACION' | 'REMISION' | 'FACTURA';
+  formato: 'POS' | 'CARTA';
+  numero: string;
+  fecha: string;
+  clienteNombre: string;
+  clienteDocumento: string;
+  medioPago: string;
+  estado: string;
+  detalles: DocumentoDetalle[];
+  subtotal: number;
+  descuento: number;
+  iva: number;
+  total: number;
+  efectivoRecibido: number;
+  cambio: number;
+};
+
 const currencyFormatter = new Intl.NumberFormat('es-CO', {
   style: 'currency',
   currency: 'COP',
@@ -49,6 +71,7 @@ const parseNumber = (value: string) => {
 export default function Ventas() {
   const { user } = useAuth();
   const [configuracion, setConfiguracion] = useState<ConfiguracionFacturacion | null>(null);
+  const [empresa, setEmpresa] = useState<ConfiguracionEmpresa | null>(null);
   const [clienteDocumento, setClienteDocumento] = useState('');
   const [clienteNombre, setClienteNombre] = useState('Cliente general');
   const [clienteId, setClienteId] = useState<number | null>(null);
@@ -62,6 +85,7 @@ export default function Ventas() {
   const [medioPago, setMedioPago] = useState<'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'CREDITO'>('EFECTIVO');
   const [efectivoRecibido, setEfectivoRecibido] = useState('0');
   const [documentoGenerado, setDocumentoGenerado] = useState<DocumentoGenerado | null>(null);
+  const [documentoPreview, setDocumentoPreview] = useState<DocumentoPreview | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [mostrarBusqueda, setMostrarBusqueda] = useState(false);
   const [mostrarPermiso, setMostrarPermiso] = useState(false);
@@ -73,6 +97,10 @@ export default function Ventas() {
       .obtenerFacturacion()
       .then(setConfiguracion)
       .catch(() => setConfiguracion(null));
+    configuracionAPI
+      .obtenerEmpresa()
+      .then(setEmpresa)
+      .catch(() => setEmpresa(null));
   }, []);
 
   useEffect(() => {
@@ -278,11 +306,60 @@ export default function Ventas() {
         }),
         descuento_aprobado_por: descuentoAutorizado ? Number(aprobadorId) : undefined,
       });
+      const numeroComprobante =
+        venta.numero_comprobante ||
+        (tipo === 'FACTURA'
+          ? `${configuracion?.prefijo_factura ?? ''} ${configuracion?.numero_factura ?? ''}`
+          : tipo === 'REMISION'
+            ? `${configuracion?.prefijo_remision ?? ''} ${configuracion?.numero_remision ?? ''}`
+            : venta.numero_comprobante || 'COTIZACIÓN');
+
       setDocumentoGenerado({
         tipo,
-        numero: venta.numero_comprobante,
+        numero: numeroComprobante,
         cliente: clienteNombre,
         total: currencyFormatter.format(totals.total),
+      });
+      const detallesPreview: DocumentoDetalle[] = cartItems.map((item) => {
+        const subtotalLinea = item.precioUnitario * item.cantidad;
+        const descuentoLinea = subtotalLinea * (item.descuentoPorcentaje / 100);
+        const base = subtotalLinea - descuentoLinea;
+        const ivaLinea = base * (item.ivaPorcentaje / 100);
+        const totalLinea = base + ivaLinea;
+        return {
+          descripcion: item.nombre,
+          codigo: item.codigo,
+          cantidad: item.cantidad,
+          precioUnitario: item.precioUnitario,
+          descuento: descuentoLinea,
+          ivaPorcentaje: item.ivaPorcentaje,
+          total: totalLinea,
+        };
+      });
+      const medioPagoDisplay =
+        {
+          EFECTIVO: 'Efectivo',
+          TARJETA: 'Tarjeta',
+          TRANSFERENCIA: 'Transferencia',
+          CREDITO: 'Crédito',
+        }[medioPago] || medioPago;
+
+      setDocumentoPreview({
+        tipo,
+        formato: 'POS',
+        numero: numeroComprobante,
+        fecha: new Date().toISOString(),
+        clienteNombre,
+        clienteDocumento: clienteDocumento || 'N/D',
+        medioPago: medioPagoDisplay,
+        estado: 'CONFIRMADA',
+        detalles: detallesPreview,
+        subtotal: totals.subtotal,
+        descuento: totals.descuentoTotal,
+        iva: totals.iva,
+        total: totals.total,
+        efectivoRecibido: parseNumber(efectivoRecibido),
+        cambio,
       });
       setMensaje(`${venta.tipo_comprobante_display} generado correctamente.`);
     } catch (error) {
@@ -670,6 +747,114 @@ export default function Ventas() {
             <div className="text-right">
               <p className="text-xs uppercase text-emerald-600">Total</p>
               <p className="text-lg font-semibold">{documentoGenerado.total}</p>
+            </div>
+          </div>
+          {documentoPreview ? (
+            <div className="mt-4 flex flex-wrap items-center gap-2 text-xs font-semibold uppercase text-emerald-700">
+              <button
+                type="button"
+                onClick={() =>
+                  setDocumentoPreview((prev) =>
+                    prev ? { ...prev, formato: 'POS' } : prev
+                  )
+                }
+                className="rounded border border-emerald-300 px-3 py-1"
+              >
+                Ver POS
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setDocumentoPreview((prev) =>
+                    prev ? { ...prev, formato: 'CARTA' } : prev
+                  )
+                }
+                className="rounded border border-emerald-300 px-3 py-1"
+              >
+                Ver carta
+              </button>
+              <button
+                type="button"
+                onClick={() => setDocumentoPreview(null)}
+                className="rounded border border-emerald-300 px-3 py-1"
+              >
+                Cerrar vista
+              </button>
+            </div>
+          ) : null}
+        </div>
+      )}
+
+      {documentoPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4">
+          <div className="relative w-full max-w-5xl rounded-lg bg-white p-6 shadow-xl">
+            <button
+              type="button"
+              className="absolute right-4 top-4 text-slate-500 hover:text-slate-700"
+              onClick={() => setDocumentoPreview(null)}
+            >
+              <X size={20} />
+            </button>
+            <div className="space-y-4">
+              <div className="text-center">
+                <p className="text-xs uppercase text-slate-500">Documento generado</p>
+                <h3 className="text-lg font-semibold text-slate-800">
+                  {documentoPreview.tipo} ({documentoPreview.formato})
+                </h3>
+              </div>
+              <div className="max-h-[70vh] overflow-auto rounded border border-slate-200 bg-slate-50 p-4">
+                <ComprobanteTemplate
+                  formato={documentoPreview.formato}
+                  tipo={documentoPreview.tipo}
+                  numero={documentoPreview.numero}
+                  fecha={documentoPreview.fecha}
+                  clienteNombre={documentoPreview.clienteNombre}
+                  clienteDocumento={documentoPreview.clienteDocumento}
+                  medioPago={documentoPreview.medioPago}
+                  estado={documentoPreview.estado}
+                  detalles={documentoPreview.detalles}
+                  subtotal={documentoPreview.subtotal}
+                  descuento={documentoPreview.descuento}
+                  iva={documentoPreview.iva}
+                  total={documentoPreview.total}
+                  efectivoRecibido={documentoPreview.efectivoRecibido}
+                  cambio={documentoPreview.cambio}
+                  notas={configuracion?.notas_factura}
+                  resolucion={configuracion?.resolucion}
+                  empresa={empresa}
+                />
+              </div>
+              <div className="flex flex-wrap justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setDocumentoPreview((prev) =>
+                      prev ? { ...prev, formato: 'POS' } : prev
+                    )
+                  }
+                  className="rounded border border-slate-300 px-4 py-2 text-sm text-slate-600"
+                >
+                  POS
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setDocumentoPreview((prev) =>
+                      prev ? { ...prev, formato: 'CARTA' } : prev
+                    )
+                  }
+                  className="rounded border border-slate-300 px-4 py-2 text-sm text-slate-600"
+                >
+                  Carta
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDocumentoPreview(null)}
+                  className="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
+                >
+                  Cerrar
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CalendarRange, FileText, Printer, ReceiptText } from 'lucide-react';
+import { configuracionAPI } from '../api/configuracion';
+import type { ConfiguracionEmpresa } from '../types';
 import { ventasApi, type EstadisticasVentas } from '../api/ventas';
 
 const currencyFormatter = new Intl.NumberFormat('es-CO', {
@@ -18,6 +20,7 @@ export default function CuentasDia() {
   const [stats, setStats] = useState<EstadisticasVentas | null>(null);
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState<string | null>(null);
+  const [empresa, setEmpresa] = useState<ConfiguracionEmpresa | null>(null);
 
   const cargarEstadisticas = async () => {
     setLoading(true);
@@ -38,6 +41,10 @@ export default function CuentasDia() {
 
   useEffect(() => {
     cargarEstadisticas();
+    configuracionAPI
+      .obtenerEmpresa()
+      .then(setEmpresa)
+      .catch(() => setEmpresa(null));
   }, []);
 
   const facturasValor = useMemo(
@@ -64,6 +71,14 @@ export default function CuentasDia() {
       return;
     }
 
+    const nombreEmpresa = empresa?.razon_social || 'MOTOREPUESTOS LAS AFRICANAS';
+    const nitEmpresa = empresa
+      ? `${empresa.tipo_identificacion} ${empresa.identificacion}${empresa.dv ? `-${empresa.dv}` : ''}`
+      : 'NIT 91.068.915-8';
+    const direccionEmpresa = empresa
+      ? `${empresa.direccion}, ${empresa.ciudad}`
+      : 'Calle 6 # 12A-45 Gaira, Santa Marta';
+
     printWindow.document.write(`
       <!doctype html>
       <html lang="es">
@@ -81,7 +96,10 @@ export default function CuentasDia() {
           </style>
         </head>
         <body>
-          <h1>${titulo}</h1>
+          <h1>${nombreEmpresa}</h1>
+          <p>${nitEmpresa}</p>
+          <p>${direccionEmpresa}</p>
+          <p class="muted">${titulo}</p>
           <p>Rango: ${fechaInicio} a ${fechaFin}</p>
           <div class="box">
             <div class="row">
