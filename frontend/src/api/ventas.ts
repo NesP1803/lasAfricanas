@@ -241,6 +241,21 @@ export const ventasApi = {
     throw new Error('Respuesta inválida al obtener ventas');
   },
 
+  async getVenta(id: number): Promise<Venta> {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/ventas/${id}/`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error('Error al obtener la venta');
+    }
+    return response.json();
+  },
+
   async getRemisionesPendientes(): Promise<Venta[]> {
     const token = localStorage.getItem('token');
     const response = await fetch(`${API_URL}/ventas/remisiones_pendientes/`, {

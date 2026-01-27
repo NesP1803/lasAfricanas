@@ -8,7 +8,10 @@ import {
   X,
   ChevronDown,
 } from 'lucide-react';
-import { ventasApi, type VentaListItem } from '../api/ventas';
+import { configuracionAPI } from '../api/configuracion';
+import { ventasApi, type Venta, type VentaListItem } from '../api/ventas';
+import ComprobanteTemplate from '../components/ComprobanteTemplate';
+import type { ConfiguracionEmpresa, ConfiguracionFacturacion } from '../types';
 
 type DocumentoTipo = 'POS' | 'CARTA';
 
@@ -100,6 +103,11 @@ export default function Remisiones() {
   const [fechaInicio, setFechaInicio] = useState('2025-10-22');
   const [fechaFin, setFechaFin] = useState('2025-10-22');
   const [documento, setDocumento] = useState<DocumentoSeleccionado | null>(null);
+  const [detalleRemision, setDetalleRemision] = useState<Venta | null>(null);
+  const [detalleCargando, setDetalleCargando] = useState(false);
+  const [detalleError, setDetalleError] = useState<string | null>(null);
+  const [empresa, setEmpresa] = useState<ConfiguracionEmpresa | null>(null);
+  const [facturacion, setFacturacion] = useState<ConfiguracionFacturacion | null>(null);
   const [anulacion, setAnulacion] = useState<RemisionItem | null>(null);
   const [anulacionData, setAnulacionData] = useState<AnulacionData>({
     motivo: motivosAnulacion[0].value,
@@ -163,6 +171,17 @@ export default function Remisiones() {
       isActive = false;
     };
   }, [estadoFiltro]);
+
+  useEffect(() => {
+    configuracionAPI
+      .obtenerEmpresa()
+      .then(setEmpresa)
+      .catch(() => setEmpresa(null));
+    configuracionAPI
+      .obtenerFacturacion()
+      .then(setFacturacion)
+      .catch(() => setFacturacion(null));
+  }, []);
 
   const toggleSelect = (id: number) => {
     setSelectedIds((prev) =>
@@ -228,9 +247,20 @@ export default function Remisiones() {
     }
   };
 
-  const abrirDocumento = (tipo: DocumentoTipo) => {
+  const abrirDocumento = async (tipo: DocumentoTipo) => {
     if (!selectedRemision) return;
     setDocumento({ remision: selectedRemision, tipo });
+    setDetalleCargando(true);
+    setDetalleError(null);
+    try {
+      const detalle = await ventasApi.getVenta(selectedRemision.id);
+      setDetalleRemision(detalle);
+    } catch (err) {
+      setDetalleRemision(null);
+      setDetalleError(err instanceof Error ? err.message : 'No se pudo cargar el detalle.');
+    } finally {
+      setDetalleCargando(false);
+    }
   };
 
   return (
@@ -446,84 +476,82 @@ export default function Remisiones() {
 
       {documento && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4">
-          <div className="relative w-full max-w-3xl rounded-lg bg-white p-6 shadow-xl">
+          <div className="relative w-full max-w-5xl rounded-lg bg-white p-6 shadow-xl">
             <button
               type="button"
               className="absolute right-4 top-4 text-slate-500 hover:text-slate-700"
-              onClick={() => setDocumento(null)}
+              onClick={() => {
+                setDocumento(null);
+                setDetalleRemision(null);
+                setDetalleError(null);
+              }}
             >
               <X size={20} />
             </button>
             <div className="space-y-4">
               <div className="text-center">
                 <p className="text-xs uppercase text-slate-500">Documento</p>
-                <h3 className="text-lg font-semibold text-slate-800">
-                  Remisión ({documento.tipo})
-                </h3>
+                <h3 className="text-lg font-semibold text-slate-800">Remisión ({documento.tipo})</h3>
               </div>
-              <div className="rounded border border-slate-200 p-4 text-sm">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div>
-                    <p className="text-xs font-semibold text-slate-500">Motorepuestos Las Africanas</p>
-                    <p className="text-xs text-slate-500">NIT: 91.068.915-8</p>
-                    <p className="text-xs text-slate-500">
-                      Calle 6 # 12A-45 Gaira, Santa Marta
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs uppercase text-slate-500">Remisión</p>
-                    <p className="text-lg font-semibold text-slate-800">
-                      {documento.remision.prefijo} {documento.remision.numero}
-                    </p>
-                    <p className="text-xs text-slate-500">{documento.remision.fechaHora}</p>
-                  </div>
-                </div>
-                <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                  <div>
-                    <p className="text-xs text-slate-500">Cliente</p>
-                    <p className="font-semibold text-slate-700">
-                      {documento.remision.cliente}
-                    </p>
-                    <p className="text-xs text-slate-500">NIT/CC: {documento.remision.nitCc}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-500">Medio de pago</p>
-                    <p className="font-semibold text-slate-700">
-                      {documento.remision.medioPagoDisplay}
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      Estado: {documento.remision.estadoDisplay}
-                    </p>
-                  </div>
-                </div>
-                <div className="mt-4 border-t border-dashed border-slate-200 pt-4">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-slate-500">Subtotal</span>
-                    <span className="font-semibold text-slate-700">
-                      {currencyFormatter.format(documento.remision.total * 0.88)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-slate-500">Impuestos</span>
-                    <span className="font-semibold text-slate-700">
-                      {currencyFormatter.format(documento.remision.total * 0.12)}
-                    </span>
-                  </div>
-                  <div className="mt-2 flex items-center justify-between text-base font-semibold text-slate-800">
-                    <span>Total a pagar</span>
-                    <span>{currencyFormatter.format(documento.remision.total)}</span>
-                  </div>
-                </div>
-                <div className="mt-4 rounded border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
-                  {documento.tipo === 'POS'
-                    ? 'Documento POS para impresión rápida.'
-                    : 'Documento carta para archivo y entrega al cliente.'}
-                </div>
+              <div className="max-h-[70vh] overflow-auto rounded border border-slate-200 bg-slate-50 p-4">
+                {detalleCargando ? (
+                  <p className="text-center text-sm text-slate-500">
+                    Cargando detalle de la remisión...
+                  </p>
+                ) : null}
+                {detalleError ? (
+                  <p className="text-center text-sm text-rose-600">{detalleError}</p>
+                ) : null}
+                <ComprobanteTemplate
+                  formato={documento.tipo}
+                  tipo="REMISION"
+                  numero={`${documento.remision.prefijo} ${documento.remision.numero}`}
+                  fecha={detalleRemision?.fecha ?? documento.remision.fechaIso}
+                  clienteNombre={detalleRemision?.cliente_info?.nombre ?? documento.remision.cliente}
+                  clienteDocumento={
+                    detalleRemision?.cliente_info?.numero_documento ?? documento.remision.nitCc
+                  }
+                  medioPago={detalleRemision?.medio_pago_display ?? documento.remision.medioPagoDisplay}
+                  estado={detalleRemision?.estado_display ?? documento.remision.estadoDisplay}
+                  detalles={
+                    detalleRemision?.detalles?.map((detalle) => ({
+                      descripcion: detalle.producto_nombre ?? 'Producto',
+                      codigo: detalle.producto_codigo ?? '',
+                      cantidad: Number(detalle.cantidad),
+                      precioUnitario: Number(detalle.precio_unitario),
+                      descuento: Number(detalle.descuento_unitario),
+                      ivaPorcentaje: Number(detalle.iva_porcentaje),
+                      total: Number(detalle.total),
+                    })) ?? []
+                  }
+                  subtotal={detalleRemision ? Number(detalleRemision.subtotal) : documento.remision.total}
+                  descuento={detalleRemision ? Number(detalleRemision.descuento_valor) : 0}
+                  iva={detalleRemision ? Number(detalleRemision.iva) : 0}
+                  total={detalleRemision ? Number(detalleRemision.total) : documento.remision.total}
+                  efectivoRecibido={
+                    detalleRemision?.efectivo_recibido !== undefined &&
+                    detalleRemision?.efectivo_recibido !== null
+                      ? Number(detalleRemision.efectivo_recibido)
+                      : undefined
+                  }
+                  cambio={
+                    detalleRemision?.cambio !== undefined && detalleRemision?.cambio !== null
+                      ? Number(detalleRemision.cambio)
+                      : undefined
+                  }
+                  notas={facturacion?.notas_factura}
+                  resolucion={facturacion?.resolucion}
+                  empresa={empresa}
+                />
               </div>
               <div className="flex items-center justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setDocumento(null)}
+                  onClick={() => {
+                    setDocumento(null);
+                    setDetalleRemision(null);
+                    setDetalleError(null);
+                  }}
                   className="rounded border border-slate-300 px-4 py-2 text-sm text-slate-600"
                 >
                   Cerrar
