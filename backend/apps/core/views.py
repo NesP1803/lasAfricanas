@@ -91,6 +91,15 @@ class ImpuestoViewSet(viewsets.ModelViewSet):
     serializer_class = ImpuestoSerializer
     permission_classes = [IsAuthenticated]
 
+    def _ensure_default_impuestos(self):
+        defaults = ['IVA 0%', 'IVA 19%', 'Exento']
+        for nombre in defaults:
+            Impuesto.objects.get_or_create(nombre=nombre)
+
+    def list(self, request, *args, **kwargs):
+        self._ensure_default_impuestos()
+        return super().list(request, *args, **kwargs)
+
 
 class AuditoriaViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Auditoria.objects.all()
