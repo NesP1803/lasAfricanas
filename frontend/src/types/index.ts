@@ -199,41 +199,6 @@ export interface UsuarioAdmin {
 }
 
 // ============================================
-// TIPOS DE PLANTILLAS DE DOCUMENTOS
-// ============================================
-export type DocumentType =
-  | "QUOTATION"
-  | "INVOICE"
-  | "DELIVERY_NOTE"
-  | "CREDIT_NOTE"
-  | "DEBIT_NOTE";
-
-export type OutputType = "PDF" | "RECEIPT";
-
-export interface TemplateVersion {
-  id: number;
-  version_number: number;
-  html?: string | null;
-  css?: string | null;
-  receipt_text?: string | null;
-  created_by?: number | null;
-  created_by_name?: string | null;
-  created_at: string;
-  comment?: string | null;
-}
-
-export interface Template {
-  id: number;
-  name: string;
-  document_type: DocumentType;
-  output_type: OutputType;
-  is_active: boolean;
-  current_version?: TemplateVersion | null;
-  created_at: string;
-  updated_at: string;
-}
-
-// ============================================
 // TIPOS DE RESPUESTA DE API
 // ============================================
 export interface PaginatedResponse<T> {

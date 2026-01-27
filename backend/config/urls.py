@@ -32,7 +32,6 @@ urlpatterns = [
     
     # API completa
     path('api/', include(router.urls)),
-    path('api/', include('apps.plantillas.urls')),
     
     # Autenticación de DRF (para browsable API)
     path('api-auth/', include('rest_framework.urls')),
