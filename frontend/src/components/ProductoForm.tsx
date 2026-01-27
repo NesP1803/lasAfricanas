@@ -25,7 +25,7 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
   const [mostrarProveedorRapido, setMostrarProveedorRapido] = useState(false);
   const [nuevoProveedor, setNuevoProveedor] = useState('');
   const [creandoProveedor, setCreandoProveedor] = useState(false);
-  const [proveedorFiltro, setProveedorFiltro] = useState('');
+  const [proveedorNombre, setProveedorNombre] = useState('');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<any>({});
 
@@ -74,6 +74,7 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
         es_servicio: producto.es_servicio,
         is_active: producto.is_active,
       });
+      setProveedorNombre(producto.proveedor_nombre ?? '');
     }
   }, [producto]);
 
@@ -155,7 +156,9 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
     try {
       const data = await inventarioApi.getProveedores({ is_active: true });
       setProveedores(Array.isArray(data) ? data : data.results);
-      setProveedorFiltro('');
+      if (!producto) {
+        setProveedorNombre('');
+      }
     } catch (error) {
       console.error('Error al cargar proveedores:', error);
     }
@@ -171,11 +174,17 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
           impuestosList.find((item) => item.is_active !== false) ?? impuestosList[0];
         if (producto) {
           const porcentajeProducto = normalizeIva(producto.iva_porcentaje);
-          const impuestoProducto = impuestosList.find((item) => {
-            const match = item.nombre.match(/(\d+(?:\.\d+)?)/);
-            const porcentaje = normalizeIva(match ? match[1] : '0');
-            return porcentajeProducto === porcentaje;
-          });
+          const impuestoProducto =
+            (producto.iva_exento
+              ? impuestosList.find((item) =>
+                  item.nombre.toLowerCase().includes('exento')
+                )
+              : null) ||
+            impuestosList.find((item) => {
+              const match = item.nombre.match(/(\d+(?:\.\d+)?)/);
+              const porcentaje = normalizeIva(match ? match[1] : '0');
+              return porcentajeProducto === porcentaje;
+            });
           setImpuestoSeleccionado(
             impuestoProducto ? String(impuestoProducto.id) : String(impuestoBase.id)
           );
@@ -201,6 +210,17 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
     }
   };
 
+  const handleProveedorNombreChange = (value: string) => {
+    setProveedorNombre(value);
+    const match = proveedores.find(
+      (prov) => prov.nombre.toLowerCase() === value.trim().toLowerCase()
+    );
+    setFormData((prev) => ({
+      ...prev,
+      proveedor: match ? String(match.id) : '',
+    }));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -211,6 +231,7 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
         (item) => String(item.id) === impuestoSeleccionado
       );
       const porcentajeIva = normalizeIva(impuestoActual?.porcentaje ?? '0');
+      const ivaExento = impuestoActual?.label.toLowerCase() === 'exento';
 
       const data = {
         ...formData,
@@ -221,6 +242,7 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
         precio_costo: formData.precio_venta || '0.01',
         precio_venta_minimo: formData.precio_venta_minimo || '0',
         iva_porcentaje: porcentajeIva,
+        iva_exento: ivaExento,
       };
 
       if (producto) {
@@ -282,9 +304,9 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
       });
       await loadProveedores();
       setFormData((prev) => ({ ...prev, proveedor: String(created.id) }));
+      setProveedorNombre(created.nombre);
       setNuevoProveedor('');
       setMostrarProveedorRapido(false);
-      setProveedorFiltro('');
       showNotification({ message: 'Proveedor creado.', type: 'success' });
     } catch (error) {
       console.error('Error al crear proveedor:', error);
@@ -409,28 +431,17 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
               </label>
               <input
                 type="text"
-                value={proveedorFiltro}
-                onChange={(event) => setProveedorFiltro(event.target.value)}
-                placeholder="Buscar proveedor..."
-                className="mb-2 w-full px-2 py-1 border border-gray-300 rounded bg-white text-xs"
+                value={proveedorNombre}
+                onChange={(event) => handleProveedorNombreChange(event.target.value)}
+                placeholder="Escribe para buscar proveedor..."
+                className="w-full px-2 py-1 border border-gray-400 rounded bg-white text-xs"
+                list="proveedor-list"
               />
-              <select
-                name="proveedor"
-                value={formData.proveedor}
-                onChange={handleChange}
-                className="w-full px-2 py-1 border border-gray-400 rounded bg-white"
-              >
-                <option value="">Seleccione un proveedor</option>
-                {proveedores
-                  .filter((prov) =>
-                    prov.nombre.toLowerCase().includes(proveedorFiltro.toLowerCase())
-                  )
-                  .map((prov) => (
-                  <option key={prov.id} value={prov.id}>
-                    {prov.nombre}
-                  </option>
+              <datalist id="proveedor-list">
+                {proveedores.map((prov) => (
+                  <option key={prov.id} value={prov.nombre} />
                 ))}
-              </select>
+              </datalist>
               <div className="mt-2 rounded border border-dashed border-blue-200 bg-blue-50 px-2 py-2 text-xs text-blue-700">
                 <div className="flex items-center justify-between">
                   <span>

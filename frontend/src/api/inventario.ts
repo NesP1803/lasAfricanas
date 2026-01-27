@@ -17,6 +17,7 @@ export interface Producto {
   stock_bajo: boolean;
   unidad_medida: string;
   iva_porcentaje: string;
+  iva_exento?: boolean;
   aplica_descuento: boolean;
   es_servicio: boolean;
   margen_utilidad?: number;

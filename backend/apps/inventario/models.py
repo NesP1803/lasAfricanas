@@ -165,6 +165,10 @@ class Producto(BaseModel):
         default=19,
         verbose_name='IVA (%)'
     )
+    iva_exento = models.BooleanField(
+        default=False,
+        verbose_name='IVA exento'
+    )
     
     # Flags
     aplica_descuento = models.BooleanField(
