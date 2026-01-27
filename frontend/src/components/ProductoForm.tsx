@@ -132,7 +132,13 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
         });
       }
     });
-    return Array.from(unique.values());
+    return Array.from(unique.values()).sort((a, b) => {
+      const aExento = a.label.toLowerCase() === 'exento';
+      const bExento = b.label.toLowerCase() === 'exento';
+      if (aExento && !bExento) return 1;
+      if (bExento && !aExento) return -1;
+      return Number(a.porcentaje) - Number(b.porcentaje);
+    });
   }, [impuestos]);
 
   const loadCategorias = async () => {
