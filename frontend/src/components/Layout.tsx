@@ -195,6 +195,7 @@ export default function Layout() {
       { label: "Usuarios", path: "/configuracion?tab=usuarios", key: "usuarios" },
       { label: "Impuestos", path: "/configuracion?tab=impuestos", key: "impuestos" },
       { label: "Auditoría", path: "/configuracion?tab=auditoria", key: "auditoria" },
+      { label: "Plantillas de documentos", path: "/configuracion/plantillas", key: "plantillas" },
     ];
 
     const filtered = isAdmin
@@ -202,6 +203,7 @@ export default function Layout() {
       : sections.filter(
           (section) =>
             section.key !== "usuarios" &&
+            section.key !== "plantillas" &&
             sectionEnabled("configuracion", section.key)
         );
 
@@ -222,6 +224,9 @@ export default function Layout() {
       }
 
       if (pathname.startsWith("/configuracion")) {
+        if (pathname.startsWith("/configuracion/plantillas")) {
+          return { moduleKey: "configuracion", sectionKey: "plantillas" };
+        }
         const params = new URLSearchParams(search);
         const tab = params.get("tab");
         const resolvedTab = tab === "clave" ? "usuarios" : tab ?? undefined;

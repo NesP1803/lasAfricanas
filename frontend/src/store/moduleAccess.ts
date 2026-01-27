@@ -30,6 +30,7 @@ export const MODULE_DEFINITIONS: ModuleDefinition[] = [
       { key: "usuarios", label: "Usuarios" },
       { key: "impuestos", label: "Impuestos" },
       { key: "auditoria", label: "Auditoría" },
+      { key: "plantillas", label: "Plantillas de documentos" },
     ],
   },
   {

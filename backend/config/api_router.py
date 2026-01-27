@@ -24,6 +24,7 @@ from apps.core.views import (
 )
 from apps.usuarios.views import UsuarioViewSet
 from apps.taller.views import MecanicoViewSet, MotoViewSet, OrdenTallerViewSet
+from apps.plantillas.views import TemplateViewSet
 
 
 # Crear router único
@@ -53,3 +54,6 @@ router.register(r'usuarios', UsuarioViewSet, basename='usuario')
 router.register(r'mecanicos', MecanicoViewSet, basename='mecanico')
 router.register(r'motos', MotoViewSet, basename='moto')
 router.register(r'ordenes-taller', OrdenTallerViewSet, basename='orden-taller')
+
+# Registrar Plantillas de documentos
+router.register(r'templates', TemplateViewSet, basename='template')
