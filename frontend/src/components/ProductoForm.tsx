@@ -168,11 +168,18 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
         const impuestoBase =
           impuestosList.find((item) => item.is_active !== false) ?? impuestosList[0];
         if (producto) {
-          const impuestoProducto = impuestosList.find((item) => {
-            const match = item.nombre.match(/(\d+(?:\.\d+)?)/);
-            const porcentaje = normalizeIva(match ? match[1] : '0');
-            return normalizeIva(producto.iva_porcentaje) === porcentaje;
-          });
+          const porcentajeProducto = normalizeIva(producto.iva_porcentaje);
+          const impuestoProducto =
+            (porcentajeProducto === '0.00'
+              ? impuestosList.find((item) =>
+                  item.nombre.toLowerCase().includes('exento')
+                )
+              : null) ||
+            impuestosList.find((item) => {
+              const match = item.nombre.match(/(\d+(?:\.\d+)?)/);
+              const porcentaje = normalizeIva(match ? match[1] : '0');
+              return porcentajeProducto === porcentaje;
+            });
           setImpuestoSeleccionado(
             impuestoProducto ? String(impuestoProducto.id) : String(impuestoBase.id)
           );
@@ -468,6 +475,7 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
                 <option value="KG">Kilogramo</option>
                 <option value="LT">Litro</option>
                 <option value="MT">Metro</option>
+                <option value="N/A">N/A</option>
               </select>
               <p className="text-[11px] text-red-600 mt-1">
                 Si el artículo se vende suelto seleccione unidad de medida (UM)
