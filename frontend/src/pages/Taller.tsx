@@ -262,6 +262,13 @@ export default function Taller() {
         console.error('Error al refrescar la orden:', refreshError);
       }
       setOrdenActual(ordenFinal);
+      setRepuestos((prev) =>
+        prev.map((item) =>
+          item.id === productoId
+            ? { ...item, stock: Math.max(0, item.stock - cantidad) }
+            : item
+        )
+      );
       setCantidades((prev) => ({ ...prev, [productoId]: 1 }));
       setRepuestoModalOpen(false);
       showNotification({
@@ -305,7 +312,25 @@ export default function Taller() {
     if (!ordenActual) return;
     try {
       const orden = await tallerApi.quitarRepuesto(ordenActual.id, { repuesto_id: repuestoId });
-      setOrdenActual(orden);
+      let ordenFinal = orden;
+      try {
+        const data = await tallerApi.getOrdenes({ moto: orden.moto });
+        const parsed = parseListado(data);
+        ordenFinal = parsed.items.find((item) => item.id === orden.id) ?? orden;
+      } catch (refreshError) {
+        console.error('Error al refrescar la orden:', refreshError);
+      }
+      const repuestoEliminado = ordenActual.repuestos.find((item) => item.id === repuestoId);
+      if (repuestoEliminado) {
+        setRepuestos((prev) =>
+          prev.map((item) =>
+            item.id === repuestoEliminado.producto
+              ? { ...item, stock: item.stock + repuestoEliminado.cantidad }
+              : item
+          )
+        );
+      }
+      setOrdenActual(ordenFinal);
       showNotification({
         message: 'Repuesto eliminado correctamente.',
         type: 'success',
@@ -707,6 +732,20 @@ export default function Taller() {
                       <PackageCheck size={14} />
                       {facturando ? 'Enviando...' : 'Facturar'}
                     </button>
+                    <button
+                      type="button"
+                      onClick={handleFacturar}
+                      disabled={facturando || !ordenActual || ordenActual.repuestos.length === 0}
+                      className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-3 py-2 text-[11px] font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <PackageCheck size={14} />
+                      {facturando ? 'Enviando...' : 'Facturar'}
+                    </button>
+                  </div>
+                  <div className="border-t border-slate-200 px-3 py-2 text-[11px] text-slate-500">
+                    {repuestos.length > 0
+                      ? `${repuestos.length} repuestos encontrados`
+                      : 'Busca repuestos en el catálogo'}
                   </div>
                   <div className="border-t border-slate-200 px-3 py-2 text-[11px] text-slate-500">
                     {repuestos.length > 0
