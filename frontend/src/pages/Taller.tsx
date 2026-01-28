@@ -262,13 +262,9 @@ export default function Taller() {
         console.error('Error al refrescar la orden:', refreshError);
       }
       setOrdenActual(ordenFinal);
-      setRepuestos((prev) =>
-        prev.map((item) =>
-          item.id === productoId
-            ? { ...item, stock: Math.max(0, item.stock - cantidad) }
-            : item
-        )
-      );
+      if (searchRepuesto) {
+        await buscarRepuestos(searchRepuesto);
+      }
       setCantidades((prev) => ({ ...prev, [productoId]: 1 }));
       setRepuestoModalOpen(false);
       showNotification({
@@ -320,17 +316,10 @@ export default function Taller() {
       } catch (refreshError) {
         console.error('Error al refrescar la orden:', refreshError);
       }
-      const repuestoEliminado = ordenActual.repuestos.find((item) => item.id === repuestoId);
-      if (repuestoEliminado) {
-        setRepuestos((prev) =>
-          prev.map((item) =>
-            item.id === repuestoEliminado.producto
-              ? { ...item, stock: item.stock + repuestoEliminado.cantidad }
-              : item
-          )
-        );
-      }
       setOrdenActual(ordenFinal);
+      if (searchRepuesto) {
+        await buscarRepuestos(searchRepuesto);
+      }
       showNotification({
         message: 'Repuesto eliminado correctamente.',
         type: 'success',
@@ -752,6 +741,11 @@ export default function Taller() {
                       ? `${repuestos.length} repuestos encontrados`
                       : 'Busca repuestos en el catálogo'}
                   </div>
+                  <div className="border-t border-slate-200 px-3 py-2 text-[11px] text-slate-500">
+                    {repuestos.length > 0
+                      ? `${repuestos.length} repuestos encontrados`
+                      : 'Busca repuestos en el catálogo'}
+                  </div>
                 </div>
 
                 <div className="border border-slate-200 bg-white shadow-sm">
@@ -835,6 +829,17 @@ export default function Taller() {
                               : 'Sin seleccionar'}
                           </span>
                           <span>Total cuentas: ${totalOrden.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-end pt-3">
+                          <button
+                            type="button"
+                            onClick={handleFacturar}
+                            disabled={facturando || ordenActual.repuestos.length === 0}
+                            className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-3 py-2 text-[11px] font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            <PackageCheck size={14} />
+                            {facturando ? 'Enviando...' : 'Facturar'}
+                          </button>
                         </div>
                       </div>
                     )}
