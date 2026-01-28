@@ -113,12 +113,6 @@ class ProductoViewSet(viewsets.ModelViewSet):
         elif self.action in ['create', 'update', 'partial_update']:
             return ProductoCreateUpdateSerializer
         return ProductoDetailSerializer
-
-    def destroy(self, request, *args, **kwargs):
-        """Realiza eliminación lógica para evitar errores por llaves foráneas."""
-        producto = self.get_object()
-        producto.soft_delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
     
     @action(detail=False, methods=['get'])
     def buscar_por_codigo(self, request):
