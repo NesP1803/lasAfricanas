@@ -9,7 +9,6 @@ import {
   PackageCheck,
   Trash2,
   Pencil,
-  BadgeCheck,
   X,
 } from 'lucide-react';
 import { inventarioApi, type ProductoList } from '../api/inventario';
@@ -539,33 +538,38 @@ export default function Taller() {
                       {mecanicos.length}
                     </span>
                   </div>
-                  <div className="max-h-[320px] overflow-y-auto">
+                  <div className="px-4 py-4">
                     {mecanicos.length === 0 ? (
-                      <div className="p-4 text-center text-sm text-slate-500">No hay mecánicos.</div>
+                      <div className="rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500">
+                        No hay mecánicos.
+                      </div>
                     ) : (
-                      <ul className="divide-y divide-slate-100">
-                        {mecanicos.map((mecanico) => (
-                          <li key={mecanico.id}>
-                            <button
-                              type="button"
-                              onClick={() => setSelectedMecanicoId(mecanico.id)}
-                              className={`flex w-full items-center justify-between px-4 py-3 text-left text-sm transition ${
-                                selectedMecanicoId === mecanico.id
-                                  ? 'bg-blue-100 text-blue-700'
-                                  : 'hover:bg-slate-50'
-                              }`}
-                            >
-                              <div>
-                                <p className="font-semibold text-slate-800">{mecanico.nombre}</p>
-                                <p className="text-xs text-slate-500">{mecanico.telefono || 'Sin teléfono'}</p>
-                              </div>
-                              {selectedMecanicoId === mecanico.id && (
-                                <BadgeCheck size={18} className="text-blue-600" />
-                              )}
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
+                      <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
+                        Mecánico en turno
+                        <select
+                          value={selectedMecanicoId ?? ''}
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            setSelectedMecanicoId(value ? Number(value) : null);
+                          }}
+                          className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 shadow-sm outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+                        >
+                          <option value="" disabled>
+                            Selecciona un mecánico
+                          </option>
+                          {mecanicos.map((mecanico) => (
+                            <option key={mecanico.id} value={mecanico.id}>
+                              {mecanico.nombre}
+                            </option>
+                          ))}
+                        </select>
+                        {selectedMecanicoId && (
+                          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
+                            {mecanicos.find((mecanico) => mecanico.id === selectedMecanicoId)?.telefono ||
+                              'Sin teléfono'}
+                          </div>
+                        )}
+                      </label>
                     )}
                   </div>
                 </div>
