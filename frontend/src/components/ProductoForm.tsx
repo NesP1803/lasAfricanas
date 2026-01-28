@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { X, Plus } from 'lucide-react';
+import { X, Plus, ChevronDown } from 'lucide-react';
 import { inventarioApi } from '../api/inventario';
 import { configuracionAPI } from '../api/configuracion';
 import type { Producto, Categoria, Proveedor} from "../api/inventario";
@@ -26,6 +26,7 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
   const [nuevoProveedor, setNuevoProveedor] = useState('');
   const [creandoProveedor, setCreandoProveedor] = useState(false);
   const [proveedorNombre, setProveedorNombre] = useState('');
+  const [mostrarListaProveedores, setMostrarListaProveedores] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<any>({});
 
@@ -45,7 +46,7 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
     proveedor: '',
     precio_venta: '',
     precio_venta_minimo: '',
-    stock: '0',
+    stock: '',
     stock_minimo: '5',
     unidad_medida: 'UND',
     aplica_descuento: true,
@@ -212,6 +213,7 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
 
   const handleProveedorNombreChange = (value: string) => {
     setProveedorNombre(value);
+    setMostrarListaProveedores(true);
     const match = proveedores.find(
       (prov) => prov.nombre.toLowerCase() === value.trim().toLowerCase()
     );
@@ -219,6 +221,20 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
       ...prev,
       proveedor: match ? String(match.id) : '',
     }));
+  };
+
+  const proveedoresFiltrados = useMemo(() => {
+    const query = proveedorNombre.trim().toLowerCase();
+    if (!query) return proveedores;
+    return proveedores.filter((prov) =>
+      prov.nombre.toLowerCase().includes(query)
+    );
+  }, [proveedores, proveedorNombre]);
+
+  const handleProveedorSelect = (prov: Proveedor) => {
+    setProveedorNombre(prov.nombre);
+    setFormData((prev) => ({ ...prev, proveedor: String(prov.id) }));
+    setMostrarListaProveedores(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -429,19 +445,50 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
               <label className="flex items-center gap-2 font-semibold text-gray-800 mb-1">
                 Proveedor
               </label>
-              <input
-                type="text"
-                value={proveedorNombre}
-                onChange={(event) => handleProveedorNombreChange(event.target.value)}
-                placeholder="Escribe para buscar proveedor..."
-                className="w-full px-2 py-1 border border-gray-400 rounded bg-white text-xs"
-                list="proveedor-list"
-              />
-              <datalist id="proveedor-list">
-                {proveedores.map((prov) => (
-                  <option key={prov.id} value={prov.nombre} />
-                ))}
-              </datalist>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={proveedorNombre}
+                  onChange={(event) => handleProveedorNombreChange(event.target.value)}
+                  onFocus={() => setMostrarListaProveedores(true)}
+                  onBlur={() => {
+                    window.setTimeout(() => setMostrarListaProveedores(false), 150);
+                  }}
+                  placeholder="Escribe para buscar proveedor..."
+                  className="w-full px-2 py-1 pr-8 border border-gray-400 rounded bg-white"
+                />
+                <button
+                  type="button"
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    setMostrarListaProveedores((prev) => !prev);
+                  }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  aria-label="Mostrar proveedores"
+                >
+                  <ChevronDown size={16} />
+                </button>
+                {mostrarListaProveedores && (
+                  <div className="absolute z-20 mt-1 max-h-48 w-full overflow-y-auto rounded border border-gray-300 bg-white shadow-lg">
+                    {proveedoresFiltrados.length === 0 ? (
+                      <div className="px-3 py-2 text-xs text-gray-500">
+                        No hay proveedores registrados.
+                      </div>
+                    ) : (
+                      proveedoresFiltrados.map((prov) => (
+                        <button
+                          key={prov.id}
+                          type="button"
+                          onMouseDown={() => handleProveedorSelect(prov)}
+                          className="w-full px-3 py-2 text-left text-xs text-gray-700 hover:bg-blue-50"
+                        >
+                          {prov.nombre}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
               <div className="mt-2 rounded border border-dashed border-blue-200 bg-blue-50 px-2 py-2 text-xs text-blue-700">
                 <div className="flex items-center justify-between">
                   <span>
@@ -489,12 +536,12 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
                 onChange={handleChange}
                 className="w-full px-2 py-1 border border-gray-400 rounded bg-white"
               >
+                <option value="N/A">N/A</option>
                 <option value="UND">Unidad</option>
                 <option value="PAR">Par</option>
                 <option value="KG">Kilogramo</option>
                 <option value="LT">Litro</option>
                 <option value="MT">Metro</option>
-                <option value="N/A">N/A</option>
               </select>
               <p className="text-[11px] text-red-600 mt-1">
                 Si el artículo se vende suelto seleccione unidad de medida (UM)
