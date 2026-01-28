@@ -360,12 +360,12 @@ export default function Layout() {
           { label: "Mercancia", path: "/articulos?tab=mercancia", key: "mercancia" },
           {
             label: "Stock Bajo",
-            path: "/articulos?tab=stock-bajo",
+            path: "/articulos?tab=stock_bajo",
             key: "stock_bajo",
           },
           {
             label: "Dar de Baja",
-            path: "/articulos?tab=dar-de-baja",
+            path: "/articulos?tab=dar_de_baja",
             key: "dar_de_baja",
           },
         ];
