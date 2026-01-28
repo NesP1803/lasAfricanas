@@ -9,7 +9,6 @@ import {
   PackageCheck,
   Trash2,
   Pencil,
-  BadgeCheck,
   X,
 } from 'lucide-react';
 import { inventarioApi, type ProductoList } from '../api/inventario';
@@ -118,6 +117,7 @@ export default function Taller() {
   const [cantidades, setCantidades] = useState<Record<number, number>>({});
   const [facturando, setFacturando] = useState(false);
   const [confirmFacturarOpen, setConfirmFacturarOpen] = useState(false);
+  const [repuestoModalOpen, setRepuestoModalOpen] = useState(false);
 
   const [motosListado, setMotosListado] = useState<Moto[]>([]);
   const [searchMoto, setSearchMoto] = useState('');
@@ -266,6 +266,30 @@ export default function Taller() {
         type: 'error',
       });
     }
+  };
+
+  const handleBuscarRepuestos = async () => {
+    if (!searchRepuesto) {
+      setRepuestos([]);
+      return;
+    }
+    await buscarRepuestos(searchRepuesto);
+  };
+
+  const closeRepuestoModal = () => {
+    setRepuestoModalOpen(false);
+  };
+
+  const handleEditMotoSeleccionada = async () => {
+    const selected = motosPorMecanico.find((moto) => moto.id === selectedMotoId);
+    if (!selected) {
+      showNotification({
+        message: 'Selecciona una moto para editar.',
+        type: 'error',
+      });
+      return;
+    }
+    await openEditMoto(selected);
   };
 
   const handleQuitarRepuesto = async (repuestoId: number) => {
@@ -507,90 +531,130 @@ export default function Taller() {
 
         {activeTab === 'ordenes' ? (
           <div className="space-y-6 px-6 py-6">
-            <div className="grid gap-6 xl:grid-cols-3">
-              <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-                  <div>
-                    <h2 className="text-sm font-semibold text-slate-800">Mecánicos</h2>
-                    <p className="text-xs text-slate-500">Selecciona el mecánico en turno</p>
-                  </div>
-                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                    {mecanicos.length}
-                  </span>
-                </div>
-                <div className="max-h-[420px] overflow-y-auto">
-                  {mecanicos.length === 0 ? (
-                    <div className="p-4 text-center text-sm text-slate-500">No hay mecánicos.</div>
-                  ) : (
-                    <ul className="divide-y divide-slate-100">
-                      {mecanicos.map((mecanico) => (
-                        <li key={mecanico.id}>
-                          <button
-                            type="button"
-                            onClick={() => setSelectedMecanicoId(mecanico.id)}
-                            className={`flex w-full items-center justify-between px-4 py-3 text-left text-sm transition ${
-                              selectedMecanicoId === mecanico.id
-                                ? 'bg-blue-100 text-blue-700'
-                                : 'hover:bg-slate-50'
-                            }`}
-                          >
-                            <div>
-                              <p className="font-semibold text-slate-800">{mecanico.nombre}</p>
-                              <p className="text-xs text-slate-500">{mecanico.telefono || 'Sin teléfono'}</p>
-                            </div>
-                            {selectedMecanicoId === mecanico.id && (
-                              <BadgeCheck size={18} className="text-blue-600" />
-                            )}
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </section>
-
-              <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-                  <div>
-                    <h2 className="text-sm font-semibold text-slate-800">Motos asociadas</h2>
-                    <p className="text-xs text-slate-500">Doble clic para abrir la orden</p>
-                  </div>
-                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                    {motosPorMecanico.length}
-                  </span>
-                </div>
-                <div className="max-h-[420px] overflow-y-auto">
-                  {motosPorMecanico.length === 0 ? (
-                    <div className="p-4 text-center text-sm text-slate-500">
-                      No hay motos asignadas.
+            <div className="grid gap-6 xl:grid-cols-[280px_1fr]">
+              <section className="space-y-6">
+                <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                  <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+                    <div>
+                      <h2 className="text-sm font-semibold text-slate-800">Seleccione mecánico</h2>
+                      <p className="text-xs text-slate-500">Lista de técnicos disponibles</p>
                     </div>
-                  ) : (
-                    <table className="w-full text-sm">
-                      <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
-                        <tr>
-                          <th className="px-4 py-2">Placa</th>
-                          <th className="px-4 py-2">Marca</th>
-                          <th className="px-4 py-2">Modelo</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {motosPorMecanico.map((moto) => (
-                          <tr
-                            key={moto.id}
-                            className={`cursor-pointer transition ${
-                              selectedMotoId === moto.id ? 'bg-blue-100' : 'hover:bg-slate-50'
-                            }`}
-                            onClick={() => handleSelectMoto(moto)}
-                            onDoubleClick={() => handleSelectMoto(moto)}
-                          >
-                            <td className="px-4 py-3 font-semibold text-slate-800">{moto.placa}</td>
-                            <td className="px-4 py-3">{moto.marca}</td>
-                            <td className="px-4 py-3">{moto.modelo || '—'}</td>
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                      {mecanicos.length}
+                    </span>
+                  </div>
+                  <div className="px-4 py-4">
+                    {mecanicos.length === 0 ? (
+                      <div className="rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500">
+                        No hay mecánicos.
+                      </div>
+                    ) : (
+                      <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
+                        Mecánico en turno
+                        <select
+                          value={selectedMecanicoId ?? ''}
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            setSelectedMecanicoId(value ? Number(value) : null);
+                          }}
+                          className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 shadow-sm outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+                        >
+                          <option value="" disabled>
+                            Selecciona un mecánico
+                          </option>
+                          {mecanicos.map((mecanico) => (
+                            <option key={mecanico.id} value={mecanico.id}>
+                              {mecanico.nombre}
+                            </option>
+                          ))}
+                        </select>
+                        {selectedMecanicoId && (
+                          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
+                            {mecanicos.find((mecanico) => mecanico.id === selectedMecanicoId)?.telefono ||
+                              'Sin teléfono'}
+                          </div>
+                        )}
+                      </label>
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                  <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+                    <div>
+                      <h2 className="text-sm font-semibold text-slate-800">Motos asociadas</h2>
+                      <p className="text-xs text-slate-500">Doble clic para abrir la orden</p>
+                    </div>
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                      {motosPorMecanico.length}
+                    </span>
+                  </div>
+                  <div className="max-h-[420px] overflow-y-auto">
+                    {motosPorMecanico.length === 0 ? (
+                      <div className="p-4 text-center text-sm text-slate-500">
+                        No hay motos asignadas.
+                      </div>
+                    ) : (
+                      <table className="w-full text-sm">
+                        <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
+                          <tr>
+                            <th className="px-4 py-2">Placa</th>
+                            <th className="px-4 py-2">Marca</th>
+                            <th className="px-4 py-2">Modelo</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {motosPorMecanico.map((moto) => (
+                            <tr
+                              key={moto.id}
+                              className={`cursor-pointer transition ${
+                                selectedMotoId === moto.id ? 'bg-blue-100' : 'hover:bg-slate-50'
+                              }`}
+                              onClick={() => handleSelectMoto(moto)}
+                              onDoubleClick={() => handleSelectMoto(moto)}
+                            >
+                              <td className="px-4 py-3 font-semibold text-slate-800">{moto.placa}</td>
+                              <td className="px-4 py-3">{moto.marca}</td>
+                              <td className="px-4 py-3">{moto.modelo || '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                  <div className="border-b border-slate-200 px-4 py-3">
+                    <h2 className="text-sm font-semibold text-slate-800">Registro de motos</h2>
+                    <p className="text-xs text-slate-500">Crear o editar motos del taller</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2 px-4 py-4">
+                    <button
+                      type="button"
+                      onClick={openCreateMoto}
+                      className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+                    >
+                      <Plus size={14} />
+                      Registrar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleEditMotoSeleccionada}
+                      className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-blue-200 hover:text-blue-600"
+                    >
+                      <Pencil size={14} />
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSearchParams({ tab: 'motos' })}
+                      className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-blue-200 hover:text-blue-600"
+                    >
+                      <Bike size={14} />
+                      Ver listado
+                    </button>
+                  </div>
                 </div>
               </section>
 
@@ -598,71 +662,24 @@ export default function Taller() {
                 <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
                   <div className="border-b border-slate-200 px-4 py-3">
                     <h2 className="text-sm font-semibold text-slate-800">Buscar repuestos</h2>
-                    <p className="text-xs text-slate-500">Busca por código o nombre del artículo</p>
+                    <p className="text-xs text-slate-500">
+                      Escriba el código o nombre y presione buscar
+                    </p>
                   </div>
-                  <div className="px-4 py-4">
-                    <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 shadow-sm">
-                      <Search size={16} className="text-slate-400" />
-                      <input
-                        type="text"
-                        value={searchRepuesto}
-                        onChange={(event) => setSearchRepuesto(event.target.value)}
-                        placeholder="Ej. Banda freno, 770..."
-                        className="flex-1 bg-transparent text-sm text-slate-700 outline-none"
-                      />
+                  <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
+                    <div className="text-sm text-slate-600">
+                      {repuestos.length > 0
+                        ? `${repuestos.length} repuestos encontrados`
+                        : 'Busca repuestos en el catálogo'}
                     </div>
-                  </div>
-                  <div className="max-h-[240px] overflow-y-auto">
-                    {repuestos.length === 0 ? (
-                      <div className="p-4 text-center text-xs text-slate-500">
-                        {searchRepuesto ? 'No hay resultados.' : 'Empieza a buscar repuestos.'}
-                      </div>
-                    ) : (
-                      <table className="w-full text-sm">
-                        <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
-                          <tr>
-                            <th className="px-3 py-2">Código</th>
-                            <th className="px-3 py-2">Artículo</th>
-                            <th className="px-3 py-2">Stock</th>
-                            <th className="px-3 py-2">Cantidad</th>
-                            <th className="px-3 py-2"></th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {repuestos.map((item) => (
-                            <tr key={item.id} className="hover:bg-slate-50">
-                              <td className="px-3 py-2 font-medium text-slate-800">{item.codigo}</td>
-                              <td className="px-3 py-2">{item.nombre}</td>
-                              <td className="px-3 py-2">{item.stock}</td>
-                              <td className="px-3 py-2">
-                                <input
-                                  type="number"
-                                  min={1}
-                                  value={cantidades[item.id] ?? 1}
-                                  onChange={(event) =>
-                                    setCantidades((prev) => ({
-                                      ...prev,
-                                      [item.id]: Number(event.target.value) || 1,
-                                    }))
-                                  }
-                                  className="w-20 rounded-md border border-slate-200 px-2 py-1 text-xs"
-                                />
-                              </td>
-                              <td className="px-3 py-2 text-right">
-                                <button
-                                  type="button"
-                                  onClick={() => handleAgregarRepuesto(item.id)}
-                                  className="inline-flex items-center gap-2 rounded-full bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700"
-                                >
-                                  <Plus size={14} />
-                                  Agregar
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => setRepuestoModalOpen(true)}
+                      className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+                    >
+                      <Search size={14} />
+                      Buscar repuestos
+                    </button>
                   </div>
                 </div>
 
@@ -695,7 +712,7 @@ export default function Taller() {
                             Aún no hay repuestos agregados.
                           </div>
                         ) : (
-                          <div className="max-h-[200px] overflow-y-auto">
+                          <div className="max-h-[220px] overflow-y-auto">
                             <table className="w-full text-sm">
                               <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
                                 <tr>
@@ -727,10 +744,16 @@ export default function Taller() {
                             </table>
                           </div>
                         )}
-                        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-3">
-                          <div className="text-sm font-semibold text-slate-700">
-                            Total: ${totalOrden.toLocaleString()}
-                          </div>
+                        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-3 text-sm font-semibold text-slate-700">
+                          <span>
+                            Moto:{' '}
+                            {ordenActual.moto_placa
+                              ? `${ordenActual.moto_placa} · ${ordenActual.moto_marca}`
+                              : 'Sin seleccionar'}
+                          </span>
+                          <span>Total cuentas: ${totalOrden.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-end">
                           <button
                             type="button"
                             onClick={handleFacturar}
@@ -1004,6 +1027,99 @@ export default function Taller() {
         onCancel={() => setConfirmDeleteOpen(false)}
         loading={loading}
       />
+      {repuestoModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4 py-6">
+          <div className="w-full max-w-5xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+              <div>
+                <p className="text-xs font-semibold uppercase text-blue-500">Repuestos</p>
+                <h2 className="text-lg font-semibold text-slate-900">Buscar repuestos</h2>
+              </div>
+              <button
+                type="button"
+                onClick={closeRepuestoModal}
+                className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="space-y-4 px-6 py-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-1 items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 shadow-sm">
+                  <Search size={16} className="text-slate-400" />
+                  <input
+                    type="text"
+                    value={searchRepuesto}
+                    onChange={(event) => setSearchRepuesto(event.target.value)}
+                    placeholder="Ej. Banda freno, 770..."
+                    className="flex-1 bg-transparent text-sm text-slate-700 outline-none"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleBuscarRepuestos}
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 transition hover:border-blue-200 hover:text-blue-600"
+                >
+                  <Search size={14} />
+                  Buscar
+                </button>
+              </div>
+              <div className="max-h-[360px] overflow-y-auto rounded-xl border border-slate-200">
+                {repuestos.length === 0 ? (
+                  <div className="p-6 text-center text-sm text-slate-500">
+                    {searchRepuesto ? 'No hay resultados.' : 'Empieza a buscar repuestos.'}
+                  </div>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
+                      <tr>
+                        <th className="px-3 py-2">Código</th>
+                        <th className="px-3 py-2">Artículo</th>
+                        <th className="px-3 py-2">Stock</th>
+                        <th className="px-3 py-2">Cantidad</th>
+                        <th className="px-3 py-2"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {repuestos.map((item) => (
+                        <tr key={item.id} className="hover:bg-slate-50">
+                          <td className="px-3 py-2 font-medium text-slate-800">{item.codigo}</td>
+                          <td className="px-3 py-2">{item.nombre}</td>
+                          <td className="px-3 py-2">{item.stock}</td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="number"
+                              min={1}
+                              value={cantidades[item.id] ?? 1}
+                              onChange={(event) =>
+                                setCantidades((prev) => ({
+                                  ...prev,
+                                  [item.id]: Number(event.target.value) || 1,
+                                }))
+                              }
+                              className="w-20 rounded-md border border-slate-200 px-2 py-1 text-xs"
+                            />
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            <button
+                              type="button"
+                              onClick={() => handleAgregarRepuesto(item.id)}
+                              className="inline-flex items-center gap-2 rounded-full bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700"
+                            >
+                              <Plus size={14} />
+                              Agregar
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
