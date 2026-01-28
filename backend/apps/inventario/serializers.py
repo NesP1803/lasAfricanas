@@ -47,6 +47,9 @@ class ProveedorSerializer(serializers.ModelSerializer):
             'updated_at'
         ]
         read_only_fields = ['created_at', 'updated_at']
+        extra_kwargs = {
+            'email': {'required': False, 'allow_blank': True},
+        }
     
     def get_total_productos(self, obj):
         return obj.productos.filter(is_active=True).count()

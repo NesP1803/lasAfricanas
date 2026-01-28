@@ -20,6 +20,9 @@ class MecanicoSerializer(serializers.ModelSerializer):
             'updated_at',
         ]
         read_only_fields = ['created_at', 'updated_at']
+        extra_kwargs = {
+            'email': {'required': False, 'allow_blank': True},
+        }
 
 
 class MotoSerializer(serializers.ModelSerializer):
