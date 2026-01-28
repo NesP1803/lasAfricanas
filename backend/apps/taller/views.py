@@ -8,7 +8,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 
-from apps.inventario.models import Producto
+from apps.inventario.models import MovimientoInventario, Producto
 from apps.ventas.models import DetalleVenta, Venta
 from .models import Mecanico, Moto, OrdenTaller, OrdenRepuesto
 from .serializers import MecanicoSerializer, MotoSerializer, OrdenTallerSerializer
@@ -67,19 +67,46 @@ class OrdenTallerViewSet(viewsets.ModelViewSet):
         except (TypeError, ValueError):
             return Response({'error': 'Cantidad inválida'}, status=status.HTTP_400_BAD_REQUEST)
 
-        repuesto, created = OrdenRepuesto.objects.get_or_create(
-            orden=orden,
-            producto=producto,
-            defaults={
-                'cantidad': cantidad,
-                'precio_unitario': producto.precio_venta,
-                'subtotal': Decimal('0'),
-            }
-        )
-        if not created:
-            repuesto.cantidad += cantidad
-            repuesto.precio_unitario = producto.precio_venta
-            repuesto.save()
+        with transaction.atomic():
+            repuesto, created = OrdenRepuesto.objects.get_or_create(
+                orden=orden,
+                producto=producto,
+                defaults={
+                    'cantidad': cantidad,
+                    'precio_unitario': producto.precio_venta,
+                    'subtotal': Decimal('0'),
+                }
+            )
+            if not created:
+                repuesto.cantidad += cantidad
+                repuesto.precio_unitario = producto.precio_venta
+                repuesto.save()
+
+            if not producto.es_servicio:
+                stock_anterior = producto.stock
+                cantidad_movimiento = -abs(cantidad)
+                stock_nuevo = stock_anterior + cantidad_movimiento
+
+                if stock_nuevo < 0:
+                    return Response(
+                        {'error': 'El stock no puede ser negativo'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+                MovimientoInventario.objects.create(
+                    producto=producto,
+                    tipo='SALIDA',
+                    cantidad=cantidad_movimiento,
+                    stock_anterior=stock_anterior,
+                    stock_nuevo=stock_nuevo,
+                    costo_unitario=producto.precio_costo,
+                    usuario=request.user,
+                    referencia=f"Orden taller #{orden.id}",
+                    observaciones="Salida por orden de taller"
+                )
+
+                producto.stock = stock_nuevo
+                producto.save(update_fields=['stock', 'updated_at'])
 
         serializer = OrdenTallerSerializer(orden)
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -91,11 +118,37 @@ class OrdenTallerViewSet(viewsets.ModelViewSet):
         producto_id = request.data.get('producto')
 
         if repuesto_id:
-            OrdenRepuesto.objects.filter(pk=repuesto_id, orden=orden).delete()
+            repuestos = OrdenRepuesto.objects.select_related('producto').filter(
+                pk=repuesto_id, orden=orden
+            )
         elif producto_id:
-            OrdenRepuesto.objects.filter(orden=orden, producto_id=producto_id).delete()
+            repuestos = OrdenRepuesto.objects.select_related('producto').filter(
+                orden=orden, producto_id=producto_id
+            )
         else:
             return Response({'error': 'Debe indicar repuesto_id o producto'}, status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            for repuesto in repuestos:
+                producto = repuesto.producto
+                if producto.es_servicio:
+                    continue
+                stock_anterior = producto.stock
+                stock_nuevo = stock_anterior + repuesto.cantidad
+                MovimientoInventario.objects.create(
+                    producto=producto,
+                    tipo='DEVOLUCION',
+                    cantidad=repuesto.cantidad,
+                    stock_anterior=stock_anterior,
+                    stock_nuevo=stock_nuevo,
+                    costo_unitario=producto.precio_costo,
+                    usuario=request.user,
+                    referencia=f"Orden taller #{orden.id}",
+                    observaciones="Devolución por retiro de repuesto"
+                )
+                producto.stock = stock_nuevo
+                producto.save(update_fields=['stock', 'updated_at'])
+            repuestos.delete()
 
         serializer = OrdenTallerSerializer(orden)
         return Response(serializer.data, status=status.HTTP_200_OK)
