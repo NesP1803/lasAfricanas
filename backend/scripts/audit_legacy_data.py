@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import sys
+from pathlib import Path
 from typing import Iterable, List, Sequence, Tuple
 
 import django
@@ -15,6 +17,9 @@ LOGGER = logging.getLogger(__name__)
 
 
 def setup_django() -> None:
+    backend_dir = Path(__file__).resolve().parents[1]
+    if str(backend_dir) not in sys.path:
+        sys.path.insert(0, str(backend_dir))
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
     django.setup()
 

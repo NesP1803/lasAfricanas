@@ -37,5 +37,9 @@ Codex debe:
 4) Ejecutar auditoría para detectar duplicados y ventas sin detalles.
 
 ```bash
+# Desde la raíz del repo
 python backend/scripts/audit_legacy_data.py --limit 20
+
+# Desde la carpeta backend/
+python scripts/audit_legacy_data.py --limit 20
 ```
