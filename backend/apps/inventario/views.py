@@ -90,6 +90,21 @@ class ProductoViewSet(viewsets.ModelViewSet):
     search_fields = ['codigo', 'nombre', 'descripcion']
     ordering_fields = ['nombre', 'precio_venta', 'stock', 'created_at']
     ordering = ['nombre']
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        stock_estado = self.request.query_params.get('stock_estado')
+        if stock_estado:
+            normalized = stock_estado.strip().lower()
+            if normalized == 'agotado':
+                queryset = queryset.filter(stock__lte=0)
+            elif normalized == 'bajo':
+                queryset = queryset.filter(
+                    Q(stock__gt=0) & Q(stock__lte=models.F('stock_minimo'))
+                )
+            elif normalized == 'ok':
+                queryset = queryset.filter(stock__gt=models.F('stock_minimo'))
+        return queryset
     
     def get_serializer_class(self):
         """Retorna el serializer apropiado según la acción"""
