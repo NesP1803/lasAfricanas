@@ -117,6 +117,7 @@ export default function Taller() {
   const [cantidades, setCantidades] = useState<Record<number, number>>({});
   const [facturando, setFacturando] = useState(false);
   const [confirmFacturarOpen, setConfirmFacturarOpen] = useState(false);
+  const [repuestoModalOpen, setRepuestoModalOpen] = useState(false);
 
   const [motosListado, setMotosListado] = useState<Moto[]>([]);
   const [searchMoto, setSearchMoto] = useState('');
@@ -273,6 +274,10 @@ export default function Taller() {
       return;
     }
     await buscarRepuestos(searchRepuesto);
+  };
+
+  const closeRepuestoModal = () => {
+    setRepuestoModalOpen(false);
   };
 
   const handleEditMotoSeleccionada = async () => {
@@ -584,7 +589,7 @@ export default function Taller() {
                       {motosPorMecanico.length}
                     </span>
                   </div>
-                  <div className="max-h-[320px] overflow-y-auto">
+                  <div className="max-h-[420px] overflow-y-auto">
                     {motosPorMecanico.length === 0 ? (
                       <div className="p-4 text-center text-sm text-slate-500">
                         No hay motos asignadas.
@@ -661,77 +666,20 @@ export default function Taller() {
                       Escriba el código o nombre y presione buscar
                     </p>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2 px-4 py-4">
-                    <div className="flex flex-1 items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 shadow-sm">
-                      <Search size={16} className="text-slate-400" />
-                      <input
-                        type="text"
-                        value={searchRepuesto}
-                        onChange={(event) => setSearchRepuesto(event.target.value)}
-                        placeholder="Ej. Banda freno, 770..."
-                        className="flex-1 bg-transparent text-sm text-slate-700 outline-none"
-                      />
+                  <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
+                    <div className="text-sm text-slate-600">
+                      {repuestos.length > 0
+                        ? `${repuestos.length} repuestos encontrados`
+                        : 'Busca repuestos en el catálogo'}
                     </div>
                     <button
                       type="button"
-                      onClick={handleBuscarRepuestos}
-                      className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 transition hover:border-blue-200 hover:text-blue-600"
+                      onClick={() => setRepuestoModalOpen(true)}
+                      className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
                     >
                       <Search size={14} />
-                      Buscar
+                      Buscar repuestos
                     </button>
-                  </div>
-                  <div className="max-h-[240px] overflow-y-auto">
-                    {repuestos.length === 0 ? (
-                      <div className="p-4 text-center text-xs text-slate-500">
-                        {searchRepuesto ? 'No hay resultados.' : 'Empieza a buscar repuestos.'}
-                      </div>
-                    ) : (
-                      <table className="w-full text-sm">
-                        <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
-                          <tr>
-                            <th className="px-3 py-2">Código</th>
-                            <th className="px-3 py-2">Artículo</th>
-                            <th className="px-3 py-2">Stock</th>
-                            <th className="px-3 py-2">Cantidad</th>
-                            <th className="px-3 py-2"></th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {repuestos.map((item) => (
-                            <tr key={item.id} className="hover:bg-slate-50">
-                              <td className="px-3 py-2 font-medium text-slate-800">{item.codigo}</td>
-                              <td className="px-3 py-2">{item.nombre}</td>
-                              <td className="px-3 py-2">{item.stock}</td>
-                              <td className="px-3 py-2">
-                                <input
-                                  type="number"
-                                  min={1}
-                                  value={cantidades[item.id] ?? 1}
-                                  onChange={(event) =>
-                                    setCantidades((prev) => ({
-                                      ...prev,
-                                      [item.id]: Number(event.target.value) || 1,
-                                    }))
-                                  }
-                                  className="w-20 rounded-md border border-slate-200 px-2 py-1 text-xs"
-                                />
-                              </td>
-                              <td className="px-3 py-2 text-right">
-                                <button
-                                  type="button"
-                                  onClick={() => handleAgregarRepuesto(item.id)}
-                                  className="inline-flex items-center gap-2 rounded-full bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700"
-                                >
-                                  <Plus size={14} />
-                                  Agregar
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
                   </div>
                 </div>
 
@@ -1079,6 +1027,99 @@ export default function Taller() {
         onCancel={() => setConfirmDeleteOpen(false)}
         loading={loading}
       />
+      {repuestoModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4 py-6">
+          <div className="w-full max-w-5xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+              <div>
+                <p className="text-xs font-semibold uppercase text-blue-500">Repuestos</p>
+                <h2 className="text-lg font-semibold text-slate-900">Buscar repuestos</h2>
+              </div>
+              <button
+                type="button"
+                onClick={closeRepuestoModal}
+                className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="space-y-4 px-6 py-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-1 items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 shadow-sm">
+                  <Search size={16} className="text-slate-400" />
+                  <input
+                    type="text"
+                    value={searchRepuesto}
+                    onChange={(event) => setSearchRepuesto(event.target.value)}
+                    placeholder="Ej. Banda freno, 770..."
+                    className="flex-1 bg-transparent text-sm text-slate-700 outline-none"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleBuscarRepuestos}
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 transition hover:border-blue-200 hover:text-blue-600"
+                >
+                  <Search size={14} />
+                  Buscar
+                </button>
+              </div>
+              <div className="max-h-[360px] overflow-y-auto rounded-xl border border-slate-200">
+                {repuestos.length === 0 ? (
+                  <div className="p-6 text-center text-sm text-slate-500">
+                    {searchRepuesto ? 'No hay resultados.' : 'Empieza a buscar repuestos.'}
+                  </div>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
+                      <tr>
+                        <th className="px-3 py-2">Código</th>
+                        <th className="px-3 py-2">Artículo</th>
+                        <th className="px-3 py-2">Stock</th>
+                        <th className="px-3 py-2">Cantidad</th>
+                        <th className="px-3 py-2"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {repuestos.map((item) => (
+                        <tr key={item.id} className="hover:bg-slate-50">
+                          <td className="px-3 py-2 font-medium text-slate-800">{item.codigo}</td>
+                          <td className="px-3 py-2">{item.nombre}</td>
+                          <td className="px-3 py-2">{item.stock}</td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="number"
+                              min={1}
+                              value={cantidades[item.id] ?? 1}
+                              onChange={(event) =>
+                                setCantidades((prev) => ({
+                                  ...prev,
+                                  [item.id]: Number(event.target.value) || 1,
+                                }))
+                              }
+                              className="w-20 rounded-md border border-slate-200 px-2 py-1 text-xs"
+                            />
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            <button
+                              type="button"
+                              onClick={() => handleAgregarRepuesto(item.id)}
+                              className="inline-flex items-center gap-2 rounded-full bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700"
+                            >
+                              <Plus size={14} />
+                              Agregar
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
