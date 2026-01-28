@@ -255,6 +255,7 @@ export default function Taller() {
       });
       setOrdenActual(orden);
       setCantidades((prev) => ({ ...prev, [productoId]: 1 }));
+      setRepuestoModalOpen(false);
       showNotification({
         message: 'Repuesto agregado correctamente.',
         type: 'success',
