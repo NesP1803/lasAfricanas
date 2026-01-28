@@ -732,6 +732,20 @@ export default function Taller() {
                       <PackageCheck size={14} />
                       {facturando ? 'Enviando...' : 'Facturar'}
                     </button>
+                    <button
+                      type="button"
+                      onClick={handleFacturar}
+                      disabled={facturando || !ordenActual || ordenActual.repuestos.length === 0}
+                      className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-3 py-2 text-[11px] font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <PackageCheck size={14} />
+                      {facturando ? 'Enviando...' : 'Facturar'}
+                    </button>
+                  </div>
+                  <div className="border-t border-slate-200 px-3 py-2 text-[11px] text-slate-500">
+                    {repuestos.length > 0
+                      ? `${repuestos.length} repuestos encontrados`
+                      : 'Busca repuestos en el catálogo'}
                   </div>
                   <div className="border-t border-slate-200 px-3 py-2 text-[11px] text-slate-500">
                     {repuestos.length > 0
