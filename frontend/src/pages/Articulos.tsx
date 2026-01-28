@@ -68,6 +68,15 @@ const dateFormatter = new Intl.DateTimeFormat('es-CO', {
   timeStyle: 'short',
 });
 
+const motivosBaja = [
+  { value: 'DEVOLUCION_PARCIAL', label: 'Devolución parcial' },
+  { value: 'DEVOLUCION_TOTAL', label: 'Devolución total' },
+  { value: 'ERROR_PRECIOS_REMISION', label: 'Error con precios en la remisión' },
+  { value: 'ERROR_CONCEPTOS_REMISION', label: 'Error por conceptos en la remisión' },
+  { value: 'NO_ACEPTA_ARTICULOS', label: 'El comprador no acepta los artículos' },
+  { value: 'OTROS', label: 'Otros' },
+];
+
 const parseListado = <T,>(data: PaginatedResponse<T> | T[]) => {
   if (Array.isArray(data)) {
     return { items: data, count: data.length };
@@ -125,7 +134,8 @@ export default function Articulos() {
   const [codigoBaja, setCodigoBaja] = useState('');
   const [productoBaja, setProductoBaja] = useState<Producto | null>(null);
   const [cantidadBaja, setCantidadBaja] = useState('');
-  const [motivoBaja, setMotivoBaja] = useState('');
+  const [motivoBaja, setMotivoBaja] = useState(motivosBaja[0]?.value ?? '');
+  const [motivoBajaDetalle, setMotivoBajaDetalle] = useState('');
   const [bajaError, setBajaError] = useState<string | null>(null);
   const { showNotification } = useNotification();
 
@@ -342,7 +352,13 @@ export default function Articulos() {
       setBajaError('Ingresa una cantidad válida.');
       return;
     }
-    if (!motivoBaja.trim()) {
+    const motivoSeleccionado = motivosBaja.find((motivo) => motivo.value === motivoBaja);
+    const motivoFinal =
+      motivoBaja === 'OTROS'
+        ? motivoBajaDetalle.trim()
+        : motivoSeleccionado?.label ?? '';
+
+    if (!motivoFinal) {
       setBajaError('Indica el motivo de la baja.');
       return;
     }
@@ -353,12 +369,13 @@ export default function Articulos() {
         cantidad,
         tipo: 'BAJA',
         costo_unitario: productoBaja.precio_costo ?? '0',
-        observaciones: motivoBaja,
+        observaciones: motivoFinal,
       });
       setCodigoBaja('');
       setProductoBaja(null);
       setCantidadBaja('');
-      setMotivoBaja('');
+      setMotivoBaja(motivosBaja[0]?.value ?? '');
+      setMotivoBajaDetalle('');
       setBajaError(null);
       await refreshCurrent();
       showNotification({
@@ -774,13 +791,26 @@ export default function Articulos() {
                   <label className="text-sm font-semibold text-slate-700">
                     Motivo
                   </label>
-                  <input
-                    type="text"
+                  <select
                     value={motivoBaja}
                     onChange={(event) => setMotivoBaja(event.target.value)}
-                    className="mt-2 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                    placeholder="Daños, pérdidas, obsequios..."
-                  />
+                    className="mt-2 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                  >
+                    {motivosBaja.map((motivo) => (
+                      <option key={motivo.value} value={motivo.value}>
+                        {motivo.label}
+                      </option>
+                    ))}
+                  </select>
+                  {motivoBaja === 'OTROS' && (
+                    <input
+                      type="text"
+                      value={motivoBajaDetalle}
+                      onChange={(event) => setMotivoBajaDetalle(event.target.value)}
+                      className="mt-2 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                      placeholder="Describe el motivo..."
+                    />
+                  )}
                 </div>
               </div>
 

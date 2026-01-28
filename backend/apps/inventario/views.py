@@ -229,7 +229,7 @@ class ProductoViewSet(viewsets.ModelViewSet):
         # Crear movimiento de inventario
         stock_anterior = producto.stock
         
-        if tipo_movimiento == 'SALIDA':
+        if tipo_movimiento in {'SALIDA', 'BAJA'}:
             cantidad = -abs(cantidad)  # Asegurar que sea negativo
         
         stock_nuevo = stock_anterior + cantidad
