@@ -22,6 +22,7 @@ import {
 } from '../api/inventario';
 import ProductoForm from '../components/ProductoForm';
 import ConfirmModal from '../components/ConfirmModal';
+import Pagination from '../components/Pagination';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../contexts/NotificationContext';
 import {
@@ -395,15 +396,6 @@ export default function Articulos() {
   };
 
   const totalPages = Math.max(1, Math.ceil(totalRegistros / PAGE_SIZE));
-  const pageNumbers = useMemo(() => {
-    if (totalPages <= 1) return [1];
-    const maxPages = 5;
-    const half = Math.floor(maxPages / 2);
-    let start = Math.max(1, page - half);
-    let end = Math.min(totalPages, start + maxPages - 1);
-    start = Math.max(1, end - maxPages + 1);
-    return Array.from({ length: end - start + 1 }, (_, index) => start + index);
-  }, [page, totalPages]);
 
   return (
     <div className="space-y-6">
@@ -661,40 +653,12 @@ export default function Articulos() {
             </table>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-500">
-            <button
-              type="button"
-              disabled={page === 1}
-              onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-              className="rounded-md border border-slate-200 px-3 py-1 disabled:opacity-50"
-            >
-              Anterior
-            </button>
-            <div className="flex flex-wrap items-center gap-1">
-              {pageNumbers.map((pageNumber) => (
-                <button
-                  key={pageNumber}
-                  type="button"
-                  onClick={() => setPage(pageNumber)}
-                  className={`rounded-md border px-3 py-1 text-sm font-semibold transition ${
-                    pageNumber === page
-                      ? 'border-blue-600 bg-blue-600 text-white'
-                      : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                  }`}
-                >
-                  {pageNumber}
-                </button>
-              ))}
-            </div>
-            <button
-              type="button"
-              disabled={page >= totalPages}
-              onClick={() => setPage((prev) => prev + 1)}
-              className="rounded-md border border-slate-200 px-3 py-1 disabled:opacity-50"
-            >
-              Siguiente
-            </button>
-          </div>
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            className="text-slate-500"
+          />
         </div>
       )}
 
@@ -741,40 +705,12 @@ export default function Articulos() {
           </div>
 
           {totalPages > 1 && (
-            <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-500">
-              <button
-                type="button"
-                disabled={page === 1}
-                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-                className="rounded-md border border-slate-200 px-3 py-1 disabled:opacity-50"
-              >
-                Anterior
-              </button>
-              <div className="flex flex-wrap items-center gap-1">
-                {pageNumbers.map((pageNumber) => (
-                  <button
-                    key={pageNumber}
-                    type="button"
-                    onClick={() => setPage(pageNumber)}
-                    className={`rounded-md border px-3 py-1 text-sm font-semibold transition ${
-                      pageNumber === page
-                        ? 'border-blue-600 bg-blue-600 text-white'
-                        : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    {pageNumber}
-                  </button>
-                ))}
-              </div>
-              <button
-                type="button"
-                disabled={page >= totalPages}
-                onClick={() => setPage((prev) => prev + 1)}
-                className="rounded-md border border-slate-200 px-3 py-1 disabled:opacity-50"
-              >
-                Siguiente
-              </button>
-            </div>
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              onPageChange={setPage}
+              className="text-slate-500"
+            />
           )}
         </div>
       )}

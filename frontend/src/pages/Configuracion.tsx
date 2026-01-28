@@ -17,6 +17,7 @@ import { configuracionAPI } from "../api/configuracion";
 import { tallerApi, type Mecanico } from "../api/taller";
 import { usuariosApi } from "../api/usuarios";
 import ConfirmModal from "../components/ConfirmModal";
+import Pagination from "../components/Pagination";
 import type {
   AuditoriaRegistro,
   AuditoriaRetention,
@@ -1502,40 +1503,14 @@ export default function Configuracion() {
             </table>
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
-            <span>
-              Página {auditoriaPage} de{" "}
-              {Math.max(1, Math.ceil(auditoriaTotal / AUDITORIA_PAGE_SIZE))}
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() =>
-                  setAuditoriaPage((prev) => Math.max(1, prev - 1))
-                }
-                disabled={auditoriaPage === 1}
-                className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 disabled:opacity-50"
-              >
-                Anterior
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  setAuditoriaPage((prev) =>
-                    prev < Math.ceil(auditoriaTotal / AUDITORIA_PAGE_SIZE)
-                      ? prev + 1
-                      : prev
-                  )
-                }
-                disabled={
-                  auditoriaPage >=
-                  Math.ceil(auditoriaTotal / AUDITORIA_PAGE_SIZE)
-                }
-                className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 disabled:opacity-50"
-              >
-                Siguiente
-              </button>
-            </div>
+          <div className="mt-4 text-xs text-slate-500">
+            <Pagination
+              page={auditoriaPage}
+              totalPages={Math.max(1, Math.ceil(auditoriaTotal / AUDITORIA_PAGE_SIZE))}
+              onPageChange={setAuditoriaPage}
+              size="sm"
+              className="text-slate-500"
+            />
           </div>
         </section>
       )}
