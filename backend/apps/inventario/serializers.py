@@ -171,15 +171,11 @@ class ProductoCreateUpdateSerializer(serializers.ModelSerializer):
         instance = self.instance
         if instance:
             # Actualización: permitir el mismo código
-            if (
-                Producto.objects.exclude(pk=instance.pk)
-                .filter(codigo=value, is_active=True)
-                .exists()
-            ):
+            if Producto.objects.exclude(pk=instance.pk).filter(codigo=value).exists():
                 raise serializers.ValidationError("Ya existe un producto con este código")
         else:
-            # Creación: código debe ser único entre activos
-            if Producto.objects.filter(codigo=value, is_active=True).exists():
+            # Creación: código debe ser único
+            if Producto.objects.filter(codigo=value).exists():
                 raise serializers.ValidationError("Ya existe un producto con este código")
         return value
     
