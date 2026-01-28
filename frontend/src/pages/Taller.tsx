@@ -253,7 +253,15 @@ export default function Taller() {
         producto: productoId,
         cantidad,
       });
-      setOrdenActual(orden);
+      let ordenFinal = orden;
+      try {
+        const data = await tallerApi.getOrdenes({ moto: orden.moto });
+        const parsed = parseListado(data);
+        ordenFinal = parsed.items.find((item) => item.id === orden.id) ?? orden;
+      } catch (refreshError) {
+        console.error('Error al refrescar la orden:', refreshError);
+      }
+      setOrdenActual(ordenFinal);
       setCantidades((prev) => ({ ...prev, [productoId]: 1 }));
       setRepuestoModalOpen(false);
       showNotification({
