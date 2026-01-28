@@ -45,6 +45,9 @@ class UsuarioSerializer(serializers.ModelSerializer):
             'modulos_permitidos',
         ]
         read_only_fields = ['id', 'last_login', 'date_joined']
+        extra_kwargs = {
+            'email': {'required': False, 'allow_blank': True},
+        }
 
     def create(self, validated_data):
         password = validated_data.pop('password', None)

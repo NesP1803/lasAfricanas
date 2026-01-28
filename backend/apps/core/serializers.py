@@ -13,6 +13,9 @@ class ConfiguracionEmpresaSerializer(serializers.ModelSerializer):
     class Meta:
         model = ConfiguracionEmpresa
         fields = '__all__'
+        extra_kwargs = {
+            'correo': {'required': False, 'allow_blank': True},
+        }
 
 
 class ConfiguracionFacturacionSerializer(serializers.ModelSerializer):
