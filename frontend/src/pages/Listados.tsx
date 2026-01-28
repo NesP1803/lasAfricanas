@@ -22,6 +22,7 @@ import type { Categoria, Proveedor } from '../api/inventario';
 import type { Cliente, PaginatedResponse, UsuarioAdmin } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import ConfirmModal from '../components/ConfirmModal';
+import Pagination from '../components/Pagination';
 import { useNotification } from '../contexts/NotificationContext';
 import {
   createFullModuleAccess,
@@ -722,26 +723,13 @@ export default function Listados() {
             </table>
           )}
         </div>
-        <div className="flex items-center justify-between border-t border-slate-200 px-6 py-4 text-sm text-slate-500">
-          <button
-            type="button"
-            disabled={page === 1}
-            onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-            className="rounded-md border border-slate-200 px-3 py-1 disabled:opacity-50"
-          >
-            Anterior
-          </button>
-          <span>
-            Página {page} de {totalPages}
-          </span>
-          <button
-            type="button"
-            disabled={page >= totalPages}
-            onClick={() => setPage((prev) => prev + 1)}
-            className="rounded-md border border-slate-200 px-3 py-1 disabled:opacity-50"
-          >
-            Siguiente
-          </button>
+        <div className="border-t border-slate-200 px-6 py-4 text-sm text-slate-500">
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            className="text-slate-500"
+          />
         </div>
       </div>
 

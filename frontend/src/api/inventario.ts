@@ -92,6 +92,7 @@ export const inventarioApi = {
     search?: string;
     categoria?: number;
     proveedor?: number;
+    stock_estado?: string;
   }): Promise<PaginatedResponse<ProductoList>> {
     const token = localStorage.getItem('token');
     const queryParams = new URLSearchParams();
@@ -100,6 +101,7 @@ export const inventarioApi = {
     if (params?.search) queryParams.append('search', params.search);
     if (params?.categoria) queryParams.append('categoria', params.categoria.toString());
     if (params?.proveedor) queryParams.append('proveedor', params.proveedor.toString());
+    if (params?.stock_estado) queryParams.append('stock_estado', params.stock_estado);
 
     const response = await fetch(`${API_URL}/productos/?${queryParams}`, {
       headers: {

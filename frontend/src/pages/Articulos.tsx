@@ -22,6 +22,7 @@ import {
 } from '../api/inventario';
 import ProductoForm from '../components/ProductoForm';
 import ConfirmModal from '../components/ConfirmModal';
+import Pagination from '../components/Pagination';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../contexts/NotificationContext';
 import {
@@ -110,7 +111,6 @@ export default function Articulos() {
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [search, setSearch] = useState('');
   const [estadoFiltro, setEstadoFiltro] = useState<EstadoFiltro>('todos');
-  const [disponibilidadFiltro, setDisponibilidadFiltro] = useState('todos');
   const [categoriaFiltro, setCategoriaFiltro] = useState('todos');
   const [proveedorFiltro, setProveedorFiltro] = useState('todos');
   const [page, setPage] = useState(1);
@@ -144,7 +144,6 @@ export default function Articulos() {
     setPage(1);
     setSelectedId(null);
     setSelectedResumen(null);
-    setDisponibilidadFiltro('todos');
   }, [activeTab]);
 
   useEffect(() => {
@@ -188,11 +187,13 @@ export default function Articulos() {
         categoriaFiltro !== 'todos' ? Number(categoriaFiltro) : undefined;
       const proveedor =
         proveedorFiltro !== 'todos' ? Number(proveedorFiltro) : undefined;
+      const stock_estado = estadoFiltro !== 'todos' ? estadoFiltro : undefined;
       const data = await inventarioApi.getProductos({
         search,
         page,
         categoria,
         proveedor,
+        stock_estado,
       });
       setMercancia(data.results);
       setTotalRegistros(data.count);
@@ -395,16 +396,6 @@ export default function Articulos() {
   };
 
   const totalPages = Math.max(1, Math.ceil(totalRegistros / PAGE_SIZE));
-  const mercanciaFiltrada = mercancia.filter((producto) => {
-    if (estadoFiltro === 'todos') return true;
-    if (estadoFiltro === 'agotado') return producto.stock_estado === 'AGOTADO';
-    if (estadoFiltro === 'bajo') return producto.stock_estado === 'BAJO';
-    return producto.stock_estado === 'OK';
-  }).filter((producto) => {
-    if (disponibilidadFiltro === 'todos') return true;
-    if (disponibilidadFiltro === 'sin_stock') return Number(producto.stock) <= 0;
-    return Number(producto.stock) > 0;
-  });
 
   return (
     <div className="space-y-6">
@@ -594,21 +585,9 @@ export default function Articulos() {
                 <option value="bajo">Stock bajo</option>
                 <option value="agotado">Agotado</option>
               </select>
-              <select
-                value={disponibilidadFiltro}
-                onChange={(event) => {
-                  setDisponibilidadFiltro(event.target.value);
-                  setPage(1);
-                }}
-                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
-              >
-                <option value="todos">Toda la disponibilidad</option>
-                <option value="con_stock">Con stock</option>
-                <option value="sin_stock">Sin stock</option>
-              </select>
             </div>
             <div className="text-sm text-slate-500">
-              Mostrando {mercanciaFiltrada.length} de {totalRegistros} artículos
+              Mostrando {mercancia.length} de {totalRegistros} artículos
             </div>
           </div>
 
@@ -627,7 +606,7 @@ export default function Articulos() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {mercanciaFiltrada.map((producto) => (
+                {mercancia.map((producto) => (
                   <tr
                     key={producto.id}
                     onClick={() => {
@@ -663,7 +642,7 @@ export default function Articulos() {
                     <td className="px-4 py-3">{renderEstadoStock(producto.stock_estado)}</td>
                   </tr>
                 ))}
-                {mercanciaFiltrada.length === 0 && (
+                {mercancia.length === 0 && (
                   <tr>
                     <td colSpan={8} className="px-4 py-6 text-center text-slate-500">
                       {loading ? 'Cargando artículos...' : 'No hay artículos registrados.'}
@@ -674,27 +653,12 @@ export default function Articulos() {
             </table>
           </div>
 
-          <div className="flex items-center justify-between text-sm text-slate-500">
-            <button
-              type="button"
-              disabled={page === 1}
-              onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-              className="rounded-md border border-slate-200 px-3 py-1 disabled:opacity-50"
-            >
-              Anterior
-            </button>
-            <span>
-              Página {page} de {totalPages}
-            </span>
-            <button
-              type="button"
-              disabled={page >= totalPages}
-              onClick={() => setPage((prev) => prev + 1)}
-              className="rounded-md border border-slate-200 px-3 py-1 disabled:opacity-50"
-            >
-              Siguiente
-            </button>
-          </div>
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            className="text-slate-500"
+          />
         </div>
       )}
 
@@ -741,27 +705,12 @@ export default function Articulos() {
           </div>
 
           {totalPages > 1 && (
-            <div className="flex items-center justify-between text-sm text-slate-500">
-              <button
-                type="button"
-                disabled={page === 1}
-                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-                className="rounded-md border border-slate-200 px-3 py-1 disabled:opacity-50"
-              >
-                Anterior
-              </button>
-              <span>
-                Página {page} de {totalPages}
-              </span>
-              <button
-                type="button"
-                disabled={page >= totalPages}
-                onClick={() => setPage((prev) => prev + 1)}
-                className="rounded-md border border-slate-200 px-3 py-1 disabled:opacity-50"
-              >
-                Siguiente
-              </button>
-            </div>
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              onPageChange={setPage}
+              className="text-slate-500"
+            />
           )}
         </div>
       )}
