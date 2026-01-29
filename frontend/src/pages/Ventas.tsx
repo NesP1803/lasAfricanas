@@ -15,9 +15,15 @@ import { inventarioApi, type Producto, type ProductoList } from '../api/inventar
 import { ventasApi } from '../api/ventas';
 import { configuracionAPI } from '../api/configuracion';
 import { useAuth } from '../contexts/AuthContext';
+import { useNotification } from '../contexts/NotificationContext';
 import ComprobanteTemplate, {
   type DocumentoDetalle,
 } from '../components/ComprobanteTemplate';
+import {
+  crearSolicitud,
+  obtenerUltimaSolicitudPorUsuario,
+  type SolicitudDescuento,
+} from '../utils/descuentos';
 import type { ConfiguracionEmpresa } from '../types';
 import type { ConfiguracionFacturacion } from '../types';
 
@@ -89,6 +95,7 @@ const parseNumber = (value: string) => {
 
 export default function Ventas() {
   const { user } = useAuth();
+  const { showNotification } = useNotification();
   const location = useLocation();
   const navigate = useNavigate();
   const [configuracion, setConfiguracion] = useState<ConfiguracionFacturacion | null>(null);
@@ -103,6 +110,8 @@ export default function Ventas() {
   const [descuentoGeneral, setDescuentoGeneral] = useState('0');
   const [descuentoAutorizado, setDescuentoAutorizado] = useState(false);
   const [aprobadorId, setAprobadorId] = useState('');
+  const [aprobadorNombre, setAprobadorNombre] = useState('');
+  const [estadoSolicitud, setEstadoSolicitud] = useState<SolicitudDescuento | null>(null);
   const [medioPago, setMedioPago] = useState<'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'CREDITO'>('EFECTIVO');
   const [efectivoRecibido, setEfectivoRecibido] = useState('0');
   const [documentoGenerado, setDocumentoGenerado] = useState<DocumentoGenerado | null>(null);
@@ -152,6 +161,33 @@ export default function Ventas() {
         .catch(() => setUsuariosAprobadores([]));
     }
   }, [mostrarPermiso, usuariosAprobadores.length]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const actualizarEstadoSolicitud = () => {
+      const solicitud = obtenerUltimaSolicitudPorUsuario(user.id);
+      setEstadoSolicitud(solicitud);
+      if (!solicitud) {
+        setDescuentoAutorizado(false);
+        return;
+      }
+      if (solicitud.estado === 'APROBADO') {
+        const aprobado = solicitud.descuentoAprobado ?? solicitud.descuentoSolicitado;
+        setDescuentoGeneral(String(aprobado));
+        setDescuentoAutorizado(true);
+      } else {
+        setDescuentoAutorizado(false);
+      }
+    };
+    actualizarEstadoSolicitud();
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === 'solicitudes_descuento') {
+        actualizarEstadoSolicitud();
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, [user?.id]);
 
   useEffect(() => {
     codigoInputRef.current?.focus();
@@ -335,13 +371,31 @@ export default function Ventas() {
   };
 
   const handleConfirmarPermiso = () => {
-    if (!aprobadorId) {
+    if (!aprobadorId || !user?.id) {
       setMensaje('Selecciona un aprobador para habilitar el descuento.');
       return;
     }
-    setDescuentoAutorizado(true);
+    const aprobador = usuariosAprobadores.find(
+      (usuario) => usuario.id === Number(aprobadorId)
+    );
+    const descuentoSolicitado = Number(descuentoGeneral || 0);
+    const solicitudes = crearSolicitud({
+      solicitanteId: user.id,
+      solicitanteNombre: user.username ?? 'Usuario',
+      aprobadorId: Number(aprobadorId),
+      aprobadorNombre: aprobador?.nombre ?? 'Administrador',
+      descuentoSolicitado,
+    });
+    const nuevaSolicitud = solicitudes[0] ?? null;
+    setEstadoSolicitud(nuevaSolicitud);
+    setAprobadorNombre(aprobador?.nombre ?? 'Administrador');
+    setDescuentoAutorizado(false);
     setMostrarPermiso(false);
-    setMensaje('Permiso de descuento activo. El aprobador puede autorizar desde cualquier lugar.');
+    setMensaje('Solicitud enviada. El aprobador recibirá la notificación para autorizar.');
+    showNotification({
+      type: 'success',
+      message: 'Solicitud de descuento enviada al aprobador.',
+    });
   };
 
   const handleGenerarDocumento = async (tipo: DocumentoGenerado['tipo']) => {
@@ -754,7 +808,6 @@ export default function Ventas() {
                 value={descuentoGeneral}
                 onChange={(event) => setDescuentoGeneral(event.target.value)}
                 className="w-24 rounded-lg border border-slate-200 px-3 py-2 text-sm text-right"
-                disabled={!descuentoAutorizado}
               />
               <span className="text-sm text-slate-500">% aplicado</span>
               <button
@@ -765,6 +818,22 @@ export default function Ventas() {
                 Solicitar permiso
               </button>
             </div>
+            {estadoSolicitud && (
+              <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                <p className="font-semibold text-slate-700">
+                  Estado: {estadoSolicitud.estado}
+                </p>
+                <p>
+                  Aprobador: {estadoSolicitud.aprobadorNombre || aprobadorNombre || 'Asignado'}
+                </p>
+                <p>
+                  Descuento solicitado: {estadoSolicitud.descuentoSolicitado}%
+                  {estadoSolicitud.descuentoAprobado !== undefined
+                    ? ` · Aprobado: ${estadoSolicitud.descuentoAprobado}%`
+                    : ''}
+                </p>
+              </div>
+            )}
             <p className="mt-2 text-xs text-slate-500">
               El descuento requiere autorización del dueño o persona designada.
             </p>
@@ -1051,6 +1120,12 @@ export default function Ventas() {
               su usuario cuando apruebe el descuento.
             </p>
             <div className="mt-4 space-y-3">
+              <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                <p className="font-semibold text-slate-700">
+                  Descuento solicitado: {descuentoGeneral || 0}%
+                </p>
+                <p>Este valor quedará pendiente de aprobación.</p>
+              </div>
               <label className="text-xs font-semibold uppercase text-slate-500">
                 Aprobador designado
               </label>
