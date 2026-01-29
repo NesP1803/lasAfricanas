@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   RefreshCw,
   Plus,
@@ -108,6 +108,7 @@ const createDefaultClienteForm = (): ClienteFormData => ({
 
 export default function Taller() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const isAdmin = user?.role?.toUpperCase() === 'ADMIN';
@@ -372,20 +373,44 @@ export default function Taller() {
     setConfirmFacturarOpen(true);
   };
 
+  const buildVentaRapidaPayload = (orden: OrdenTaller) => {
+    const selectedMoto =
+      motosPorMecanico.find((moto) => moto.id === orden.moto) ??
+      motosListado.find((moto) => moto.id === orden.moto);
+
+    return {
+      ordenId: orden.id,
+      motoId: orden.moto,
+      motoPlaca: orden.moto_placa,
+      motoMarca: orden.moto_marca,
+      motoModelo: orden.moto_modelo,
+      clienteId: selectedMoto?.cliente ?? null,
+      clienteNombre: selectedMoto?.cliente_nombre ?? '',
+      repuestos: orden.repuestos.map((repuesto) => ({
+        productoId: repuesto.producto,
+        codigo: repuesto.producto_codigo ?? '',
+        nombre: repuesto.producto_nombre ?? '',
+        cantidad: repuesto.cantidad,
+        precioUnitario: repuesto.precio_unitario,
+        ivaPorcentaje: repuesto.iva_porcentaje ?? '0',
+      })),
+    };
+  };
+
   const confirmFacturar = async () => {
     if (!ordenActual) return;
     try {
       setFacturando(true);
-      const orden = await tallerApi.facturarOrden(ordenActual.id, { tipo_comprobante: 'REMISION' });
-      setOrdenActual(orden);
+      const payload = buildVentaRapidaPayload(ordenActual);
+      navigate('/ventas', { state: { fromTaller: payload } });
       showNotification({
-        message: 'Orden enviada a facturación.',
+        message: 'Orden enviada a venta rápida.',
         type: 'success',
       });
     } catch (error: any) {
       console.error('Error al facturar:', error);
       showNotification({
-        message: error?.message || 'No se pudo facturar la orden.',
+        message: error?.message || 'No se pudo enviar la orden a venta rápida.',
         type: 'error',
       });
     } finally {
