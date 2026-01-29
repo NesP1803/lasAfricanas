@@ -1102,7 +1102,7 @@ export default function Taller() {
                       Seleccionado: {selectedCliente.nombre} ({selectedCliente.numero_documento})
                     </div>
                   ) : (
-                    <div className="text-xs text-slate-400">Selecciona un cliente de la lista.</div>
+                    <div></div>
                   )}
                   {clienteSearch.trim() ? (
                     clientesToShow.length === 0 ? (
@@ -1134,8 +1134,7 @@ export default function Taller() {
                       </ul>
                     )
                   ) : (
-                    <div className="text-xs text-slate-400">
-                      Escribe para ver resultados en tiempo real.
+                    <div >
                     </div>
                   )}
                   <button
