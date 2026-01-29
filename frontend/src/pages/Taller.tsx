@@ -15,7 +15,6 @@ import { inventarioApi, type ProductoList } from '../api/inventario';
 import { ventasApi } from '../api/ventas';
 import { tallerApi, type Mecanico, type Moto, type OrdenTaller } from '../api/taller';
 import type { Cliente, PaginatedResponse } from '../types';
-import type { Proveedor } from '../api/inventario';
 import { useAuth } from '../contexts/AuthContext';
 import ConfirmModal from '../components/ConfirmModal';
 import { useNotification } from '../contexts/NotificationContext';
@@ -157,7 +156,6 @@ export default function Taller() {
   const [motoFormError, setMotoFormError] = useState<string | null>(null);
   const [savingMoto, setSavingMoto] = useState(false);
   const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [clienteSearch, setClienteSearch] = useState('');
   const [showClienteForm, setShowClienteForm] = useState(false);
   const [clienteFormData, setClienteFormData] = useState<ClienteFormData>(
@@ -411,13 +409,11 @@ export default function Taller() {
 
   const loadMotoFormOptions = async () => {
     try {
-      const [clientesResp, proveedoresResp, mecanicosResp] = await Promise.all([
+      const [clientesResp, mecanicosResp] = await Promise.all([
         ventasApi.getClientes({ is_active: true }),
-        inventarioApi.getProveedores({ is_active: true }),
         tallerApi.getMecanicos({ is_active: true }),
       ]);
       setClientes(parseListado(clientesResp).items);
-      setProveedores(parseListado(proveedoresResp).items);
       setMecanicos(parseListado(mecanicosResp).items);
     } catch (error) {
       console.error('Error al cargar catálogos:', error);
@@ -584,6 +580,17 @@ export default function Taller() {
       return nombre.includes(term) || documento.includes(term);
     });
   }, [clienteSearch, clientes]);
+
+  const clientesToShow = useMemo(() => {
+    const term = clienteSearch.trim();
+    if (!term) return [];
+    return filteredClientes.slice(0, 8);
+  }, [clienteSearch, filteredClientes]);
+
+  const selectedCliente = useMemo(
+    () => clientes.find((cliente) => String(cliente.id) === motoFormData.cliente) ?? null,
+    [clientes, motoFormData.cliente]
+  );
 
   return (
     <div className="space-y-6">
@@ -1082,32 +1089,55 @@ export default function Taller() {
                     <input
                       type="text"
                       value={clienteSearch}
-                      onChange={(event) => setClienteSearch(event.target.value)}
+                      onChange={(event) => {
+                        setClienteSearch(event.target.value);
+                        setMotoFormData((prev) => ({ ...prev, cliente: '' }));
+                      }}
                       placeholder="Buscar por nombre o documento"
                       className="flex-1 bg-transparent text-sm text-slate-700 outline-none"
                     />
                   </div>
-                  <select
-                    name="cliente"
-                    value={motoFormData.cliente}
-                    onChange={(event) =>
-                      setMotoFormData((prev) => ({ ...prev, cliente: event.target.value }))
-                    }
-                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 shadow-sm outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
-                  >
-                    <option value="">Seleccionar cliente</option>
-                    {filteredClientes.length === 0 ? (
-                      <option value="" disabled>
-                        Sin coincidencias
-                      </option>
+                  {selectedCliente ? (
+                    <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                      Seleccionado: {selectedCliente.nombre} ({selectedCliente.numero_documento})
+                    </div>
+                  ) : (
+                    <div className="text-xs text-slate-400">Selecciona un cliente de la lista.</div>
+                  )}
+                  {clienteSearch.trim() ? (
+                    clientesToShow.length === 0 ? (
+                      <div className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-400">
+                        Sin coincidencias.
+                      </div>
                     ) : (
-                      filteredClientes.map((cliente) => (
-                        <option key={cliente.id} value={String(cliente.id)}>
-                          {cliente.nombre} ({cliente.numero_documento})
-                        </option>
-                      ))
-                    )}
-                  </select>
+                      <ul className="max-h-40 overflow-y-auto rounded-lg border border-slate-200 bg-white text-sm text-slate-700 shadow-sm">
+                        {clientesToShow.map((cliente) => (
+                          <li key={cliente.id}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setMotoFormData((prev) => ({
+                                  ...prev,
+                                  cliente: String(cliente.id),
+                                }));
+                                setClienteSearch(cliente.nombre);
+                              }}
+                              className="flex w-full flex-col px-3 py-2 text-left transition hover:bg-slate-50"
+                            >
+                              <span className="font-medium">{cliente.nombre}</span>
+                              <span className="text-xs text-slate-500">
+                                {cliente.tipo_documento} {cliente.numero_documento}
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )
+                  ) : (
+                    <div className="text-xs text-slate-400">
+                      Escribe para ver resultados en tiempo real.
+                    </div>
+                  )}
                   <button
                     type="button"
                     onClick={() => {
@@ -1129,17 +1159,6 @@ export default function Taller() {
                     label: mecanico.nombre,
                   }))}
                   placeholder="Seleccionar mecánico"
-                />
-                <SelectField
-                  label="Proveedor (opcional)"
-                  name="proveedor"
-                  value={motoFormData.proveedor}
-                  onChange={(value) => setMotoFormData((prev) => ({ ...prev, proveedor: value }))}
-                  options={proveedores.map((proveedor) => ({
-                    value: String(proveedor.id),
-                    label: proveedor.nombre,
-                  }))}
-                  placeholder="Seleccionar proveedor (opcional)"
                 />
                 {showClienteForm && (
                   <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 md:col-span-2">
