@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Barcode,
   CircleDollarSign,
@@ -56,6 +57,24 @@ type DocumentoPreview = {
   cambio: number;
 };
 
+type TallerVentaPayload = {
+  ordenId: number;
+  motoId: number;
+  motoPlaca?: string;
+  motoMarca?: string;
+  motoModelo?: string;
+  clienteId: number | null;
+  clienteNombre: string;
+  repuestos: Array<{
+    productoId: number;
+    codigo: string;
+    nombre: string;
+    cantidad: number;
+    precioUnitario: string;
+    ivaPorcentaje: string;
+  }>;
+};
+
 const currencyFormatter = new Intl.NumberFormat('es-CO', {
   style: 'currency',
   currency: 'COP',
@@ -70,6 +89,8 @@ const parseNumber = (value: string) => {
 
 export default function Ventas() {
   const { user } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [configuracion, setConfiguracion] = useState<ConfiguracionFacturacion | null>(null);
   const [empresa, setEmpresa] = useState<ConfiguracionEmpresa | null>(null);
   const [clienteDocumento, setClienteDocumento] = useState('');
@@ -91,6 +112,11 @@ export default function Ventas() {
   const [mostrarPermiso, setMostrarPermiso] = useState(false);
   const [usuariosAprobadores, setUsuariosAprobadores] = useState<{ id: number; nombre: string }[]>([]);
   const codigoInputRef = useRef<HTMLInputElement | null>(null);
+
+  const tallerPayload = useMemo(() => {
+    const state = location.state as { fromTaller?: TallerVentaPayload } | null;
+    return state?.fromTaller ?? null;
+  }, [location.state]);
 
   useEffect(() => {
     configuracionAPI
@@ -130,6 +156,58 @@ export default function Ventas() {
   useEffect(() => {
     codigoInputRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    if (!tallerPayload) return;
+    const applyTallerData = async () => {
+      try {
+        const productos = await Promise.all(
+          tallerPayload.repuestos.map((repuesto) =>
+            inventarioApi
+              .getProducto(repuesto.productoId)
+              .then((producto) => ({ producto, repuesto }))
+              .catch(() => ({ producto: null, repuesto }))
+          )
+        );
+
+        const items = productos.map(({ producto, repuesto }) => ({
+          id: repuesto.productoId,
+          codigo: repuesto.codigo || producto?.codigo || '',
+          nombre: repuesto.nombre || producto?.nombre || 'Producto',
+          ivaPorcentaje: Number(repuesto.ivaPorcentaje || producto?.iva_porcentaje || 0),
+          precioUnitario: Number(repuesto.precioUnitario || producto?.precio_venta || 0),
+          stock: producto?.stock ?? 0,
+          cantidad: repuesto.cantidad,
+          descuentoPorcentaje: 0,
+        }));
+
+        setCartItems(items);
+
+        if (tallerPayload.clienteId) {
+          try {
+            const cliente = await ventasApi.getCliente(tallerPayload.clienteId);
+            setClienteDocumento(cliente.numero_documento);
+            setClienteNombre(cliente.nombre);
+            setClienteId(cliente.id);
+          } catch (error) {
+            setClienteNombre(tallerPayload.clienteNombre || 'Cliente general');
+            setClienteId(tallerPayload.clienteId ?? null);
+            setMensaje('No se pudo cargar el cliente desde la orden de taller.');
+          }
+        } else {
+          setClienteNombre(tallerPayload.clienteNombre || 'Cliente general');
+          setClienteId(null);
+          if (!tallerPayload.clienteNombre) {
+            setMensaje('La orden no tiene cliente asignado.');
+          }
+        }
+      } finally {
+        navigate('/ventas', { replace: true, state: null });
+      }
+    };
+
+    applyTallerData();
+  }, [tallerPayload, navigate]);
 
   const totals = useMemo(() => {
     const subtotal = cartItems.reduce(
