@@ -15,7 +15,6 @@ import { inventarioApi, type ProductoList } from '../api/inventario';
 import { ventasApi } from '../api/ventas';
 import { tallerApi, type Mecanico, type Moto, type OrdenTaller } from '../api/taller';
 import type { Cliente, PaginatedResponse } from '../types';
-import type { Proveedor } from '../api/inventario';
 import { useAuth } from '../contexts/AuthContext';
 import ConfirmModal from '../components/ConfirmModal';
 import { useNotification } from '../contexts/NotificationContext';
@@ -65,6 +64,24 @@ type MotoFormData = {
   is_active: boolean;
 };
 
+type ClienteFormData = {
+  tipo_documento: Cliente['tipo_documento'];
+  numero_documento: string;
+  nombre: string;
+  telefono: string;
+  email: string;
+  direccion: string;
+  ciudad: string;
+  is_active: boolean;
+};
+
+const documentoOptions = [
+  { value: 'CC', label: 'Cédula' },
+  { value: 'NIT', label: 'NIT' },
+  { value: 'CE', label: 'Cédula de extranjería' },
+  { value: 'PASAPORTE', label: 'Pasaporte' },
+];
+
 const createDefaultMotoForm = (): MotoFormData => ({
   placa: '',
   marca: '',
@@ -75,6 +92,17 @@ const createDefaultMotoForm = (): MotoFormData => ({
   mecanico: '',
   proveedor: '',
   observaciones: '',
+  is_active: true,
+});
+
+const createDefaultClienteForm = (): ClienteFormData => ({
+  tipo_documento: 'CC',
+  numero_documento: '',
+  nombre: '',
+  telefono: '',
+  email: '',
+  direccion: '',
+  ciudad: '',
   is_active: true,
 });
 
@@ -128,7 +156,13 @@ export default function Taller() {
   const [motoFormError, setMotoFormError] = useState<string | null>(null);
   const [savingMoto, setSavingMoto] = useState(false);
   const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [proveedores, setProveedores] = useState<Proveedor[]>([]);
+  const [clienteSearch, setClienteSearch] = useState('');
+  const [showClienteForm, setShowClienteForm] = useState(false);
+  const [clienteFormData, setClienteFormData] = useState<ClienteFormData>(
+    createDefaultClienteForm()
+  );
+  const [clienteFormError, setClienteFormError] = useState<string | null>(null);
+  const [savingCliente, setSavingCliente] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const { showNotification } = useNotification();
 
@@ -375,23 +409,29 @@ export default function Taller() {
 
   const loadMotoFormOptions = async () => {
     try {
-      const [clientesResp, proveedoresResp, mecanicosResp] = await Promise.all([
+      const [clientesResp, mecanicosResp] = await Promise.all([
         ventasApi.getClientes({ is_active: true }),
-        inventarioApi.getProveedores({ is_active: true }),
         tallerApi.getMecanicos({ is_active: true }),
       ]);
       setClientes(parseListado(clientesResp).items);
-      setProveedores(parseListado(proveedoresResp).items);
       setMecanicos(parseListado(mecanicosResp).items);
     } catch (error) {
       console.error('Error al cargar catálogos:', error);
     }
   };
 
+  const resetClienteForm = () => {
+    setClienteSearch('');
+    setShowClienteForm(false);
+    setClienteFormData(createDefaultClienteForm());
+    setClienteFormError(null);
+  };
+
   const openCreateMoto = async () => {
     setMotoFormMode('create');
     setMotoFormError(null);
     setMotoFormData(createDefaultMotoForm());
+    resetClienteForm();
     setMotoModalOpen(true);
     await loadMotoFormOptions();
   };
@@ -412,6 +452,7 @@ export default function Taller() {
       observaciones: moto.observaciones ?? '',
       is_active: moto.is_active,
     });
+    resetClienteForm();
     setMotoModalOpen(true);
     await loadMotoFormOptions();
   };
@@ -421,6 +462,33 @@ export default function Taller() {
     setMotoModalOpen(false);
     setMotoFormData(createDefaultMotoForm());
     setMotoFormError(null);
+    resetClienteForm();
+  };
+
+  const handleCreateCliente = async () => {
+    if (!clienteFormData.numero_documento.trim() || !clienteFormData.nombre.trim()) {
+      setClienteFormError('Completa el documento y el nombre del cliente.');
+      return;
+    }
+    try {
+      setSavingCliente(true);
+      setClienteFormError(null);
+      const nuevoCliente = await ventasApi.crearCliente(clienteFormData);
+      setClientes((prev) => [...prev, nuevoCliente]);
+      setMotoFormData((prev) => ({ ...prev, cliente: String(nuevoCliente.id) }));
+      setClienteSearch(nuevoCliente.nombre);
+      setShowClienteForm(false);
+      setClienteFormData(createDefaultClienteForm());
+      showNotification({
+        message: 'Cliente registrado correctamente.',
+        type: 'success',
+      });
+    } catch (error: any) {
+      console.error('Error al registrar cliente:', error);
+      setClienteFormError('No se pudo registrar el cliente.');
+    } finally {
+      setSavingCliente(false);
+    }
   };
 
   const handleMotoSubmit = async (event: React.FormEvent) => {
@@ -502,6 +570,27 @@ export default function Taller() {
     if (!ordenActual) return 0;
     return Number(ordenActual.total || 0);
   }, [ordenActual]);
+
+  const filteredClientes = useMemo(() => {
+    const term = clienteSearch.trim().toLowerCase();
+    if (!term) return clientes;
+    return clientes.filter((cliente) => {
+      const nombre = cliente.nombre?.toLowerCase() ?? '';
+      const documento = cliente.numero_documento?.toLowerCase() ?? '';
+      return nombre.includes(term) || documento.includes(term);
+    });
+  }, [clienteSearch, clientes]);
+
+  const clientesToShow = useMemo(() => {
+    const term = clienteSearch.trim();
+    if (!term) return [];
+    return filteredClientes.slice(0, 8);
+  }, [clienteSearch, filteredClientes]);
+
+  const selectedCliente = useMemo(
+    () => clientes.find((cliente) => String(cliente.id) === motoFormData.cliente) ?? null,
+    [clientes, motoFormData.cliente]
+  );
 
   return (
     <div className="space-y-6">
@@ -1018,17 +1107,73 @@ export default function Taller() {
                   value={motoFormData.anio}
                   onChange={(value) => setMotoFormData((prev) => ({ ...prev, anio: value }))}
                 />
-                <SelectField
-                  label="Cliente"
-                  name="cliente"
-                  value={motoFormData.cliente}
-                  onChange={(value) => setMotoFormData((prev) => ({ ...prev, cliente: value }))}
-                  options={clientes.map((cliente) => ({
-                    value: String(cliente.id),
-                    label: `${cliente.nombre} (${cliente.numero_documento})`,
-                  }))}
-                  placeholder="Seleccionar cliente"
-                />
+                <div className="flex flex-col gap-2 text-sm font-medium text-slate-700">
+                  <span>Cliente</span>
+                  <div className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 shadow-sm focus-within:border-blue-300 focus-within:ring-2 focus-within:ring-blue-100">
+                    <Search size={16} className="text-slate-400" />
+                    <input
+                      type="text"
+                      value={clienteSearch}
+                      onChange={(event) => {
+                        setClienteSearch(event.target.value);
+                        setMotoFormData((prev) => ({ ...prev, cliente: '' }));
+                      }}
+                      placeholder="Buscar por nombre o documento"
+                      className="flex-1 bg-transparent text-sm text-slate-700 outline-none"
+                    />
+                  </div>
+                  {selectedCliente ? (
+                    <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                      Seleccionado: {selectedCliente.nombre} ({selectedCliente.numero_documento})
+                    </div>
+                  ) : (
+                    <div className="text-xs text-slate-400">Selecciona un cliente de la lista.</div>
+                  )}
+                  {clienteSearch.trim() ? (
+                    clientesToShow.length === 0 ? (
+                      <div className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-400">
+                        Sin coincidencias.
+                      </div>
+                    ) : (
+                      <ul className="max-h-40 overflow-y-auto rounded-lg border border-slate-200 bg-white text-sm text-slate-700 shadow-sm">
+                        {clientesToShow.map((cliente) => (
+                          <li key={cliente.id}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setMotoFormData((prev) => ({
+                                  ...prev,
+                                  cliente: String(cliente.id),
+                                }));
+                                setClienteSearch(cliente.nombre);
+                              }}
+                              className="flex w-full flex-col px-3 py-2 text-left transition hover:bg-slate-50"
+                            >
+                              <span className="font-medium">{cliente.nombre}</span>
+                              <span className="text-xs text-slate-500">
+                                {cliente.tipo_documento} {cliente.numero_documento}
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )
+                  ) : (
+                    <div className="text-xs text-slate-400">
+                      Escribe para ver resultados en tiempo real.
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowClienteForm((prev) => !prev);
+                      setClienteFormError(null);
+                    }}
+                    className="self-start text-xs font-semibold text-blue-600 transition hover:text-blue-700"
+                  >
+                    {showClienteForm ? 'Cancelar registro de cliente' : 'Registrar cliente nuevo'}
+                  </button>
+                </div>
                 <SelectField
                   label="Mecánico"
                   name="mecanico"
@@ -1040,17 +1185,116 @@ export default function Taller() {
                   }))}
                   placeholder="Seleccionar mecánico"
                 />
-                <SelectField
-                  label="Proveedor"
-                  name="proveedor"
-                  value={motoFormData.proveedor}
-                  onChange={(value) => setMotoFormData((prev) => ({ ...prev, proveedor: value }))}
-                  options={proveedores.map((proveedor) => ({
-                    value: String(proveedor.id),
-                    label: proveedor.nombre,
-                  }))}
-                  placeholder="Seleccionar proveedor"
-                />
+                {showClienteForm && (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 md:col-span-2">
+                    <div className="mb-3 flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-semibold uppercase text-blue-500">
+                          Nuevo cliente
+                        </p>
+                        <p className="text-sm text-slate-600">
+                          Registra el cliente sin salir del formulario.
+                        </p>
+                      </div>
+                    </div>
+                    {clienteFormError && (
+                      <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-600">
+                        {clienteFormError}
+                      </div>
+                    )}
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <SelectField
+                        label="Tipo de documento"
+                        name="tipo_documento"
+                        value={clienteFormData.tipo_documento}
+                        onChange={(value) =>
+                          setClienteFormData((prev) => ({
+                            ...prev,
+                            tipo_documento: value as Cliente['tipo_documento'],
+                          }))
+                        }
+                        options={documentoOptions}
+                      />
+                      <InputField
+                        label="Número de documento"
+                        name="numero_documento"
+                        value={clienteFormData.numero_documento}
+                        onChange={(value) =>
+                          setClienteFormData((prev) => ({ ...prev, numero_documento: value }))
+                        }
+                      />
+                      <InputField
+                        label="Nombre / Razón social"
+                        name="nombre"
+                        value={clienteFormData.nombre}
+                        onChange={(value) =>
+                          setClienteFormData((prev) => ({ ...prev, nombre: value }))
+                        }
+                      />
+                      <InputField
+                        label="Teléfono"
+                        name="telefono"
+                        value={clienteFormData.telefono}
+                        onChange={(value) =>
+                          setClienteFormData((prev) => ({ ...prev, telefono: value }))
+                        }
+                      />
+                      <InputField
+                        label="Email"
+                        name="email"
+                        type="email"
+                        value={clienteFormData.email}
+                        onChange={(value) =>
+                          setClienteFormData((prev) => ({ ...prev, email: value }))
+                        }
+                      />
+                      <InputField
+                        label="Ciudad"
+                        name="ciudad"
+                        value={clienteFormData.ciudad}
+                        onChange={(value) =>
+                          setClienteFormData((prev) => ({ ...prev, ciudad: value }))
+                        }
+                      />
+                      <TextAreaField
+                        label="Dirección"
+                        name="direccion"
+                        value={clienteFormData.direccion}
+                        onChange={(value) =>
+                          setClienteFormData((prev) => ({ ...prev, direccion: value }))
+                        }
+                      />
+                      <CheckboxField
+                        label="Cliente activo"
+                        name="is_active"
+                        checked={clienteFormData.is_active}
+                        onChange={(checked) =>
+                          setClienteFormData((prev) => ({ ...prev, is_active: checked }))
+                        }
+                      />
+                    </div>
+                    <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowClienteForm(false);
+                          setClienteFormError(null);
+                        }}
+                        className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 transition hover:border-slate-300"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleCreateCliente}
+                        disabled={savingCliente}
+                        className="rounded-full bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-70"
+                      >
+                        {savingCliente ? 'Guardando...' : 'Guardar cliente'}
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <TextAreaField
                   label="Observaciones"
                   name="observaciones"
