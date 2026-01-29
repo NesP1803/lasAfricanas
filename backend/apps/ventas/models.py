@@ -256,8 +256,6 @@ class Venta(BaseModel):
         ultimo_numero = (
             cls.objects.filter(
                 tipo_comprobante=tipo_comprobante,
-                fecha__year=fecha.year,
-                fecha__month=fecha.month,
                 numero_comprobante__regex=rf'^{prefijo}-\\d+$',
             )
             .annotate(
