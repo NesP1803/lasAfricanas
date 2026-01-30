@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2, XCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
@@ -11,7 +11,7 @@ export default function Notificaciones() {
   const navigate = useNavigate();
   const [solicitudes, setSolicitudes] = useState<SolicitudDescuento[]>([]);
   const [ajustesDescuento, setAjustesDescuento] = useState<Record<string, string>>({});
-  const pollingRef = useRef<number | null>(null);
+  const lastSolicitudFetchRef = useRef(0);
 
   const esAdmin = useMemo(() => user?.role === "ADMIN", [user?.role]);
   const currencyFormatter = useMemo(
@@ -30,33 +30,39 @@ export default function Notificaciones() {
     }
   }, [esAdmin, navigate]);
 
-  useEffect(() => {
+  const actualizarSolicitudes = useCallback(async () => {
     if (!esAdmin || !user?.id) {
       setSolicitudes([]);
       return;
     }
-    if (pollingRef.current) return;
-    const actualizarSolicitudes = async () => {
-      try {
-        const data = await descuentosApi.listarSolicitudes();
-        setSolicitudes(data);
-        const pendientes = data.filter((solicitud) => solicitud.estado === "PENDIENTE");
-        if (pendientes.length > 0) {
-          showNotification({
-            type: "info",
-            message: `Tienes ${pendientes.length} solicitud(es) de descuento pendientes.`,
-          });
-        }
-      } catch (error) {
+    const now = Date.now();
+    if (now - lastSolicitudFetchRef.current < 10000) {
+      return;
+    }
+    lastSolicitudFetchRef.current = now;
+    try {
+      const data = await descuentosApi.listarSolicitudes();
+      setSolicitudes(data);
+      const pendientes = data.filter((solicitud) => solicitud.estado === "PENDIENTE");
+      if (pendientes.length > 0) {
         showNotification({
-          type: "error",
-          message: "No se pudieron cargar las solicitudes.",
+          type: "info",
+          message: `Tienes ${pendientes.length} solicitud(es) de descuento pendientes.`,
         });
       }
-    };
+    } catch (error) {
+      showNotification({
+        type: "error",
+        message: "No se pudieron cargar las solicitudes.",
+      });
+    }
+  }, [esAdmin, showNotification, user?.id]);
 
+  useEffect(() => {
     actualizarSolicitudes();
-    pollingRef.current = window.setInterval(actualizarSolicitudes, 15000);
+  }, [actualizarSolicitudes]);
+
+  useEffect(() => {
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
         actualizarSolicitudes();
@@ -64,13 +70,9 @@ export default function Notificaciones() {
     };
     document.addEventListener("visibilitychange", handleVisibility);
     return () => {
-      if (pollingRef.current) {
-        window.clearInterval(pollingRef.current);
-        pollingRef.current = null;
-      }
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [esAdmin, showNotification, user?.id]);
+  }, [actualizarSolicitudes]);
 
   const handleAjusteDescuento = (id: string, value: string) => {
     setAjustesDescuento((prev) => ({ ...prev, [id]: value }));
@@ -127,6 +129,13 @@ export default function Notificaciones() {
               Revisa y autoriza descuentos solicitados por otros usuarios.
             </p>
           </div>
+          <button
+            type="button"
+            onClick={actualizarSolicitudes}
+            className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold uppercase text-slate-600 hover:bg-slate-50"
+          >
+            Actualizar
+          </button>
         </div>
 
         {solicitudes.length === 0 ? (
