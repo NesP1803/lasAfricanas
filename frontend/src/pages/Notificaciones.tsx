@@ -36,13 +36,20 @@ export default function Notificaciones() {
     }
     let intervalId: number | null = null;
     const actualizarSolicitudes = async () => {
-      const data = await descuentosApi.listarSolicitudes();
-      setSolicitudes(data);
-      const pendientes = data.filter((solicitud) => solicitud.estado === "PENDIENTE");
-      if (pendientes.length > 0) {
+      try {
+        const data = await descuentosApi.listarSolicitudes();
+        setSolicitudes(data);
+        const pendientes = data.filter((solicitud) => solicitud.estado === "PENDIENTE");
+        if (pendientes.length > 0) {
+          showNotification({
+            type: "info",
+            message: `Tienes ${pendientes.length} solicitud(es) de descuento pendientes.`,
+          });
+        }
+      } catch (error) {
         showNotification({
-          type: "info",
-          message: `Tienes ${pendientes.length} solicitud(es) de descuento pendientes.`,
+          type: "error",
+          message: "No se pudieron cargar las solicitudes.",
         });
       }
     };

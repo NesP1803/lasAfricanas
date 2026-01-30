@@ -19,6 +19,13 @@ export interface SolicitudDescuento {
   updated_at: string;
 }
 
+type PaginatedResponse<T> = {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: T[];
+};
+
 export const descuentosApi = {
   crearSolicitud: async (payload: {
     aprobador: number;
@@ -35,10 +42,13 @@ export const descuentosApi = {
     return response.data;
   },
   listarSolicitudes: async () => {
-    const response = await apiClient.get<SolicitudDescuento[]>(
-      '/solicitudes-descuento/'
-    );
-    return response.data;
+    const response = await apiClient.get<
+      SolicitudDescuento[] | PaginatedResponse<SolicitudDescuento>
+    >('/solicitudes-descuento/');
+    if (Array.isArray(response.data)) {
+      return response.data;
+    }
+    return response.data.results ?? [];
   },
   actualizarSolicitud: async (
     id: number,
