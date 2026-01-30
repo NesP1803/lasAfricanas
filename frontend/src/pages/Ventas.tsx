@@ -80,7 +80,8 @@ type TallerVentaPayload = {
 const currencyFormatter = new Intl.NumberFormat('es-CO', {
   style: 'currency',
   currency: 'COP',
-  minimumFractionDigits: 2,
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0,
 });
 
 const parseNumber = (value: string) => {
@@ -88,6 +89,8 @@ const parseNumber = (value: string) => {
   const parsed = Number(normalized);
   return Number.isNaN(parsed) ? 0 : parsed;
 };
+
+const roundCop = (value: number) => Math.round(value);
 
 export default function Ventas() {
   const { user } = useAuth();
@@ -119,6 +122,7 @@ export default function Ventas() {
   const [cargandoAprobadores, setCargandoAprobadores] = useState(false);
   const codigoInputRef = useRef<HTMLInputElement | null>(null);
   const lastSolicitudFetchRef = useRef(0);
+  const esAdmin = useMemo(() => user?.role === 'ADMIN', [user?.role]);
 
   const tallerPayload = useMemo(() => {
     const state = location.state as { fromTaller?: TallerVentaPayload } | null;
@@ -176,7 +180,15 @@ export default function Ventas() {
   }, [mostrarPermiso, usuariosAprobadores.length]);
 
   useEffect(() => {
-    if (!user?.id) return;
+    if (esAdmin) {
+      setDescuentoAutorizado(true);
+      setEstadoSolicitud(null);
+      setMostrarPermiso(false);
+    }
+  }, [esAdmin]);
+
+  useEffect(() => {
+    if (!user?.id || esAdmin) return;
     const actualizarEstadoSolicitud = async () => {
       const now = Date.now();
       if (now - lastSolicitudFetchRef.current < 10000) {
@@ -218,10 +230,32 @@ export default function Ventas() {
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
+
+    let intervalId: number | null = null;
+    const startPolling = () => {
+      if (intervalId !== null) return;
+      intervalId = window.setInterval(() => {
+        if (document.visibilityState === 'visible') {
+          actualizarEstadoSolicitud();
+        }
+      }, 10000);
+    };
+    const stopPolling = () => {
+      if (intervalId !== null) {
+        window.clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
+
+    if (estadoSolicitud?.estado === 'PENDIENTE') {
+      startPolling();
+    }
+
     return () => {
+      stopPolling();
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [user?.id]);
+  }, [esAdmin, estadoSolicitud?.estado, user?.id]);
 
   useEffect(() => {
     codigoInputRef.current?.focus();
@@ -280,21 +314,26 @@ export default function Ventas() {
   }, [tallerPayload, navigate]);
 
   const totals = useMemo(() => {
-    const subtotal = cartItems.reduce(
+    const rawSubtotal = cartItems.reduce(
       (acc, item) => acc + item.precioUnitario * item.cantidad,
       0
     );
-    const descuentoLineas = cartItems.reduce((acc, item) => {
+    const rawDescuentoLineas = cartItems.reduce((acc, item) => {
       const lineSubtotal = item.precioUnitario * item.cantidad;
       return acc + lineSubtotal * (item.descuentoPorcentaje / 100);
     }, 0);
-    const descuentoGeneralValor = subtotal * (parseNumber(descuentoGeneral) / 100);
-    const iva = cartItems.reduce((acc, item) => {
+    const rawDescuentoGeneralValor =
+      rawSubtotal * (parseNumber(descuentoGeneral) / 100);
+    const rawIva = cartItems.reduce((acc, item) => {
       const lineSubtotal = item.precioUnitario * item.cantidad;
       const lineDesc = lineSubtotal * (item.descuentoPorcentaje / 100);
       const base = lineSubtotal - lineDesc;
       return acc + base * (item.ivaPorcentaje / 100);
     }, 0);
+    const subtotal = roundCop(rawSubtotal);
+    const descuentoLineas = roundCop(rawDescuentoLineas);
+    const descuentoGeneralValor = roundCop(rawDescuentoGeneralValor);
+    const iva = roundCop(rawIva);
     const descuentoTotalPrevio = descuentoLineas + descuentoGeneralValor;
     const descuentoTotalAplicado =
       descuentoLineas +
@@ -405,10 +444,19 @@ export default function Ventas() {
   };
 
   const handleSolicitarPermiso = () => {
+    if (esAdmin) {
+      setMensaje('Los administradores no requieren permiso para aplicar descuentos.');
+      return;
+    }
     setMostrarPermiso(true);
   };
 
   const handleConfirmarPermiso = () => {
+    if (esAdmin) {
+      setMostrarPermiso(false);
+      setMensaje('Los administradores no requieren permiso para aplicar descuentos.');
+      return;
+    }
     if (!aprobadorId || !user?.id) {
       setMensaje('Selecciona un aprobador para habilitar el descuento.');
       return;
@@ -460,6 +508,11 @@ export default function Ventas() {
       return;
     }
     try {
+      const efectivoRecibidoNumero = roundCop(parseNumber(efectivoRecibido));
+      const cambioCalculado = Math.max(
+        0,
+        efectivoRecibidoNumero - totals.totalAplicado
+      );
       const venta = await ventasApi.crearVenta({
         tipo_comprobante: tipo,
         cliente: clienteId,
@@ -470,25 +523,28 @@ export default function Ventas() {
         iva: totals.iva.toFixed(2),
         total: totals.totalAplicado.toFixed(2),
         medio_pago: medioPago,
-        efectivo_recibido: parseNumber(efectivoRecibido).toFixed(2),
-        cambio: (parseNumber(efectivoRecibido) - totals.totalAplicado).toFixed(2),
+        efectivo_recibido: efectivoRecibidoNumero.toFixed(2),
+        cambio: cambioCalculado.toFixed(2),
         detalles: cartItems.map((item) => {
           const subtotal = item.precioUnitario * item.cantidad;
           const descuento = subtotal * (item.descuentoPorcentaje / 100);
           const base = subtotal - descuento;
           const iva = base * (item.ivaPorcentaje / 100);
-          const total = base + iva;
+          const total = roundCop(base + iva);
           return {
             producto: item.id,
             cantidad: item.cantidad,
-            precio_unitario: item.precioUnitario.toFixed(2),
-            descuento_unitario: descuento.toFixed(2),
+            precio_unitario: roundCop(item.precioUnitario).toFixed(2),
+            descuento_unitario: roundCop(descuento).toFixed(2),
             iva_porcentaje: item.ivaPorcentaje.toFixed(2),
-            subtotal: subtotal.toFixed(2),
+            subtotal: roundCop(subtotal).toFixed(2),
             total: total.toFixed(2),
           };
         }),
-        descuento_aprobado_por: descuentoAutorizado ? Number(aprobadorId) : undefined,
+        descuento_aprobado_por:
+          descuentoAutorizado && !esAdmin && aprobadorId
+            ? Number(aprobadorId)
+            : undefined,
       });
       const numeroComprobante =
         venta.numero_comprobante ||
@@ -509,13 +565,13 @@ export default function Ventas() {
         const descuentoLinea = subtotalLinea * (item.descuentoPorcentaje / 100);
         const base = subtotalLinea - descuentoLinea;
         const ivaLinea = base * (item.ivaPorcentaje / 100);
-        const totalLinea = base + ivaLinea;
+        const totalLinea = roundCop(base + ivaLinea);
         return {
           descripcion: item.nombre,
           codigo: item.codigo,
           cantidad: item.cantidad,
-          precioUnitario: item.precioUnitario,
-          descuento: descuentoLinea,
+          precioUnitario: roundCop(item.precioUnitario),
+          descuento: roundCop(descuentoLinea),
           ivaPorcentaje: item.ivaPorcentaje,
           total: totalLinea,
         };
@@ -542,8 +598,8 @@ export default function Ventas() {
         descuento: totals.descuentoTotalAplicado,
         iva: totals.iva,
         total: totals.totalAplicado,
-        efectivoRecibido: parseNumber(efectivoRecibido),
-        cambio,
+        efectivoRecibido: efectivoRecibidoNumero,
+        cambio: roundCop(cambioCalculado),
       });
       setMensaje(`${venta.tipo_comprobante_display} generado correctamente.`);
     } catch (error) {
@@ -552,8 +608,8 @@ export default function Ventas() {
   };
 
   const cambio = useMemo(() => {
-    const calculado = parseNumber(efectivoRecibido) - totals.totalPrevio;
-    return calculado >= 0 ? calculado : 0;
+    const calculado = roundCop(parseNumber(efectivoRecibido)) - totals.totalPrevio;
+    return roundCop(calculado >= 0 ? calculado : 0);
   }, [efectivoRecibido, totals.totalPrevio]);
 
   return (
@@ -715,7 +771,7 @@ export default function Ventas() {
                   const descuento = subtotal * (item.descuentoPorcentaje / 100);
                   const base = subtotal - descuento;
                   const iva = base * (item.ivaPorcentaje / 100);
-                  const total = base + iva;
+                  const total = roundCop(base + iva);
                   return (
                     <tr key={item.id} className="border-b border-slate-100">
                       <td className="px-3 py-2">
@@ -838,7 +894,7 @@ export default function Ventas() {
               <div className="flex items-center justify-between">
                 <span className="text-slate-500">Efectivo recibido</span>
                 <span className="font-semibold text-emerald-600">
-                  {currencyFormatter.format(parseNumber(efectivoRecibido))}
+                  {currencyFormatter.format(roundCop(parseNumber(efectivoRecibido)))}
                 </span>
               </div>
               <div className="flex items-center justify-between">
@@ -867,13 +923,15 @@ export default function Ventas() {
                 className="w-24 rounded-lg border border-slate-200 px-3 py-2 text-sm text-right"
               />
               <span className="text-sm text-slate-500">% aplicado</span>
-              <button
-                type="button"
-                onClick={handleSolicitarPermiso}
-                className="ml-auto rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold uppercase text-slate-600 hover:bg-slate-50"
-              >
-                Solicitar permiso
-              </button>
+              {!esAdmin && (
+                <button
+                  type="button"
+                  onClick={handleSolicitarPermiso}
+                  className="ml-auto rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold uppercase text-slate-600 hover:bg-slate-50"
+                >
+                  Solicitar permiso
+                </button>
+              )}
             </div>
             {estadoSolicitud && (
               <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-600">
@@ -891,9 +949,11 @@ export default function Ventas() {
                 </p>
               </div>
             )}
-            <p className="mt-2 text-xs text-slate-500">
-              El descuento requiere autorización del dueño o persona designada.
-            </p>
+            {!esAdmin && (
+              <p className="mt-2 text-xs text-slate-500">
+                El descuento requiere autorización del dueño o persona designada.
+              </p>
+            )}
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">

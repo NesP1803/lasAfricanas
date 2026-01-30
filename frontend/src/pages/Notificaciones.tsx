@@ -19,7 +19,8 @@ export default function Notificaciones() {
       new Intl.NumberFormat("es-CO", {
         style: "currency",
         currency: "COP",
-        minimumFractionDigits: 2,
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
       }),
     []
   );
@@ -93,8 +94,11 @@ export default function Notificaciones() {
         estado,
         descuento_aprobado: estado === "APROBADO" ? String(descuentoAprobado) : null,
       })
-      .then(() => descuentosApi.listarSolicitudes())
-      .then((data) => setSolicitudes(data))
+      .then((updated) => {
+        setSolicitudes((prev) =>
+          prev.map((item) => (item.id === updated.id ? updated : item))
+        );
+      })
       .catch(() => {
         showNotification({
           type: "error",
