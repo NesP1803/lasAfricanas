@@ -95,14 +95,15 @@ const mapVentaToRemisionItem = (venta: VentaListItem): RemisionItem => {
 };
 
 export default function Remisiones() {
+  const today = new Date().toISOString().split('T')[0];
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [remisiones, setRemisiones] = useState<RemisionItem[]>([]);
   const [busqueda, setBusqueda] = useState('');
   const [estadoFiltro, setEstadoFiltro] = useState<'CONFIRMADA' | 'ANULADA' | 'TODAS'>(
     'CONFIRMADA'
   );
-  const [fechaInicio, setFechaInicio] = useState('2025-10-22');
-  const [fechaFin, setFechaFin] = useState('2025-10-22');
+  const [fechaInicio, setFechaInicio] = useState(today);
+  const [fechaFin, setFechaFin] = useState(today);
   const [documento, setDocumento] = useState<DocumentoSeleccionado | null>(null);
   const [detalleRemision, setDetalleRemision] = useState<Venta | null>(null);
   const [detalleCargando, setDetalleCargando] = useState(false);
@@ -118,6 +119,33 @@ export default function Remisiones() {
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [anulando, setAnulando] = useState(false);
+
+  const cargarRemisiones = async (filters: {
+    estado: 'CONFIRMADA' | 'ANULADA' | 'TODAS';
+    fechaInicio?: string;
+    fechaFin?: string;
+    search?: string;
+  }) => {
+    setCargando(true);
+    setError(null);
+    try {
+      const search = filters.search?.trim();
+      const response = await ventasApi.getVentas({
+        tipoComprobante: 'REMISION',
+        estado: filters.estado === 'TODAS' ? undefined : filters.estado,
+        fechaInicio: filters.fechaInicio || undefined,
+        fechaFin: filters.fechaFin || undefined,
+        search: search ? search : undefined,
+      });
+      setRemisiones(response.map(mapVentaToRemisionItem));
+      setSelectedIds([]);
+    } catch (err) {
+      setRemisiones([]);
+      setError(err instanceof Error ? err.message : 'Error al cargar remisiones');
+    } finally {
+      setCargando(false);
+    }
+  };
 
   const remisionesFiltradas = useMemo(() => {
     const query = busqueda.trim().toLowerCase();
@@ -146,32 +174,12 @@ export default function Remisiones() {
   }, [busqueda, remisiones, fechaInicio, fechaFin]);
 
   useEffect(() => {
-    let isActive = true;
-    const cargarRemisiones = async () => {
-      setCargando(true);
-      setError(null);
-      try {
-        const response = await ventasApi.getVentas({
-          tipoComprobante: 'REMISION',
-          estado: estadoFiltro === 'TODAS' ? undefined : estadoFiltro,
-        });
-        if (!isActive) return;
-        setRemisiones(response.map(mapVentaToRemisionItem));
-        setSelectedIds([]);
-      } catch (err) {
-        if (!isActive) return;
-        setRemisiones([]);
-        setError(err instanceof Error ? err.message : 'Error al cargar remisiones');
-      } finally {
-        if (isActive) setCargando(false);
-      }
-    };
-
-    cargarRemisiones();
-    return () => {
-      isActive = false;
-    };
-  }, [estadoFiltro]);
+    cargarRemisiones({
+      estado: estadoFiltro,
+      fechaInicio,
+      fechaFin,
+    });
+  }, [estadoFiltro, fechaInicio, fechaFin]);
 
   useEffect(() => {
     configuracionAPI
@@ -215,31 +223,12 @@ export default function Remisiones() {
         descripcion,
         devuelve_inventario: anulacionData.opcion === 'ANULAR_TODO',
       });
-      setRemisiones((prev) =>
-        prev.map((item) =>
-          item.id === ventaActualizada.id
-            ? mapVentaToRemisionItem({
-                id: ventaActualizada.id,
-                numero_comprobante: ventaActualizada.numero_comprobante,
-                tipo_comprobante: ventaActualizada.tipo_comprobante,
-                tipo_comprobante_display: ventaActualizada.tipo_comprobante_display,
-                fecha: ventaActualizada.fecha,
-                cliente: ventaActualizada.cliente,
-                cliente_nombre: ventaActualizada.cliente_info?.nombre ?? item.cliente,
-                cliente_numero_documento:
-                  ventaActualizada.cliente_info?.numero_documento ?? item.nitCc,
-                vendedor: ventaActualizada.vendedor,
-                vendedor_nombre: ventaActualizada.vendedor_nombre,
-                total: ventaActualizada.total,
-                medio_pago: ventaActualizada.medio_pago,
-                medio_pago_display: ventaActualizada.medio_pago_display,
-                estado: ventaActualizada.estado,
-                estado_display: ventaActualizada.estado_display,
-              })
-            : item
-        )
-      );
-      setSelectedIds((prev) => prev.filter((id) => id !== anulacion.id));
+      await cargarRemisiones({
+        estado: estadoFiltro,
+        fechaInicio,
+        fechaFin,
+        search: busqueda,
+      });
       setAnulacion(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al anular remisión');
@@ -277,10 +266,36 @@ export default function Remisiones() {
           <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
+              onClick={() =>
+                cargarRemisiones({
+                  estado: estadoFiltro,
+                  fechaInicio,
+                  fechaFin,
+                  search: busqueda,
+                })
+              }
               className="flex items-center gap-2 rounded border border-slate-300 px-3 py-1.5 text-xs font-semibold uppercase text-slate-600"
+              disabled={cargando}
             >
               <FileSearch size={14} />
-              Mostrar
+              Actualizar
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setEstadoFiltro('ANULADA');
+                cargarRemisiones({
+                  estado: 'ANULADA',
+                  fechaInicio,
+                  fechaFin,
+                  search: busqueda,
+                });
+              }}
+              className="flex items-center gap-2 rounded border border-slate-300 px-3 py-1.5 text-xs font-semibold uppercase text-slate-600"
+              disabled={cargando}
+            >
+              <FileSearch size={14} />
+              Ver anuladas
             </button>
             <button
               type="button"
