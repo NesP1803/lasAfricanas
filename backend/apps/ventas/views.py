@@ -6,6 +6,7 @@ from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Sum, Count, Q
 from django.utils import timezone
+from datetime import datetime, time
 
 from .models import Cliente, Venta, DetalleVenta, SolicitudDescuento, VentaAnulada
 from .serializers import (
@@ -63,16 +64,35 @@ class VentaViewSet(viewsets.ModelViewSet):
     ordering_fields = ['fecha', 'total']
     ordering = ['-fecha']
 
+    @staticmethod
+    def _get_fecha_range(fecha_inicio, fecha_fin):
+        tz = timezone.get_current_timezone()
+        inicio_dt = fin_dt = None
+        if fecha_inicio:
+            inicio_date = datetime.strptime(fecha_inicio, '%Y-%m-%d').date()
+            inicio_dt = timezone.make_aware(
+                datetime.combine(inicio_date, time.min),
+                tz
+            )
+        if fecha_fin:
+            fin_date = datetime.strptime(fecha_fin, '%Y-%m-%d').date()
+            fin_dt = timezone.make_aware(
+                datetime.combine(fin_date, time.max),
+                tz
+            )
+        return inicio_dt, fin_dt
+
     def get_queryset(self):
         queryset = Venta.objects.select_related(
             'cliente', 'vendedor'
         ).prefetch_related('detalles').all()
         fecha_inicio = self.request.query_params.get('fecha_inicio')
         fecha_fin = self.request.query_params.get('fecha_fin')
-        if fecha_inicio:
-            queryset = queryset.filter(fecha__date__gte=fecha_inicio)
-        if fecha_fin:
-            queryset = queryset.filter(fecha__date__lte=fecha_fin)
+        inicio_dt, fin_dt = self._get_fecha_range(fecha_inicio, fecha_fin)
+        if inicio_dt:
+            queryset = queryset.filter(fecha__gte=inicio_dt)
+        if fin_dt:
+            queryset = queryset.filter(fecha__lte=fin_dt)
         return queryset
     
     def get_serializer_class(self):
@@ -213,10 +233,11 @@ class VentaViewSet(viewsets.ModelViewSet):
         
         ventas = self.get_queryset().filter(estado='CONFIRMADA')
         
-        if fecha_inicio:
-            ventas = ventas.filter(fecha__date__gte=fecha_inicio)
-        if fecha_fin:
-            ventas = ventas.filter(fecha__date__lte=fecha_fin)
+        inicio_dt, fin_dt = self._get_fecha_range(fecha_inicio, fecha_fin)
+        if inicio_dt:
+            ventas = ventas.filter(fecha__gte=inicio_dt)
+        if fin_dt:
+            ventas = ventas.filter(fecha__lte=fin_dt)
         
         stats = ventas.aggregate(
             total_ventas=Count('id'),
