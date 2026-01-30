@@ -1,5 +1,6 @@
 from decimal import Decimal, InvalidOperation
 from django.contrib.auth import authenticate
+from django.db import models
 from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.permissions import BasePermission, IsAuthenticated
@@ -35,6 +36,8 @@ class UsuarioViewSet(viewsets.ModelViewSet):
         if self.action == 'me':
             return [IsAuthenticated()]
         if self.action == 'validar_descuento':
+            return [IsAuthenticated()]
+        if self.action == 'aprobadores':
             return [IsAuthenticated()]
         return [IsAdminOrTipoAdmin()]
 
@@ -100,6 +103,26 @@ class UsuarioViewSet(viewsets.ModelViewSet):
                 else None,
             }
         )
+
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def aprobadores(self, request):
+        aprobadores = Usuario.objects.filter(
+            is_active=True
+        ).filter(
+            models.Q(is_superuser=True) | models.Q(tipo_usuario='ADMIN')
+        ).order_by('first_name', 'last_name', 'username')
+
+        data = [
+            {
+                'id': usuario.id,
+                'first_name': usuario.first_name,
+                'last_name': usuario.last_name,
+                'username': usuario.username,
+                'tipo_usuario': usuario.tipo_usuario,
+            }
+            for usuario in aprobadores
+        ]
+        return Response(data)
 
     @action(detail=False, methods=['get', 'patch'])
     def me(self, request):

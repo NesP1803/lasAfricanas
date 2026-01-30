@@ -17,6 +17,7 @@ import {
 import {
   ClipboardList,
   Boxes,
+  Bell,
   FileText,
   LogOut,
   Menu,
@@ -314,7 +315,13 @@ export default function Layout() {
         });
       }
 
-      if (!isAdmin) {
+      if (isAdmin) {
+        items.unshift({
+          label: "Notificaciones",
+          icon: <Bell size={18} />,
+          path: "/notificaciones",
+        });
+      } else {
         items.unshift({
           label: "Mi perfil",
           icon: <User size={18} />,
@@ -523,27 +530,37 @@ export default function Layout() {
               <img
                 src={logoUrl}
                 alt="Logo de la empresa"
-                className="h-10 w-10 rounded-lg bg-white/15 object-cover"
+                className="h-12 w-12 rounded-lg bg-white/15 object-cover"
               />
             ) : (
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/15 text-lg font-bold">
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-white/15 text-xl font-bold">
                 LA
               </div>
             )}
             <div>
-              <h1 className="text-lg font-semibold leading-tight">
+              <h1 className="text-xl font-semibold leading-tight">
                 Las Africanas
               </h1>
-              <p className="text-xs text-blue-100">Sistema Integrado</p>
+              <p className="text-sm text-blue-100">Sistema Integrado</p>
             </div>
           </button>
 
           <div className="flex items-center gap-3">
-            <div className="hidden text-right text-xs text-blue-100 sm:block">
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => navigate("/notificaciones")}
+                className="relative rounded-full bg-white/10 p-2 text-white transition hover:bg-white/20"
+                aria-label="Ver notificaciones"
+              >
+                <Bell size={18} />
+              </button>
+            )}
+            <div className="hidden text-right text-sm text-blue-100 sm:block">
               <p className="font-semibold text-white">{user?.username}</p>
               <p>{user?.role}</p>
             </div>
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-sm font-semibold">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/20 text-base font-semibold">
               {user?.username?.charAt(0)?.toUpperCase()}
             </div>
             <button
@@ -551,7 +568,7 @@ export default function Layout() {
                 closeMenuNow();
                 handleLogout();
               }}
-              className="flex items-center gap-2 rounded-md bg-white/10 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/20"
+              className="flex items-center gap-2 rounded-md bg-white/10 px-3 py-2 text-base font-medium text-white transition hover:bg-white/20"
             >
               <LogOut size={16} />
               <span className="hidden sm:inline">Salir</span>
@@ -592,7 +609,7 @@ export default function Layout() {
                     onSelectLeaf(item);
                   }
                 }}
-                className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-white/90 transition hover:bg-white/15 hover:text-white"
+                className="flex items-center gap-2 rounded-md px-3 py-2 text-base font-medium text-white/90 transition hover:bg-white/15 hover:text-white"
               >
                 {renderMenuButton(item.label, item.icon)}
               </button>

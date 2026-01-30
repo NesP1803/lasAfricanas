@@ -140,6 +140,10 @@ export const configuracionAPI = {
     }
     return [];
   },
+  obtenerAprobadores: async () => {
+    const response = await apiClient.get<UsuarioAdmin[]>('/usuarios/aprobadores/');
+    return response.data;
+  },
   crearUsuario: async (data: Partial<UsuarioAdmin> & { password?: string }) => {
     const response = await apiClient.post<UsuarioAdmin>('/usuarios/', data);
     return response.data;
