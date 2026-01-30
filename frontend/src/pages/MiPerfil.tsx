@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Eye, EyeOff, Save, XCircle } from "lucide-react";
+import { Eye, EyeOff, Save } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { configuracionAPI } from "../api/configuracion";
 import { useAuth } from "../contexts/AuthContext";
 import { useNotification } from "../contexts/NotificationContext";
@@ -25,7 +26,7 @@ const emptyPerfil: PerfilForm = {
 
 export default function MiPerfil() {
   const { user } = useAuth();
-  const { showNotification } = useNotification();
+  const navigate = useNavigate();
   const [perfil, setPerfil] = useState<UsuarioAdmin | null>(null);
   const [form, setForm] = useState<PerfilForm>(emptyPerfil);
   const [mensajePerfil, setMensajePerfil] = useState("");
@@ -34,21 +35,9 @@ export default function MiPerfil() {
   const [confirmarClave, setConfirmarClave] = useState("");
   const [mostrarNuevaClave, setMostrarNuevaClave] = useState(false);
   const [mostrarConfirmarClave, setMostrarConfirmarClave] = useState(false);
-  const [solicitudes, setSolicitudes] = useState<SolicitudDescuento[]>([]);
-  const [ajustesDescuento, setAjustesDescuento] = useState<Record<string, string>>({});
-
-  const esAdmin = useMemo(() => {
-    return (perfil?.tipo_usuario ?? user?.role) === "ADMIN";
-  }, [perfil?.tipo_usuario, user?.role]);
-
-  const currencyFormatter = useMemo(
-    () =>
-      new Intl.NumberFormat("es-CO", {
-        style: "currency",
-        currency: "COP",
-        minimumFractionDigits: 2,
-      }),
-    []
+  const esAdmin = useMemo(
+    () => (perfil?.tipo_usuario ?? user?.role) === "ADMIN",
+    [perfil?.tipo_usuario, user?.role]
   );
 
   useEffect(() => {
@@ -72,31 +61,10 @@ export default function MiPerfil() {
   }, []);
 
   useEffect(() => {
-    if (!esAdmin || !user?.id) {
-      setSolicitudes([]);
-      return;
+    if (esAdmin) {
+      navigate("/notificaciones", { replace: true });
     }
-    const actualizarSolicitudes = () => {
-      const data = obtenerSolicitudesPorAprobador(user.id);
-      setSolicitudes(data);
-      const pendientes = data.filter((solicitud) => solicitud.estado === "PENDIENTE");
-      if (pendientes.length > 0) {
-        showNotification({
-          type: "info",
-          message: `Tienes ${pendientes.length} solicitud(es) de descuento pendientes.`,
-        });
-      }
-    };
-
-    actualizarSolicitudes();
-    const handleStorage = (event: StorageEvent) => {
-      if (event.key === "solicitudes_descuento") {
-        actualizarSolicitudes();
-      }
-    };
-    window.addEventListener("storage", handleStorage);
-    return () => window.removeEventListener("storage", handleStorage);
-  }, [esAdmin, showNotification, user?.id]);
+  }, [esAdmin, navigate]);
 
   const handleGuardarPerfil = async () => {
     setMensajePerfil("");

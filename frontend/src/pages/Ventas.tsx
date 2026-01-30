@@ -163,24 +163,17 @@ export default function Ventas() {
     if (usuariosAprobadores.length > 0) return;
     setCargandoAprobadores(true);
     configuracionAPI
-      .obtenerUsuarios()
+      .obtenerAprobadores()
       .then((data) => {
-        const aprobadores = data
-          .filter((usuario) => usuario.tipo_usuario === 'ADMIN')
-          .map((usuario) => ({
-            id: usuario.id,
-            nombre: `${usuario.first_name} ${usuario.last_name}`.trim() || usuario.username,
-          }));
-        const fallback = data.map((usuario) => ({
+        const lista = data.map((usuario) => ({
           id: usuario.id,
           nombre: `${usuario.first_name} ${usuario.last_name}`.trim() || usuario.username,
         }));
-        const lista = aprobadores.length > 0 ? aprobadores : fallback;
         setUsuariosAprobadores(lista);
         window.localStorage.setItem('usuarios_aprobadores', JSON.stringify(lista));
       })
       .catch(() => {
-        setMensaje('No se pudieron cargar los aprobadores. Ingresa el ID del admin.');
+        setUsuariosAprobadores([]);
       })
       .finally(() => setCargandoAprobadores(false));
   }, [mostrarPermiso, usuariosAprobadores.length]);
@@ -1194,29 +1187,9 @@ export default function Ventas() {
                 ))}
               </select>
               {usuariosAprobadores.length === 0 && !cargandoAprobadores && (
-                <div className="space-y-2 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                  <p>
-                    No se encontraron aprobadores disponibles. Ingresa el ID del admin
-                    para enviar la solicitud.
-                  </p>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    <input
-                      type="number"
-                      min={1}
-                      placeholder="ID del admin"
-                      value={aprobadorId}
-                      onChange={(event) => setAprobadorId(event.target.value)}
-                      className="w-full rounded-lg border border-amber-200 px-3 py-2 text-sm"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Nombre del admin"
-                      value={aprobadorNombre}
-                      onChange={(event) => setAprobadorNombre(event.target.value)}
-                      className="w-full rounded-lg border border-amber-200 px-3 py-2 text-sm"
-                    />
-                  </div>
-                </div>
+                <p className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                  No se encontraron aprobadores disponibles. Intenta nuevamente más tarde.
+                </p>
               )}
               <button
                 type="button"
