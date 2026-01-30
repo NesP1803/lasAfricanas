@@ -37,6 +37,8 @@ class UsuarioViewSet(viewsets.ModelViewSet):
             return [IsAuthenticated()]
         if self.action == 'validar_descuento':
             return [IsAuthenticated()]
+        if self.action == 'aprobadores':
+            return [IsAuthenticated()]
         return [IsAdminOrTipoAdmin()]
 
     @action(detail=True, methods=['post'])
