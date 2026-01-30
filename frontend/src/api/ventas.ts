@@ -79,6 +79,8 @@ export interface EstadisticasVentas {
   total_facturas: number;
   total_facturas_valor: string | null;
   total_remisiones_valor: string | null;
+  facturas_por_usuario?: { usuario: string; cuentas: number }[];
+  remisiones_por_usuario?: { usuario: string; cuentas: number }[];
 }
 
 export const ventasApi = {
