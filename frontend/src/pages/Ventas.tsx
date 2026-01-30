@@ -7,7 +7,6 @@ import {
   MinusCircle,
   PlusCircle,
   Search,
-  ShieldCheck,
   Trash2,
   X,
 } from 'lucide-react';
@@ -614,377 +613,402 @@ export default function Ventas() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Ventana de facturación</h1>
-          <p className="text-sm text-slate-500">
-            Genera cotizaciones, remisiones y facturas con lectura por código de barras o QR.
-          </p>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm">
-          <p className="font-semibold text-slate-700">Vendedor</p>
-          <p className="text-slate-900">{user?.username ?? 'Usuario'}</p>
-        </div>
-      </div>
-
-      <section className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:grid-cols-4">
-        <div className="space-y-2">
-          <label className="text-xs font-semibold uppercase text-slate-500">Documento cliente</label>
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              value={clienteDocumento}
-              onChange={(event) => setClienteDocumento(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  handleBuscarCliente();
-                }
-              }}
-              placeholder="Digite NIT/CC"
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-            />
-            <button
-              type="button"
-              onClick={handleBuscarCliente}
-              className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-slate-600 transition hover:bg-slate-100"
-            >
-              <Search size={18} />
-            </button>
-          </div>
-          <p className="text-sm font-semibold text-slate-800">{clienteNombre}</p>
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-xs font-semibold uppercase text-slate-500">Facturación</label>
-          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-            {configuracion
-              ? `${configuracion.prefijo_factura}-${configuracion.numero_factura}`
-              : 'FAC-000000'}
-          </div>
-          <label className="text-xs font-semibold uppercase text-slate-500">Remisión</label>
-          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-            {configuracion
-              ? `${configuracion.prefijo_remision}-${configuracion.numero_remision}`
-              : 'REM-000000'}
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-xs font-semibold uppercase text-slate-500">Medio de pago</label>
-          <select
-            value={medioPago}
-            onChange={(event) =>
-              setMedioPago(event.target.value as typeof medioPago)
-            }
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-          >
-            <option value="EFECTIVO">Efectivo</option>
-            <option value="TARJETA">Tarjeta</option>
-            <option value="TRANSFERENCIA">Transferencia</option>
-            <option value="CREDITO">Crédito</option>
-          </select>
-          <label className="text-xs font-semibold uppercase text-slate-500">Efectivo recibido</label>
-          <input
-            type="text"
-            value={efectivoRecibido}
-            onChange={(event) => setEfectivoRecibido(event.target.value)}
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-xs font-semibold uppercase text-slate-500">Lectura rápida</label>
-          <div className="flex items-center gap-2">
-            <div className="flex flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-              <Barcode size={18} className="text-slate-500" />
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="grid gap-4 lg:grid-cols-12">
+          <div className="space-y-2 lg:col-span-3">
+            <label className="text-xs font-semibold uppercase text-slate-500">
+              Digite NIT/CC del cliente
+            </label>
+            <div className="flex items-center gap-2">
               <input
-                ref={codigoInputRef}
                 type="text"
-                value={codigoProducto}
-                onChange={(event) => setCodigoProducto(event.target.value)}
+                value={clienteDocumento}
+                onChange={(event) => setClienteDocumento(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') {
-                    handleBuscarProductoPorCodigo();
+                    handleBuscarCliente();
                   }
                 }}
-                placeholder="Digite código / QR / barra"
-                className="w-full bg-transparent text-sm focus:outline-none"
+                placeholder="Digite NIT/CC"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
               />
+              <button
+                type="button"
+                onClick={handleBuscarCliente}
+                className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-slate-600 transition hover:bg-slate-100"
+              >
+                <Search size={18} />
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={handleBuscarProductoPorCodigo}
-              className="rounded-lg bg-blue-600 p-2 text-white shadow-sm transition hover:bg-blue-700"
-            >
-              <PlusCircle size={18} />
-            </button>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={handleAbrirBusqueda}
-              className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold uppercase text-slate-600 hover:bg-slate-50"
-            >
-              <Search size={14} /> Consulta rápida
-            </button>
-            <button
-              type="button"
-              onClick={handleLimpiarTodo}
-              className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold uppercase text-rose-600 hover:bg-rose-50"
-            >
-              <Trash2 size={14} /> Borrar todo
-            </button>
-          </div>
-        </div>
-      </section>
 
-      <section className="grid gap-4 lg:grid-cols-[1fr,320px]">
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-200 bg-yellow-50 px-4 py-2 text-xs font-semibold uppercase text-slate-600">
-            Detalle de productos
+          <div className="space-y-2 lg:col-span-3">
+            <label className="text-xs font-semibold uppercase text-slate-500">
+              Cliente y/o razón social
+            </label>
+            <input
+              type="text"
+              value={clienteNombre}
+              readOnly
+              className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-800"
+            />
           </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
-              <thead className="bg-yellow-400 text-xs uppercase text-slate-900">
-                <tr>
-                  <th className="px-3 py-2">Cant</th>
-                  <th className="px-3 py-2">Código</th>
-                  <th className="px-3 py-2">Artículo</th>
-                  <th className="px-3 py-2 text-right">I.V.A.</th>
-                  <th className="px-3 py-2 text-right">Total</th>
-                  <th className="px-3 py-2 text-right">Precio U</th>
-                  <th className="px-3 py-2 text-right">Desc %</th>
-                  <th className="px-3 py-2 text-right">Stock</th>
-                  <th className="px-3 py-2 text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {cartItems.length === 0 && (
-                  <tr>
-                    <td colSpan={9} className="px-3 py-10 text-center text-slate-500">
-                      Agrega productos con lector o doble clic.
-                    </td>
-                  </tr>
-                )}
-                {cartItems.map((item) => {
-                  const subtotal = item.precioUnitario * item.cantidad;
-                  const descuento = subtotal * (item.descuentoPorcentaje / 100);
-                  const base = subtotal - descuento;
-                  const iva = base * (item.ivaPorcentaje / 100);
-                  const total = roundCop(base + iva);
-                  return (
-                    <tr key={item.id} className="border-b border-slate-100">
-                      <td className="px-3 py-2">
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleActualizarCantidad(
-                                item.id,
-                                Math.max(1, item.cantidad - 1)
-                              )
-                            }
-                            className="text-slate-400 hover:text-slate-600"
-                          >
-                            <MinusCircle size={16} />
-                          </button>
-                          <input
-                            type="number"
-                            min={1}
-                            value={item.cantidad}
-                            onChange={(event) =>
-                              handleActualizarCantidad(
-                                item.id,
-                                Number(event.target.value || 1)
-                              )
-                            }
-                            className="w-16 rounded border border-slate-200 px-2 py-1 text-center text-sm"
-                          />
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleActualizarCantidad(item.id, item.cantidad + 1)
-                            }
-                            className="text-slate-400 hover:text-slate-600"
-                          >
-                            <PlusCircle size={16} />
-                          </button>
-                        </div>
-                      </td>
-                      <td className="px-3 py-2 text-slate-600">{item.codigo}</td>
-                      <td className="px-3 py-2 font-medium text-slate-800">
-                        {item.nombre}
-                      </td>
-                      <td className="px-3 py-2 text-right">{item.ivaPorcentaje}%</td>
-                      <td className="px-3 py-2 text-right">
-                        {currencyFormatter.format(total)}
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        {currencyFormatter.format(item.precioUnitario)}
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        <input
-                          type="number"
-                          min={0}
-                          max={100}
-                          value={item.descuentoPorcentaje}
-                          onChange={(event) =>
-                            handleActualizarDescuento(
-                              item.id,
-                              Number(event.target.value || 0)
-                            )
-                          }
-                          className="w-20 rounded border border-slate-200 px-2 py-1 text-right text-sm"
-                          disabled={!descuentoAutorizado}
-                        />
-                      </td>
-                      <td className="px-3 py-2 text-right">{item.stock}</td>
-                      <td className="px-3 py-2 text-right">
-                        <button
-                          type="button"
-                          onClick={() => handleEliminarItem(item.id)}
-                          className="rounded-lg border border-slate-200 p-2 text-rose-600 hover:bg-rose-50"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+
+          <div className="space-y-2 lg:col-span-2">
+            <label className="text-xs font-semibold uppercase text-slate-500">Vendedor</label>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-800">
+              {user?.username ?? 'Usuario'}
+            </div>
+          </div>
+
+          <div className="space-y-2 lg:col-span-2">
+            <label className="text-xs font-semibold uppercase text-slate-500">
+              Generar factura
+            </label>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+              {configuracion
+                ? `${configuracion.prefijo_factura}-${configuracion.numero_factura}`
+                : 'FAC-000000'}
+            </div>
+          </div>
+
+          <div className="space-y-2 lg:col-span-2">
+            <label className="text-xs font-semibold uppercase text-slate-500">
+              Generar remisión
+            </label>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+              {configuracion
+                ? `${configuracion.prefijo_remision}-${configuracion.numero_remision}`
+                : 'REM-000000'}
+            </div>
           </div>
         </div>
 
-        <div className="space-y-4">
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold uppercase text-slate-600">
-                Totales
-              </h2>
-              <CircleDollarSign className="text-slate-400" size={20} />
+        <div className="mt-4 grid gap-4 lg:grid-cols-12">
+          <div className="space-y-2 lg:col-span-5">
+            <label className="text-xs font-semibold uppercase text-slate-500">
+              Digite código de artículo
+            </label>
+            <div className="flex items-center gap-2">
+              <div className="flex flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                <Barcode size={18} className="text-slate-500" />
+                <input
+                  ref={codigoInputRef}
+                  type="text"
+                  value={codigoProducto}
+                  onChange={(event) => setCodigoProducto(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      handleBuscarProductoPorCodigo();
+                    }
+                  }}
+                  placeholder="Digite código / QR / barra"
+                  className="w-full bg-transparent text-sm focus:outline-none"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleBuscarProductoPorCodigo}
+                className="rounded-lg bg-blue-600 p-2 text-white shadow-sm transition hover:bg-blue-700"
+              >
+                <PlusCircle size={18} />
+              </button>
             </div>
-            <div className="mt-4 space-y-3 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500">Subtotal</span>
-                <span className="font-semibold text-slate-900">
-                  {currencyFormatter.format(totals.subtotal)}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500">Impuestos</span>
-                <span className="font-semibold text-slate-900">
-                  {currencyFormatter.format(totals.iva)}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500">Descuentos</span>
-                <span className="font-semibold text-rose-600">
-                  -{currencyFormatter.format(totals.descuentoTotalPrevio)}
-                </span>
-              </div>
-              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-base font-semibold text-slate-900">
-                Total a pagar: {currencyFormatter.format(totals.totalPrevio)}
-              </div>
-              {!descuentoAutorizado && parseNumber(descuentoGeneral) > 0 && (
-                <p className="text-xs text-amber-600">
-                  Descuento pendiente de aprobación. Total estimado sujeto a cambios.
-                </p>
-              )}
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500">Efectivo recibido</span>
-                <span className="font-semibold text-emerald-600">
-                  {currencyFormatter.format(roundCop(parseNumber(efectivoRecibido)))}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500">Cambio</span>
-                <span className="font-semibold text-slate-900">
-                  {currencyFormatter.format(cambio)}
-                </span>
-              </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={handleAbrirBusqueda}
+                className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold uppercase text-slate-600 hover:bg-slate-50"
+              >
+                <Search size={14} /> Consulta rápida
+              </button>
+              <button
+                type="button"
+                onClick={handleLimpiarTodo}
+                className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold uppercase text-rose-600 hover:bg-rose-50"
+              >
+                <Trash2 size={14} /> Borrar todo
+              </button>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold uppercase text-slate-600">
-                Descuento general
-              </h2>
-              <ShieldCheck className="text-slate-400" size={20} />
-            </div>
-            <div className="mt-3 flex items-center gap-2">
+          <div className="space-y-2 lg:col-span-2">
+            <label className="text-xs font-semibold uppercase text-slate-500">
+              Descuento general
+            </label>
+            <div className="flex items-center gap-2">
               <input
                 type="number"
                 min={0}
                 max={100}
                 value={descuentoGeneral}
                 onChange={(event) => setDescuentoGeneral(event.target.value)}
-                className="w-24 rounded-lg border border-slate-200 px-3 py-2 text-sm text-right"
+                className="w-20 rounded-lg border border-slate-200 px-2 py-2 text-sm text-right"
               />
               <span className="text-sm text-slate-500">% aplicado</span>
-              {!esAdmin && (
-                <button
-                  type="button"
-                  onClick={handleSolicitarPermiso}
-                  className="ml-auto rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold uppercase text-slate-600 hover:bg-slate-50"
-                >
-                  Solicitar permiso
-                </button>
-              )}
             </div>
-            {estadoSolicitud && (
-              <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                <p className="font-semibold text-slate-700">
-                  Estado: {estadoSolicitud.estado}
-                </p>
-                <p>
-                  Aprobador: {estadoSolicitud.aprobador_nombre || aprobadorNombre || 'Asignado'}
-                </p>
-                <p>
-                  Descuento solicitado: {estadoSolicitud.descuento_solicitado}%
-                  {estadoSolicitud.descuento_aprobado
-                    ? ` · Aprobado: ${estadoSolicitud.descuento_aprobado}%`
-                    : ''}
-                </p>
-              </div>
-            )}
             {!esAdmin && (
-              <p className="mt-2 text-xs text-slate-500">
-                El descuento requiere autorización del dueño o persona designada.
-              </p>
+              <button
+                type="button"
+                onClick={handleSolicitarPermiso}
+                className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold uppercase text-slate-600 hover:bg-slate-50"
+              >
+                Solicitar permiso
+              </button>
             )}
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="text-sm font-semibold uppercase text-slate-600">
-              Documentos
-            </h2>
-            <div className="mt-3 grid gap-2">
+          <div className="space-y-2 lg:col-span-3">
+            <label className="text-xs font-semibold uppercase text-slate-500">
+              Medio de pago
+            </label>
+            <select
+              value={medioPago}
+              onChange={(event) =>
+                setMedioPago(event.target.value as typeof medioPago)
+              }
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+            >
+              <option value="EFECTIVO">Efectivo</option>
+              <option value="TARJETA">Tarjeta</option>
+              <option value="TRANSFERENCIA">Transferencia</option>
+              <option value="CREDITO">Crédito</option>
+            </select>
+            <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={() => handleGenerarDocumento('COTIZACION')}
-                className="flex items-center justify-between rounded-lg border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                className="flex flex-1 items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold uppercase text-slate-700 hover:bg-slate-50"
               >
                 <span>Cotizar</span>
-                <FileText size={18} />
+                <FileText size={16} />
               </button>
               <button
                 type="button"
                 onClick={() => handleGenerarDocumento('REMISION')}
-                className="flex items-center justify-between rounded-lg border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                className="flex flex-1 items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold uppercase text-slate-700 hover:bg-slate-50"
               >
                 <span>Remisión</span>
-                <FileText size={18} />
+                <FileText size={16} />
               </button>
               <button
                 type="button"
                 onClick={() => handleGenerarDocumento('FACTURA')}
-                className="flex items-center justify-between rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
+                className="flex flex-1 items-center justify-between rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold uppercase text-white shadow-sm hover:bg-blue-700"
               >
                 <span>Facturar</span>
-                <FileText size={18} />
+                <FileText size={16} />
               </button>
+            </div>
+          </div>
+
+          <div className="space-y-2 lg:col-span-2">
+            <label className="text-xs font-semibold uppercase text-slate-500">
+              Efectivo recibido
+            </label>
+            <input
+              type="text"
+              value={efectivoRecibido}
+              onChange={(event) => setEfectivoRecibido(event.target.value)}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+            />
+            {!descuentoAutorizado && parseNumber(descuentoGeneral) > 0 && (
+              <p className="text-xs text-amber-600">
+                Descuento pendiente de aprobación.
+              </p>
+            )}
+          </div>
+        </div>
+
+        {estadoSolicitud && (
+          <div className="mt-4 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            <p className="font-semibold text-slate-700">
+              Estado: {estadoSolicitud.estado}
+            </p>
+            <p>
+              Aprobador: {estadoSolicitud.aprobador_nombre || aprobadorNombre || 'Asignado'}
+            </p>
+            <p>
+              Descuento solicitado: {estadoSolicitud.descuento_solicitado}%
+              {estadoSolicitud.descuento_aprobado
+                ? ` · Aprobado: ${estadoSolicitud.descuento_aprobado}%`
+                : ''}
+            </p>
+          </div>
+        )}
+        {!esAdmin && (
+          <p className="mt-2 text-xs text-slate-500">
+            El descuento requiere autorización del dueño o persona designada.
+          </p>
+        )}
+      </section>
+
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-200 bg-yellow-50 px-4 py-2 text-xs font-semibold uppercase text-slate-600">
+          Detalle de productos
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-left text-sm">
+            <thead className="bg-yellow-400 text-xs uppercase text-slate-900">
+              <tr>
+                <th className="px-3 py-2">Cant</th>
+                <th className="px-3 py-2">Código</th>
+                <th className="px-3 py-2">Artículo</th>
+                <th className="px-3 py-2 text-right">I.V.A.</th>
+                <th className="px-3 py-2 text-right">Total</th>
+                <th className="px-3 py-2 text-right">Precio U</th>
+                <th className="px-3 py-2 text-right">Desc %</th>
+                <th className="px-3 py-2 text-right">Stock</th>
+                <th className="px-3 py-2 text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {cartItems.length === 0 && (
+                <tr>
+                  <td colSpan={9} className="px-3 py-10 text-center text-slate-500">
+                    Agrega productos con lector o doble clic.
+                  </td>
+                </tr>
+              )}
+              {cartItems.map((item) => {
+                const subtotal = item.precioUnitario * item.cantidad;
+                const descuento = subtotal * (item.descuentoPorcentaje / 100);
+                const base = subtotal - descuento;
+                const iva = base * (item.ivaPorcentaje / 100);
+                const total = roundCop(base + iva);
+                return (
+                  <tr key={item.id} className="border-b border-slate-100">
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleActualizarCantidad(
+                              item.id,
+                              Math.max(1, item.cantidad - 1)
+                            )
+                          }
+                          className="text-slate-400 hover:text-slate-600"
+                        >
+                          <MinusCircle size={16} />
+                        </button>
+                        <input
+                          type="number"
+                          min={1}
+                          value={item.cantidad}
+                          onChange={(event) =>
+                            handleActualizarCantidad(
+                              item.id,
+                              Number(event.target.value || 1)
+                            )
+                          }
+                          className="w-16 rounded border border-slate-200 px-2 py-1 text-center text-sm"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleActualizarCantidad(item.id, item.cantidad + 1)
+                          }
+                          className="text-slate-400 hover:text-slate-600"
+                        >
+                          <PlusCircle size={16} />
+                        </button>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 text-slate-600">{item.codigo}</td>
+                    <td className="px-3 py-2 font-medium text-slate-800">
+                      {item.nombre}
+                    </td>
+                    <td className="px-3 py-2 text-right">{item.ivaPorcentaje}%</td>
+                    <td className="px-3 py-2 text-right">
+                      {currencyFormatter.format(total)}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      {currencyFormatter.format(item.precioUnitario)}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={item.descuentoPorcentaje}
+                        onChange={(event) =>
+                          handleActualizarDescuento(
+                            item.id,
+                            Number(event.target.value || 0)
+                          )
+                        }
+                        className="w-20 rounded border border-slate-200 px-2 py-1 text-right text-sm"
+                        disabled={!descuentoAutorizado}
+                      />
+                    </td>
+                    <td className="px-3 py-2 text-right">{item.stock}</td>
+                    <td className="px-3 py-2 text-right">
+                      <button
+                        type="button"
+                        onClick={() => handleEliminarItem(item.id)}
+                        className="rounded-lg border border-slate-200 p-2 text-rose-600 hover:bg-rose-50"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-2">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h2 className="text-sm font-semibold uppercase text-slate-600">
+            Resumen de venta
+          </h2>
+          <div className="mt-4 space-y-3 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-500">Subtotal</span>
+              <span className="font-semibold text-slate-900">
+                {currencyFormatter.format(totals.subtotal)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-slate-500">Impuestos</span>
+              <span className="font-semibold text-slate-900">
+                {currencyFormatter.format(totals.iva)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-slate-500">Descuentos</span>
+              <span className="font-semibold text-rose-600">
+                -{currencyFormatter.format(totals.descuentoTotalPrevio)}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold uppercase text-slate-600">
+              Total a pagar
+            </h2>
+            <CircleDollarSign className="text-slate-400" size={20} />
+          </div>
+          <div className="mt-4 space-y-3 text-sm">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-base font-semibold text-slate-900">
+              {currencyFormatter.format(totals.totalPrevio)}
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-slate-500">Efectivo recibido</span>
+              <span className="font-semibold text-emerald-600">
+                {currencyFormatter.format(roundCop(parseNumber(efectivoRecibido)))}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-slate-500">Cambio</span>
+              <span className="font-semibold text-slate-900">
+                {currencyFormatter.format(cambio)}
+              </span>
             </div>
           </div>
         </div>
