@@ -120,6 +120,7 @@ export default function Ventas() {
   const [mostrarBusqueda, setMostrarBusqueda] = useState(false);
   const [mostrarPermiso, setMostrarPermiso] = useState(false);
   const [usuariosAprobadores, setUsuariosAprobadores] = useState<{ id: number; nombre: string }[]>([]);
+  const [cargandoAprobadores, setCargandoAprobadores] = useState(false);
   const codigoInputRef = useRef<HTMLInputElement | null>(null);
 
   const tallerPayload = useMemo(() => {
@@ -147,19 +148,41 @@ export default function Ventas() {
   }, [busquedaProducto, mostrarBusqueda]);
 
   useEffect(() => {
-    if (mostrarPermiso && usuariosAprobadores.length === 0) {
-      configuracionAPI
-        .obtenerUsuarios()
-        .then((data) =>
-          setUsuariosAprobadores(
-            data.map((usuario) => ({
-              id: usuario.id,
-              nombre: `${usuario.first_name} ${usuario.last_name}`.trim() || usuario.username,
-            }))
-          )
-        )
-        .catch(() => setUsuariosAprobadores([]));
+    if (!mostrarPermiso) return;
+    const cached = window.localStorage.getItem('usuarios_aprobadores');
+    if (cached && usuariosAprobadores.length === 0) {
+      try {
+        const parsed = JSON.parse(cached) as { id: number; nombre: string }[];
+        if (Array.isArray(parsed)) {
+          setUsuariosAprobadores(parsed);
+        }
+      } catch (error) {
+        window.localStorage.removeItem('usuarios_aprobadores');
+      }
     }
+    if (usuariosAprobadores.length > 0) return;
+    setCargandoAprobadores(true);
+    configuracionAPI
+      .obtenerUsuarios()
+      .then((data) => {
+        const aprobadores = data
+          .filter((usuario) => usuario.tipo_usuario === 'ADMIN')
+          .map((usuario) => ({
+            id: usuario.id,
+            nombre: `${usuario.first_name} ${usuario.last_name}`.trim() || usuario.username,
+          }));
+        const fallback = data.map((usuario) => ({
+          id: usuario.id,
+          nombre: `${usuario.first_name} ${usuario.last_name}`.trim() || usuario.username,
+        }));
+        const lista = aprobadores.length > 0 ? aprobadores : fallback;
+        setUsuariosAprobadores(lista);
+        window.localStorage.setItem('usuarios_aprobadores', JSON.stringify(lista));
+      })
+      .catch(() => {
+        setMensaje('No se pudieron cargar los aprobadores. Ingresa el ID del admin.');
+      })
+      .finally(() => setCargandoAprobadores(false));
   }, [mostrarPermiso, usuariosAprobadores.length]);
 
   useEffect(() => {
@@ -176,6 +199,7 @@ export default function Ventas() {
         setDescuentoGeneral(String(aprobado));
         setDescuentoAutorizado(true);
       } else {
+        setDescuentoGeneral(String(solicitud.descuentoSolicitado));
         setDescuentoAutorizado(false);
       }
     };
@@ -254,23 +278,27 @@ export default function Ventas() {
       const lineSubtotal = item.precioUnitario * item.cantidad;
       return acc + lineSubtotal * (item.descuentoPorcentaje / 100);
     }, 0);
-    const descuentoGeneralValor = descuentoAutorizado
-      ? subtotal * (parseNumber(descuentoGeneral) / 100)
-      : 0;
+    const descuentoGeneralValor = subtotal * (parseNumber(descuentoGeneral) / 100);
     const iva = cartItems.reduce((acc, item) => {
       const lineSubtotal = item.precioUnitario * item.cantidad;
       const lineDesc = lineSubtotal * (item.descuentoPorcentaje / 100);
       const base = lineSubtotal - lineDesc;
       return acc + base * (item.ivaPorcentaje / 100);
     }, 0);
-    const descuentoTotal = descuentoLineas + descuentoGeneralValor;
-    const total = subtotal - descuentoTotal + iva;
+    const descuentoTotalPrevio = descuentoLineas + descuentoGeneralValor;
+    const descuentoTotalAplicado =
+      descuentoLineas +
+      (descuentoAutorizado ? descuentoGeneralValor : 0);
+    const totalPrevio = subtotal - descuentoTotalPrevio + iva;
+    const totalAplicado = subtotal - descuentoTotalAplicado + iva;
     return {
       subtotal,
-      descuentoTotal,
+      descuentoTotalPrevio,
+      descuentoTotalAplicado,
       descuentoGeneralValor,
       iva,
-      total,
+      totalPrevio,
+      totalAplicado,
     };
   }, [cartItems, descuentoAutorizado, descuentoGeneral]);
 
@@ -383,8 +411,13 @@ export default function Ventas() {
       solicitanteId: user.id,
       solicitanteNombre: user.username ?? 'Usuario',
       aprobadorId: Number(aprobadorId),
-      aprobadorNombre: aprobador?.nombre ?? 'Administrador',
+      aprobadorNombre: (aprobador?.nombre ?? aprobadorNombre) || 'Administrador',
       descuentoSolicitado,
+      descuentoSolicitadoValor: totals.descuentoGeneralValor,
+      subtotal: totals.subtotal,
+      iva: totals.iva,
+      totalAntesDescuento: totals.subtotal + totals.iva,
+      totalConDescuento: totals.totalPrevio,
     });
     const nuevaSolicitud = solicitudes[0] ?? null;
     setEstadoSolicitud(nuevaSolicitud);
@@ -407,6 +440,10 @@ export default function Ventas() {
       setMensaje('Agrega productos antes de continuar.');
       return;
     }
+    if (!descuentoAutorizado && parseNumber(descuentoGeneral) > 0) {
+      setMensaje('El descuento general está pendiente de aprobación.');
+      return;
+    }
     try {
       const venta = await ventasApi.crearVenta({
         tipo_comprobante: tipo,
@@ -414,12 +451,12 @@ export default function Ventas() {
         vendedor: user?.id ?? 0,
         subtotal: totals.subtotal.toFixed(2),
         descuento_porcentaje: descuentoAutorizado ? descuentoGeneral : '0',
-        descuento_valor: totals.descuentoTotal.toFixed(2),
+        descuento_valor: totals.descuentoTotalAplicado.toFixed(2),
         iva: totals.iva.toFixed(2),
-        total: totals.total.toFixed(2),
+        total: totals.totalAplicado.toFixed(2),
         medio_pago: medioPago,
         efectivo_recibido: parseNumber(efectivoRecibido).toFixed(2),
-        cambio: (parseNumber(efectivoRecibido) - totals.total).toFixed(2),
+        cambio: (parseNumber(efectivoRecibido) - totals.totalAplicado).toFixed(2),
         detalles: cartItems.map((item) => {
           const subtotal = item.precioUnitario * item.cantidad;
           const descuento = subtotal * (item.descuentoPorcentaje / 100);
@@ -450,7 +487,7 @@ export default function Ventas() {
         tipo,
         numero: numeroComprobante,
         cliente: clienteNombre,
-        total: currencyFormatter.format(totals.total),
+        total: currencyFormatter.format(totals.totalAplicado),
       });
       const detallesPreview: DocumentoDetalle[] = cartItems.map((item) => {
         const subtotalLinea = item.precioUnitario * item.cantidad;
@@ -487,9 +524,9 @@ export default function Ventas() {
         estado: 'CONFIRMADA',
         detalles: detallesPreview,
         subtotal: totals.subtotal,
-        descuento: totals.descuentoTotal,
+        descuento: totals.descuentoTotalAplicado,
         iva: totals.iva,
-        total: totals.total,
+        total: totals.totalAplicado,
         efectivoRecibido: parseNumber(efectivoRecibido),
         cambio,
       });
@@ -500,9 +537,9 @@ export default function Ventas() {
   };
 
   const cambio = useMemo(() => {
-    const calculado = parseNumber(efectivoRecibido) - totals.total;
+    const calculado = parseNumber(efectivoRecibido) - totals.totalPrevio;
     return calculado >= 0 ? calculado : 0;
-  }, [efectivoRecibido, totals.total]);
+  }, [efectivoRecibido, totals.totalPrevio]);
 
   return (
     <div className="space-y-6">
@@ -772,12 +809,17 @@ export default function Ventas() {
               <div className="flex items-center justify-between">
                 <span className="text-slate-500">Descuentos</span>
                 <span className="font-semibold text-rose-600">
-                  -{currencyFormatter.format(totals.descuentoTotal)}
+                  -{currencyFormatter.format(totals.descuentoTotalPrevio)}
                 </span>
               </div>
               <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-base font-semibold text-slate-900">
-                Total a pagar: {currencyFormatter.format(totals.total)}
+                Total a pagar: {currencyFormatter.format(totals.totalPrevio)}
               </div>
+              {!descuentoAutorizado && parseNumber(descuentoGeneral) > 0 && (
+                <p className="text-xs text-amber-600">
+                  Descuento pendiente de aprobación. Total estimado sujeto a cambios.
+                </p>
+              )}
               <div className="flex items-center justify-between">
                 <span className="text-slate-500">Efectivo recibido</span>
                 <span className="font-semibold text-emerald-600">
@@ -1131,16 +1173,51 @@ export default function Ventas() {
               </label>
               <select
                 value={aprobadorId}
-                onChange={(event) => setAprobadorId(event.target.value)}
+                onChange={(event) => {
+                  const selectedId = event.target.value;
+                  setAprobadorId(selectedId);
+                  const selected = usuariosAprobadores.find(
+                    (usuario) => usuario.id === Number(selectedId)
+                  );
+                  setAprobadorNombre(selected?.nombre ?? '');
+                }}
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                disabled={cargandoAprobadores || usuariosAprobadores.length === 0}
               >
-                <option value="">Seleccionar</option>
+                <option value="">
+                  {cargandoAprobadores ? 'Cargando...' : 'Seleccionar'}
+                </option>
                 {usuariosAprobadores.map((usuario) => (
                   <option key={usuario.id} value={usuario.id}>
                     {usuario.nombre}
                   </option>
                 ))}
               </select>
+              {usuariosAprobadores.length === 0 && !cargandoAprobadores && (
+                <div className="space-y-2 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                  <p>
+                    No se encontraron aprobadores disponibles. Ingresa el ID del admin
+                    para enviar la solicitud.
+                  </p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <input
+                      type="number"
+                      min={1}
+                      placeholder="ID del admin"
+                      value={aprobadorId}
+                      onChange={(event) => setAprobadorId(event.target.value)}
+                      className="w-full rounded-lg border border-amber-200 px-3 py-2 text-sm"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Nombre del admin"
+                      value={aprobadorNombre}
+                      onChange={(event) => setAprobadorNombre(event.target.value)}
+                      className="w-full rounded-lg border border-amber-200 px-3 py-2 text-sm"
+                    />
+                  </div>
+                </div>
+              )}
               <button
                 type="button"
                 onClick={handleConfirmarPermiso}

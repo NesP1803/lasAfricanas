@@ -41,6 +41,16 @@ export default function MiPerfil() {
     return (perfil?.tipo_usuario ?? user?.role) === "ADMIN";
   }, [perfil?.tipo_usuario, user?.role]);
 
+  const currencyFormatter = useMemo(
+    () =>
+      new Intl.NumberFormat("es-CO", {
+        style: "currency",
+        currency: "COP",
+        minimumFractionDigits: 2,
+      }),
+    []
+  );
+
   useEffect(() => {
     const cargarPerfil = async () => {
       try {
@@ -286,6 +296,13 @@ export default function MiPerfil() {
                           Descuento aprobado: {solicitud.descuentoAprobado}%
                         </p>
                       )}
+                      {solicitud.totalConDescuento !== undefined &&
+                        solicitud.totalAntesDescuento !== undefined && (
+                          <p className="text-xs text-slate-500">
+                            Total antes: {currencyFormatter.format(solicitud.totalAntesDescuento)} ·
+                            Total solicitado: {currencyFormatter.format(solicitud.totalConDescuento)}
+                          </p>
+                        )}
                     </div>
                     <div className="text-xs text-slate-500">
                       {new Date(solicitud.updatedAt).toLocaleString()}

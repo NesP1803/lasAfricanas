@@ -7,6 +7,11 @@ export interface SolicitudDescuento {
   aprobadorId: number;
   aprobadorNombre: string;
   descuentoSolicitado: number;
+  descuentoSolicitadoValor?: number;
+  subtotal?: number;
+  iva?: number;
+  totalAntesDescuento?: number;
+  totalConDescuento?: number;
   descuentoAprobado?: number;
   estado: EstadoSolicitudDescuento;
   createdAt: string;
@@ -51,6 +56,11 @@ export const crearSolicitud = (payload: {
   aprobadorId: number;
   aprobadorNombre: string;
   descuentoSolicitado: number;
+  descuentoSolicitadoValor?: number;
+  subtotal?: number;
+  iva?: number;
+  totalAntesDescuento?: number;
+  totalConDescuento?: number;
 }): SolicitudDescuento[] => {
   const solicitudes = cargarSolicitudes();
   const ahora = new Date().toISOString();
@@ -61,6 +71,11 @@ export const crearSolicitud = (payload: {
     aprobadorId: payload.aprobadorId,
     aprobadorNombre: payload.aprobadorNombre,
     descuentoSolicitado: payload.descuentoSolicitado,
+    descuentoSolicitadoValor: payload.descuentoSolicitadoValor,
+    subtotal: payload.subtotal,
+    iva: payload.iva,
+    totalAntesDescuento: payload.totalAntesDescuento,
+    totalConDescuento: payload.totalConDescuento,
     estado: 'PENDIENTE',
     createdAt: ahora,
     updatedAt: ahora,
