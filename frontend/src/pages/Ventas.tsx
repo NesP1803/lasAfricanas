@@ -613,10 +613,10 @@ export default function Ventas() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <section className="rounded-2xl border border-slate-200 bg-white px-6 py-5 shadow-sm">
         <div className="grid gap-4 lg:grid-cols-12">
           <div className="space-y-2 lg:col-span-3">
-            <label className="text-xs font-semibold uppercase text-slate-500">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               Digite NIT/CC del cliente
             </label>
             <div className="flex items-center gap-2">
@@ -630,12 +630,12 @@ export default function Ventas() {
                   }
                 }}
                 placeholder="Digite NIT/CC"
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
               />
               <button
                 type="button"
                 onClick={handleBuscarCliente}
-                className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-slate-600 transition hover:bg-slate-100"
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50"
               >
                 <Search size={18} />
               </button>
@@ -643,29 +643,31 @@ export default function Ventas() {
           </div>
 
           <div className="space-y-2 lg:col-span-3">
-            <label className="text-xs font-semibold uppercase text-slate-500">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               Cliente y/o razón social
             </label>
             <input
               type="text"
               value={clienteNombre}
               readOnly
-              className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-800"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-800"
             />
           </div>
 
           <div className="space-y-2 lg:col-span-2">
-            <label className="text-xs font-semibold uppercase text-slate-500">Vendedor</label>
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-800">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              Vendedor
+            </label>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-800">
               {user?.username ?? 'Usuario'}
             </div>
           </div>
 
           <div className="space-y-2 lg:col-span-2">
-            <label className="text-xs font-semibold uppercase text-slate-500">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               Generar factura
             </label>
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
               {configuracion
                 ? `${configuracion.prefijo_factura}-${configuracion.numero_factura}`
                 : 'FAC-000000'}
@@ -673,10 +675,10 @@ export default function Ventas() {
           </div>
 
           <div className="space-y-2 lg:col-span-2">
-            <label className="text-xs font-semibold uppercase text-slate-500">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               Generar remisión
             </label>
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
               {configuracion
                 ? `${configuracion.prefijo_remision}-${configuracion.numero_remision}`
                 : 'REM-000000'}
@@ -686,12 +688,12 @@ export default function Ventas() {
 
         <div className="mt-4 grid gap-4 lg:grid-cols-12">
           <div className="space-y-2 lg:col-span-5">
-            <label className="text-xs font-semibold uppercase text-slate-500">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               Digite código de artículo
             </label>
             <div className="flex items-center gap-2">
-              <div className="flex flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                <Barcode size={18} className="text-slate-500" />
+              <div className="flex flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                <Barcode size={18} className="text-slate-400" />
                 <input
                   ref={codigoInputRef}
                   type="text"
@@ -709,7 +711,7 @@ export default function Ventas() {
               <button
                 type="button"
                 onClick={handleBuscarProductoPorCodigo}
-                className="rounded-lg bg-blue-600 p-2 text-white shadow-sm transition hover:bg-blue-700"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-white shadow-sm transition hover:bg-blue-700"
               >
                 <PlusCircle size={18} />
               </button>
@@ -718,14 +720,14 @@ export default function Ventas() {
               <button
                 type="button"
                 onClick={handleAbrirBusqueda}
-                className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold uppercase text-slate-600 hover:bg-slate-50"
+                className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold uppercase text-slate-600 hover:bg-slate-50"
               >
                 <Search size={14} /> Consulta rápida
               </button>
               <button
                 type="button"
                 onClick={handleLimpiarTodo}
-                className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold uppercase text-rose-600 hover:bg-rose-50"
+                className="flex items-center gap-2 rounded-xl border border-rose-200 px-4 py-2 text-xs font-semibold uppercase text-rose-600 hover:bg-rose-50"
               >
                 <Trash2 size={14} /> Borrar todo
               </button>
@@ -733,7 +735,7 @@ export default function Ventas() {
           </div>
 
           <div className="space-y-2 lg:col-span-2">
-            <label className="text-xs font-semibold uppercase text-slate-500">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               Descuento general
             </label>
             <div className="flex items-center gap-2">
@@ -743,7 +745,7 @@ export default function Ventas() {
                 max={100}
                 value={descuentoGeneral}
                 onChange={(event) => setDescuentoGeneral(event.target.value)}
-                className="w-20 rounded-lg border border-slate-200 px-2 py-2 text-sm text-right"
+                className="w-20 rounded-xl border border-slate-200 px-2 py-2 text-sm text-right"
               />
               <span className="text-sm text-slate-500">% aplicado</span>
             </div>
@@ -751,7 +753,7 @@ export default function Ventas() {
               <button
                 type="button"
                 onClick={handleSolicitarPermiso}
-                className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold uppercase text-slate-600 hover:bg-slate-50"
+                className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold uppercase text-slate-600 hover:bg-slate-50"
               >
                 Solicitar permiso
               </button>
@@ -759,7 +761,7 @@ export default function Ventas() {
           </div>
 
           <div className="space-y-2 lg:col-span-3">
-            <label className="text-xs font-semibold uppercase text-slate-500">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               Medio de pago
             </label>
             <select
@@ -767,7 +769,7 @@ export default function Ventas() {
               onChange={(event) =>
                 setMedioPago(event.target.value as typeof medioPago)
               }
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
             >
               <option value="EFECTIVO">Efectivo</option>
               <option value="TARJETA">Tarjeta</option>
@@ -778,7 +780,7 @@ export default function Ventas() {
               <button
                 type="button"
                 onClick={() => handleGenerarDocumento('COTIZACION')}
-                className="flex flex-1 items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold uppercase text-slate-700 hover:bg-slate-50"
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold uppercase text-slate-700 hover:bg-slate-50"
               >
                 <span>Cotizar</span>
                 <FileText size={16} />
@@ -786,7 +788,7 @@ export default function Ventas() {
               <button
                 type="button"
                 onClick={() => handleGenerarDocumento('REMISION')}
-                className="flex flex-1 items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold uppercase text-slate-700 hover:bg-slate-50"
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold uppercase text-slate-700 hover:bg-slate-50"
               >
                 <span>Remisión</span>
                 <FileText size={16} />
@@ -794,7 +796,7 @@ export default function Ventas() {
               <button
                 type="button"
                 onClick={() => handleGenerarDocumento('FACTURA')}
-                className="flex flex-1 items-center justify-between rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold uppercase text-white shadow-sm hover:bg-blue-700"
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 py-2 text-xs font-semibold uppercase text-white shadow-sm hover:bg-blue-700"
               >
                 <span>Facturar</span>
                 <FileText size={16} />
@@ -803,14 +805,14 @@ export default function Ventas() {
           </div>
 
           <div className="space-y-2 lg:col-span-2">
-            <label className="text-xs font-semibold uppercase text-slate-500">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               Efectivo recibido
             </label>
             <input
               type="text"
               value={efectivoRecibido}
               onChange={(event) => setEfectivoRecibido(event.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
             />
             {!descuentoAutorizado && parseNumber(descuentoGeneral) > 0 && (
               <p className="text-xs text-amber-600">
@@ -844,7 +846,7 @@ export default function Ventas() {
       </section>
 
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-200 bg-yellow-50 px-4 py-2 text-xs font-semibold uppercase text-slate-600">
+        <div className="border-b border-slate-200 bg-yellow-50 px-5 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
           Detalle de productos
         </div>
         <div className="overflow-x-auto">
@@ -961,8 +963,8 @@ export default function Ventas() {
       </section>
 
       <section className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-semibold uppercase text-slate-600">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600">
             Resumen de venta
           </h2>
           <div className="mt-4 space-y-3 text-sm">
@@ -987,15 +989,15 @@ export default function Ventas() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold uppercase text-slate-600">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600">
               Total a pagar
             </h2>
             <CircleDollarSign className="text-slate-400" size={20} />
           </div>
           <div className="mt-4 space-y-3 text-sm">
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-base font-semibold text-slate-900">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-base font-semibold text-slate-900">
               {currencyFormatter.format(totals.totalPrevio)}
             </div>
             <div className="flex items-center justify-between">
