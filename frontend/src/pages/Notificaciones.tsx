@@ -3,11 +3,7 @@ import { CheckCircle2, XCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { useNotification } from "../contexts/NotificationContext";
-import {
-  actualizarSolicitud,
-  obtenerSolicitudesPorAprobador,
-  type SolicitudDescuento,
-} from "../utils/descuentos";
+import { descuentosApi, type SolicitudDescuento } from "../api/descuentos";
 
 export default function Notificaciones() {
   const { user } = useAuth();
@@ -38,8 +34,9 @@ export default function Notificaciones() {
       setSolicitudes([]);
       return;
     }
-    const actualizarSolicitudes = () => {
-      const data = obtenerSolicitudesPorAprobador(user.id);
+    let intervalId: number | null = null;
+    const actualizarSolicitudes = async () => {
+      const data = await descuentosApi.listarSolicitudes();
       setSolicitudes(data);
       const pendientes = data.filter((solicitud) => solicitud.estado === "PENDIENTE");
       if (pendientes.length > 0) {
@@ -51,13 +48,19 @@ export default function Notificaciones() {
     };
 
     actualizarSolicitudes();
-    const handleStorage = (event: StorageEvent) => {
-      if (event.key === "solicitudes_descuento") {
+    intervalId = window.setInterval(actualizarSolicitudes, 10000);
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
         actualizarSolicitudes();
       }
     };
-    window.addEventListener("storage", handleStorage);
-    return () => window.removeEventListener("storage", handleStorage);
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      if (intervalId) {
+        window.clearInterval(intervalId);
+      }
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
   }, [esAdmin, showNotification, user?.id]);
 
   const handleAjusteDescuento = (id: string, value: string) => {
@@ -71,14 +74,22 @@ export default function Notificaciones() {
     const valorAprobado = ajustesDescuento[solicitud.id];
     const descuentoAprobado = Number(
       valorAprobado === undefined || valorAprobado === ""
-        ? solicitud.descuentoSolicitado
+        ? solicitud.descuento_solicitado
         : valorAprobado
     );
-    const updated = actualizarSolicitud(solicitud.id, {
-      estado,
-      descuentoAprobado: estado === "APROBADO" ? descuentoAprobado : undefined,
-    });
-    setSolicitudes(updated.filter((item) => item.aprobadorId === solicitud.aprobadorId));
+    descuentosApi
+      .actualizarSolicitud(solicitud.id, {
+        estado,
+        descuento_aprobado: estado === "APROBADO" ? String(descuentoAprobado) : null,
+      })
+      .then(() => descuentosApi.listarSolicitudes())
+      .then((data) => setSolicitudes(data))
+      .catch(() => {
+        showNotification({
+          type: "error",
+          message: "No se pudo actualizar la solicitud.",
+        });
+      });
     showNotification({
       type: estado === "APROBADO" ? "success" : "error",
       message:
@@ -123,27 +134,29 @@ export default function Notificaciones() {
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
                     <p className="font-semibold text-slate-800">
-                      {solicitud.solicitanteNombre}
+                      {solicitud.vendedor_nombre}
                     </p>
                     <p className="text-xs text-slate-500">
-                      Solicitó {solicitud.descuentoSolicitado}% · Estado:{" "}
+                      Solicitó {solicitud.descuento_solicitado}% · Estado:{" "}
                       <span className="font-semibold">{solicitud.estado}</span>
                     </p>
-                    {solicitud.descuentoAprobado !== undefined && (
+                    {solicitud.descuento_aprobado && (
                       <p className="text-xs text-slate-500">
-                        Descuento aprobado: {solicitud.descuentoAprobado}%
+                        Descuento aprobado: {solicitud.descuento_aprobado}%
                       </p>
                     )}
-                    {solicitud.totalConDescuento !== undefined &&
-                      solicitud.totalAntesDescuento !== undefined && (
+                    {solicitud.total_con_descuento !== null &&
+                      solicitud.total_con_descuento !== undefined &&
+                      solicitud.total_antes_descuento !== null &&
+                      solicitud.total_antes_descuento !== undefined && (
                         <p className="text-xs text-slate-500">
-                          Total antes: {currencyFormatter.format(solicitud.totalAntesDescuento)} ·
-                          Total solicitado: {currencyFormatter.format(solicitud.totalConDescuento)}
+                          Total antes: {currencyFormatter.format(Number(solicitud.total_antes_descuento))} ·
+                          Total solicitado: {currencyFormatter.format(Number(solicitud.total_con_descuento))}
                         </p>
                       )}
                   </div>
                   <div className="text-xs text-slate-500">
-                    {new Date(solicitud.updatedAt).toLocaleString()}
+                    {new Date(solicitud.updated_at).toLocaleString()}
                   </div>
                 </div>
 
@@ -157,7 +170,7 @@ export default function Notificaciones() {
                         type="number"
                         min={0}
                         max={100}
-                        value={ajustesDescuento[solicitud.id] ?? String(solicitud.descuentoSolicitado)}
+                        value={ajustesDescuento[solicitud.id] ?? String(solicitud.descuento_solicitado)}
                         onChange={(event) =>
                           handleAjusteDescuento(solicitud.id, event.target.value)
                         }

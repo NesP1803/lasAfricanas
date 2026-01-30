@@ -13,7 +13,8 @@ from apps.inventario.views import (
 )
 from apps.ventas.views import (
     ClienteViewSet,
-    VentaViewSet
+    VentaViewSet,
+    SolicitudDescuentoViewSet,
 )
 
 from apps.core.views import (
@@ -38,6 +39,7 @@ router.register(r'movimientos', MovimientoInventarioViewSet, basename='movimient
 # Registrar ViewSets de Ventas
 router.register(r'clientes', ClienteViewSet, basename='cliente')
 router.register(r'ventas', VentaViewSet, basename='venta')
+router.register(r'solicitudes-descuento', SolicitudDescuentoViewSet, basename='solicitud-descuento')
 
 
 # Registrar Configuración y Auditoría

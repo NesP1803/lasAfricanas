@@ -19,11 +19,7 @@ import { useNotification } from '../contexts/NotificationContext';
 import ComprobanteTemplate, {
   type DocumentoDetalle,
 } from '../components/ComprobanteTemplate';
-import {
-  crearSolicitud,
-  obtenerUltimaSolicitudPorUsuario,
-  type SolicitudDescuento,
-} from '../utils/descuentos';
+import { descuentosApi, type SolicitudDescuento } from '../api/descuentos';
 import type { ConfiguracionEmpresa } from '../types';
 import type { ConfiguracionFacturacion } from '../types';
 
@@ -180,30 +176,51 @@ export default function Ventas() {
 
   useEffect(() => {
     if (!user?.id) return;
-    const actualizarEstadoSolicitud = () => {
-      const solicitud = obtenerUltimaSolicitudPorUsuario(user.id);
-      setEstadoSolicitud(solicitud);
-      if (!solicitud) {
-        setDescuentoAutorizado(false);
-        return;
-      }
-      if (solicitud.estado === 'APROBADO') {
-        const aprobado = solicitud.descuentoAprobado ?? solicitud.descuentoSolicitado;
-        setDescuentoGeneral(String(aprobado));
-        setDescuentoAutorizado(true);
-      } else {
-        setDescuentoGeneral(String(solicitud.descuentoSolicitado));
-        setDescuentoAutorizado(false);
+    let intervalId: number | null = null;
+
+    const actualizarEstadoSolicitud = async () => {
+      try {
+        const solicitudes = await descuentosApi.listarSolicitudes();
+        if (solicitudes.length === 0) {
+          setEstadoSolicitud(null);
+          setDescuentoAutorizado(false);
+          return;
+        }
+        const sorted = [...solicitudes].sort(
+          (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+        );
+        const solicitud = sorted[0];
+        setEstadoSolicitud(solicitud);
+        const solicitado = Number(solicitud.descuento_solicitado || 0);
+        if (solicitud.estado === 'APROBADO') {
+          const aprobado = solicitud.descuento_aprobado
+            ? Number(solicitud.descuento_aprobado)
+            : solicitado;
+          setDescuentoGeneral(String(aprobado));
+          setDescuentoAutorizado(true);
+        } else {
+          setDescuentoGeneral(String(solicitado));
+          setDescuentoAutorizado(false);
+        }
+      } catch (error) {
+        setEstadoSolicitud(null);
       }
     };
+
     actualizarEstadoSolicitud();
-    const handleStorage = (event: StorageEvent) => {
-      if (event.key === 'solicitudes_descuento') {
+    intervalId = window.setInterval(actualizarEstadoSolicitud, 10000);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
         actualizarEstadoSolicitud();
       }
     };
-    window.addEventListener('storage', handleStorage);
-    return () => window.removeEventListener('storage', handleStorage);
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      if (intervalId) {
+        window.clearInterval(intervalId);
+      }
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, [user?.id]);
 
   useEffect(() => {
@@ -400,28 +417,33 @@ export default function Ventas() {
       (usuario) => usuario.id === Number(aprobadorId)
     );
     const descuentoSolicitado = Number(descuentoGeneral || 0);
-    const solicitudes = crearSolicitud({
-      solicitanteId: user.id,
-      solicitanteNombre: user.username ?? 'Usuario',
-      aprobadorId: Number(aprobadorId),
-      aprobadorNombre: (aprobador?.nombre ?? aprobadorNombre) || 'Administrador',
-      descuentoSolicitado,
-      descuentoSolicitadoValor: totals.descuentoGeneralValor,
-      subtotal: totals.subtotal,
-      iva: totals.iva,
-      totalAntesDescuento: totals.subtotal + totals.iva,
-      totalConDescuento: totals.totalPrevio,
-    });
-    const nuevaSolicitud = solicitudes[0] ?? null;
-    setEstadoSolicitud(nuevaSolicitud);
-    setAprobadorNombre(aprobador?.nombre ?? 'Administrador');
-    setDescuentoAutorizado(false);
-    setMostrarPermiso(false);
-    setMensaje('Solicitud enviada. El aprobador recibirá la notificación para autorizar.');
-    showNotification({
-      type: 'success',
-      message: 'Solicitud de descuento enviada al aprobador.',
-    });
+    descuentosApi
+      .crearSolicitud({
+        aprobador: Number(aprobadorId),
+        descuento_solicitado: descuentoSolicitado,
+        subtotal: totals.subtotal,
+        iva: totals.iva,
+        total_antes_descuento: totals.subtotal + totals.iva,
+        total_con_descuento: totals.totalPrevio,
+      })
+      .then((nuevaSolicitud) => {
+        setEstadoSolicitud(nuevaSolicitud);
+        setAprobadorNombre(aprobador?.nombre ?? 'Administrador');
+        setDescuentoAutorizado(false);
+        setMostrarPermiso(false);
+        setMensaje('Solicitud enviada. El aprobador recibirá la notificación para autorizar.');
+        showNotification({
+          type: 'success',
+          message: 'Solicitud de descuento enviada al aprobador.',
+        });
+      })
+      .catch(() => {
+        setMensaje('No se pudo enviar la solicitud. Revisa la conexión.');
+        showNotification({
+          type: 'error',
+          message: 'No se pudo enviar la solicitud de descuento.',
+        });
+      });
   };
 
   const handleGenerarDocumento = async (tipo: DocumentoGenerado['tipo']) => {
@@ -859,12 +881,12 @@ export default function Ventas() {
                   Estado: {estadoSolicitud.estado}
                 </p>
                 <p>
-                  Aprobador: {estadoSolicitud.aprobadorNombre || aprobadorNombre || 'Asignado'}
+                  Aprobador: {estadoSolicitud.aprobador_nombre || aprobadorNombre || 'Asignado'}
                 </p>
                 <p>
-                  Descuento solicitado: {estadoSolicitud.descuentoSolicitado}%
-                  {estadoSolicitud.descuentoAprobado !== undefined
-                    ? ` · Aprobado: ${estadoSolicitud.descuentoAprobado}%`
+                  Descuento solicitado: {estadoSolicitud.descuento_solicitado}%
+                  {estadoSolicitud.descuento_aprobado
+                    ? ` · Aprobado: ${estadoSolicitud.descuento_aprobado}%`
                     : ''}
                 </p>
               </div>
