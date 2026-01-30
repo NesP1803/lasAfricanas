@@ -278,6 +278,17 @@ class Venta(BaseModel):
             raise ValidationError('Solo las facturas pueden tener datos de facturación electrónica')
         
         # Validar descuento con permisos del vendedor
+        if (
+            self.vendedor
+            and (
+                self.vendedor.is_superuser
+                or self.vendedor.is_staff
+                or getattr(self.vendedor, 'tipo_usuario', None) == 'ADMIN'
+            )
+        ):
+            self.descuento_requiere_aprobacion = False
+            return
+
         if hasattr(self.vendedor, 'perfil_vendedor'):
             perfil = self.vendedor.perfil_vendedor
             puede_aplicar, requiere_aprobacion = perfil.puede_aplicar_descuento(self.descuento_porcentaje)
