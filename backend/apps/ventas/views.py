@@ -1,18 +1,20 @@
 from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Sum, Count, Q
 from django.utils import timezone
 
-from .models import Cliente, Venta, DetalleVenta, VentaAnulada
+from .models import Cliente, Venta, DetalleVenta, SolicitudDescuento, VentaAnulada
 from .serializers import (
     ClienteSerializer,
     VentaListSerializer,
     VentaDetailSerializer,
     VentaCreateSerializer,
-    VentaAnuladaSerializer
+    VentaAnuladaSerializer,
+    SolicitudDescuentoSerializer,
 )
 
 
@@ -86,7 +88,8 @@ class VentaViewSet(viewsets.ModelViewSet):
         
         serializer = VentaListSerializer(remisiones, many=True)
         return Response(serializer.data)
-    
+
+
     @action(detail=True, methods=['post'])
     def convertir_a_factura(self, request, pk=None):
         """
@@ -217,3 +220,40 @@ class VentaViewSet(viewsets.ModelViewSet):
         )
         
         return Response(stats)
+
+
+class SolicitudDescuentoViewSet(viewsets.ModelViewSet):
+    """ViewSet para solicitudes de descuento"""
+    serializer_class = SolicitudDescuentoSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['estado', 'vendedor', 'aprobador']
+    search_fields = ['vendedor__username', 'aprobador__username']
+    ordering_fields = ['created_at', 'updated_at']
+    ordering = ['-created_at']
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_superuser or user.is_staff or getattr(user, 'tipo_usuario', None) == 'ADMIN':
+            return SolicitudDescuento.objects.filter(aprobador=user)
+        return SolicitudDescuento.objects.filter(vendedor=user)
+
+    def perform_create(self, serializer):
+        aprobador = serializer.validated_data.get('aprobador')
+        if not aprobador or not (
+            aprobador.is_superuser
+            or aprobador.is_staff
+            or getattr(aprobador, 'tipo_usuario', None) == 'ADMIN'
+        ):
+            raise ValidationError({'aprobador': 'Aprobador inválido.'})
+        serializer.save(vendedor=self.request.user)
+
+    def update(self, request, *args, **kwargs):
+        if request.user != self.get_object().aprobador:
+            return Response({'detail': 'No autorizado.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        if request.user != self.get_object().aprobador:
+            return Response({'detail': 'No autorizado.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().partial_update(request, *args, **kwargs)

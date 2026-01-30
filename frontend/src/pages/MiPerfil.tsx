@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Eye, EyeOff, Save } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { configuracionAPI } from "../api/configuracion";
 import { useAuth } from "../contexts/AuthContext";
 import type { UsuarioAdmin } from "../types";
@@ -19,6 +20,7 @@ const emptyPerfil: PerfilForm = {
 
 export default function MiPerfil() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [perfil, setPerfil] = useState<UsuarioAdmin | null>(null);
   const [form, setForm] = useState<PerfilForm>(emptyPerfil);
   const [mensajePerfil, setMensajePerfil] = useState("");
@@ -27,6 +29,10 @@ export default function MiPerfil() {
   const [confirmarClave, setConfirmarClave] = useState("");
   const [mostrarNuevaClave, setMostrarNuevaClave] = useState(false);
   const [mostrarConfirmarClave, setMostrarConfirmarClave] = useState(false);
+  const esAdmin = useMemo(
+    () => (perfil?.tipo_usuario ?? user?.role) === "ADMIN",
+    [perfil?.tipo_usuario, user?.role]
+  );
 
   useEffect(() => {
     const cargarPerfil = async () => {
@@ -47,6 +53,12 @@ export default function MiPerfil() {
 
     cargarPerfil();
   }, []);
+
+  useEffect(() => {
+    if (esAdmin) {
+      navigate("/notificaciones", { replace: true });
+    }
+  }, [esAdmin, navigate]);
 
   const handleGuardarPerfil = async () => {
     setMensajePerfil("");
