@@ -248,6 +248,38 @@ class VentaViewSet(viewsets.ModelViewSet):
             total_facturas_valor=Sum('total', filter=Q(tipo_comprobante='FACTURA')),
             total_remisiones_valor=Sum('total', filter=Q(tipo_comprobante='REMISION')),
         )
+
+        ventas_por_usuario = (
+            ventas.values(
+                'vendedor_id',
+                'vendedor__first_name',
+                'vendedor__last_name',
+                'vendedor__username',
+            )
+            .annotate(
+                total_facturas=Count('id', filter=Q(tipo_comprobante='FACTURA')),
+                total_remisiones=Count('id', filter=Q(tipo_comprobante='REMISION')),
+            )
+            .order_by('vendedor__first_name', 'vendedor__last_name', 'vendedor__username')
+        )
+
+        facturas_por_usuario = []
+        remisiones_por_usuario = []
+        for item in ventas_por_usuario:
+            nombre = f"{item['vendedor__first_name']} {item['vendedor__last_name']}".strip()
+            if not nombre:
+                nombre = item['vendedor__username']
+            if item['total_facturas'] > 0:
+                facturas_por_usuario.append(
+                    {'usuario': nombre, 'cuentas': item['total_facturas']}
+                )
+            if item['total_remisiones'] > 0:
+                remisiones_por_usuario.append(
+                    {'usuario': nombre, 'cuentas': item['total_remisiones']}
+                )
+
+        stats['facturas_por_usuario'] = facturas_por_usuario
+        stats['remisiones_por_usuario'] = remisiones_por_usuario
         
         return Response(stats)
 

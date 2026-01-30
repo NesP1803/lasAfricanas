@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CalendarRange, FileText, ReceiptText } from 'lucide-react';
 import { ventasApi, type EstadisticasVentas } from '../api/ventas';
 
@@ -20,7 +20,7 @@ export default function DetallesCuentas() {
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState<string | null>(null);
 
-  const cargarEstadisticas = async () => {
+  const cargarEstadisticas = useCallback(async () => {
     setLoading(true);
     try {
       const response = await ventasApi.getEstadisticas({
@@ -35,11 +35,14 @@ export default function DetallesCuentas() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [fechaInicio, fechaFin]);
 
   useEffect(() => {
+    if (!fechaInicio || !fechaFin) {
+      return;
+    }
     cargarEstadisticas();
-  }, []);
+  }, [cargarEstadisticas, fechaInicio, fechaFin]);
 
   const facturasValor = useMemo(
     () => toNumber(stats?.total_facturas_valor),
@@ -50,6 +53,8 @@ export default function DetallesCuentas() {
     [stats?.total_remisiones_valor]
   );
   const totalCaja = facturasValor + remisionesValor;
+  const facturasPorEmpleado = stats?.facturas_por_usuario ?? [];
+  const remisionesPorEmpleado = stats?.remisiones_por_usuario ?? [];
 
   return (
     <div className="space-y-6">
@@ -62,15 +67,6 @@ export default function DetallesCuentas() {
             Visualiza lo recaudado en facturas y remisiones con el rango de fechas.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={cargarEstadisticas}
-          className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
-          disabled={loading}
-        >
-          <CalendarRange size={18} />
-          {loading ? 'Calculando...' : 'Calcular'}
-        </button>
       </div>
 
       <section className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:grid-cols-[1.4fr,1fr]">
@@ -101,6 +97,7 @@ export default function DetallesCuentas() {
             <div className="ml-auto flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600">
               <CalendarRange size={14} />
               {fechaInicio} → {fechaFin}
+              {loading && <span className="text-blue-600">Calculando…</span>}
             </div>
           </div>
 
@@ -221,9 +218,23 @@ export default function DetallesCuentas() {
                 <span className="px-3 py-2">Usuario</span>
                 <span className="px-3 py-2 text-right">Cuentas</span>
               </div>
-              <div className="px-3 py-4 text-center text-sm text-slate-400">
-                Sin datos por empleado.
-              </div>
+              {facturasPorEmpleado.length === 0 ? (
+                <div className="px-3 py-4 text-center text-sm text-slate-400">
+                  Sin datos por empleado.
+                </div>
+              ) : (
+                facturasPorEmpleado.map((item) => (
+                  <div
+                    key={item.usuario}
+                    className="grid grid-cols-2 border-t border-slate-100 text-sm text-slate-600"
+                  >
+                    <span className="px-3 py-2">{item.usuario}</span>
+                    <span className="px-3 py-2 text-right font-semibold text-slate-900">
+                      {item.cuentas}
+                    </span>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 
@@ -236,9 +247,23 @@ export default function DetallesCuentas() {
                 <span className="px-3 py-2">Usuario</span>
                 <span className="px-3 py-2 text-right">Cuentas</span>
               </div>
-              <div className="px-3 py-4 text-center text-sm text-slate-400">
-                Sin datos por empleado.
-              </div>
+              {remisionesPorEmpleado.length === 0 ? (
+                <div className="px-3 py-4 text-center text-sm text-slate-400">
+                  Sin datos por empleado.
+                </div>
+              ) : (
+                remisionesPorEmpleado.map((item) => (
+                  <div
+                    key={item.usuario}
+                    className="grid grid-cols-2 border-t border-slate-100 text-sm text-slate-600"
+                  >
+                    <span className="px-3 py-2">{item.usuario}</span>
+                    <span className="px-3 py-2 text-right font-semibold text-slate-900">
+                      {item.cuentas}
+                    </span>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
