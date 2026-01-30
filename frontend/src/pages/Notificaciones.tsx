@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2, XCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
@@ -11,6 +11,7 @@ export default function Notificaciones() {
   const navigate = useNavigate();
   const [solicitudes, setSolicitudes] = useState<SolicitudDescuento[]>([]);
   const [ajustesDescuento, setAjustesDescuento] = useState<Record<string, string>>({});
+  const pollingRef = useRef<number | null>(null);
 
   const esAdmin = useMemo(() => user?.role === "ADMIN", [user?.role]);
   const currencyFormatter = useMemo(
@@ -34,7 +35,7 @@ export default function Notificaciones() {
       setSolicitudes([]);
       return;
     }
-    let intervalId: number | null = null;
+    if (pollingRef.current) return;
     const actualizarSolicitudes = async () => {
       try {
         const data = await descuentosApi.listarSolicitudes();
@@ -55,7 +56,7 @@ export default function Notificaciones() {
     };
 
     actualizarSolicitudes();
-    intervalId = window.setInterval(actualizarSolicitudes, 10000);
+    pollingRef.current = window.setInterval(actualizarSolicitudes, 15000);
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
         actualizarSolicitudes();
@@ -63,8 +64,9 @@ export default function Notificaciones() {
     };
     document.addEventListener("visibilitychange", handleVisibility);
     return () => {
-      if (intervalId) {
-        window.clearInterval(intervalId);
+      if (pollingRef.current) {
+        window.clearInterval(pollingRef.current);
+        pollingRef.current = null;
       }
       document.removeEventListener("visibilitychange", handleVisibility);
     };

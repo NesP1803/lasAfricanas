@@ -118,6 +118,7 @@ export default function Ventas() {
   const [usuariosAprobadores, setUsuariosAprobadores] = useState<{ id: number; nombre: string }[]>([]);
   const [cargandoAprobadores, setCargandoAprobadores] = useState(false);
   const codigoInputRef = useRef<HTMLInputElement | null>(null);
+  const pollingRef = useRef<number | null>(null);
 
   const tallerPayload = useMemo(() => {
     const state = location.state as { fromTaller?: TallerVentaPayload } | null;
@@ -176,7 +177,7 @@ export default function Ventas() {
 
   useEffect(() => {
     if (!user?.id) return;
-    let intervalId: number | null = null;
+    if (pollingRef.current) return;
 
     const actualizarEstadoSolicitud = async () => {
       try {
@@ -208,7 +209,7 @@ export default function Ventas() {
     };
 
     actualizarEstadoSolicitud();
-    intervalId = window.setInterval(actualizarEstadoSolicitud, 10000);
+    pollingRef.current = window.setInterval(actualizarEstadoSolicitud, 15000);
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
         actualizarEstadoSolicitud();
@@ -216,8 +217,9 @@ export default function Ventas() {
     };
     document.addEventListener('visibilitychange', handleVisibility);
     return () => {
-      if (intervalId) {
-        window.clearInterval(intervalId);
+      if (pollingRef.current) {
+        window.clearInterval(pollingRef.current);
+        pollingRef.current = null;
       }
       document.removeEventListener('visibilitychange', handleVisibility);
     };
