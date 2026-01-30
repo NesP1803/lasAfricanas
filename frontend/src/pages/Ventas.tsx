@@ -7,6 +7,7 @@ import {
   MinusCircle,
   PlusCircle,
   Search,
+  ShieldCheck,
   Trash2,
   X,
 } from 'lucide-react';
@@ -613,9 +614,9 @@ export default function Ventas() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-2xl border border-slate-200 bg-white px-6 py-5 shadow-sm">
-        <div className="grid gap-4 lg:grid-cols-12">
-          <div className="space-y-2 lg:col-span-3">
+      <section className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+        <div className="grid gap-3 lg:grid-cols-6">
+          <div className="space-y-2">
             <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               Digite NIT/CC del cliente
             </label>
@@ -630,19 +631,19 @@ export default function Ventas() {
                   }
                 }}
                 placeholder="Digite NIT/CC"
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
               />
               <button
                 type="button"
                 onClick={handleBuscarCliente}
-                className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50"
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50"
               >
                 <Search size={18} />
               </button>
             </div>
           </div>
 
-          <div className="space-y-2 lg:col-span-3">
+          <div className="space-y-2">
             <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               Cliente y/o razón social
             </label>
@@ -650,43 +651,62 @@ export default function Ventas() {
               type="text"
               value={clienteNombre}
               readOnly
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-800"
+              className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-semibold text-slate-800"
             />
           </div>
 
-          <div className="space-y-2 lg:col-span-2">
+          <div className="space-y-2">
             <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               Vendedor
             </label>
-            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-800">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-semibold text-slate-800">
               {user?.username ?? 'Usuario'}
             </div>
           </div>
 
-          <div className="space-y-2 lg:col-span-2">
+          <div className="space-y-2">
             <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               Generar factura
             </label>
-            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700">
               {configuracion
                 ? `${configuracion.prefijo_factura}-${configuracion.numero_factura}`
                 : 'FAC-000000'}
             </div>
           </div>
 
-          <div className="space-y-2 lg:col-span-2">
+          <div className="space-y-2">
             <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               Generar remisión
             </label>
-            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700">
               {configuracion
                 ? `${configuracion.prefijo_remision}-${configuracion.numero_remision}`
                 : 'REM-000000'}
             </div>
           </div>
+          <div className="space-y-2">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              Medio de pago
+            </label>
+            <select
+              value={medioPago}
+              onChange={(event) =>
+                setMedioPago(event.target.value as typeof medioPago)
+              }
+              className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
+            >
+              <option value="EFECTIVO">Efectivo</option>
+              <option value="TARJETA">Tarjeta</option>
+              <option value="TRANSFERENCIA">Transferencia</option>
+              <option value="CREDITO">Crédito</option>
+            </select>
+          </div>
         </div>
+      </section>
 
-        <div className="mt-4 grid gap-4 lg:grid-cols-12">
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="grid gap-4 lg:grid-cols-12">
           <div className="space-y-2 lg:col-span-5">
             <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               Digite código de artículo
@@ -711,7 +731,7 @@ export default function Ventas() {
               <button
                 type="button"
                 onClick={handleBuscarProductoPorCodigo}
-                className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-white shadow-sm transition hover:bg-blue-700"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-white shadow-sm transition hover:bg-blue-700"
               >
                 <PlusCircle size={18} />
               </button>
@@ -720,14 +740,14 @@ export default function Ventas() {
               <button
                 type="button"
                 onClick={handleAbrirBusqueda}
-                className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold uppercase text-slate-600 hover:bg-slate-50"
+                className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-1.5 text-[11px] font-semibold uppercase text-slate-600 hover:bg-slate-50"
               >
                 <Search size={14} /> Consulta rápida
               </button>
               <button
                 type="button"
                 onClick={handleLimpiarTodo}
-                className="flex items-center gap-2 rounded-xl border border-rose-200 px-4 py-2 text-xs font-semibold uppercase text-rose-600 hover:bg-rose-50"
+                className="flex items-center gap-2 rounded-xl border border-rose-200 px-3 py-1.5 text-[11px] font-semibold uppercase text-rose-600 hover:bg-rose-50"
               >
                 <Trash2 size={14} /> Borrar todo
               </button>
@@ -745,7 +765,7 @@ export default function Ventas() {
                 max={100}
                 value={descuentoGeneral}
                 onChange={(event) => setDescuentoGeneral(event.target.value)}
-                className="w-20 rounded-xl border border-slate-200 px-2 py-2 text-sm text-right"
+                className="w-20 rounded-lg border border-slate-200 px-2 py-1.5 text-sm text-right"
               />
               <span className="text-sm text-slate-500">% aplicado</span>
             </div>
@@ -753,7 +773,7 @@ export default function Ventas() {
               <button
                 type="button"
                 onClick={handleSolicitarPermiso}
-                className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold uppercase text-slate-600 hover:bg-slate-50"
+                className="rounded-xl border border-slate-200 px-3 py-1.5 text-[11px] font-semibold uppercase text-slate-600 hover:bg-slate-50"
               >
                 Solicitar permiso
               </button>
@@ -762,20 +782,8 @@ export default function Ventas() {
 
           <div className="space-y-2 lg:col-span-3">
             <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-              Medio de pago
+              Generar documento
             </label>
-            <select
-              value={medioPago}
-              onChange={(event) =>
-                setMedioPago(event.target.value as typeof medioPago)
-              }
-              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-            >
-              <option value="EFECTIVO">Efectivo</option>
-              <option value="TARJETA">Tarjeta</option>
-              <option value="TRANSFERENCIA">Transferencia</option>
-              <option value="CREDITO">Crédito</option>
-            </select>
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
@@ -812,7 +820,7 @@ export default function Ventas() {
               type="text"
               value={efectivoRecibido}
               onChange={(event) => setEfectivoRecibido(event.target.value)}
-              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+              className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
             />
             {!descuentoAutorizado && parseNumber(descuentoGeneral) > 0 && (
               <p className="text-xs text-amber-600">
@@ -846,22 +854,22 @@ export default function Ventas() {
       </section>
 
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-200 bg-yellow-50 px-5 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+        <div className="border-b border-slate-200 bg-yellow-50 px-5 py-2 text-xs font-semibold uppercase tracking-wide text-slate-700">
           Detalle de productos
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-sm">
-            <thead className="bg-yellow-400 text-xs uppercase text-slate-900">
+            <thead className="bg-yellow-400 text-[11px] uppercase text-slate-900">
               <tr>
-                <th className="px-3 py-2">Cant</th>
-                <th className="px-3 py-2">Código</th>
-                <th className="px-3 py-2">Artículo</th>
-                <th className="px-3 py-2 text-right">I.V.A.</th>
-                <th className="px-3 py-2 text-right">Total</th>
-                <th className="px-3 py-2 text-right">Precio U</th>
-                <th className="px-3 py-2 text-right">Desc %</th>
-                <th className="px-3 py-2 text-right">Stock</th>
-                <th className="px-3 py-2 text-right">Acciones</th>
+                <th className="px-3 py-1.5">Cant</th>
+                <th className="px-3 py-1.5">Código</th>
+                <th className="px-3 py-1.5">Artículo</th>
+                <th className="px-3 py-1.5 text-right">I.V.A.</th>
+                <th className="px-3 py-1.5 text-right">Total</th>
+                <th className="px-3 py-1.5 text-right">Precio U</th>
+                <th className="px-3 py-1.5 text-right">Desc %</th>
+                <th className="px-3 py-1.5 text-right">Stock</th>
+                <th className="px-3 py-1.5 text-right">Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -880,7 +888,7 @@ export default function Ventas() {
                 const total = roundCop(base + iva);
                 return (
                   <tr key={item.id} className="border-b border-slate-100">
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-1.5">
                       <div className="flex items-center gap-1">
                         <button
                           type="button"
@@ -904,7 +912,7 @@ export default function Ventas() {
                               Number(event.target.value || 1)
                             )
                           }
-                          className="w-16 rounded border border-slate-200 px-2 py-1 text-center text-sm"
+                          className="w-14 rounded border border-slate-200 px-2 py-0.5 text-center text-sm"
                         />
                         <button
                           type="button"
@@ -917,18 +925,18 @@ export default function Ventas() {
                         </button>
                       </div>
                     </td>
-                    <td className="px-3 py-2 text-slate-600">{item.codigo}</td>
-                    <td className="px-3 py-2 font-medium text-slate-800">
+                    <td className="px-3 py-1.5 text-slate-600">{item.codigo}</td>
+                    <td className="px-3 py-1.5 font-medium text-slate-800">
                       {item.nombre}
                     </td>
-                    <td className="px-3 py-2 text-right">{item.ivaPorcentaje}%</td>
-                    <td className="px-3 py-2 text-right">
+                    <td className="px-3 py-1.5 text-right">{item.ivaPorcentaje}%</td>
+                    <td className="px-3 py-1.5 text-right font-semibold text-slate-800">
                       {currencyFormatter.format(total)}
                     </td>
-                    <td className="px-3 py-2 text-right">
+                    <td className="px-3 py-1.5 text-right">
                       {currencyFormatter.format(item.precioUnitario)}
                     </td>
-                    <td className="px-3 py-2 text-right">
+                    <td className="px-3 py-1.5 text-right">
                       <input
                         type="number"
                         min={0}
@@ -940,16 +948,16 @@ export default function Ventas() {
                             Number(event.target.value || 0)
                           )
                         }
-                        className="w-20 rounded border border-slate-200 px-2 py-1 text-right text-sm"
+                        className="w-16 rounded border border-slate-200 px-2 py-0.5 text-right text-sm"
                         disabled={!descuentoAutorizado}
                       />
                     </td>
-                    <td className="px-3 py-2 text-right">{item.stock}</td>
-                    <td className="px-3 py-2 text-right">
+                    <td className="px-3 py-1.5 text-right">{item.stock}</td>
+                    <td className="px-3 py-1.5 text-right">
                       <button
                         type="button"
                         onClick={() => handleEliminarItem(item.id)}
-                        className="rounded-lg border border-slate-200 p-2 text-rose-600 hover:bg-rose-50"
+                        className="rounded-lg border border-slate-200 p-1.5 text-rose-600 hover:bg-rose-50"
                       >
                         <Trash2 size={16} />
                       </button>
@@ -962,55 +970,57 @@ export default function Ventas() {
         </div>
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600">
-            Resumen de venta
-          </h2>
-          <div className="mt-4 space-y-3 text-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-slate-500">Subtotal</span>
-              <span className="font-semibold text-slate-900">
-                {currencyFormatter.format(totals.subtotal)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-slate-500">Impuestos</span>
-              <span className="font-semibold text-slate-900">
-                {currencyFormatter.format(totals.iva)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-slate-500">Descuentos</span>
-              <span className="font-semibold text-rose-600">
-                -{currencyFormatter.format(totals.descuentoTotalPrevio)}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between">
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600">
-              Total a pagar
+              Resumen de venta
             </h2>
-            <CircleDollarSign className="text-slate-400" size={20} />
+            <div className="mt-4 space-y-3 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">Subtotal</span>
+                <span className="text-base font-semibold text-slate-900">
+                  {currencyFormatter.format(totals.subtotal)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">Impuestos</span>
+                <span className="text-base font-semibold text-slate-900">
+                  {currencyFormatter.format(totals.iva)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">Descuentos</span>
+                <span className="text-base font-semibold text-rose-600">
+                  -{currencyFormatter.format(totals.descuentoTotalPrevio)}
+                </span>
+              </div>
+            </div>
           </div>
-          <div className="mt-4 space-y-3 text-sm">
-            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-base font-semibold text-slate-900">
-              {currencyFormatter.format(totals.totalPrevio)}
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between rounded-xl bg-yellow-50 px-3 py-2">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700">
+                Total a pagar
+              </h2>
+              <CircleDollarSign className="text-slate-400" size={20} />
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-slate-500">Efectivo recibido</span>
-              <span className="font-semibold text-emerald-600">
-                {currencyFormatter.format(roundCop(parseNumber(efectivoRecibido)))}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-slate-500">Cambio</span>
-              <span className="font-semibold text-slate-900">
-                {currencyFormatter.format(cambio)}
-              </span>
+            <div className="mt-4 space-y-3 text-sm">
+              <div className="rounded-xl border border-amber-200 bg-amber-100 px-4 py-3 text-lg font-semibold text-slate-900">
+                {currencyFormatter.format(totals.totalPrevio)}
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">Efectivo recibido</span>
+                <span className="rounded-md bg-emerald-600 px-2 py-1 text-sm font-semibold text-white">
+                  {currencyFormatter.format(roundCop(parseNumber(efectivoRecibido)))}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">Cambio</span>
+                <span className="rounded-md bg-blue-50 px-2 py-1 font-semibold text-blue-700">
+                  {currencyFormatter.format(cambio)}
+                </span>
+              </div>
             </div>
           </div>
         </div>
