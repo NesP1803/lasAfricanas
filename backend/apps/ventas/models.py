@@ -462,6 +462,85 @@ class AuditoriaDescuento(BaseModel):
         ordering = ['-created_at']
 
 
+class SolicitudDescuento(BaseModel):
+    """Solicitudes de descuentos pendientes de aprobación"""
+    ESTADO_CHOICES = [
+        ('PENDIENTE', 'Pendiente'),
+        ('APROBADO', 'Aprobado'),
+        ('RECHAZADO', 'Rechazado'),
+    ]
+
+    vendedor = models.ForeignKey(
+        'usuarios.Usuario',
+        on_delete=models.PROTECT,
+        related_name='solicitudes_descuento',
+        verbose_name='Vendedor'
+    )
+    aprobador = models.ForeignKey(
+        'usuarios.Usuario',
+        on_delete=models.PROTECT,
+        related_name='solicitudes_descuento_recibidas',
+        verbose_name='Aprobador'
+    )
+    descuento_solicitado = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        verbose_name='Descuento solicitado (%)'
+    )
+    descuento_aprobado = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Descuento aprobado (%)'
+    )
+    subtotal = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Subtotal'
+    )
+    iva = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='IVA'
+    )
+    total_antes_descuento = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Total antes de descuento'
+    )
+    total_con_descuento = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Total con descuento'
+    )
+    estado = models.CharField(
+        max_length=20,
+        choices=ESTADO_CHOICES,
+        default='PENDIENTE',
+        verbose_name='Estado'
+    )
+
+    class Meta:
+        db_table = 'solicitudes_descuento'
+        verbose_name = 'Solicitud de Descuento'
+        verbose_name_plural = 'Solicitudes de Descuento'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['vendedor']),
+            models.Index(fields=['aprobador']),
+            models.Index(fields=['estado']),
+        ]
+
+
 class VentaAnulada(BaseModel):
     """Registro de ventas anuladas con su motivo"""
     venta = models.OneToOneField(
