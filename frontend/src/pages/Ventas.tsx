@@ -788,7 +788,7 @@ export default function Ventas() {
               <button
                 type="button"
                 onClick={() => handleGenerarDocumento('COTIZACION')}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold uppercase text-slate-700 hover:bg-slate-50"
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-1.5 text-[11px] font-semibold uppercase text-slate-700 hover:bg-slate-50"
               >
                 <span>Cotizar</span>
                 <FileText size={16} />
@@ -796,7 +796,7 @@ export default function Ventas() {
               <button
                 type="button"
                 onClick={() => handleGenerarDocumento('REMISION')}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold uppercase text-slate-700 hover:bg-slate-50"
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-1.5 text-[11px] font-semibold uppercase text-slate-700 hover:bg-slate-50"
               >
                 <span>Remisión</span>
                 <FileText size={16} />
@@ -804,7 +804,7 @@ export default function Ventas() {
               <button
                 type="button"
                 onClick={() => handleGenerarDocumento('FACTURA')}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 py-2 text-xs font-semibold uppercase text-white shadow-sm hover:bg-blue-700"
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 py-1.5 text-[11px] font-semibold uppercase text-white shadow-sm hover:bg-blue-700"
               >
                 <span>Facturar</span>
                 <FileText size={16} />
