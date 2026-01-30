@@ -705,123 +705,6 @@ export default function Ventas() {
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-200 bg-yellow-50 px-5 py-2 text-xs font-semibold uppercase tracking-wide text-slate-700">
-          Detalle de productos
-        </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-left text-sm">
-            <thead className="bg-yellow-400 text-[11px] uppercase text-slate-900">
-              <tr>
-                <th className="px-3 py-1.5">Cant</th>
-                <th className="px-3 py-1.5">Código</th>
-                <th className="px-3 py-1.5">Artículo</th>
-                <th className="px-3 py-1.5 text-right">I.V.A.</th>
-                <th className="px-3 py-1.5 text-right">Total</th>
-                <th className="px-3 py-1.5 text-right">Precio U</th>
-                <th className="px-3 py-1.5 text-right">Desc %</th>
-                <th className="px-3 py-1.5 text-right">Stock</th>
-                <th className="px-3 py-1.5 text-right">Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {cartItems.length === 0 && (
-                <tr>
-                  <td colSpan={9} className="px-3 py-10 text-center text-slate-500">
-                    Agrega productos con lector o doble clic.
-                  </td>
-                </tr>
-              )}
-              {cartItems.map((item) => {
-                const subtotal = item.precioUnitario * item.cantidad;
-                const descuento = subtotal * (item.descuentoPorcentaje / 100);
-                const base = subtotal - descuento;
-                const iva = base * (item.ivaPorcentaje / 100);
-                const total = roundCop(base + iva);
-                return (
-                  <tr key={item.id} className="border-b border-slate-100">
-                    <td className="px-3 py-1.5">
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleActualizarCantidad(
-                              item.id,
-                              Math.max(1, item.cantidad - 1)
-                            )
-                          }
-                          className="text-slate-400 hover:text-slate-600"
-                        >
-                          <MinusCircle size={16} />
-                        </button>
-                        <input
-                          type="number"
-                          min={1}
-                          value={item.cantidad}
-                          onChange={(event) =>
-                            handleActualizarCantidad(
-                              item.id,
-                              Number(event.target.value || 1)
-                            )
-                          }
-                          className="w-14 rounded border border-slate-200 px-2 py-0.5 text-center text-sm"
-                        />
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleActualizarCantidad(item.id, item.cantidad + 1)
-                          }
-                          className="text-slate-400 hover:text-slate-600"
-                        >
-                          <PlusCircle size={16} />
-                        </button>
-                      </div>
-                    </td>
-                    <td className="px-3 py-1.5 text-slate-600">{item.codigo}</td>
-                    <td className="px-3 py-1.5 font-medium text-slate-800">
-                      {item.nombre}
-                    </td>
-                    <td className="px-3 py-1.5 text-right">{item.ivaPorcentaje}%</td>
-                    <td className="px-3 py-1.5 text-right font-semibold text-slate-800">
-                      {currencyFormatter.format(total)}
-                    </td>
-                    <td className="px-3 py-1.5 text-right">
-                      {currencyFormatter.format(item.precioUnitario)}
-                    </td>
-                    <td className="px-3 py-1.5 text-right">
-                      <input
-                        type="number"
-                        min={0}
-                        max={100}
-                        value={item.descuentoPorcentaje}
-                        onChange={(event) =>
-                          handleActualizarDescuento(
-                            item.id,
-                            Number(event.target.value || 0)
-                          )
-                        }
-                        className="w-16 rounded border border-slate-200 px-2 py-0.5 text-right text-sm"
-                        disabled={!descuentoAutorizado}
-                      />
-                    </td>
-                    <td className="px-3 py-1.5 text-right">{item.stock}</td>
-                    <td className="px-3 py-1.5 text-right">
-                      <button
-                        type="button"
-                        onClick={() => handleEliminarItem(item.id)}
-                        className="rounded-lg border border-slate-200 p-1.5 text-rose-600 hover:bg-rose-50"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="grid gap-4 lg:grid-cols-12">
           <div className="space-y-2 lg:col-span-5">
@@ -968,8 +851,127 @@ export default function Ventas() {
             El descuento requiere autorización del dueño o persona designada.
           </p>
         )}
+      </section>
 
-        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-200 bg-yellow-50 px-5 py-2 text-xs font-semibold uppercase tracking-wide text-slate-700">
+          Detalle de productos
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-left text-sm">
+            <thead className="bg-yellow-400 text-[11px] uppercase text-slate-900">
+              <tr>
+                <th className="px-3 py-1.5">Cant</th>
+                <th className="px-3 py-1.5">Código</th>
+                <th className="px-3 py-1.5">Artículo</th>
+                <th className="px-3 py-1.5 text-right">I.V.A.</th>
+                <th className="px-3 py-1.5 text-right">Total</th>
+                <th className="px-3 py-1.5 text-right">Precio U</th>
+                <th className="px-3 py-1.5 text-right">Desc %</th>
+                <th className="px-3 py-1.5 text-right">Stock</th>
+                <th className="px-3 py-1.5 text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {cartItems.length === 0 && (
+                <tr>
+                  <td colSpan={9} className="px-3 py-10 text-center text-slate-500">
+                    Agrega productos con lector o doble clic.
+                  </td>
+                </tr>
+              )}
+              {cartItems.map((item) => {
+                const subtotal = item.precioUnitario * item.cantidad;
+                const descuento = subtotal * (item.descuentoPorcentaje / 100);
+                const base = subtotal - descuento;
+                const iva = base * (item.ivaPorcentaje / 100);
+                const total = roundCop(base + iva);
+                return (
+                  <tr key={item.id} className="border-b border-slate-100">
+                    <td className="px-3 py-1.5">
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleActualizarCantidad(
+                              item.id,
+                              Math.max(1, item.cantidad - 1)
+                            )
+                          }
+                          className="text-slate-400 hover:text-slate-600"
+                        >
+                          <MinusCircle size={16} />
+                        </button>
+                        <input
+                          type="number"
+                          min={1}
+                          value={item.cantidad}
+                          onChange={(event) =>
+                            handleActualizarCantidad(
+                              item.id,
+                              Number(event.target.value || 1)
+                            )
+                          }
+                          className="w-14 rounded border border-slate-200 px-2 py-0.5 text-center text-sm"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleActualizarCantidad(item.id, item.cantidad + 1)
+                          }
+                          className="text-slate-400 hover:text-slate-600"
+                        >
+                          <PlusCircle size={16} />
+                        </button>
+                      </div>
+                    </td>
+                    <td className="px-3 py-1.5 text-slate-600">{item.codigo}</td>
+                    <td className="px-3 py-1.5 font-medium text-slate-800">
+                      {item.nombre}
+                    </td>
+                    <td className="px-3 py-1.5 text-right">{item.ivaPorcentaje}%</td>
+                    <td className="px-3 py-1.5 text-right font-semibold text-slate-800">
+                      {currencyFormatter.format(total)}
+                    </td>
+                    <td className="px-3 py-1.5 text-right">
+                      {currencyFormatter.format(item.precioUnitario)}
+                    </td>
+                    <td className="px-3 py-1.5 text-right">
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={item.descuentoPorcentaje}
+                        onChange={(event) =>
+                          handleActualizarDescuento(
+                            item.id,
+                            Number(event.target.value || 0)
+                          )
+                        }
+                        className="w-16 rounded border border-slate-200 px-2 py-0.5 text-right text-sm"
+                        disabled={!descuentoAutorizado}
+                      />
+                    </td>
+                    <td className="px-3 py-1.5 text-right">{item.stock}</td>
+                    <td className="px-3 py-1.5 text-right">
+                      <button
+                        type="button"
+                        onClick={() => handleEliminarItem(item.id)}
+                        className="rounded-lg border border-slate-200 p-1.5 text-rose-600 hover:bg-rose-50"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="grid gap-4 lg:grid-cols-2">
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600">
               Resumen de venta
