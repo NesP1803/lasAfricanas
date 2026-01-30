@@ -56,15 +56,24 @@ class ClienteViewSet(viewsets.ModelViewSet):
 
 class VentaViewSet(viewsets.ModelViewSet):
     """ViewSet para gestionar ventas"""
-    queryset = Venta.objects.select_related(
-        'cliente', 'vendedor'
-    ).prefetch_related('detalles').all()
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['tipo_comprobante', 'estado', 'vendedor', 'cliente']
     search_fields = ['numero_comprobante', 'cliente__nombre', 'cliente__numero_documento']
     ordering_fields = ['fecha', 'total']
     ordering = ['-fecha']
+
+    def get_queryset(self):
+        queryset = Venta.objects.select_related(
+            'cliente', 'vendedor'
+        ).prefetch_related('detalles').all()
+        fecha_inicio = self.request.query_params.get('fecha_inicio')
+        fecha_fin = self.request.query_params.get('fecha_fin')
+        if fecha_inicio:
+            queryset = queryset.filter(fecha__date__gte=fecha_inicio)
+        if fecha_fin:
+            queryset = queryset.filter(fecha__date__lte=fecha_fin)
+        return queryset
     
     def get_serializer_class(self):
         """Retorna el serializer apropiado según la acción"""
@@ -205,9 +214,9 @@ class VentaViewSet(viewsets.ModelViewSet):
         ventas = self.get_queryset().filter(estado='CONFIRMADA')
         
         if fecha_inicio:
-            ventas = ventas.filter(fecha__gte=fecha_inicio)
+            ventas = ventas.filter(fecha__date__gte=fecha_inicio)
         if fecha_fin:
-            ventas = ventas.filter(fecha__lte=fecha_fin)
+            ventas = ventas.filter(fecha__date__lte=fecha_fin)
         
         stats = ventas.aggregate(
             total_ventas=Count('id'),

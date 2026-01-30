@@ -213,6 +213,8 @@ export const ventasApi = {
     estado?: string;
     search?: string;
     ordering?: string;
+    fechaInicio?: string;
+    fechaFin?: string;
   }): Promise<VentaListItem[]> {
     const token = localStorage.getItem('token');
     const queryParams = new URLSearchParams();
@@ -220,6 +222,8 @@ export const ventasApi = {
     if (params?.estado) queryParams.append('estado', params.estado);
     if (params?.search) queryParams.append('search', params.search);
     if (params?.ordering) queryParams.append('ordering', params.ordering);
+    if (params?.fechaInicio) queryParams.append('fecha_inicio', params.fechaInicio);
+    if (params?.fechaFin) queryParams.append('fecha_fin', params.fechaFin);
     const query = queryParams.toString();
     const response = await fetch(`${API_URL}/ventas/${query ? `?${query}` : ''}`, {
       headers: {
