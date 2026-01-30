@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard';
 import Layout from './components/Layout';
 import Configuracion from './pages/Configuracion';
 import MiPerfil from './pages/MiPerfil';
+import Notificaciones from './pages/Notificaciones';
 import Listados from './pages/Listados';
 import Articulos from './pages/Articulos';
 import Taller from './pages/Taller';
@@ -26,6 +27,7 @@ function App() {
               <Route index element={<Dashboard />} />
               <Route path="configuracion" element={<Configuracion />} />
               <Route path="mi-perfil" element={<MiPerfil />} />
+              <Route path="notificaciones" element={<Notificaciones />} />
               <Route path="listados" element={<Listados />} />
               <Route path="articulos" element={<Articulos />} />
               <Route path="taller" element={<Taller />} />

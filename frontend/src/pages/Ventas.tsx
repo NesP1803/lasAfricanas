@@ -15,9 +15,11 @@ import { inventarioApi, type Producto, type ProductoList } from '../api/inventar
 import { ventasApi } from '../api/ventas';
 import { configuracionAPI } from '../api/configuracion';
 import { useAuth } from '../contexts/AuthContext';
+import { useNotification } from '../contexts/NotificationContext';
 import ComprobanteTemplate, {
   type DocumentoDetalle,
 } from '../components/ComprobanteTemplate';
+import { descuentosApi, type SolicitudDescuento } from '../api/descuentos';
 import type { ConfiguracionEmpresa } from '../types';
 import type { ConfiguracionFacturacion } from '../types';
 
@@ -89,6 +91,7 @@ const parseNumber = (value: string) => {
 
 export default function Ventas() {
   const { user } = useAuth();
+  const { showNotification } = useNotification();
   const location = useLocation();
   const navigate = useNavigate();
   const [configuracion, setConfiguracion] = useState<ConfiguracionFacturacion | null>(null);
@@ -103,6 +106,8 @@ export default function Ventas() {
   const [descuentoGeneral, setDescuentoGeneral] = useState('0');
   const [descuentoAutorizado, setDescuentoAutorizado] = useState(false);
   const [aprobadorId, setAprobadorId] = useState('');
+  const [aprobadorNombre, setAprobadorNombre] = useState('');
+  const [estadoSolicitud, setEstadoSolicitud] = useState<SolicitudDescuento | null>(null);
   const [medioPago, setMedioPago] = useState<'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'CREDITO'>('EFECTIVO');
   const [efectivoRecibido, setEfectivoRecibido] = useState('0');
   const [documentoGenerado, setDocumentoGenerado] = useState<DocumentoGenerado | null>(null);
@@ -111,7 +116,9 @@ export default function Ventas() {
   const [mostrarBusqueda, setMostrarBusqueda] = useState(false);
   const [mostrarPermiso, setMostrarPermiso] = useState(false);
   const [usuariosAprobadores, setUsuariosAprobadores] = useState<{ id: number; nombre: string }[]>([]);
+  const [cargandoAprobadores, setCargandoAprobadores] = useState(false);
   const codigoInputRef = useRef<HTMLInputElement | null>(null);
+  const lastSolicitudFetchRef = useRef(0);
 
   const tallerPayload = useMemo(() => {
     const state = location.state as { fromTaller?: TallerVentaPayload } | null;
@@ -138,20 +145,83 @@ export default function Ventas() {
   }, [busquedaProducto, mostrarBusqueda]);
 
   useEffect(() => {
-    if (mostrarPermiso && usuariosAprobadores.length === 0) {
-      configuracionAPI
-        .obtenerUsuarios()
-        .then((data) =>
-          setUsuariosAprobadores(
-            data.map((usuario) => ({
-              id: usuario.id,
-              nombre: `${usuario.first_name} ${usuario.last_name}`.trim() || usuario.username,
-            }))
-          )
-        )
-        .catch(() => setUsuariosAprobadores([]));
+    if (!mostrarPermiso) return;
+    const cached = window.localStorage.getItem('usuarios_aprobadores');
+    if (cached && usuariosAprobadores.length === 0) {
+      try {
+        const parsed = JSON.parse(cached) as { id: number; nombre: string }[];
+        if (Array.isArray(parsed)) {
+          setUsuariosAprobadores(parsed);
+        }
+      } catch (error) {
+        window.localStorage.removeItem('usuarios_aprobadores');
+      }
     }
+    if (usuariosAprobadores.length > 0) return;
+    setCargandoAprobadores(true);
+    configuracionAPI
+      .obtenerAprobadores()
+      .then((data) => {
+        const lista = data.map((usuario) => ({
+          id: usuario.id,
+          nombre: `${usuario.first_name} ${usuario.last_name}`.trim() || usuario.username,
+        }));
+        setUsuariosAprobadores(lista);
+        window.localStorage.setItem('usuarios_aprobadores', JSON.stringify(lista));
+      })
+      .catch(() => {
+        setUsuariosAprobadores([]);
+      })
+      .finally(() => setCargandoAprobadores(false));
   }, [mostrarPermiso, usuariosAprobadores.length]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const actualizarEstadoSolicitud = async () => {
+      const now = Date.now();
+      if (now - lastSolicitudFetchRef.current < 10000) {
+        return;
+      }
+      lastSolicitudFetchRef.current = now;
+      try {
+        const solicitudes = await descuentosApi.listarSolicitudes();
+        if (solicitudes.length === 0) {
+          setEstadoSolicitud(null);
+          setDescuentoAutorizado(false);
+          return;
+        }
+        const sorted = [...solicitudes].sort(
+          (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+        );
+        const solicitud = sorted[0];
+        setEstadoSolicitud(solicitud);
+        const solicitado = Number(solicitud.descuento_solicitado || 0);
+        if (solicitud.estado === 'APROBADO') {
+          const aprobado = solicitud.descuento_aprobado
+            ? Number(solicitud.descuento_aprobado)
+            : solicitado;
+          setDescuentoGeneral(String(aprobado));
+          setDescuentoAutorizado(true);
+        } else {
+          setDescuentoGeneral(String(solicitado));
+          setDescuentoAutorizado(false);
+        }
+      } catch (error) {
+        setEstadoSolicitud(null);
+      }
+    };
+
+    actualizarEstadoSolicitud();
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        actualizarEstadoSolicitud();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     codigoInputRef.current?.focus();
@@ -218,23 +288,27 @@ export default function Ventas() {
       const lineSubtotal = item.precioUnitario * item.cantidad;
       return acc + lineSubtotal * (item.descuentoPorcentaje / 100);
     }, 0);
-    const descuentoGeneralValor = descuentoAutorizado
-      ? subtotal * (parseNumber(descuentoGeneral) / 100)
-      : 0;
+    const descuentoGeneralValor = subtotal * (parseNumber(descuentoGeneral) / 100);
     const iva = cartItems.reduce((acc, item) => {
       const lineSubtotal = item.precioUnitario * item.cantidad;
       const lineDesc = lineSubtotal * (item.descuentoPorcentaje / 100);
       const base = lineSubtotal - lineDesc;
       return acc + base * (item.ivaPorcentaje / 100);
     }, 0);
-    const descuentoTotal = descuentoLineas + descuentoGeneralValor;
-    const total = subtotal - descuentoTotal + iva;
+    const descuentoTotalPrevio = descuentoLineas + descuentoGeneralValor;
+    const descuentoTotalAplicado =
+      descuentoLineas +
+      (descuentoAutorizado ? descuentoGeneralValor : 0);
+    const totalPrevio = subtotal - descuentoTotalPrevio + iva;
+    const totalAplicado = subtotal - descuentoTotalAplicado + iva;
     return {
       subtotal,
-      descuentoTotal,
+      descuentoTotalPrevio,
+      descuentoTotalAplicado,
       descuentoGeneralValor,
       iva,
-      total,
+      totalPrevio,
+      totalAplicado,
     };
   }, [cartItems, descuentoAutorizado, descuentoGeneral]);
 
@@ -335,13 +409,41 @@ export default function Ventas() {
   };
 
   const handleConfirmarPermiso = () => {
-    if (!aprobadorId) {
+    if (!aprobadorId || !user?.id) {
       setMensaje('Selecciona un aprobador para habilitar el descuento.');
       return;
     }
-    setDescuentoAutorizado(true);
-    setMostrarPermiso(false);
-    setMensaje('Permiso de descuento activo. El aprobador puede autorizar desde cualquier lugar.');
+    const aprobador = usuariosAprobadores.find(
+      (usuario) => usuario.id === Number(aprobadorId)
+    );
+    const descuentoSolicitado = Number(descuentoGeneral || 0);
+    descuentosApi
+      .crearSolicitud({
+        aprobador: Number(aprobadorId),
+        descuento_solicitado: descuentoSolicitado,
+        subtotal: totals.subtotal,
+        iva: totals.iva,
+        total_antes_descuento: totals.subtotal + totals.iva,
+        total_con_descuento: totals.totalPrevio,
+      })
+      .then((nuevaSolicitud) => {
+        setEstadoSolicitud(nuevaSolicitud);
+        setAprobadorNombre(aprobador?.nombre ?? 'Administrador');
+        setDescuentoAutorizado(false);
+        setMostrarPermiso(false);
+        setMensaje('Solicitud enviada. El aprobador recibirá la notificación para autorizar.');
+        showNotification({
+          type: 'success',
+          message: 'Solicitud de descuento enviada al aprobador.',
+        });
+      })
+      .catch(() => {
+        setMensaje('No se pudo enviar la solicitud. Revisa la conexión.');
+        showNotification({
+          type: 'error',
+          message: 'No se pudo enviar la solicitud de descuento.',
+        });
+      });
   };
 
   const handleGenerarDocumento = async (tipo: DocumentoGenerado['tipo']) => {
@@ -353,6 +455,10 @@ export default function Ventas() {
       setMensaje('Agrega productos antes de continuar.');
       return;
     }
+    if (!descuentoAutorizado && parseNumber(descuentoGeneral) > 0) {
+      setMensaje('El descuento general está pendiente de aprobación.');
+      return;
+    }
     try {
       const venta = await ventasApi.crearVenta({
         tipo_comprobante: tipo,
@@ -360,12 +466,12 @@ export default function Ventas() {
         vendedor: user?.id ?? 0,
         subtotal: totals.subtotal.toFixed(2),
         descuento_porcentaje: descuentoAutorizado ? descuentoGeneral : '0',
-        descuento_valor: totals.descuentoTotal.toFixed(2),
+        descuento_valor: totals.descuentoTotalAplicado.toFixed(2),
         iva: totals.iva.toFixed(2),
-        total: totals.total.toFixed(2),
+        total: totals.totalAplicado.toFixed(2),
         medio_pago: medioPago,
         efectivo_recibido: parseNumber(efectivoRecibido).toFixed(2),
-        cambio: (parseNumber(efectivoRecibido) - totals.total).toFixed(2),
+        cambio: (parseNumber(efectivoRecibido) - totals.totalAplicado).toFixed(2),
         detalles: cartItems.map((item) => {
           const subtotal = item.precioUnitario * item.cantidad;
           const descuento = subtotal * (item.descuentoPorcentaje / 100);
@@ -396,7 +502,7 @@ export default function Ventas() {
         tipo,
         numero: numeroComprobante,
         cliente: clienteNombre,
-        total: currencyFormatter.format(totals.total),
+        total: currencyFormatter.format(totals.totalAplicado),
       });
       const detallesPreview: DocumentoDetalle[] = cartItems.map((item) => {
         const subtotalLinea = item.precioUnitario * item.cantidad;
@@ -433,9 +539,9 @@ export default function Ventas() {
         estado: 'CONFIRMADA',
         detalles: detallesPreview,
         subtotal: totals.subtotal,
-        descuento: totals.descuentoTotal,
+        descuento: totals.descuentoTotalAplicado,
         iva: totals.iva,
-        total: totals.total,
+        total: totals.totalAplicado,
         efectivoRecibido: parseNumber(efectivoRecibido),
         cambio,
       });
@@ -446,9 +552,9 @@ export default function Ventas() {
   };
 
   const cambio = useMemo(() => {
-    const calculado = parseNumber(efectivoRecibido) - totals.total;
+    const calculado = parseNumber(efectivoRecibido) - totals.totalPrevio;
     return calculado >= 0 ? calculado : 0;
-  }, [efectivoRecibido, totals.total]);
+  }, [efectivoRecibido, totals.totalPrevio]);
 
   return (
     <div className="space-y-6">
@@ -718,12 +824,17 @@ export default function Ventas() {
               <div className="flex items-center justify-between">
                 <span className="text-slate-500">Descuentos</span>
                 <span className="font-semibold text-rose-600">
-                  -{currencyFormatter.format(totals.descuentoTotal)}
+                  -{currencyFormatter.format(totals.descuentoTotalPrevio)}
                 </span>
               </div>
               <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-base font-semibold text-slate-900">
-                Total a pagar: {currencyFormatter.format(totals.total)}
+                Total a pagar: {currencyFormatter.format(totals.totalPrevio)}
               </div>
+              {!descuentoAutorizado && parseNumber(descuentoGeneral) > 0 && (
+                <p className="text-xs text-amber-600">
+                  Descuento pendiente de aprobación. Total estimado sujeto a cambios.
+                </p>
+              )}
               <div className="flex items-center justify-between">
                 <span className="text-slate-500">Efectivo recibido</span>
                 <span className="font-semibold text-emerald-600">
@@ -754,7 +865,6 @@ export default function Ventas() {
                 value={descuentoGeneral}
                 onChange={(event) => setDescuentoGeneral(event.target.value)}
                 className="w-24 rounded-lg border border-slate-200 px-3 py-2 text-sm text-right"
-                disabled={!descuentoAutorizado}
               />
               <span className="text-sm text-slate-500">% aplicado</span>
               <button
@@ -765,6 +875,22 @@ export default function Ventas() {
                 Solicitar permiso
               </button>
             </div>
+            {estadoSolicitud && (
+              <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                <p className="font-semibold text-slate-700">
+                  Estado: {estadoSolicitud.estado}
+                </p>
+                <p>
+                  Aprobador: {estadoSolicitud.aprobador_nombre || aprobadorNombre || 'Asignado'}
+                </p>
+                <p>
+                  Descuento solicitado: {estadoSolicitud.descuento_solicitado}%
+                  {estadoSolicitud.descuento_aprobado
+                    ? ` · Aprobado: ${estadoSolicitud.descuento_aprobado}%`
+                    : ''}
+                </p>
+              </div>
+            )}
             <p className="mt-2 text-xs text-slate-500">
               El descuento requiere autorización del dueño o persona designada.
             </p>
@@ -1051,21 +1177,42 @@ export default function Ventas() {
               su usuario cuando apruebe el descuento.
             </p>
             <div className="mt-4 space-y-3">
+              <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                <p className="font-semibold text-slate-700">
+                  Descuento solicitado: {descuentoGeneral || 0}%
+                </p>
+                <p>Este valor quedará pendiente de aprobación.</p>
+              </div>
               <label className="text-xs font-semibold uppercase text-slate-500">
                 Aprobador designado
               </label>
               <select
                 value={aprobadorId}
-                onChange={(event) => setAprobadorId(event.target.value)}
+                onChange={(event) => {
+                  const selectedId = event.target.value;
+                  setAprobadorId(selectedId);
+                  const selected = usuariosAprobadores.find(
+                    (usuario) => usuario.id === Number(selectedId)
+                  );
+                  setAprobadorNombre(selected?.nombre ?? '');
+                }}
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                disabled={cargandoAprobadores || usuariosAprobadores.length === 0}
               >
-                <option value="">Seleccionar</option>
+                <option value="">
+                  {cargandoAprobadores ? 'Cargando...' : 'Seleccionar'}
+                </option>
                 {usuariosAprobadores.map((usuario) => (
                   <option key={usuario.id} value={usuario.id}>
                     {usuario.nombre}
                   </option>
                 ))}
               </select>
+              {usuariosAprobadores.length === 0 && !cargandoAprobadores && (
+                <p className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                  No se encontraron aprobadores disponibles. Intenta nuevamente más tarde.
+                </p>
+              )}
               <button
                 type="button"
                 onClick={handleConfirmarPermiso}

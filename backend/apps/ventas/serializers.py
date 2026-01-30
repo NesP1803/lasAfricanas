@@ -1,5 +1,12 @@
 from rest_framework import serializers
-from .models import Cliente, Venta, DetalleVenta, AuditoriaDescuento, VentaAnulada
+from .models import (
+    Cliente,
+    Venta,
+    DetalleVenta,
+    AuditoriaDescuento,
+    SolicitudDescuento,
+    VentaAnulada,
+)
 from apps.inventario.serializers import ProductoListSerializer
 from apps.usuarios.models import Usuario
 
@@ -207,3 +214,35 @@ class VentaAnuladaSerializer(serializers.ModelSerializer):
             'created_at'
         ]
         read_only_fields = ['created_at']
+
+
+class SolicitudDescuentoSerializer(serializers.ModelSerializer):
+    """Serializer para solicitudes de descuento"""
+    vendedor_nombre = serializers.CharField(source='vendedor.username', read_only=True)
+    aprobador_nombre = serializers.CharField(source='aprobador.username', read_only=True)
+
+    class Meta:
+        model = SolicitudDescuento
+        fields = [
+            'id',
+            'vendedor',
+            'vendedor_nombre',
+            'aprobador',
+            'aprobador_nombre',
+            'descuento_solicitado',
+            'descuento_aprobado',
+            'subtotal',
+            'iva',
+            'total_antes_descuento',
+            'total_con_descuento',
+            'estado',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = [
+            'vendedor',
+            'vendedor_nombre',
+            'aprobador_nombre',
+            'created_at',
+            'updated_at',
+        ]
