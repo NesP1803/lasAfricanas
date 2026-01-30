@@ -45,8 +45,8 @@ type AnulacionData = {
 const motivosAnulacion = [
   { value: 'DEVOLUCION_PARCIAL', label: 'Devolución parcial' },
   { value: 'DEVOLUCION_TOTAL', label: 'Devolución total' },
-  { value: 'ERROR_PRECIOS', label: 'Error con precios en la remisión' },
-  { value: 'ERROR_CONCEPTO', label: 'Error por conceptos en la remisión' },
+  { value: 'ERROR_PRECIOS', label: 'Error con precios en la factura' },
+  { value: 'ERROR_CONCEPTO', label: 'Error por conceptos en la factura' },
   { value: 'COMPRADOR_NO_ACEPTA', label: 'El comprador no acepta los artículos' },
   { value: 'OTRO', label: 'Otro' },
 ];
@@ -278,7 +278,24 @@ export default function Facturas() {
               disabled={cargando}
             >
               <FileSearch size={14} />
-              Mostrar
+              Actualizar
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setEstadoFiltro('ANULADA');
+                cargarFacturas({
+                  estado: 'ANULADA',
+                  fechaInicio,
+                  fechaFin,
+                  search: busqueda,
+                });
+              }}
+              className="flex items-center gap-2 rounded border border-slate-300 px-3 py-1.5 text-xs font-semibold uppercase text-slate-600"
+              disabled={cargando}
+            >
+              <FileSearch size={14} />
+              Ver anuladas
             </button>
             <button
               type="button"
@@ -607,6 +624,10 @@ export default function Facturas() {
               </div>
               <div className="rounded border border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-600">
                 Escriba el número de la nueva factura que reemplaza esta.
+              </div>
+              <div className="rounded border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                Recuerde generar la nota crédito física que anula el total de la venta y
+                conservar la factura marcada como ANULADA para trazabilidad contable.
               </div>
               <div>
                 <label className="text-xs font-semibold text-slate-500">

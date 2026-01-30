@@ -278,7 +278,24 @@ export default function Remisiones() {
               disabled={cargando}
             >
               <FileSearch size={14} />
-              Mostrar
+              Actualizar
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setEstadoFiltro('ANULADA');
+                cargarRemisiones({
+                  estado: 'ANULADA',
+                  fechaInicio,
+                  fechaFin,
+                  search: busqueda,
+                });
+              }}
+              className="flex items-center gap-2 rounded border border-slate-300 px-3 py-1.5 text-xs font-semibold uppercase text-slate-600"
+              disabled={cargando}
+            >
+              <FileSearch size={14} />
+              Ver anuladas
             </button>
             <button
               type="button"
