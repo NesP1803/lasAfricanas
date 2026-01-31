@@ -39,14 +39,13 @@ type DocumentoSeleccionado = {
 type AnulacionData = {
   motivo: string;
   numeroNuevaFactura: string;
-  opcion: 'ANULAR_TODO' | 'USAR_DATOS';
 };
 
 const motivosAnulacion = [
   { value: 'DEVOLUCION_PARCIAL', label: 'Devolución parcial' },
   { value: 'DEVOLUCION_TOTAL', label: 'Devolución total' },
-  { value: 'ERROR_PRECIOS', label: 'Error con precios en la remisión' },
-  { value: 'ERROR_CONCEPTO', label: 'Error por conceptos en la remisión' },
+  { value: 'ERROR_PRECIOS', label: 'Error con precios en la factura' },
+  { value: 'ERROR_CONCEPTO', label: 'Error por conceptos en la factura' },
   { value: 'COMPRADOR_NO_ACEPTA', label: 'El comprador no acepta los artículos' },
   { value: 'OTRO', label: 'Otro' },
 ];
@@ -95,14 +94,15 @@ const mapVentaToFacturaItem = (venta: VentaListItem): FacturaItem => {
 };
 
 export default function Facturas() {
+  const today = new Date().toISOString().split('T')[0];
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [facturas, setFacturas] = useState<FacturaItem[]>([]);
   const [busqueda, setBusqueda] = useState('');
   const [estadoFiltro, setEstadoFiltro] = useState<'CONFIRMADA' | 'ANULADA' | 'TODAS'>(
     'CONFIRMADA'
   );
-  const [fechaInicio, setFechaInicio] = useState('2025-10-22');
-  const [fechaFin, setFechaFin] = useState('2025-10-22');
+  const [fechaInicio, setFechaInicio] = useState(today);
+  const [fechaFin, setFechaFin] = useState(today);
   const [documento, setDocumento] = useState<DocumentoSeleccionado | null>(null);
   const [detalleFactura, setDetalleFactura] = useState<Venta | null>(null);
   const [detalleCargando, setDetalleCargando] = useState(false);
@@ -113,11 +113,37 @@ export default function Facturas() {
   const [anulacionData, setAnulacionData] = useState<AnulacionData>({
     motivo: motivosAnulacion[0].value,
     numeroNuevaFactura: '',
-    opcion: 'ANULAR_TODO',
   });
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [anulando, setAnulando] = useState(false);
+
+  const cargarFacturas = async (filters: {
+    estado: 'CONFIRMADA' | 'ANULADA' | 'TODAS';
+    fechaInicio?: string;
+    fechaFin?: string;
+    search?: string;
+  }) => {
+    setCargando(true);
+    setError(null);
+    try {
+      const search = filters.search?.trim();
+      const response = await ventasApi.getVentas({
+        tipoComprobante: 'FACTURA',
+        estado: filters.estado === 'TODAS' ? undefined : filters.estado,
+        fechaInicio: filters.fechaInicio || undefined,
+        fechaFin: filters.fechaFin || undefined,
+        search: search ? search : undefined,
+      });
+      setFacturas(response.map(mapVentaToFacturaItem));
+      setSelectedIds([]);
+    } catch (err) {
+      setFacturas([]);
+      setError(err instanceof Error ? err.message : 'Error al cargar facturas');
+    } finally {
+      setCargando(false);
+    }
+  };
 
   const facturasFiltradas = useMemo(() => {
     const query = busqueda.trim().toLowerCase();
@@ -146,32 +172,12 @@ export default function Facturas() {
   }, [busqueda, facturas, fechaInicio, fechaFin]);
 
   useEffect(() => {
-    let isActive = true;
-    const cargarFacturas = async () => {
-      setCargando(true);
-      setError(null);
-      try {
-        const response = await ventasApi.getVentas({
-          tipoComprobante: 'FACTURA',
-          estado: estadoFiltro === 'TODAS' ? undefined : estadoFiltro,
-        });
-        if (!isActive) return;
-        setFacturas(response.map(mapVentaToFacturaItem));
-        setSelectedIds([]);
-      } catch (err) {
-        if (!isActive) return;
-        setFacturas([]);
-        setError(err instanceof Error ? err.message : 'Error al cargar facturas');
-      } finally {
-        if (isActive) setCargando(false);
-      }
-    };
-
-    cargarFacturas();
-    return () => {
-      isActive = false;
-    };
-  }, [estadoFiltro]);
+    cargarFacturas({
+      estado: estadoFiltro,
+      fechaInicio,
+      fechaFin,
+    });
+  }, [estadoFiltro, fechaInicio, fechaFin]);
 
   useEffect(() => {
     configuracionAPI
@@ -198,7 +204,6 @@ export default function Facturas() {
     setAnulacionData({
       motivo: motivosAnulacion[0].value,
       numeroNuevaFactura: '',
-      opcion: 'ANULAR_TODO',
     });
   };
 
@@ -210,36 +215,17 @@ export default function Facturas() {
       const descripcion = anulacionData.numeroNuevaFactura
         ? `Nueva factura: ${anulacionData.numeroNuevaFactura}`
         : 'Anulación sin factura de reemplazo.';
-      const ventaActualizada = await ventasApi.anularVenta(anulacion.id, {
+      await ventasApi.anularVenta(anulacion.id, {
         motivo: anulacionData.motivo,
         descripcion,
-        devuelve_inventario: anulacionData.opcion === 'ANULAR_TODO',
+        devuelve_inventario: true,
       });
-      setFacturas((prev) =>
-        prev.map((item) =>
-          item.id === ventaActualizada.id
-            ? mapVentaToFacturaItem({
-                id: ventaActualizada.id,
-                numero_comprobante: ventaActualizada.numero_comprobante,
-                tipo_comprobante: ventaActualizada.tipo_comprobante,
-                tipo_comprobante_display: ventaActualizada.tipo_comprobante_display,
-                fecha: ventaActualizada.fecha,
-                cliente: ventaActualizada.cliente,
-                cliente_nombre: ventaActualizada.cliente_info?.nombre ?? item.cliente,
-                cliente_numero_documento:
-                  ventaActualizada.cliente_info?.numero_documento ?? item.nitCc,
-                vendedor: ventaActualizada.vendedor,
-                vendedor_nombre: ventaActualizada.vendedor_nombre,
-                total: ventaActualizada.total,
-                medio_pago: ventaActualizada.medio_pago,
-                medio_pago_display: ventaActualizada.medio_pago_display,
-                estado: ventaActualizada.estado,
-                estado_display: ventaActualizada.estado_display,
-              })
-            : item
-        )
-      );
-      setSelectedIds((prev) => prev.filter((id) => id !== anulacion.id));
+      await cargarFacturas({
+        estado: estadoFiltro,
+        fechaInicio,
+        fechaFin,
+        search: busqueda,
+      });
       setAnulacion(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al anular factura');
@@ -277,10 +263,36 @@ export default function Facturas() {
           <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
+              onClick={() =>
+                cargarFacturas({
+                  estado: estadoFiltro,
+                  fechaInicio,
+                  fechaFin,
+                  search: busqueda,
+                })
+              }
               className="flex items-center gap-2 rounded border border-slate-300 px-3 py-1.5 text-xs font-semibold uppercase text-slate-600"
+              disabled={cargando}
             >
               <FileSearch size={14} />
-              Mostrar
+              Actualizar
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setEstadoFiltro('ANULADA');
+                cargarFacturas({
+                  estado: 'ANULADA',
+                  fechaInicio,
+                  fechaFin,
+                  search: busqueda,
+                });
+              }}
+              className="flex items-center gap-2 rounded border border-slate-300 px-3 py-1.5 text-xs font-semibold uppercase text-slate-600"
+              disabled={cargando}
+            >
+              <FileSearch size={14} />
+              Ver anuladas
             </button>
             <button
               type="button"
@@ -610,6 +622,10 @@ export default function Facturas() {
               <div className="rounded border border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-600">
                 Escriba el número de la nueva factura que reemplaza esta.
               </div>
+              <div className="rounded border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                Recuerde generar la nota crédito física que anula el total de la venta y
+                conservar la factura marcada como ANULADA para trazabilidad contable.
+              </div>
               <div>
                 <label className="text-xs font-semibold text-slate-500">
                   No. factura nueva (si aplica)
@@ -625,30 +641,6 @@ export default function Facturas() {
                   className="mt-1 w-full rounded border border-slate-300 px-2 py-2 text-sm"
                   placeholder="Prefijo y número"
                 />
-              </div>
-              <div className="flex flex-col gap-2">
-                <label className="flex items-center gap-2 text-sm text-slate-600">
-                  <input
-                    type="radio"
-                    name="tipo-anulacion"
-                    checked={anulacionData.opcion === 'ANULAR_TODO'}
-                    onChange={() =>
-                      setAnulacionData((prev) => ({ ...prev, opcion: 'ANULAR_TODO' }))
-                    }
-                  />
-                  Anular todo
-                </label>
-                <label className="flex items-center gap-2 text-sm text-slate-600">
-                  <input
-                    type="radio"
-                    name="tipo-anulacion"
-                    checked={anulacionData.opcion === 'USAR_DATOS'}
-                    onChange={() =>
-                      setAnulacionData((prev) => ({ ...prev, opcion: 'USAR_DATOS' }))
-                    }
-                  />
-                  Usar datos en otra factura
-                </label>
               </div>
             </div>
             <div className="mt-6 flex justify-center">

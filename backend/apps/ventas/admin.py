@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Cliente, Venta, DetalleVenta, AuditoriaDescuento, VentaAnulada
+from .models import Cliente, Venta, DetalleVenta, AuditoriaDescuento, VentaAnulada, RemisionAnulada
 
 
 @admin.register(Cliente)
@@ -179,3 +179,25 @@ class VentaAnuladaAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         return qs.select_related('venta', 'anulado_por')
+
+
+@admin.register(RemisionAnulada)
+class RemisionAnuladaAdmin(admin.ModelAdmin):
+    list_display = [
+        'created_at',
+        'remision',
+        'motivo',
+        'anulado_por',
+        'devuelve_inventario'
+    ]
+    list_filter = ['motivo', 'devuelve_inventario', 'created_at']
+    search_fields = [
+        'remision__numero_comprobante',
+        'descripcion',
+        'anulado_por__username'
+    ]
+    ordering = ['-created_at']
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.select_related('remision', 'anulado_por')

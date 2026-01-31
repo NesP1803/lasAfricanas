@@ -8,7 +8,7 @@ from django.db.models import Sum, Count, Q
 from django.utils import timezone
 from datetime import datetime, time
 
-from .models import Cliente, Venta, DetalleVenta, SolicitudDescuento, VentaAnulada
+from .models import Cliente, Venta, DetalleVenta, SolicitudDescuento, VentaAnulada, RemisionAnulada
 from .serializers import (
     ClienteSerializer,
     VentaListSerializer,
@@ -172,7 +172,7 @@ class VentaViewSet(viewsets.ModelViewSet):
         
         motivo = request.data.get('motivo')
         descripcion = request.data.get('descripcion', '')
-        devuelve_inventario = request.data.get('devuelve_inventario', True)
+        devuelve_inventario = True
         
         if not motivo:
             return Response(
@@ -181,13 +181,22 @@ class VentaViewSet(viewsets.ModelViewSet):
             )
         
         # Crear registro de anulación
-        VentaAnulada.objects.create(
-            venta=venta,
-            motivo=motivo,
-            descripcion=descripcion,
-            anulado_por=request.user,
-            devuelve_inventario=devuelve_inventario
-        )
+        if venta.tipo_comprobante == 'REMISION':
+            RemisionAnulada.objects.create(
+                remision=venta,
+                motivo=motivo,
+                descripcion=descripcion,
+                anulado_por=request.user,
+                devuelve_inventario=devuelve_inventario
+            )
+        else:
+            VentaAnulada.objects.create(
+                venta=venta,
+                motivo=motivo,
+                descripcion=descripcion,
+                anulado_por=request.user,
+                devuelve_inventario=devuelve_inventario
+            )
         
         # Cambiar estado de la venta
         venta.estado = 'ANULADA'
