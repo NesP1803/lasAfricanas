@@ -594,3 +594,40 @@ class VentaAnulada(BaseModel):
         db_table = 'ventas_anuladas'
         verbose_name = 'Venta Anulada'
         verbose_name_plural = 'Ventas Anuladas'
+
+
+class RemisionAnulada(BaseModel):
+    """Registro de remisiones anuladas con su motivo"""
+    remision = models.OneToOneField(
+        Venta,
+        on_delete=models.CASCADE,
+        related_name='anulacion_remision',
+        verbose_name='Remisión anulada'
+    )
+
+    MOTIVO_CHOICES = VentaAnulada.MOTIVO_CHOICES
+
+    motivo = models.CharField(
+        max_length=50,
+        choices=MOTIVO_CHOICES,
+        verbose_name='Motivo de anulación'
+    )
+    descripcion = models.TextField(
+        verbose_name='Descripción detallada'
+    )
+    anulado_por = models.ForeignKey(
+        'usuarios.Usuario',
+        on_delete=models.PROTECT,
+        related_name='remisiones_anuladas',
+        verbose_name='Anulado por'
+    )
+    devuelve_inventario = models.BooleanField(
+        default=True,
+        verbose_name='Devuelve al inventario',
+        help_text='Si la mercancía regresa al stock'
+    )
+
+    class Meta:
+        db_table = 'remisiones_anuladas'
+        verbose_name = 'Remisión Anulada'
+        verbose_name_plural = 'Remisiones Anuladas'

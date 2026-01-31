@@ -39,7 +39,6 @@ type DocumentoSeleccionado = {
 type AnulacionData = {
   motivo: string;
   numeroNuevaRemision: string;
-  opcion: 'ANULAR_TODO' | 'USAR_DATOS';
 };
 
 const motivosAnulacion = [
@@ -114,7 +113,6 @@ export default function Remisiones() {
   const [anulacionData, setAnulacionData] = useState<AnulacionData>({
     motivo: motivosAnulacion[0].value,
     numeroNuevaRemision: '',
-    opcion: 'ANULAR_TODO',
   });
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -206,7 +204,6 @@ export default function Remisiones() {
     setAnulacionData({
       motivo: motivosAnulacion[0].value,
       numeroNuevaRemision: '',
-      opcion: 'ANULAR_TODO',
     });
   };
 
@@ -218,10 +215,10 @@ export default function Remisiones() {
       const descripcion = anulacionData.numeroNuevaRemision
         ? `Nueva remisión: ${anulacionData.numeroNuevaRemision}`
         : 'Anulación sin remisión de reemplazo.';
-      const ventaActualizada = await ventasApi.anularVenta(anulacion.id, {
+      await ventasApi.anularVenta(anulacion.id, {
         motivo: anulacionData.motivo,
         descripcion,
-        devuelve_inventario: anulacionData.opcion === 'ANULAR_TODO',
+        devuelve_inventario: true,
       });
       await cargarRemisiones({
         estado: estadoFiltro,
@@ -641,30 +638,6 @@ export default function Remisiones() {
                   className="mt-1 w-full rounded border border-slate-300 px-2 py-2 text-sm"
                   placeholder="Prefijo y número"
                 />
-              </div>
-              <div className="flex flex-col gap-2">
-                <label className="flex items-center gap-2 text-sm text-slate-600">
-                  <input
-                    type="radio"
-                    name="tipo-anulacion-remision"
-                    checked={anulacionData.opcion === 'ANULAR_TODO'}
-                    onChange={() =>
-                      setAnulacionData((prev) => ({ ...prev, opcion: 'ANULAR_TODO' }))
-                    }
-                  />
-                  Anular todo
-                </label>
-                <label className="flex items-center gap-2 text-sm text-slate-600">
-                  <input
-                    type="radio"
-                    name="tipo-anulacion-remision"
-                    checked={anulacionData.opcion === 'USAR_DATOS'}
-                    onChange={() =>
-                      setAnulacionData((prev) => ({ ...prev, opcion: 'USAR_DATOS' }))
-                    }
-                  />
-                  Usar datos en otra remisión
-                </label>
               </div>
             </div>
             <div className="mt-6 flex justify-center">
