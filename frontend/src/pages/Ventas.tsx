@@ -191,7 +191,7 @@ export default function Ventas() {
     if (!user?.id || esAdmin) return;
     const actualizarEstadoSolicitud = async () => {
       const now = Date.now();
-      if (now - lastSolicitudFetchRef.current < 10000) {
+      if (now - lastSolicitudFetchRef.current < 2000) {
         return;
       }
       lastSolicitudFetchRef.current = now;
@@ -238,7 +238,7 @@ export default function Ventas() {
         if (document.visibilityState === 'visible') {
           actualizarEstadoSolicitud();
         }
-      }, 10000);
+      }, 2000);
     };
     const stopPolling = () => {
       if (intervalId !== null) {
