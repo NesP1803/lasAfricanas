@@ -4,9 +4,17 @@ import {
   useNavigate,
   useLocation,
 } from "react-router-dom";
-import { useEffect, useMemo, useState, useRef, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useRef,
+  type ReactNode,
+} from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { configuracionAPI } from "../api/configuracion";
+import { descuentosApi, type SolicitudDescuento } from "../api/descuentos";
 import {
   createFullModuleAccess,
   isModuleEnabled,
@@ -124,6 +132,10 @@ export default function Layout() {
   const [mobileExpanded, setMobileExpanded] = useState<Record<string, boolean>>(
     {}
   );
+  const [notificaciones, setNotificaciones] = useState<SolicitudDescuento[]>([]);
+  const [isBellOpen, setIsBellOpen] = useState(false);
+  const bellRef = useRef<HTMLDivElement | null>(null);
+  const lastNotificationFetchRef = useRef(0);
 
   // --- Menú principal con delay ---
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
@@ -452,6 +464,67 @@ export default function Layout() {
     [configuracionItems, isAdmin]
   );
 
+  const actualizarNotificaciones = useCallback(async () => {
+    if (!isAdmin) {
+      setNotificaciones([]);
+      return;
+    }
+    const now = Date.now();
+    if (now - lastNotificationFetchRef.current < 5000) {
+      return;
+    }
+    lastNotificationFetchRef.current = now;
+    try {
+      const data = await descuentosApi.listarSolicitudes();
+      const pendientes = data
+        .filter((solicitud) => solicitud.estado === "PENDIENTE")
+        .sort(
+          (a, b) =>
+            new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+        );
+      setNotificaciones(pendientes);
+    } catch (error) {
+      setNotificaciones([]);
+    }
+  }, [isAdmin]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    actualizarNotificaciones();
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        actualizarNotificaciones();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        actualizarNotificaciones();
+      }
+    }, 5000);
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [actualizarNotificaciones, isAdmin]);
+
+  useEffect(() => {
+    if (!isBellOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!bellRef.current) return;
+      if (!bellRef.current.contains(event.target as Node)) {
+        setIsBellOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isBellOpen]);
+
+  const pendingCount = notificaciones.length;
+  const pendingBadge = pendingCount > 99 ? "99+" : String(pendingCount);
+
   const renderMenuButton = (label: string, icon?: ReactNode) => (
     <>
       {icon}
@@ -547,14 +620,83 @@ export default function Layout() {
 
           <div className="flex items-center gap-3">
             {isAdmin && (
-              <button
-                type="button"
-                onClick={() => navigate("/notificaciones")}
-                className="relative rounded-full bg-white/10 p-2 text-white transition hover:bg-white/20"
-                aria-label="Ver notificaciones"
-              >
-                <Bell size={18} />
-              </button>
+              <div className="relative" ref={bellRef}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsBellOpen((prev) => !prev);
+                    if (!isBellOpen) {
+                      actualizarNotificaciones();
+                    }
+                  }}
+                  className="relative rounded-full bg-white/10 p-2 text-white transition hover:bg-white/20"
+                  aria-label="Ver notificaciones"
+                  aria-haspopup="true"
+                  aria-expanded={isBellOpen}
+                >
+                  <Bell size={18} />
+                  {pendingCount > 0 && (
+                    <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-semibold text-white">
+                      {pendingBadge}
+                    </span>
+                  )}
+                </button>
+                {isBellOpen && (
+                  <div className="absolute right-0 mt-2 w-80 overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-700 shadow-xl">
+                    <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+                      <p className="text-sm font-semibold">Notificaciones</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsBellOpen(false);
+                          navigate("/notificaciones");
+                        }}
+                        className="text-xs font-semibold text-blue-600 hover:text-blue-700"
+                      >
+                        Ver todo
+                      </button>
+                    </div>
+                    <div className="max-h-72 overflow-y-auto">
+                      {notificaciones.length === 0 ? (
+                        <div className="px-4 py-4 text-sm text-slate-500">
+                          No tienes solicitudes pendientes.
+                        </div>
+                      ) : (
+                        <ul className="divide-y divide-slate-100">
+                          {notificaciones.map((solicitud) => (
+                            <li
+                              key={solicitud.id}
+                              className="px-4 py-3 text-sm hover:bg-slate-50"
+                            >
+                              <p className="font-semibold text-slate-800">
+                                {solicitud.vendedor_nombre}
+                              </p>
+                              <p className="text-xs text-slate-500">
+                                Solicitó {solicitud.descuento_solicitado}% ·{" "}
+                                {new Date(
+                                  solicitud.updated_at
+                                ).toLocaleString()}
+                              </p>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                    <div className="border-t border-slate-100 px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsBellOpen(false);
+                          navigate("/notificaciones");
+                        }}
+                        className="w-full rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold uppercase text-white hover:bg-blue-700"
+                      >
+                        Ir a notificaciones
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
             <div className="hidden text-right text-sm text-blue-100 sm:block">
               <p className="font-semibold text-white">{user?.username}</p>
