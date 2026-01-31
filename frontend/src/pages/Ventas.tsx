@@ -257,6 +257,9 @@ export default function Ventas() {
     };
   }, [esAdmin, estadoSolicitud?.estado, user?.id]);
 
+  const descuentoBloqueado =
+    !esAdmin && estadoSolicitud?.estado === 'APROBADO';
+
   useEffect(() => {
     codigoInputRef.current?.focus();
   }, []);
@@ -765,7 +768,8 @@ export default function Ventas() {
                 max={100}
                 value={descuentoGeneral}
                 onChange={(event) => setDescuentoGeneral(event.target.value)}
-                className="w-20 rounded-lg border border-slate-200 px-2 py-1.5 text-sm text-right"
+                disabled={descuentoBloqueado}
+                className="w-20 rounded-lg border border-slate-200 px-2 py-1.5 text-sm text-right disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
               />
               <span className="text-sm text-slate-500">% aplicado</span>
             </div>
@@ -773,10 +777,16 @@ export default function Ventas() {
               <button
                 type="button"
                 onClick={handleSolicitarPermiso}
+                disabled={descuentoBloqueado}
                 className="rounded-xl border border-slate-200 px-3 py-1.5 text-[11px] font-semibold uppercase text-slate-600 hover:bg-slate-50"
               >
                 Solicitar permiso
               </button>
+            )}
+            {descuentoBloqueado && (
+              <p className="text-xs text-slate-500">
+                El descuento ya fue aprobado y no se puede modificar.
+              </p>
             )}
           </div>
 
