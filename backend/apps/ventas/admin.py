@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Cliente, Venta, DetalleVenta, AuditoriaDescuento, VentaAnulada, RemisionAnulada
+from .models import Cliente, Venta, DetalleVenta, AuditoriaDescuento, VentaAnulada, RemisionAnulada, Caja
 
 
 @admin.register(Cliente)
@@ -53,14 +53,19 @@ class VentaAdmin(admin.ModelAdmin):
         'vendedor',
         'total',
         'estado',
+        'estado_pago',
+        'caja_destino',
         'badge_factura_electronica'
     ]
     list_filter = [
         'tipo_comprobante',
         'estado',
+        'estado_pago',
         'medio_pago',
+        'caja_destino',
         'fecha',
-        'vendedor'
+        'vendedor',
+        'cajero'
     ]
     search_fields = [
         'numero_comprobante',
@@ -98,8 +103,12 @@ class VentaAdmin(admin.ModelAdmin):
             ),
             'classes': ('collapse',)
         }),
-        ('Pago', {
+        ('Caja y Pago', {
             'fields': (
+                'estado_pago',
+                'caja_destino',
+                'cajero',
+                'fecha_cobro',
                 'medio_pago',
                 'efectivo_recibido',
                 'cambio'
@@ -132,7 +141,7 @@ class VentaAdmin(admin.ModelAdmin):
     
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        return qs.select_related('cliente', 'vendedor', 'remision_origen')
+        return qs.select_related('cliente', 'vendedor', 'cajero', 'caja_destino', 'remision_origen')
 
 
 @admin.register(AuditoriaDescuento)
@@ -201,3 +210,36 @@ class RemisionAnuladaAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         return qs.select_related('remision', 'anulado_por')
+
+
+@admin.register(Caja)
+class CajaAdmin(admin.ModelAdmin):
+    list_display = [
+        'nombre',
+        'ubicacion',
+        'get_cajeros_count',
+        'get_ventas_pendientes',
+        'is_active',
+        'created_at'
+    ]
+    list_filter = ['is_active', 'created_at']
+    search_fields = ['nombre', 'descripcion', 'ubicacion']
+    ordering = ['nombre']
+
+    fieldsets = (
+        ('Información', {
+            'fields': ('nombre', 'descripcion', 'ubicacion')
+        }),
+        ('Estado', {
+            'fields': ('is_active',),
+            'classes': ('collapse',)
+        }),
+    )
+
+    def get_cajeros_count(self, obj):
+        return obj.cajeros_asignados.count()
+    get_cajeros_count.short_description = 'Cajeros asignados'
+
+    def get_ventas_pendientes(self, obj):
+        return obj.ventas_pendientes_count
+    get_ventas_pendientes.short_description = 'Ventas pendientes'

@@ -6,6 +6,7 @@ from .models import (
     AuditoriaDescuento,
     SolicitudDescuento,
     VentaAnulada,
+    Caja,
 )
 from apps.inventario.serializers import ProductoListSerializer
 from apps.usuarios.models import Usuario
@@ -83,10 +84,13 @@ class VentaListSerializer(serializers.ModelSerializer):
         read_only=True
     )
     vendedor_nombre = serializers.CharField(source='vendedor.username', read_only=True)
+    cajero_nombre = serializers.SerializerMethodField()
+    caja_nombre = serializers.CharField(source='caja_destino.nombre', read_only=True, default=None)
     tipo_comprobante_display = serializers.CharField(source='get_tipo_comprobante_display', read_only=True)
     estado_display = serializers.CharField(source='get_estado_display', read_only=True)
+    estado_pago_display = serializers.CharField(source='get_estado_pago_display', read_only=True)
     medio_pago_display = serializers.CharField(source='get_medio_pago_display', read_only=True)
-    
+
     class Meta:
         model = Venta
         fields = [
@@ -100,23 +104,37 @@ class VentaListSerializer(serializers.ModelSerializer):
             'cliente_numero_documento',
             'vendedor',
             'vendedor_nombre',
+            'cajero',
+            'cajero_nombre',
+            'caja_destino',
+            'caja_nombre',
             'total',
             'medio_pago',
             'medio_pago_display',
             'estado',
-            'estado_display'
+            'estado_display',
+            'estado_pago',
+            'estado_pago_display'
         ]
+
+    def get_cajero_nombre(self, obj):
+        if obj.cajero:
+            return obj.cajero.get_full_name() or obj.cajero.username
+        return None
 
 
 class VentaDetailSerializer(serializers.ModelSerializer):
     """Serializer completo para detalle de venta"""
     cliente_info = ClienteSerializer(source='cliente', read_only=True)
     vendedor_nombre = serializers.CharField(source='vendedor.get_full_name', read_only=True)
+    cajero_nombre = serializers.SerializerMethodField()
+    caja_nombre = serializers.CharField(source='caja_destino.nombre', read_only=True, default=None)
     detalles = DetalleVentaSerializer(many=True, read_only=True)
     tipo_comprobante_display = serializers.CharField(source='get_tipo_comprobante_display', read_only=True)
     estado_display = serializers.CharField(source='get_estado_display', read_only=True)
+    estado_pago_display = serializers.CharField(source='get_estado_pago_display', read_only=True)
     medio_pago_display = serializers.CharField(source='get_medio_pago_display', read_only=True)
-    
+
     class Meta:
         model = Venta
         fields = [
@@ -128,6 +146,10 @@ class VentaDetailSerializer(serializers.ModelSerializer):
             'cliente_info',
             'vendedor',
             'vendedor_nombre',
+            'cajero',
+            'cajero_nombre',
+            'caja_destino',
+            'caja_nombre',
             'fecha',
             'subtotal',
             'descuento_porcentaje',
@@ -136,6 +158,9 @@ class VentaDetailSerializer(serializers.ModelSerializer):
             'total',
             'descuento_requiere_aprobacion',
             'descuento_aprobado_por',
+            'estado_pago',
+            'estado_pago_display',
+            'fecha_cobro',
             'medio_pago',
             'medio_pago_display',
             'efectivo_recibido',
@@ -153,6 +178,11 @@ class VentaDetailSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['numero_comprobante', 'created_at', 'updated_at']
 
+    def get_cajero_nombre(self, obj):
+        if obj.cajero:
+            return obj.cajero.get_full_name() or obj.cajero.username
+        return None
+
 
 class VentaCreateSerializer(serializers.ModelSerializer):
     """Serializer para crear ventas"""
@@ -162,7 +192,13 @@ class VentaCreateSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True
     )
-    
+    caja_destino = serializers.PrimaryKeyRelatedField(
+        queryset=Caja.objects.filter(is_active=True),
+        required=False,
+        allow_null=True
+    )
+    enviar_a_caja = serializers.BooleanField(required=False, default=False, write_only=True)
+
     class Meta:
         model = Venta
         fields = [
@@ -179,17 +215,30 @@ class VentaCreateSerializer(serializers.ModelSerializer):
             'efectivo_recibido',
             'cambio',
             'observaciones',
-            'detalles'
+            'detalles',
+            'caja_destino',
+            'enviar_a_caja'
         ]
-    
+
     def create(self, validated_data):
         """Crea la venta con sus detalles"""
         detalles_data = validated_data.pop('detalles')
+        enviar_a_caja = validated_data.pop('enviar_a_caja', False)
+        caja_destino = validated_data.get('caja_destino')
+
+        # Si se envía a caja, establecer estado pendiente
+        if enviar_a_caja and caja_destino:
+            validated_data['estado_pago'] = 'PENDIENTE_CAJA'
+            # No establecer medio_pago hasta que se procese en caja
+            validated_data['medio_pago'] = 'EFECTIVO'  # Default temporal
+            validated_data['efectivo_recibido'] = 0
+            validated_data['cambio'] = 0
+
         venta = Venta.objects.create(**validated_data)
-        
+
         for detalle_data in detalles_data:
             DetalleVenta.objects.create(venta=venta, **detalle_data)
-        
+
         return venta
 
 
@@ -246,3 +295,100 @@ class SolicitudDescuentoSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
         ]
+
+
+class CajaSerializer(serializers.ModelSerializer):
+    """Serializer para Cajas"""
+    cajeros_count = serializers.SerializerMethodField()
+    ventas_pendientes_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Caja
+        fields = [
+            'id',
+            'nombre',
+            'descripcion',
+            'ubicacion',
+            'is_active',
+            'cajeros_count',
+            'ventas_pendientes_count',
+            'created_at',
+            'updated_at'
+        ]
+        read_only_fields = ['created_at', 'updated_at']
+
+    def get_cajeros_count(self, obj):
+        return obj.cajeros_asignados.count()
+
+    def get_ventas_pendientes_count(self, obj):
+        return obj.ventas_pendientes_count
+
+
+class VentaPendienteCajaSerializer(serializers.ModelSerializer):
+    """Serializer para ventas pendientes de cobro en caja"""
+    cliente_nombre = serializers.CharField(source='cliente.nombre', read_only=True)
+    cliente_numero_documento = serializers.CharField(
+        source='cliente.numero_documento',
+        read_only=True
+    )
+    vendedor_nombre = serializers.SerializerMethodField()
+    tipo_comprobante_display = serializers.CharField(source='get_tipo_comprobante_display', read_only=True)
+    detalles = DetalleVentaSerializer(many=True, read_only=True)
+    caja_nombre = serializers.CharField(source='caja_destino.nombre', read_only=True)
+
+    class Meta:
+        model = Venta
+        fields = [
+            'id',
+            'numero_comprobante',
+            'tipo_comprobante',
+            'tipo_comprobante_display',
+            'fecha',
+            'cliente',
+            'cliente_nombre',
+            'cliente_numero_documento',
+            'vendedor',
+            'vendedor_nombre',
+            'subtotal',
+            'descuento_porcentaje',
+            'descuento_valor',
+            'iva',
+            'total',
+            'caja_destino',
+            'caja_nombre',
+            'observaciones',
+            'detalles',
+        ]
+
+    def get_vendedor_nombre(self, obj):
+        return obj.vendedor.get_full_name() or obj.vendedor.username
+
+
+class ProcesarPagoSerializer(serializers.Serializer):
+    """Serializer para procesar pago en caja"""
+    medio_pago = serializers.ChoiceField(choices=Venta.MEDIO_PAGO)
+    efectivo_recibido = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        required=False,
+        default=0
+    )
+    observaciones = serializers.CharField(required=False, allow_blank=True)
+
+    def validate(self, data):
+        medio_pago = data.get('medio_pago')
+        efectivo_recibido = data.get('efectivo_recibido', 0)
+        venta = self.context.get('venta')
+
+        if medio_pago == 'EFECTIVO' and venta:
+            if efectivo_recibido < venta.total:
+                raise serializers.ValidationError({
+                    'efectivo_recibido': f'El efectivo recibido debe ser mayor o igual al total ({venta.total})'
+                })
+
+        return data
+
+
+class EnviarACajaSerializer(serializers.Serializer):
+    """Serializer para enviar una venta a caja"""
+    caja_destino = serializers.PrimaryKeyRelatedField(queryset=Caja.objects.filter(is_active=True))

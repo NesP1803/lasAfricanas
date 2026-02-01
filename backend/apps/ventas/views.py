@@ -8,7 +8,7 @@ from django.db.models import Sum, Count, Q
 from django.utils import timezone
 from datetime import datetime, time
 
-from .models import Cliente, Venta, DetalleVenta, SolicitudDescuento, VentaAnulada, RemisionAnulada
+from .models import Cliente, Venta, DetalleVenta, SolicitudDescuento, VentaAnulada, RemisionAnulada, Caja
 from .serializers import (
     ClienteSerializer,
     VentaListSerializer,
@@ -16,6 +16,10 @@ from .serializers import (
     VentaCreateSerializer,
     VentaAnuladaSerializer,
     SolicitudDescuentoSerializer,
+    CajaSerializer,
+    VentaPendienteCajaSerializer,
+    ProcesarPagoSerializer,
+    EnviarACajaSerializer,
 )
 
 
@@ -59,7 +63,7 @@ class VentaViewSet(viewsets.ModelViewSet):
     """ViewSet para gestionar ventas"""
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['tipo_comprobante', 'estado', 'vendedor', 'cliente']
+    filterset_fields = ['tipo_comprobante', 'estado', 'estado_pago', 'vendedor', 'cliente', 'caja_destino', 'cajero']
     search_fields = ['numero_comprobante', 'cliente__nombre', 'cliente__numero_documento']
     ordering_fields = ['fecha', 'total']
     ordering = ['-fecha']
@@ -84,7 +88,7 @@ class VentaViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = Venta.objects.select_related(
-            'cliente', 'vendedor'
+            'cliente', 'vendedor', 'cajero', 'caja_destino'
         ).prefetch_related('detalles').all()
         fecha_inicio = self.request.query_params.get('fecha_inicio')
         fecha_fin = self.request.query_params.get('fecha_fin')
@@ -114,10 +118,124 @@ class VentaViewSet(viewsets.ModelViewSet):
             estado='CONFIRMADA',
             facturas_generadas__isnull=True  # No tiene factura asociada
         )
-        
+
         serializer = VentaListSerializer(remisiones, many=True)
         return Response(serializer.data)
 
+    @action(detail=False, methods=['get'])
+    def pendientes_caja(self, request):
+        """
+        Retorna ventas pendientes de cobro en caja.
+        Filtra por la caja del usuario si es cajero.
+
+        GET /api/ventas/pendientes_caja/
+        GET /api/ventas/pendientes_caja/?caja=1
+        """
+        ventas = self.get_queryset().filter(
+            estado_pago='PENDIENTE_CAJA',
+            estado='CONFIRMADA'
+        )
+
+        # Si el usuario es cajero, filtrar por su caja asignada
+        caja_id = request.query_params.get('caja')
+        if caja_id:
+            ventas = ventas.filter(caja_destino_id=caja_id)
+        elif hasattr(request.user, 'caja') and request.user.caja:
+            ventas = ventas.filter(caja_destino=request.user.caja)
+
+        serializer = VentaPendienteCajaSerializer(ventas, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['post'])
+    def enviar_a_caja(self, request, pk=None):
+        """
+        Envía una venta a caja para procesamiento de pago.
+
+        POST /api/ventas/{id}/enviar_a_caja/
+        Body: {
+            "caja_destino": 1
+        }
+        """
+        venta = self.get_object()
+
+        if venta.tipo_comprobante == 'COTIZACION':
+            return Response(
+                {'error': 'Las cotizaciones no se pueden enviar a caja'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if venta.estado_pago == 'PAGADO':
+            return Response(
+                {'error': 'Esta venta ya está pagada'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        serializer = EnviarACajaSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        caja = serializer.validated_data['caja_destino']
+        venta.enviar_a_caja(caja)
+
+        return Response(
+            VentaDetailSerializer(venta).data,
+            status=status.HTTP_200_OK
+        )
+
+    @action(detail=True, methods=['post'])
+    def procesar_pago(self, request, pk=None):
+        """
+        Procesa el pago de una venta pendiente en caja.
+
+        POST /api/ventas/{id}/procesar_pago/
+        Body: {
+            "medio_pago": "EFECTIVO",
+            "efectivo_recibido": 150000,
+            "observaciones": ""
+        }
+        """
+        venta = self.get_object()
+
+        # Verificar que el usuario puede procesar pagos
+        if not request.user.puede_procesar_pagos:
+            return Response(
+                {'error': 'No tiene permisos para procesar pagos'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        if venta.estado_pago == 'PAGADO':
+            return Response(
+                {'error': 'Esta venta ya está pagada'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        serializer = ProcesarPagoSerializer(
+            data=request.data,
+            context={'venta': venta}
+        )
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            venta.procesar_pago(
+                cajero=request.user,
+                medio_pago=serializer.validated_data['medio_pago'],
+                efectivo_recibido=serializer.validated_data.get('efectivo_recibido', 0)
+            )
+
+            # Agregar observaciones si se proporcionaron
+            observaciones = serializer.validated_data.get('observaciones', '')
+            if observaciones:
+                venta.observaciones = f"{venta.observaciones}\n[Caja] {observaciones}".strip()
+                venta.save()
+
+            return Response(
+                VentaDetailSerializer(venta).data,
+                status=status.HTTP_200_OK
+            )
+        except ValueError as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
     @action(detail=True, methods=['post'])
     def convertir_a_factura(self, request, pk=None):
@@ -328,3 +446,95 @@ class SolicitudDescuentoViewSet(viewsets.ModelViewSet):
         if request.user != self.get_object().aprobador:
             return Response({'detail': 'No autorizado.'}, status=status.HTTP_403_FORBIDDEN)
         return super().partial_update(request, *args, **kwargs)
+
+
+class CajaViewSet(viewsets.ModelViewSet):
+    """ViewSet para gestionar cajas"""
+    queryset = Caja.objects.all()
+    serializer_class = CajaSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['is_active']
+    search_fields = ['nombre', 'descripcion', 'ubicacion']
+    ordering_fields = ['nombre', 'created_at']
+    ordering = ['nombre']
+
+    @action(detail=True, methods=['get'])
+    def ventas_pendientes(self, request, pk=None):
+        """
+        Retorna las ventas pendientes de cobro para esta caja.
+
+        GET /api/cajas/{id}/ventas_pendientes/
+        """
+        caja = self.get_object()
+        ventas = Venta.objects.filter(
+            caja_destino=caja,
+            estado_pago='PENDIENTE_CAJA',
+            estado='CONFIRMADA'
+        ).select_related('cliente', 'vendedor').prefetch_related('detalles')
+
+        serializer = VentaPendienteCajaSerializer(ventas, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get'])
+    def estadisticas(self, request, pk=None):
+        """
+        Retorna estadísticas de la caja.
+
+        GET /api/cajas/{id}/estadisticas/
+        """
+        caja = self.get_object()
+
+        # Ventas pendientes
+        pendientes = Venta.objects.filter(
+            caja_destino=caja,
+            estado_pago='PENDIENTE_CAJA',
+            estado='CONFIRMADA'
+        ).aggregate(
+            cantidad=Count('id'),
+            total=Sum('total')
+        )
+
+        # Ventas cobradas hoy
+        hoy = timezone.now().date()
+        tz = timezone.get_current_timezone()
+        inicio_hoy = timezone.make_aware(
+            datetime.combine(hoy, time.min),
+            tz
+        )
+        fin_hoy = timezone.make_aware(
+            datetime.combine(hoy, time.max),
+            tz
+        )
+
+        cobradas_hoy = Venta.objects.filter(
+            caja_destino=caja,
+            estado_pago='PAGADO',
+            fecha_cobro__gte=inicio_hoy,
+            fecha_cobro__lte=fin_hoy
+        ).aggregate(
+            cantidad=Count('id'),
+            total=Sum('total'),
+            efectivo=Sum('total', filter=Q(medio_pago='EFECTIVO')),
+            transferencia=Sum('total', filter=Q(medio_pago='TRANSFERENCIA')),
+            tarjeta=Sum('total', filter=Q(medio_pago='TARJETA')),
+            credito=Sum('total', filter=Q(medio_pago='CREDITO')),
+        )
+
+        return Response({
+            'pendientes': {
+                'cantidad': pendientes['cantidad'] or 0,
+                'total': pendientes['total'] or 0
+            },
+            'cobradas_hoy': {
+                'cantidad': cobradas_hoy['cantidad'] or 0,
+                'total': cobradas_hoy['total'] or 0,
+                'por_medio_pago': {
+                    'efectivo': cobradas_hoy['efectivo'] or 0,
+                    'transferencia': cobradas_hoy['transferencia'] or 0,
+                    'tarjeta': cobradas_hoy['tarjeta'] or 0,
+                    'credito': cobradas_hoy['credito'] or 0,
+                }
+            },
+            'cajeros_asignados': caja.cajeros_asignados.count()
+        })

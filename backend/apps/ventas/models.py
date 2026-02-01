@@ -76,13 +76,18 @@ class Venta(BaseModel):
         ('REMISION', 'Remisión'),
         ('FACTURA', 'Factura'),
     ]
-    
+
     ESTADO = [
         ('BORRADOR', 'Borrador'),
         ('CONFIRMADA', 'Confirmada'),
         ('ANULADA', 'Anulada'),
     ]
-    
+
+    ESTADO_PAGO = [
+        ('PAGADO', 'Pagado'),
+        ('PENDIENTE_CAJA', 'Pendiente en Caja'),
+    ]
+
     MEDIO_PAGO = [
         ('EFECTIVO', 'Efectivo'),
         ('TRANSFERENCIA', 'Transferencia'),
@@ -121,7 +126,40 @@ class Venta(BaseModel):
         related_name='ventas',
         verbose_name='Vendedor'
     )
-    
+    # Campos para separación venta/caja
+    cajero = models.ForeignKey(
+        'usuarios.Usuario',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='ventas_cobradas',
+        verbose_name='Cajero',
+        help_text='Usuario que procesó el pago'
+    )
+    caja_destino = models.ForeignKey(
+        'Caja',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='ventas',
+        verbose_name='Caja destino',
+        help_text='Caja donde se debe procesar el pago'
+    )
+    estado_pago = models.CharField(
+        max_length=20,
+        choices=ESTADO_PAGO,
+        default='PAGADO',
+        db_index=True,
+        verbose_name='Estado de pago',
+        help_text='PENDIENTE_CAJA si requiere cobro en caja'
+    )
+    fecha_cobro = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Fecha de cobro',
+        help_text='Fecha y hora en que se procesó el pago'
+    )
+
     # Fechas
     fecha = models.DateTimeField(
         auto_now_add=True,
@@ -248,6 +286,8 @@ class Venta(BaseModel):
             models.Index(fields=['vendedor', 'fecha']),
             models.Index(fields=['cliente', 'fecha']),
             models.Index(fields=['estado', 'fecha']),
+            models.Index(fields=['estado_pago', 'caja_destino']),
+            models.Index(fields=['cajero', 'fecha_cobro']),
         ]
 
     @classmethod
@@ -310,6 +350,46 @@ class Venta(BaseModel):
         """Indica si debe enviarse a DIAN"""
         return self.tipo_comprobante == 'FACTURA'
     
+    def enviar_a_caja(self, caja):
+        """
+        Envía la venta a una caja para procesamiento de pago.
+        Solo aplica para REMISION y FACTURA.
+        """
+        if self.tipo_comprobante == 'COTIZACION':
+            raise ValueError("Las cotizaciones no se envían a caja")
+
+        if self.estado_pago == 'PAGADO':
+            raise ValueError("Esta venta ya está pagada")
+
+        self.caja_destino = caja
+        self.estado_pago = 'PENDIENTE_CAJA'
+        self.save()
+
+    def procesar_pago(self, cajero, medio_pago, efectivo_recibido=0):
+        """
+        Procesa el pago de una venta pendiente en caja.
+
+        Args:
+            cajero: Usuario que procesa el pago
+            medio_pago: Método de pago utilizado
+            efectivo_recibido: Monto recibido (solo para efectivo)
+        """
+        from django.utils import timezone
+
+        if self.estado_pago == 'PAGADO':
+            raise ValueError("Esta venta ya está pagada")
+
+        self.cajero = cajero
+        self.medio_pago = medio_pago
+        self.efectivo_recibido = efectivo_recibido
+        if medio_pago == 'EFECTIVO' and efectivo_recibido > 0:
+            self.cambio = efectivo_recibido - self.total
+        else:
+            self.cambio = 0
+        self.estado_pago = 'PAGADO'
+        self.fecha_cobro = timezone.now()
+        self.save()
+
     def convertir_a_factura(self):
         """
         Convierte una REMISIÓN en FACTURA electrónica.
@@ -631,3 +711,48 @@ class RemisionAnulada(BaseModel):
         db_table = 'remisiones_anuladas'
         verbose_name = 'Remisión Anulada'
         verbose_name_plural = 'Remisiones Anuladas'
+
+
+class Caja(BaseModel):
+    """
+    Modelo para gestionar múltiples cajas/puntos de pago.
+    Permite separar el proceso de venta del proceso de cobro.
+    """
+    nombre = models.CharField(
+        max_length=50,
+        unique=True,
+        verbose_name='Nombre de la caja',
+        help_text='Ej: Caja 1, Caja Principal, etc.'
+    )
+    descripcion = models.TextField(
+        blank=True,
+        verbose_name='Descripción'
+    )
+    ubicacion = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Ubicación'
+    )
+
+    class Meta:
+        db_table = 'cajas'
+        verbose_name = 'Caja'
+        verbose_name_plural = 'Cajas'
+        ordering = ['nombre']
+
+    def __str__(self):
+        return self.nombre
+
+    @property
+    def cajeros_asignados(self):
+        """Retorna los cajeros actualmente asignados a esta caja"""
+        from apps.usuarios.models import Usuario
+        return Usuario.objects.filter(caja=self, is_active=True, tipo_usuario='CAJERO')
+
+    @property
+    def ventas_pendientes_count(self):
+        """Cantidad de ventas pendientes de cobro en esta caja"""
+        return Venta.objects.filter(
+            caja_destino=self,
+            estado_pago='PENDIENTE_CAJA'
+        ).count()

@@ -26,6 +26,7 @@ import {
   ClipboardList,
   Boxes,
   Bell,
+  Banknote,
   FileText,
   LogOut,
   Menu,
@@ -281,6 +282,10 @@ export default function Layout() {
         return { moduleKey: "facturacion", sectionKey: "venta_rapida" };
       }
 
+      if (pathname.startsWith("/caja")) {
+        return { moduleKey: "facturacion", sectionKey: "caja" };
+      }
+
       if (pathname.startsWith("/facturacion/facturas")) {
         return { moduleKey: "facturacion", sectionKey: "listados" };
       }
@@ -421,6 +426,9 @@ export default function Layout() {
         const facturacionItems: MenuItem[] = [];
         if (isAdmin || sectionEnabled("facturacion", "venta_rapida")) {
           facturacionItems.push({ label: "Venta rápida", path: "/ventas" });
+        }
+        if (isAdmin || sectionEnabled("facturacion", "caja")) {
+          facturacionItems.push({ label: "Caja", path: "/caja" });
         }
         if (isAdmin || sectionEnabled("facturacion", "cuentas")) {
           facturacionItems.push({

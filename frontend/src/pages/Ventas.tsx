@@ -12,7 +12,7 @@ import {
   X,
 } from 'lucide-react';
 import { inventarioApi, type Producto, type ProductoList } from '../api/inventario';
-import { ventasApi } from '../api/ventas';
+import { ventasApi, cajasApi, type Caja } from '../api/ventas';
 import { configuracionAPI } from '../api/configuracion';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../contexts/NotificationContext';
@@ -120,6 +120,9 @@ export default function Ventas() {
   const [mostrarPermiso, setMostrarPermiso] = useState(false);
   const [usuariosAprobadores, setUsuariosAprobadores] = useState<{ id: number; nombre: string }[]>([]);
   const [cargandoAprobadores, setCargandoAprobadores] = useState(false);
+  const [cajas, setCajas] = useState<Caja[]>([]);
+  const [cajaSeleccionada, setCajaSeleccionada] = useState<number | null>(null);
+  const [enviarACaja, setEnviarACaja] = useState(false);
   const codigoInputRef = useRef<HTMLInputElement | null>(null);
   const lastSolicitudFetchRef = useRef(0);
   const esAdmin = useMemo(() => user?.role === 'ADMIN', [user?.role]);
@@ -138,6 +141,11 @@ export default function Ventas() {
       .obtenerEmpresa()
       .then(setEmpresa)
       .catch(() => setEmpresa(null));
+    // Cargar cajas disponibles
+    cajasApi
+      .getCajas()
+      .then((data) => setCajas(data.filter((c) => c.is_active)))
+      .catch(() => setCajas([]));
   }, []);
 
   useEffect(() => {
@@ -443,6 +451,8 @@ export default function Ventas() {
   const handleLimpiarTodo = () => {
     setCartItems([]);
     setDocumentoGenerado(null);
+    setEnviarACaja(false);
+    setCajaSeleccionada(null);
     setMensaje('Venta reiniciada.');
   };
 
@@ -510,9 +520,13 @@ export default function Ventas() {
       setMensaje('El descuento general está pendiente de aprobación.');
       return;
     }
+    if (enviarACaja && !cajaSeleccionada) {
+      setMensaje('Selecciona una caja para enviar la venta.');
+      return;
+    }
     try {
-      const efectivoRecibidoNumero = roundCop(parseNumber(efectivoRecibido));
-      const cambioCalculado = Math.max(
+      const efectivoRecibidoNumero = enviarACaja ? 0 : roundCop(parseNumber(efectivoRecibido));
+      const cambioCalculado = enviarACaja ? 0 : Math.max(
         0,
         efectivoRecibidoNumero - totals.totalAplicado
       );
@@ -525,7 +539,7 @@ export default function Ventas() {
         descuento_valor: totals.descuentoTotalAplicado.toFixed(2),
         iva: totals.iva.toFixed(2),
         total: totals.totalAplicado.toFixed(2),
-        medio_pago: medioPago,
+        medio_pago: enviarACaja ? 'EFECTIVO' : medioPago,
         efectivo_recibido: efectivoRecibidoNumero.toFixed(2),
         cambio: cambioCalculado.toFixed(2),
         detalles: cartItems.map((item) => {
@@ -548,6 +562,8 @@ export default function Ventas() {
           descuentoAutorizado && !esAdmin && aprobadorId
             ? Number(aprobadorId)
             : undefined,
+        caja_destino: enviarACaja ? cajaSeleccionada ?? undefined : undefined,
+        enviar_a_caja: enviarACaja,
       });
       const numeroComprobante =
         venta.numero_comprobante ||
@@ -604,7 +620,16 @@ export default function Ventas() {
         efectivoRecibido: efectivoRecibidoNumero,
         cambio: roundCop(cambioCalculado),
       });
-      setMensaje(`${venta.tipo_comprobante_display} generado correctamente.`);
+      if (enviarACaja) {
+        const cajaEnviada = cajas.find((c) => c.id === cajaSeleccionada);
+        setMensaje(`${venta.tipo_comprobante_display} enviado a ${cajaEnviada?.nombre ?? 'caja'} para cobro.`);
+        showNotification({
+          type: 'success',
+          message: `Venta enviada a ${cajaEnviada?.nombre ?? 'caja'} para cobro`,
+        });
+      } else {
+        setMensaje(`${venta.tipo_comprobante_display} generado correctamente.`);
+      }
     } catch (error) {
       setMensaje('No se pudo generar el documento. Revisa la conexión.');
     }
@@ -697,7 +722,8 @@ export default function Ventas() {
               onChange={(event) =>
                 setMedioPago(event.target.value as typeof medioPago)
               }
-              className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
+              disabled={enviarACaja}
+              className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none disabled:bg-slate-100 disabled:cursor-not-allowed"
             >
               <option value="EFECTIVO">Efectivo</option>
               <option value="TARJETA">Tarjeta</option>
@@ -705,6 +731,46 @@ export default function Ventas() {
               <option value="CREDITO">Crédito</option>
             </select>
           </div>
+
+          {cajas.length > 0 && (
+            <div className="space-y-2">
+              <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                Enviar a caja
+              </label>
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={enviarACaja}
+                    onChange={(e) => {
+                      setEnviarACaja(e.target.checked);
+                      if (!e.target.checked) {
+                        setCajaSeleccionada(null);
+                      } else if (cajas.length === 1) {
+                        setCajaSeleccionada(cajas[0].id);
+                      }
+                    }}
+                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-slate-700">Cobrar en caja</span>
+                </label>
+              </div>
+              {enviarACaja && (
+                <select
+                  value={cajaSeleccionada ?? ''}
+                  onChange={(e) => setCajaSeleccionada(Number(e.target.value) || null)}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
+                >
+                  <option value="">Seleccionar caja</option>
+                  {cajas.map((caja) => (
+                    <option key={caja.id} value={caja.id}>
+                      {caja.nombre}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
         </div>
       </section>
 

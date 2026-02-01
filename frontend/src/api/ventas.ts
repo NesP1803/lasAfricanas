@@ -29,6 +29,14 @@ export interface VentaCreate {
   observaciones?: string;
   detalles: DetalleVenta[];
   descuento_aprobado_por?: number;
+  caja_destino?: number;
+  enviar_a_caja?: boolean;
+}
+
+export interface ProcesarPagoData {
+  medio_pago: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'CREDITO';
+  efectivo_recibido?: number;
+  observaciones?: string;
 }
 
 export interface Venta {
@@ -64,11 +72,69 @@ export interface VentaListItem {
   cliente_numero_documento: string;
   vendedor: number;
   vendedor_nombre: string;
+  cajero?: number;
+  cajero_nombre?: string;
+  caja_destino?: number;
+  caja_nombre?: string;
   total: string;
   medio_pago: string;
   medio_pago_display: string;
   estado: string;
   estado_display: string;
+  estado_pago: string;
+  estado_pago_display: string;
+}
+
+export interface Caja {
+  id: number;
+  nombre: string;
+  descripcion: string;
+  ubicacion: string;
+  is_active: boolean;
+  cajeros_count: number;
+  ventas_pendientes_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VentaPendienteCaja {
+  id: number;
+  numero_comprobante: string;
+  tipo_comprobante: string;
+  tipo_comprobante_display: string;
+  fecha: string;
+  cliente: number;
+  cliente_nombre: string;
+  cliente_numero_documento: string;
+  vendedor: number;
+  vendedor_nombre: string;
+  subtotal: string;
+  descuento_porcentaje: string;
+  descuento_valor: string;
+  iva: string;
+  total: string;
+  caja_destino: number;
+  caja_nombre: string;
+  observaciones: string;
+  detalles: any[];
+}
+
+export interface EstadisticasCaja {
+  pendientes: {
+    cantidad: number;
+    total: number;
+  };
+  cobradas_hoy: {
+    cantidad: number;
+    total: number;
+    por_medio_pago: {
+      efectivo: number;
+      transferencia: number;
+      tarjeta: number;
+      credito: number;
+    };
+  };
+  cajeros_asignados: number;
 }
 
 export interface EstadisticasVentas {
@@ -347,6 +413,151 @@ export const ventasApi = {
     if (params?.fechaFin) queryParams.append('fecha_fin', params.fechaFin);
     const query = queryParams.toString();
     const response = await fetch(`${API_URL}/ventas/estadisticas/${query ? `?${query}` : ''}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) throw new Error('Error al obtener estadísticas');
+    return response.json();
+  },
+
+  // Ventas pendientes de caja
+  async getVentasPendientesCaja(cajaId?: number): Promise<VentaPendienteCaja[]> {
+    const token = localStorage.getItem('token');
+    const queryParams = new URLSearchParams();
+    if (cajaId) queryParams.append('caja', cajaId.toString());
+    const query = queryParams.toString();
+    const response = await fetch(`${API_URL}/ventas/pendientes_caja/${query ? `?${query}` : ''}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) throw new Error('Error al obtener ventas pendientes');
+    return response.json();
+  },
+
+  async enviarACaja(ventaId: number, cajaDestinoId: number): Promise<Venta> {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/ventas/${ventaId}/enviar_a_caja/`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ caja_destino: cajaDestinoId }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Error al enviar a caja');
+    }
+    return response.json();
+  },
+
+  async procesarPago(ventaId: number, data: ProcesarPagoData): Promise<Venta> {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/ventas/${ventaId}/procesar_pago/`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Error al procesar pago');
+    }
+    return response.json();
+  },
+};
+
+// API de Cajas
+export const cajasApi = {
+  async getCajas(): Promise<Caja[]> {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/cajas/`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) throw new Error('Error al obtener cajas');
+    const data = await response.json();
+    return Array.isArray(data) ? data : data.results || [];
+  },
+
+  async getCaja(id: number): Promise<Caja> {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/cajas/${id}/`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) throw new Error('Error al obtener caja');
+    return response.json();
+  },
+
+  async crearCaja(data: Partial<Caja>): Promise<Caja> {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/cajas/`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(JSON.stringify(error));
+    }
+    return response.json();
+  },
+
+  async actualizarCaja(id: number, data: Partial<Caja>): Promise<Caja> {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/cajas/${id}/`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(JSON.stringify(error));
+    }
+    return response.json();
+  },
+
+  async getVentasPendientes(cajaId: number): Promise<VentaPendienteCaja[]> {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/cajas/${cajaId}/ventas_pendientes/`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) throw new Error('Error al obtener ventas pendientes');
+    return response.json();
+  },
+
+  async getEstadisticas(cajaId: number): Promise<EstadisticasCaja> {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/cajas/${cajaId}/estadisticas/`, {
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',

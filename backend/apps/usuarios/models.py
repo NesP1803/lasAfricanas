@@ -11,6 +11,7 @@ class Usuario(AbstractUser):
     TIPO_USUARIO = [
         ('ADMIN', 'Administrador'),
         ('VENDEDOR', 'Vendedor'),
+        ('CAJERO', 'Cajero'),
         ('MECANICO', 'Mecánico'),
         ('BODEGUERO', 'Bodeguero'),
     ]
@@ -43,6 +44,16 @@ class Usuario(AbstractUser):
         verbose_name='Módulos permitidos',
         help_text='Configuración de acceso a módulos y secciones del sistema'
     )
+    caja = models.ForeignKey(
+        'ventas.Caja',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='cajeros',
+        verbose_name='Caja asignada',
+        help_text='Caja donde trabaja el cajero'
+    )
+
     class Meta:
         db_table = 'usuarios'
         verbose_name = 'Usuario'
@@ -56,6 +67,16 @@ class Usuario(AbstractUser):
     def nombre_completo(self):
         """Retorna el nombre completo del usuario"""
         return self.get_full_name() or self.username
+
+    @property
+    def es_cajero(self):
+        """Indica si el usuario es cajero"""
+        return self.tipo_usuario == 'CAJERO'
+
+    @property
+    def puede_procesar_pagos(self):
+        """Indica si el usuario puede procesar pagos en caja"""
+        return self.tipo_usuario in ['CAJERO', 'ADMIN'] or self.is_superuser
 
 
 class PerfilVendedor(BaseModel):

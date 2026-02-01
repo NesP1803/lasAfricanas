@@ -10,6 +10,7 @@ import Listados from './pages/Listados';
 import Articulos from './pages/Articulos';
 import Taller from './pages/Taller';
 import Ventas from './pages/Ventas';
+import Caja from './pages/Caja';
 import CuentasDia from './pages/CuentasDia';
 import DetallesCuentas from './pages/DetallesCuentas';
 import Facturas from './pages/Facturas';
@@ -32,6 +33,7 @@ function App() {
               <Route path="articulos" element={<Articulos />} />
               <Route path="taller" element={<Taller />} />
               <Route path="ventas" element={<Ventas />} />
+              <Route path="caja" element={<Caja />} />
               <Route path="ventas/cuentas-dia" element={<CuentasDia />} />
               <Route path="ventas/detalles-cuentas" element={<DetallesCuentas />} />
               <Route path="facturacion/facturas" element={<Facturas />} />
