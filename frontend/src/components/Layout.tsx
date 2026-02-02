@@ -423,6 +423,9 @@ export default function Layout() {
         if (isAdmin || sectionEnabled("facturacion", "venta_rapida")) {
           facturacionItems.push({ label: "Venta rápida", path: "/ventas" });
         }
+        if (isAdmin || sectionEnabled("facturacion", "caja")) {
+          facturacionItems.push({ label: "Caja", path: "/facturacion/caja" });
+        }
         if (isAdmin || sectionEnabled("facturacion", "cuentas")) {
           facturacionItems.push({
             label: "Cuentas",
