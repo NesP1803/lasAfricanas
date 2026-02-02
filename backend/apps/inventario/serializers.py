@@ -1,6 +1,6 @@
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from rest_framework import serializers
-from .models import Categoria, Proveedor, Producto, MovimientoInventario
+from .models import Categoria, Proveedor, Producto, MovimientoInventario, ProductoFavorito
 
 
 class CategoriaSerializer(serializers.ModelSerializer):
@@ -221,3 +221,30 @@ class MovimientoInventarioSerializer(serializers.ModelSerializer):
             'created_at'
         ]
         read_only_fields = ['created_at', 'stock_anterior', 'stock_nuevo']
+
+
+class ProductoFavoritoSerializer(serializers.ModelSerializer):
+    producto_codigo = serializers.CharField(source='producto.codigo', read_only=True)
+    producto_nombre = serializers.CharField(source='producto.nombre', read_only=True)
+    producto_precio = serializers.DecimalField(
+        source='producto.precio_venta',
+        max_digits=12,
+        decimal_places=2,
+        read_only=True,
+    )
+    producto_stock = serializers.IntegerField(source='producto.stock', read_only=True)
+
+    class Meta:
+        model = ProductoFavorito
+        fields = [
+            'id',
+            'producto',
+            'producto_codigo',
+            'producto_nombre',
+            'producto_precio',
+            'producto_stock',
+            'alias',
+            'orden',
+            'created_at',
+        ]
+        read_only_fields = ['created_at']

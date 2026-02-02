@@ -98,8 +98,8 @@ export default function Facturas() {
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [facturas, setFacturas] = useState<FacturaItem[]>([]);
   const [busqueda, setBusqueda] = useState('');
-  const [estadoFiltro, setEstadoFiltro] = useState<'CONFIRMADA' | 'ANULADA' | 'TODAS'>(
-    'CONFIRMADA'
+  const [estadoFiltro, setEstadoFiltro] = useState<'FACTURADA' | 'ANULADA' | 'TODAS'>(
+    'FACTURADA'
   );
   const [fechaInicio, setFechaInicio] = useState(today);
   const [fechaFin, setFechaFin] = useState(today);
@@ -119,7 +119,7 @@ export default function Facturas() {
   const [anulando, setAnulando] = useState(false);
 
   const cargarFacturas = async (filters: {
-    estado: 'CONFIRMADA' | 'ANULADA' | 'TODAS';
+    estado: 'FACTURADA' | 'ANULADA' | 'TODAS';
     fechaInicio?: string;
     fechaFin?: string;
     search?: string;
@@ -339,11 +339,11 @@ export default function Facturas() {
             <select
               value={estadoFiltro}
               onChange={(event) =>
-                setEstadoFiltro(event.target.value as 'CONFIRMADA' | 'ANULADA' | 'TODAS')
+                setEstadoFiltro(event.target.value as 'FACTURADA' | 'ANULADA' | 'TODAS')
               }
               className="rounded border border-slate-300 px-2 py-1 text-sm"
             >
-              <option value="CONFIRMADA">Confirmadas</option>
+              <option value="FACTURADA">Facturadas</option>
               <option value="ANULADA">Anuladas</option>
               <option value="TODAS">Todas</option>
             </select>

@@ -495,7 +495,7 @@ def import_ventas(table: str, tipo_comprobante: str) -> int:
         total = to_decimal(value_from_row(row_map, ["total", "valor"], default=str(subtotal + iva - descuento_valor)))
 
         medio_pago = value_from_row(row_map, ["medio_pago", "mediopago", "pago", "forma_pago"], default="EFECTIVO")
-        estado = value_from_row(row_map, ["estado"], default="CONFIRMADA")
+        estado = value_from_row(row_map, ["estado"], default="FACTURADA")
         observaciones = value_from_row(row_map, ["observaciones", "nota"], default="")
 
         _, was_created = Venta.objects.get_or_create(

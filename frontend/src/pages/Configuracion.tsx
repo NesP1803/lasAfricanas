@@ -158,6 +158,7 @@ export default function Configuracion() {
     last_name: "",
     telefono: "",
     tipo_usuario: "VENDEDOR" as UsuarioAdmin["tipo_usuario"],
+    es_cajero: false,
     is_active: true,
     password: "",
   });
@@ -685,6 +686,7 @@ export default function Configuracion() {
       last_name: "",
       telefono: "",
       tipo_usuario: "VENDEDOR",
+      es_cajero: false,
       is_active: true,
       password: "",
     });
@@ -714,6 +716,7 @@ export default function Configuracion() {
       last_name: usuario.last_name || "",
       telefono: usuario.telefono || "",
       tipo_usuario: usuario.tipo_usuario,
+      es_cajero: usuario.es_cajero ?? false,
       is_active: usuario.is_active,
       password: "",
     });
@@ -749,6 +752,7 @@ export default function Configuracion() {
           last_name: nuevoUsuario.last_name || "",
           telefono: nuevoUsuario.telefono || "",
           tipo_usuario: nuevoUsuario.tipo_usuario,
+          es_cajero: nuevoUsuario.es_cajero,
           is_active: nuevoUsuario.is_active,
           password: nuevoUsuario.password,
         };
@@ -773,6 +777,7 @@ export default function Configuracion() {
           last_name: nuevoUsuario.last_name || "",
           telefono: nuevoUsuario.telefono || "",
           tipo_usuario: nuevoUsuario.tipo_usuario,
+          es_cajero: nuevoUsuario.es_cajero,
           is_active: nuevoUsuario.is_active,
         };
         const data = await configuracionAPI.actualizarUsuario(
@@ -1567,15 +1572,22 @@ export default function Configuracion() {
                       </p>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="inline-flex rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600">
-                        {usuario.tipo_usuario === "ADMIN"
-                          ? "Administrador"
-                          : usuario.tipo_usuario === "VENDEDOR"
-                          ? "Vendedor"
-                          : usuario.tipo_usuario === "MECANICO"
-                          ? "Mecánico"
-                          : "Bodeguero"}
-                      </span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="inline-flex rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600">
+                          {usuario.tipo_usuario === "ADMIN"
+                            ? "Administrador"
+                            : usuario.tipo_usuario === "VENDEDOR"
+                            ? "Vendedor"
+                            : usuario.tipo_usuario === "MECANICO"
+                            ? "Mecánico"
+                            : "Bodeguero"}
+                        </span>
+                        {usuario.es_cajero && (
+                          <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                            Caja
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <label className="inline-flex items-center gap-2 text-xs text-slate-600">
@@ -1802,6 +1814,19 @@ export default function Configuracion() {
                     <option value="MECANICO">Mecánico</option>
                     <option value="BODEGUERO">Bodeguero</option>
                   </select>
+                </label>
+                <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={nuevoUsuario.es_cajero}
+                    onChange={(event) =>
+                      setNuevoUsuario((prev) => ({
+                        ...prev,
+                        es_cajero: event.target.checked,
+                      }))
+                    }
+                  />
+                  Asignar perfil de caja
                 </label>
                 {userModalMode === "edit" ? (
                   <>
