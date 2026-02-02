@@ -8,7 +8,6 @@ import {
   PlusCircle,
   Search,
   ShieldCheck,
-  Star,
   Send,
   Trash2,
   X,
@@ -17,7 +16,6 @@ import {
   inventarioApi,
   type Producto,
   type ProductoList,
-  type ProductoFavorito,
 } from '../api/inventario';
 import { ventasApi, type Venta, type VentaListItem } from '../api/ventas';
 import { configuracionAPI } from '../api/configuracion';
@@ -124,8 +122,6 @@ export default function Ventas() {
   const [documentoPreview, setDocumentoPreview] = useState<DocumentoPreview | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [mostrarBusqueda, setMostrarBusqueda] = useState(false);
-  const [favoritos, setFavoritos] = useState<ProductoFavorito[]>([]);
-  const [favoritoSeleccionado, setFavoritoSeleccionado] = useState<ProductoFavorito | null>(null);
   const [productoInfo, setProductoInfo] = useState<ProductoList | Producto | null>(null);
   const [guardandoBorrador, setGuardandoBorrador] = useState(false);
   const [enviandoCaja, setEnviandoCaja] = useState(false);
@@ -144,10 +140,6 @@ export default function Ventas() {
   const esCaja = useMemo(() => Boolean(user?.es_cajero || esAdmin), [user?.es_cajero, esAdmin]);
   const ventaBloqueada = Boolean(
     ventaBorrador && ventaBorrador.estado !== 'BORRADOR' && !esCaja
-  );
-  const favoritosIds = useMemo(
-    () => new Set(favoritos.map((fav) => fav.producto)),
-    [favoritos]
   );
 
   const tallerPayload = useMemo(() => {
@@ -173,14 +165,6 @@ export default function Ventas() {
       .then((response) => setProductos(response.results ?? []))
       .catch(() => setProductos([]));
   }, [busquedaProducto, mostrarBusqueda]);
-
-  useEffect(() => {
-    if (!mostrarBusqueda) return;
-    inventarioApi
-      .getFavoritos()
-      .then((data) => setFavoritos(data))
-      .catch(() => setFavoritos([]));
-  }, [mostrarBusqueda]);
 
   useEffect(() => {
     if (!esCaja) return;
@@ -464,44 +448,6 @@ export default function Ventas() {
     setMostrarBusqueda(true);
     setBusquedaProducto('');
     setProductoInfo(null);
-    setFavoritoSeleccionado(null);
-  };
-
-  const handleAgregarFavorito = async (productoId: number) => {
-    try {
-      await inventarioApi.agregarFavorito({ producto: productoId });
-      const data = await inventarioApi.getFavoritos();
-      setFavoritos(data);
-      showNotification({
-        type: 'success',
-        message: 'Producto agregado a favoritos.',
-      });
-    } catch (error) {
-      showNotification({
-        type: 'error',
-        message: 'No se pudo agregar a favoritos.',
-      });
-    }
-  };
-
-  const handleEliminarFavorito = async (favoritoId: number) => {
-    try {
-      await inventarioApi.eliminarFavorito(favoritoId);
-      const data = await inventarioApi.getFavoritos();
-      setFavoritos(data);
-      if (favoritoSeleccionado?.id === favoritoId) {
-        setFavoritoSeleccionado(null);
-      }
-      showNotification({
-        type: 'success',
-        message: 'Favorito eliminado.',
-      });
-    } catch (error) {
-      showNotification({
-        type: 'error',
-        message: 'No se pudo eliminar el favorito.',
-      });
-    }
   };
 
   const handleSeleccionarProducto = async (productoId: number) => {
@@ -537,11 +483,26 @@ export default function Ventas() {
     setCartItems((prev) => prev.filter((item) => item.id !== id));
   };
 
+  const resetDescuentoState = () => {
+    setDescuentoGeneral('0');
+    setDescuentoAutorizado(esAdmin);
+    setAprobadorId('');
+    setAprobadorNombre('');
+    setEstadoSolicitud(null);
+    setMostrarPermiso(false);
+  };
+
   const handleLimpiarTodo = () => {
     if (ventaBloqueada) return;
     setCartItems([]);
     setDocumentoGenerado(null);
     setVentaBorrador(null);
+    setClienteId(null);
+    setClienteNombre('Cliente general');
+    setClienteDocumento('');
+    setMedioPago('EFECTIVO');
+    setEfectivoRecibido('0');
+    resetDescuentoState();
     setMensaje('Venta reiniciada.');
   };
 
@@ -688,6 +649,7 @@ export default function Ventas() {
     try {
       const enviada = await ventasApi.enviarACaja(venta.id);
       setVentaBorrador(enviada);
+      resetDescuentoState();
       setMensaje('Venta enviada a caja.');
       showNotification({
         type: 'success',
@@ -719,6 +681,7 @@ export default function Ventas() {
         cliente: clienteNombre,
         total: currencyFormatter.format(totals.totalAplicado),
       });
+      resetDescuentoState();
       setMensaje('Factura generada correctamente.');
     } catch (error) {
       setMensaje('No se pudo facturar. Revisa la conexión.');
@@ -784,6 +747,7 @@ export default function Ventas() {
       await ventasApi.actualizarVenta(detalleCaja.id, buildVentaPayload('FACTURA'));
       const facturada = await ventasApi.facturarEnCaja(detalleCaja.id);
       setDetalleCaja(facturada);
+      resetDescuentoState();
       showNotification({
         type: 'success',
         message: 'Venta facturada desde caja.',
@@ -867,6 +831,7 @@ export default function Ventas() {
         efectivoRecibido: efectivoRecibidoNumero,
         cambio: roundCop(cambioCalculado),
       });
+      resetDescuentoState();
       setMensaje(`${venta.tipo_comprobante_display} generado correctamente.`);
     } catch (error) {
       setMensaje('No se pudo generar el documento. Revisa la conexión.');
@@ -878,9 +843,7 @@ export default function Ventas() {
     return roundCop(calculado >= 0 ? calculado : 0);
   }, [efectivoRecibido, totals.totalPrevio]);
 
-  const obtenerInfoProducto = (
-    info: ProductoFavorito | ProductoList | Producto | null
-  ) => {
+  const obtenerInfoProducto = (info: ProductoList | Producto | null) => {
     if (!info) return null;
     const nombre = 'producto_nombre' in info ? info.producto_nombre : info.nombre;
     const codigo = 'producto_codigo' in info ? info.producto_codigo : info.codigo;
@@ -1135,15 +1098,6 @@ export default function Ventas() {
                   >
                     <span>{guardandoBorrador ? 'Facturando...' : 'Facturar'}</span>
                     <FileText size={16} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={guardarBorrador}
-                    disabled={ventaBloqueada || guardandoBorrador}
-                    className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-1.5 text-[11px] font-semibold uppercase text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
-                  >
-                    <span>{guardandoBorrador ? 'Guardando...' : 'Guardar borrador'}</span>
-                    <ShieldCheck size={16} />
                   </button>
                 </>
               ) : (
@@ -1668,75 +1622,28 @@ export default function Ventas() {
               </div>
             </div>
             <div className="grid gap-4 px-4 pb-4 lg:grid-cols-[260px,1fr]">
-              <div className="space-y-3">
-                <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
-                  <p className="text-xs font-semibold uppercase text-slate-500">
-                    Favoritos
-                  </p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {favoritos.length === 0 && (
-                      <span className="text-xs text-slate-500">
-                        Agrega productos como favoritos.
-                      </span>
-                    )}
-                    {favoritos.map((favorito) => (
-                      <button
-                        key={favorito.id}
-                        type="button"
-                        onClick={() => {
-                          setFavoritoSeleccionado(favorito);
-                          setProductoInfo(favorito);
-                        }}
-                        className="group flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
-                      >
-                        <Star size={12} className="text-amber-400" />
-                        <span>
-                          {favorito.alias || favorito.producto_nombre}
-                        </span>
-                        <span
-                          role="button"
-                          tabIndex={0}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            handleEliminarFavorito(favorito.id);
-                          }}
-                          onKeyDown={(event) => {
-                            if (event.key === 'Enter') {
-                              event.stopPropagation();
-                              handleEliminarFavorito(favorito.id);
-                            }
-                          }}
-                          className="ml-1 text-slate-300 group-hover:text-slate-500"
-                        >
-                          ×
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="rounded-xl border border-slate-100 bg-white px-3 py-3">
-                  <p className="text-xs font-semibold uppercase text-slate-500">
-                    Consulta rápida
-                  </p>
-                  {(() => {
-                    const info = obtenerInfoProducto(productoInfo ?? favoritoSeleccionado);
-                    if (!info) {
-                      return (
-                        <p className="mt-2 text-xs text-slate-400">
-                          Selecciona un producto para ver precio y stock.
-                        </p>
-                      );
-                    }
+              <div className="rounded-xl border border-slate-100 bg-white px-3 py-3">
+                <p className="text-xs font-semibold uppercase text-slate-500">
+                  Consulta rápida
+                </p>
+                {(() => {
+                  const info = obtenerInfoProducto(productoInfo);
+                  if (!info) {
                     return (
-                      <div className="mt-2 space-y-1 text-xs text-slate-600">
-                        <p className="font-semibold text-slate-800">{info.nombre}</p>
-                        <p>Código: {info.codigo}</p>
-                        <p>Precio: {currencyFormatter.format(Number(info.precio))}</p>
-                        <p>Stock: {info.stock}</p>
-                      </div>
+                      <p className="mt-2 text-xs text-slate-400">
+                        Selecciona un producto para ver precio y stock.
+                      </p>
                     );
-                  })()}
-                </div>
+                  }
+                  return (
+                    <div className="mt-2 space-y-1 text-xs text-slate-600">
+                      <p className="font-semibold text-slate-800">{info.nombre}</p>
+                      <p>Código: {info.codigo}</p>
+                      <p>Precio: {currencyFormatter.format(Number(info.precio))}</p>
+                      <p>Stock: {info.stock}</p>
+                    </div>
+                  );
+                })()}
               </div>
               <div className="max-h-[420px] overflow-auto">
                 <table className="min-w-full text-left text-sm">
@@ -1778,23 +1685,13 @@ export default function Ventas() {
                           {producto.stock}
                         </td>
                         <td className="px-3 py-2 text-right">
-                          <div className="flex justify-end gap-2">
-                            <button
-                              type="button"
-                              onClick={() => handleSeleccionarProducto(producto.id)}
-                              className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-semibold uppercase text-slate-600 hover:bg-slate-50"
-                            >
-                              Añadir
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleAgregarFavorito(producto.id)}
-                              disabled={favoritosIds.has(producto.id)}
-                              className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-semibold uppercase text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
-                            >
-                              <Star size={14} className="text-amber-400" />
-                            </button>
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleSeleccionarProducto(producto.id)}
+                            className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-semibold uppercase text-slate-600 hover:bg-slate-50"
+                          >
+                            Añadir
+                          </button>
                         </td>
                       </tr>
                     ))}
