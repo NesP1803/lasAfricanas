@@ -69,6 +69,7 @@ export const MODULE_DEFINITIONS: ModuleDefinition[] = [
     description: "Venta rápida, cuentas y listados de facturas.",
     sections: [
       { key: "venta_rapida", label: "Venta rápida" },
+      { key: "caja", label: "Caja" },
       { key: "cuentas", label: "Cuentas" },
       { key: "listados", label: "Listados" },
     ],
