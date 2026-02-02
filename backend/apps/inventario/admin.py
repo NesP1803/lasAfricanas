@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Categoria, Proveedor, Producto, MovimientoInventario
+from .models import Categoria, Proveedor, Producto, MovimientoInventario, ProductoFavorito
 
 
 @admin.register(Categoria)
@@ -156,3 +156,11 @@ class MovimientoInventarioAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         return qs.select_related('producto', 'usuario')
+
+
+@admin.register(ProductoFavorito)
+class ProductoFavoritoAdmin(admin.ModelAdmin):
+    list_display = ['usuario', 'producto', 'alias', 'orden', 'created_at']
+    list_filter = ['usuario', 'created_at']
+    search_fields = ['producto__codigo', 'producto__nombre', 'alias', 'usuario__username']
+    ordering = ['usuario', 'orden', '-created_at']

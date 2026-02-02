@@ -40,7 +40,7 @@ class ClienteSerializer(serializers.ModelSerializer):
     
     def get_total_compras(self, obj):
         """Total de ventas del cliente"""
-        return obj.ventas.filter(estado='CONFIRMADA').count()
+        return obj.ventas.filter(estado='FACTURADA').count()
     
     def validate_numero_documento(self, value):
         """Valida que el documento sea único"""
@@ -142,6 +142,11 @@ class VentaDetailSerializer(serializers.ModelSerializer):
             'cambio',
             'estado',
             'estado_display',
+            'creada_por',
+            'enviada_a_caja_por',
+            'enviada_a_caja_at',
+            'facturada_por',
+            'facturada_at',
             'observaciones',
             'remision_origen',
             'factura_electronica_uuid',
@@ -156,7 +161,7 @@ class VentaDetailSerializer(serializers.ModelSerializer):
 
 class VentaCreateSerializer(serializers.ModelSerializer):
     """Serializer para crear ventas"""
-    detalles = DetalleVentaSerializer(many=True)
+    detalles = DetalleVentaSerializer(many=True, required=False)
     descuento_aprobado_por = serializers.PrimaryKeyRelatedField(
         queryset=Usuario.objects.all(),
         required=False,
@@ -184,13 +189,33 @@ class VentaCreateSerializer(serializers.ModelSerializer):
     
     def create(self, validated_data):
         """Crea la venta con sus detalles"""
-        detalles_data = validated_data.pop('detalles')
+        detalles_data = validated_data.pop('detalles', [])
         venta = Venta.objects.create(**validated_data)
         
         for detalle_data in detalles_data:
             DetalleVenta.objects.create(venta=venta, **detalle_data)
         
         return venta
+
+    def update(self, instance, validated_data):
+        detalles_data = validated_data.pop('detalles', None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        if detalles_data is not None:
+            instance.detalles.all().delete()
+            for detalle_data in detalles_data:
+                DetalleVenta.objects.create(venta=instance, **detalle_data)
+        return instance
+
+    def validate(self, attrs):
+        if self.instance is None:
+            detalles = attrs.get('detalles')
+            if not detalles:
+                raise serializers.ValidationError(
+                    {'detalles': 'Debe incluir al menos un detalle.'}
+                )
+        return attrs
 
 
 class VentaAnuladaSerializer(serializers.ModelSerializer):

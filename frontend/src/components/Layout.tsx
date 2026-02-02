@@ -289,6 +289,7 @@ export default function Layout() {
         return { moduleKey: "facturacion", sectionKey: "listados" };
       }
 
+
       return null;
     };
 

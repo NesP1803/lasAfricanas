@@ -16,6 +16,7 @@ class UsuarioAdmin(BaseUserAdmin):
         'email', 
         'get_full_name', 
         'tipo_usuario', 
+        'es_cajero',
         'sede', 
         'is_active', 
         'is_staff'
@@ -24,6 +25,7 @@ class UsuarioAdmin(BaseUserAdmin):
     # Filtros en la barra lateral
     list_filter = [
         'tipo_usuario', 
+        'es_cajero',
         'sede', 
         'is_active', 
         'is_staff', 
@@ -50,7 +52,7 @@ class UsuarioAdmin(BaseUserAdmin):
             'fields': ('first_name', 'last_name', 'email', 'telefono')
         }),
         ('Información laboral', {
-            'fields': ('tipo_usuario', 'sede')
+            'fields': ('tipo_usuario', 'es_cajero', 'sede')
         }),
         ('Permisos', {
             'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions'),
@@ -74,6 +76,7 @@ class UsuarioAdmin(BaseUserAdmin):
                 'last_name',
                 'email',
                 'tipo_usuario',
+                'es_cajero',
                 'sede',
                 'is_staff',
                 'is_active'

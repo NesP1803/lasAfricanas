@@ -8,6 +8,8 @@ from .models import Venta, DetalleVenta, AuditoriaDescuento
 def generar_numero_comprobante(sender, instance, **kwargs):
     """Genera número de comprobante automáticamente"""
     if not instance.numero_comprobante:
+        if instance.tipo_comprobante == 'FACTURA' and instance.estado != 'FACTURADA':
+            return
         fecha = timezone.now()
         prefijo = {
             'COTIZACION': 'COT',
