@@ -84,6 +84,18 @@ export interface InventarioEstadisticas {
   valor_inventario: string | number;
 }
 
+export interface ProductoFavorito {
+  id: number;
+  producto: number;
+  producto_codigo: string;
+  producto_nombre: string;
+  producto_precio: string;
+  producto_stock: number;
+  alias: string;
+  orden: number;
+  created_at: string;
+}
+
 // Funciones API
 export const inventarioApi = {
   // Productos
@@ -219,6 +231,56 @@ export const inventarioApi = {
 
     if (!response.ok) throw new Error('Error al obtener productos con stock bajo');
     return response.json();
+  },
+
+  async getFavoritos(): Promise<ProductoFavorito[]> {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/productos-favoritos/`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) throw new Error('Error al obtener favoritos');
+    const data = await response.json();
+    if (Array.isArray(data)) {
+      return data;
+    }
+    if (Array.isArray(data?.results)) {
+      return data.results;
+    }
+    return [];
+  },
+
+  async agregarFavorito(data: { producto: number; alias?: string; orden?: number }): Promise<ProductoFavorito> {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/productos-favoritos/`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Error al agregar favorito');
+    }
+    return response.json();
+  },
+
+  async eliminarFavorito(id: number): Promise<void> {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/productos-favoritos/${id}/`, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) throw new Error('Error al eliminar favorito');
   },
 
   async getEstadisticas(): Promise<InventarioEstadisticas> {

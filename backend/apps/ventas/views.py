@@ -6,7 +6,9 @@ from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Sum, Count, Q
 from django.utils import timezone
+from django.db import transaction
 from datetime import datetime, time
+from decimal import Decimal
 
 from .models import Cliente, Venta, DetalleVenta, SolicitudDescuento, VentaAnulada, RemisionAnulada
 from .serializers import (
@@ -17,6 +19,21 @@ from .serializers import (
     VentaAnuladaSerializer,
     SolicitudDescuentoSerializer,
 )
+
+
+def _is_admin(user):
+    return bool(
+        user
+        and (
+            user.is_superuser
+            or user.is_staff
+            or getattr(user, 'tipo_usuario', None) == 'ADMIN'
+        )
+    )
+
+
+def _is_caja(user):
+    return _is_admin(user) or user.has_perm('ventas.caja_facturar')
 
 
 class ClienteViewSet(viewsets.ModelViewSet):
@@ -99,9 +116,49 @@ class VentaViewSet(viewsets.ModelViewSet):
         """Retorna el serializer apropiado según la acción"""
         if self.action == 'list':
             return VentaListSerializer
-        elif self.action == 'create':
+        elif self.action in {'create', 'update', 'partial_update'}:
             return VentaCreateSerializer
         return VentaDetailSerializer
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        vendedor = serializer.validated_data.get('vendedor')
+        if not _is_admin(user):
+            vendedor = user
+        tipo_comprobante = serializer.validated_data.get('tipo_comprobante')
+        estado = 'BORRADOR' if tipo_comprobante == 'FACTURA' else 'FACTURADA'
+        serializer.save(
+            vendedor=vendedor or user,
+            creada_por=user,
+            estado=estado,
+        )
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        venta = serializer.instance
+        detail_serializer = VentaDetailSerializer(venta, context=self.get_serializer_context())
+        headers = self.get_success_headers(detail_serializer.data)
+        return Response(detail_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    def update(self, request, *args, **kwargs):
+        venta = self.get_object()
+        if venta.estado != 'BORRADOR' and not _is_admin(request.user):
+            return Response(
+                {'error': 'Solo se pueden editar ventas en borrador.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        venta = self.get_object()
+        if venta.estado != 'BORRADOR' and not _is_admin(request.user):
+            return Response(
+                {'error': 'Solo se pueden editar ventas en borrador.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().partial_update(request, *args, **kwargs)
     
     @action(detail=False, methods=['get'])
     def remisiones_pendientes(self, request):
@@ -111,7 +168,7 @@ class VentaViewSet(viewsets.ModelViewSet):
         """
         remisiones = self.get_queryset().filter(
             tipo_comprobante='REMISION',
-            estado='CONFIRMADA',
+            estado='FACTURADA',
             facturas_generadas__isnull=True  # No tiene factura asociada
         )
         
@@ -134,7 +191,7 @@ class VentaViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        if remision.estado != 'CONFIRMADA':
+        if remision.estado != 'FACTURADA':
             return Response(
                 {'error': 'Solo se pueden facturar remisiones confirmadas'},
                 status=status.HTTP_400_BAD_REQUEST
@@ -142,6 +199,10 @@ class VentaViewSet(viewsets.ModelViewSet):
         
         try:
             factura = remision.convertir_a_factura()
+            factura.estado = 'FACTURADA'
+            factura.facturada_por = request.user
+            factura.facturada_at = timezone.now()
+            factura.save()
             serializer = VentaDetailSerializer(factura)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         except Exception as e:
@@ -229,6 +290,31 @@ class VentaViewSet(viewsets.ModelViewSet):
         
         serializer = VentaDetailSerializer(venta)
         return Response(serializer.data)
+
+    @action(detail=True, methods=['post'], url_path='enviar-a-caja')
+    def enviar_a_caja(self, request, pk=None):
+        venta = self.get_object()
+
+        if venta.estado != 'BORRADOR':
+            return Response(
+                {'error': 'Solo se pueden enviar a caja ventas en borrador.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        venta.estado = 'ENVIADA_A_CAJA'
+        venta.enviada_a_caja_por = request.user
+        venta.enviada_a_caja_at = timezone.now()
+        venta.save(
+            update_fields=[
+                'estado',
+                'enviada_a_caja_por',
+                'enviada_a_caja_at',
+                'updated_at',
+            ]
+        )
+
+        serializer = VentaDetailSerializer(venta)
+        return Response(serializer.data)
     
     @action(detail=False, methods=['get'])
     def estadisticas(self, request):
@@ -240,7 +326,7 @@ class VentaViewSet(viewsets.ModelViewSet):
         fecha_inicio = request.query_params.get('fecha_inicio')
         fecha_fin = request.query_params.get('fecha_fin')
         
-        ventas = self.get_queryset().filter(estado='CONFIRMADA')
+        ventas = self.get_queryset().filter(estado='FACTURADA')
         
         inicio_dt, fin_dt = self._get_fecha_range(fecha_inicio, fecha_fin)
         if inicio_dt:
@@ -291,6 +377,107 @@ class VentaViewSet(viewsets.ModelViewSet):
         stats['remisiones_por_usuario'] = remisiones_por_usuario
         
         return Response(stats)
+
+
+class CajaViewSet(viewsets.GenericViewSet):
+    permission_classes = [IsAuthenticated]
+    serializer_class = VentaDetailSerializer
+
+    def get_queryset(self):
+        return Venta.objects.select_related(
+            'cliente',
+            'vendedor',
+            'facturada_por',
+            'enviada_a_caja_por',
+        ).prefetch_related('detalles', 'detalles__producto')
+
+    def _require_caja(self, request):
+        if not _is_caja(request.user):
+            return Response({'detail': 'No autorizado.'}, status=status.HTTP_403_FORBIDDEN)
+        return None
+
+    def _normalize_decimal(self, value):
+        return Decimal(value).quantize(Decimal('0.01'))
+
+    def _validar_para_facturar(self, venta):
+        if venta.estado != 'ENVIADA_A_CAJA':
+            raise ValidationError('La venta no está enviada a caja.')
+
+        detalles = list(venta.detalles.select_related('producto'))
+        if not detalles:
+            raise ValidationError('La venta no tiene detalles para facturar.')
+
+        subtotal = sum((detalle.subtotal for detalle in detalles), Decimal('0.00'))
+        total = sum((detalle.total for detalle in detalles), Decimal('0.00'))
+
+        if self._normalize_decimal(subtotal) != self._normalize_decimal(venta.subtotal):
+            raise ValidationError('El subtotal no coincide con los detalles.')
+
+        if self._normalize_decimal(total) != self._normalize_decimal(venta.total):
+            raise ValidationError('El total no coincide con los detalles.')
+
+        if venta.afecta_inventario:
+            for detalle in detalles:
+                if detalle.afecto_inventario and detalle.producto.stock < detalle.cantidad:
+                    raise ValidationError(
+                        f'Stock insuficiente para {detalle.producto.nombre}.'
+                    )
+
+    @action(detail=False, methods=['get'], url_path='pendientes')
+    def pendientes(self, request):
+        permission_response = self._require_caja(request)
+        if permission_response:
+            return permission_response
+
+        ventas = self.get_queryset().filter(estado='ENVIADA_A_CAJA')
+        serializer = VentaListSerializer(ventas, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['post'])
+    def facturar(self, request, pk=None):
+        permission_response = self._require_caja(request)
+        if permission_response:
+            return permission_response
+
+        venta = self.get_object()
+        try:
+            self._validar_para_facturar(venta)
+        except ValidationError as error:
+            return Response({'error': error.detail}, status=status.HTTP_400_BAD_REQUEST)
+
+        from apps.inventario.models import MovimientoInventario
+
+        with transaction.atomic():
+            venta.estado = 'FACTURADA'
+            venta.facturada_por = request.user
+            venta.facturada_at = timezone.now()
+            venta.save()
+
+            if venta.afecta_inventario:
+                for detalle in venta.detalles.select_related('producto'):
+                    if not detalle.afecto_inventario:
+                        continue
+                    producto = detalle.producto
+                    stock_anterior = producto.stock
+                    stock_nuevo = stock_anterior - detalle.cantidad
+                    if stock_nuevo < 0:
+                        raise ValidationError(
+                            f'Stock insuficiente para {producto.nombre}.'
+                        )
+                    MovimientoInventario.objects.create(
+                        producto=producto,
+                        tipo='SALIDA',
+                        cantidad=-abs(detalle.cantidad),
+                        stock_anterior=stock_anterior,
+                        stock_nuevo=stock_nuevo,
+                        costo_unitario=detalle.precio_unitario,
+                        usuario=request.user,
+                        referencia=venta.numero_comprobante or f'VENTA-{venta.id}',
+                        observaciones='Facturación en caja',
+                    )
+
+        serializer = VentaDetailSerializer(venta)
+        return Response(serializer.data)
 
 
 class SolicitudDescuentoViewSet(viewsets.ModelViewSet):

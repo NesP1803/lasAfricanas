@@ -163,6 +163,38 @@ El frontend quedará disponible en `http://localhost:5173/`.
 2. Levanta el backend (`python manage.py runserver`).
 3. Levanta el frontend (`npm run dev`).
 
+## Flujo de ventas y caja
+
+### Estados de venta
+
+- `BORRADOR` → armado por vendedor.
+- `ENVIADA_A_CAJA` → lista para facturar en caja.
+- `FACTURADA` → venta cerrada (aplica también a remisiones/cotizaciones).
+- `ANULADA` → anulada por proceso de reversa.
+
+### Permisos / grupos
+
+- Otorga el permiso **`ventas.caja_facturar`** (por grupo o usuario) para habilitar la acción de facturar en caja.
+- Administradores (`is_staff`, `is_superuser` o `tipo_usuario=ADMIN`) también pueden facturar.
+
+### Endpoints nuevos (DRF)
+
+- `POST /api/ventas/` → crea venta `BORRADOR` cuando el comprobante es `FACTURA`.
+- `PATCH /api/ventas/{id}/` → edita solo ventas en `BORRADOR`.
+- `POST /api/ventas/{id}/enviar-a-caja/` → mueve a `ENVIADA_A_CAJA`.
+- `GET /api/caja/pendientes/` → lista ventas pendientes de facturar.
+- `POST /api/caja/{id}/facturar/` → valida stock/totales y marca `FACTURADA`.
+
+## Consulta rápida de precios (favoritos)
+
+Guarda productos por usuario para consultarlos rápidamente desde ventas.
+
+### Endpoints
+
+- `GET /api/productos-favoritos/`
+- `POST /api/productos-favoritos/`
+- `DELETE /api/productos-favoritos/{id}/`
+
 ## Compartir datos de la base de datos con el equipo
 
 Si los datos están solo en tu PC, hay dos formas comunes de compartirlos con tu compañero:

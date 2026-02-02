@@ -8,11 +8,18 @@ import {
   PlusCircle,
   Search,
   ShieldCheck,
+  Star,
+  Send,
   Trash2,
   X,
 } from 'lucide-react';
-import { inventarioApi, type Producto, type ProductoList } from '../api/inventario';
-import { ventasApi } from '../api/ventas';
+import {
+  inventarioApi,
+  type Producto,
+  type ProductoList,
+  type ProductoFavorito,
+} from '../api/inventario';
+import { ventasApi, type Venta } from '../api/ventas';
 import { configuracionAPI } from '../api/configuracion';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../contexts/NotificationContext';
@@ -117,12 +124,23 @@ export default function Ventas() {
   const [documentoPreview, setDocumentoPreview] = useState<DocumentoPreview | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [mostrarBusqueda, setMostrarBusqueda] = useState(false);
+  const [favoritos, setFavoritos] = useState<ProductoFavorito[]>([]);
+  const [favoritoSeleccionado, setFavoritoSeleccionado] = useState<ProductoFavorito | null>(null);
+  const [productoInfo, setProductoInfo] = useState<ProductoList | Producto | null>(null);
+  const [guardandoBorrador, setGuardandoBorrador] = useState(false);
+  const [enviandoCaja, setEnviandoCaja] = useState(false);
+  const [ventaBorrador, setVentaBorrador] = useState<Venta | null>(null);
   const [mostrarPermiso, setMostrarPermiso] = useState(false);
   const [usuariosAprobadores, setUsuariosAprobadores] = useState<{ id: number; nombre: string }[]>([]);
   const [cargandoAprobadores, setCargandoAprobadores] = useState(false);
   const codigoInputRef = useRef<HTMLInputElement | null>(null);
   const lastSolicitudFetchRef = useRef(0);
   const esAdmin = useMemo(() => user?.role === 'ADMIN', [user?.role]);
+  const ventaBloqueada = Boolean(ventaBorrador && ventaBorrador.estado !== 'BORRADOR');
+  const favoritosIds = useMemo(
+    () => new Set(favoritos.map((fav) => fav.producto)),
+    [favoritos]
+  );
 
   const tallerPayload = useMemo(() => {
     const state = location.state as { fromTaller?: TallerVentaPayload } | null;
@@ -147,6 +165,14 @@ export default function Ventas() {
       .then((response) => setProductos(response.results ?? []))
       .catch(() => setProductos([]));
   }, [busquedaProducto, mostrarBusqueda]);
+
+  useEffect(() => {
+    if (!mostrarBusqueda) return;
+    inventarioApi
+      .getFavoritos()
+      .then((data) => setFavoritos(data))
+      .catch(() => setFavoritos([]));
+  }, [mostrarBusqueda]);
 
   useEffect(() => {
     if (!mostrarPermiso) return;
@@ -355,6 +381,7 @@ export default function Ventas() {
   }, [cartItems, descuentoAutorizado, descuentoGeneral]);
 
   const handleBuscarCliente = async () => {
+    if (ventaBloqueada) return;
     if (!clienteDocumento.trim()) return;
     try {
       const cliente = await ventasApi.buscarCliente(clienteDocumento.trim());
@@ -369,6 +396,7 @@ export default function Ventas() {
   };
 
   const agregarProducto = (producto: Producto) => {
+    if (ventaBloqueada) return;
     setCartItems((prev) => {
       const existing = prev.find((item) => item.id === producto.id);
       if (existing) {
@@ -395,6 +423,7 @@ export default function Ventas() {
   };
 
   const handleBuscarProductoPorCodigo = async () => {
+    if (ventaBloqueada) return;
     if (!codigoProducto.trim()) return;
     try {
       const producto = await inventarioApi.buscarPorCodigo(codigoProducto.trim());
@@ -408,13 +437,55 @@ export default function Ventas() {
   };
 
   const handleAbrirBusqueda = () => {
+    if (ventaBloqueada) return;
     setMostrarBusqueda(true);
     setBusquedaProducto('');
+    setProductoInfo(null);
+    setFavoritoSeleccionado(null);
+  };
+
+  const handleAgregarFavorito = async (productoId: number) => {
+    try {
+      await inventarioApi.agregarFavorito({ producto: productoId });
+      const data = await inventarioApi.getFavoritos();
+      setFavoritos(data);
+      showNotification({
+        type: 'success',
+        message: 'Producto agregado a favoritos.',
+      });
+    } catch (error) {
+      showNotification({
+        type: 'error',
+        message: 'No se pudo agregar a favoritos.',
+      });
+    }
+  };
+
+  const handleEliminarFavorito = async (favoritoId: number) => {
+    try {
+      await inventarioApi.eliminarFavorito(favoritoId);
+      const data = await inventarioApi.getFavoritos();
+      setFavoritos(data);
+      if (favoritoSeleccionado?.id === favoritoId) {
+        setFavoritoSeleccionado(null);
+      }
+      showNotification({
+        type: 'success',
+        message: 'Favorito eliminado.',
+      });
+    } catch (error) {
+      showNotification({
+        type: 'error',
+        message: 'No se pudo eliminar el favorito.',
+      });
+    }
   };
 
   const handleSeleccionarProducto = async (productoId: number) => {
+    if (ventaBloqueada) return;
     try {
       const producto = await inventarioApi.getProducto(productoId);
+      setProductoInfo(producto);
       agregarProducto(producto);
       setMensaje('Producto agregado.');
     } catch (error) {
@@ -423,12 +494,14 @@ export default function Ventas() {
   };
 
   const handleActualizarCantidad = (id: number, cantidad: number) => {
+    if (ventaBloqueada) return;
     setCartItems((prev) =>
       prev.map((item) => (item.id === id ? { ...item, cantidad } : item))
     );
   };
 
   const handleActualizarDescuento = (id: number, descuento: number) => {
+    if (ventaBloqueada) return;
     setCartItems((prev) =>
       prev.map((item) =>
         item.id === id ? { ...item, descuentoPorcentaje: descuento } : item
@@ -437,16 +510,20 @@ export default function Ventas() {
   };
 
   const handleEliminarItem = (id: number) => {
+    if (ventaBloqueada) return;
     setCartItems((prev) => prev.filter((item) => item.id !== id));
   };
 
   const handleLimpiarTodo = () => {
+    if (ventaBloqueada) return;
     setCartItems([]);
     setDocumentoGenerado(null);
+    setVentaBorrador(null);
     setMensaje('Venta reiniciada.');
   };
 
   const handleSolicitarPermiso = () => {
+    if (ventaBloqueada) return;
     if (esAdmin) {
       setMensaje('Los administradores no requieren permiso para aplicar descuentos.');
       return;
@@ -455,6 +532,7 @@ export default function Ventas() {
   };
 
   const handleConfirmarPermiso = () => {
+    if (ventaBloqueada) return;
     if (esAdmin) {
       setMostrarPermiso(false);
       setMensaje('Los administradores no requieren permiso para aplicar descuentos.');
@@ -497,58 +575,118 @@ export default function Ventas() {
       });
   };
 
-  const handleGenerarDocumento = async (tipo: DocumentoGenerado['tipo']) => {
+  const buildVentaPayload = (tipo: DocumentoGenerado['tipo']) => {
+    const efectivoRecibidoNumero = roundCop(parseNumber(efectivoRecibido));
+    const cambioCalculado = Math.max(
+      0,
+      efectivoRecibidoNumero - totals.totalAplicado
+    );
+    return {
+      tipo_comprobante: tipo,
+      cliente: clienteId ?? 0,
+      vendedor: user?.id ?? 0,
+      subtotal: totals.subtotal.toFixed(2),
+      descuento_porcentaje: descuentoAutorizado ? descuentoGeneral : '0',
+      descuento_valor: totals.descuentoTotalAplicado.toFixed(2),
+      iva: totals.iva.toFixed(2),
+      total: totals.totalAplicado.toFixed(2),
+      medio_pago: medioPago,
+      efectivo_recibido: efectivoRecibidoNumero.toFixed(2),
+      cambio: cambioCalculado.toFixed(2),
+      detalles: cartItems.map((item) => {
+        const subtotal = item.precioUnitario * item.cantidad;
+        const descuento = subtotal * (item.descuentoPorcentaje / 100);
+        const base = subtotal - descuento;
+        const iva = base * (item.ivaPorcentaje / 100);
+        const total = roundCop(base + iva);
+        return {
+          producto: item.id,
+          cantidad: item.cantidad,
+          precio_unitario: roundCop(item.precioUnitario).toFixed(2),
+          descuento_unitario: roundCop(descuento).toFixed(2),
+          iva_porcentaje: item.ivaPorcentaje.toFixed(2),
+          subtotal: roundCop(subtotal).toFixed(2),
+          total: total.toFixed(2),
+        };
+      }),
+      descuento_aprobado_por:
+        descuentoAutorizado && !esAdmin && aprobadorId
+          ? Number(aprobadorId)
+          : undefined,
+    };
+  };
+
+  const validarVenta = () => {
     if (!clienteId) {
       setMensaje('Selecciona un cliente para continuar.');
-      return;
+      return false;
     }
     if (cartItems.length === 0) {
       setMensaje('Agrega productos antes de continuar.');
-      return;
+      return false;
     }
     if (!descuentoAutorizado && parseNumber(descuentoGeneral) > 0) {
       setMensaje('El descuento general está pendiente de aprobación.');
-      return;
+      return false;
     }
+    return true;
+  };
+
+  const guardarBorrador = async () => {
+    if (!validarVenta()) return null;
+    const payload = buildVentaPayload('FACTURA');
+    setGuardandoBorrador(true);
+    try {
+      const venta = ventaBorrador
+        ? await ventasApi.actualizarVenta(ventaBorrador.id, payload)
+        : await ventasApi.crearVenta(payload);
+      setVentaBorrador(venta);
+      setMensaje('Venta guardada como borrador.');
+      return venta;
+    } catch (error) {
+      setMensaje('No se pudo guardar el borrador. Revisa la conexión.');
+      return null;
+    } finally {
+      setGuardandoBorrador(false);
+    }
+  };
+
+  const handleEnviarCaja = async () => {
+    if (ventaBloqueada) return;
+    let venta = ventaBorrador;
+    if (!venta) {
+      venta = await guardarBorrador();
+    }
+    if (!venta) return;
+    setEnviandoCaja(true);
+    try {
+      const enviada = await ventasApi.enviarACaja(venta.id);
+      setVentaBorrador(enviada);
+      setMensaje('Venta enviada a caja.');
+      showNotification({
+        type: 'success',
+        message: 'Venta enviada a caja.',
+      });
+    } catch (error) {
+      setMensaje('No se pudo enviar a caja. Revisa la conexión.');
+      showNotification({
+        type: 'error',
+        message: 'No se pudo enviar a caja.',
+      });
+    } finally {
+      setEnviandoCaja(false);
+    }
+  };
+
+  const handleGenerarDocumento = async (tipo: DocumentoGenerado['tipo']) => {
+    if (!validarVenta()) return;
     try {
       const efectivoRecibidoNumero = roundCop(parseNumber(efectivoRecibido));
       const cambioCalculado = Math.max(
         0,
         efectivoRecibidoNumero - totals.totalAplicado
       );
-      const venta = await ventasApi.crearVenta({
-        tipo_comprobante: tipo,
-        cliente: clienteId,
-        vendedor: user?.id ?? 0,
-        subtotal: totals.subtotal.toFixed(2),
-        descuento_porcentaje: descuentoAutorizado ? descuentoGeneral : '0',
-        descuento_valor: totals.descuentoTotalAplicado.toFixed(2),
-        iva: totals.iva.toFixed(2),
-        total: totals.totalAplicado.toFixed(2),
-        medio_pago: medioPago,
-        efectivo_recibido: efectivoRecibidoNumero.toFixed(2),
-        cambio: cambioCalculado.toFixed(2),
-        detalles: cartItems.map((item) => {
-          const subtotal = item.precioUnitario * item.cantidad;
-          const descuento = subtotal * (item.descuentoPorcentaje / 100);
-          const base = subtotal - descuento;
-          const iva = base * (item.ivaPorcentaje / 100);
-          const total = roundCop(base + iva);
-          return {
-            producto: item.id,
-            cantidad: item.cantidad,
-            precio_unitario: roundCop(item.precioUnitario).toFixed(2),
-            descuento_unitario: roundCop(descuento).toFixed(2),
-            iva_porcentaje: item.ivaPorcentaje.toFixed(2),
-            subtotal: roundCop(subtotal).toFixed(2),
-            total: total.toFixed(2),
-          };
-        }),
-        descuento_aprobado_por:
-          descuentoAutorizado && !esAdmin && aprobadorId
-            ? Number(aprobadorId)
-            : undefined,
-      });
+      const venta = await ventasApi.crearVenta(buildVentaPayload(tipo));
       const numeroComprobante =
         venta.numero_comprobante ||
         (tipo === 'FACTURA'
@@ -595,7 +733,7 @@ export default function Ventas() {
         clienteNombre,
         clienteDocumento: clienteDocumento || 'N/D',
         medioPago: medioPagoDisplay,
-        estado: 'CONFIRMADA',
+        estado: 'FACTURADA',
         detalles: detallesPreview,
         subtotal: totals.subtotal,
         descuento: totals.descuentoTotalAplicado,
@@ -615,10 +753,21 @@ export default function Ventas() {
     return roundCop(calculado >= 0 ? calculado : 0);
   }, [efectivoRecibido, totals.totalPrevio]);
 
+  const obtenerInfoProducto = (
+    info: ProductoFavorito | ProductoList | Producto | null
+  ) => {
+    if (!info) return null;
+    const nombre = 'producto_nombre' in info ? info.producto_nombre : info.nombre;
+    const codigo = 'producto_codigo' in info ? info.producto_codigo : info.codigo;
+    const precio = 'producto_precio' in info ? info.producto_precio : info.precio_venta;
+    const stock = 'producto_stock' in info ? info.producto_stock : info.stock;
+    return { nombre, codigo, precio, stock };
+  };
+
   return (
     <div className="space-y-6">
       <section className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
-        <div className="grid gap-3 lg:grid-cols-6">
+        <div className="grid gap-3 lg:grid-cols-7">
           <div className="space-y-2">
             <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               Digite NIT/CC del cliente
@@ -634,12 +783,14 @@ export default function Ventas() {
                   }
                 }}
                 placeholder="Digite NIT/CC"
-                className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
+                disabled={ventaBloqueada}
+                className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100"
               />
               <button
                 type="button"
                 onClick={handleBuscarCliente}
-                className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50"
+                disabled={ventaBloqueada}
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
               >
                 <Search size={18} />
               </button>
@@ -665,6 +816,37 @@ export default function Ventas() {
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-semibold text-slate-800">
               {user?.username ?? 'Usuario'}
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              Estado venta
+            </label>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-semibold text-slate-800">
+              {ventaBorrador?.estado
+                ? {
+                    BORRADOR: 'Borrador',
+                    ENVIADA_A_CAJA: 'Enviada a caja',
+                    FACTURADA: 'Facturada',
+                    ANULADA: 'Anulada',
+                  }[ventaBorrador.estado]
+                : 'Nueva venta'}
+            </div>
+            {ventaBloqueada && (
+              <button
+                type="button"
+                onClick={() => {
+                  setVentaBorrador(null);
+                  setCartItems([]);
+                  setDocumentoGenerado(null);
+                  setDocumentoPreview(null);
+                  setMensaje(null);
+                }}
+                className="text-xs font-semibold uppercase text-blue-600 hover:text-blue-700"
+              >
+                Iniciar nueva venta
+              </button>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -697,6 +879,7 @@ export default function Ventas() {
               onChange={(event) =>
                 setMedioPago(event.target.value as typeof medioPago)
               }
+              disabled={ventaBloqueada}
               className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
             >
               <option value="EFECTIVO">Efectivo</option>
@@ -728,13 +911,15 @@ export default function Ventas() {
                     }
                   }}
                   placeholder="Digite código / QR / barra"
-                  className="w-full bg-transparent text-sm focus:outline-none"
+                  disabled={ventaBloqueada}
+                  className="w-full bg-transparent text-sm focus:outline-none disabled:cursor-not-allowed"
                 />
               </div>
               <button
                 type="button"
                 onClick={handleBuscarProductoPorCodigo}
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-white shadow-sm transition hover:bg-blue-700"
+                disabled={ventaBloqueada}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
                 <PlusCircle size={18} />
               </button>
@@ -743,14 +928,16 @@ export default function Ventas() {
               <button
                 type="button"
                 onClick={handleAbrirBusqueda}
-                className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-1.5 text-[11px] font-semibold uppercase text-slate-600 hover:bg-slate-50"
+                disabled={ventaBloqueada}
+                className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-1.5 text-[11px] font-semibold uppercase text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
               >
                 <Search size={14} /> Consulta rápida
               </button>
               <button
                 type="button"
                 onClick={handleLimpiarTodo}
-                className="flex items-center gap-2 rounded-xl border border-rose-200 px-3 py-1.5 text-[11px] font-semibold uppercase text-rose-600 hover:bg-rose-50"
+                disabled={ventaBloqueada}
+                className="flex items-center gap-2 rounded-xl border border-rose-200 px-3 py-1.5 text-[11px] font-semibold uppercase text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:bg-slate-100"
               >
                 <Trash2 size={14} /> Borrar todo
               </button>
@@ -768,7 +955,7 @@ export default function Ventas() {
                 max={100}
                 value={descuentoGeneral}
                 onChange={(event) => setDescuentoGeneral(event.target.value)}
-                disabled={descuentoBloqueado}
+                disabled={descuentoBloqueado || ventaBloqueada}
                 className="w-20 rounded-lg border border-slate-200 px-2 py-1.5 text-sm text-right disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
               />
               <span className="text-sm text-slate-500">% aplicado</span>
@@ -777,7 +964,7 @@ export default function Ventas() {
               <button
                 type="button"
                 onClick={handleSolicitarPermiso}
-                disabled={descuentoBloqueado}
+                disabled={descuentoBloqueado || ventaBloqueada}
                 className="rounded-xl border border-slate-200 px-3 py-1.5 text-[11px] font-semibold uppercase text-slate-600 hover:bg-slate-50"
               >
                 Solicitar permiso
@@ -792,13 +979,14 @@ export default function Ventas() {
 
           <div className="space-y-2 lg:col-span-3">
             <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-              Generar documento
+              Generar documento / caja
             </label>
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={() => handleGenerarDocumento('COTIZACION')}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-1.5 text-[11px] font-semibold uppercase text-slate-700 hover:bg-slate-50"
+                disabled={ventaBloqueada}
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-1.5 text-[11px] font-semibold uppercase text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
               >
                 <span>Cotizar</span>
                 <FileText size={16} />
@@ -806,18 +994,29 @@ export default function Ventas() {
               <button
                 type="button"
                 onClick={() => handleGenerarDocumento('REMISION')}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-1.5 text-[11px] font-semibold uppercase text-slate-700 hover:bg-slate-50"
+                disabled={ventaBloqueada}
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-1.5 text-[11px] font-semibold uppercase text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
               >
                 <span>Remisión</span>
                 <FileText size={16} />
               </button>
               <button
                 type="button"
-                onClick={() => handleGenerarDocumento('FACTURA')}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 py-1.5 text-[11px] font-semibold uppercase text-white shadow-sm hover:bg-blue-700"
+                onClick={guardarBorrador}
+                disabled={ventaBloqueada || guardandoBorrador}
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-1.5 text-[11px] font-semibold uppercase text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
               >
-                <span>Facturar</span>
-                <FileText size={16} />
+                <span>{guardandoBorrador ? 'Guardando...' : 'Guardar borrador'}</span>
+                <ShieldCheck size={16} />
+              </button>
+              <button
+                type="button"
+                onClick={handleEnviarCaja}
+                disabled={ventaBloqueada || enviandoCaja}
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 py-1.5 text-[11px] font-semibold uppercase text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                <span>{enviandoCaja ? 'Enviando...' : 'Enviar a caja'}</span>
+                <Send size={16} />
               </button>
             </div>
           </div>
@@ -826,12 +1025,13 @@ export default function Ventas() {
             <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               Efectivo recibido
             </label>
-            <input
-              type="text"
-              value={efectivoRecibido}
-              onChange={(event) => setEfectivoRecibido(event.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
-            />
+          <input
+            type="text"
+            value={efectivoRecibido}
+            onChange={(event) => setEfectivoRecibido(event.target.value)}
+            disabled={ventaBloqueada}
+            className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
+          />
             {!descuentoAutorizado && parseNumber(descuentoGeneral) > 0 && (
               <p className="text-xs text-amber-600">
                 Descuento pendiente de aprobación.
@@ -908,7 +1108,8 @@ export default function Ventas() {
                               Math.max(1, item.cantidad - 1)
                             )
                           }
-                          className="text-slate-400 hover:text-slate-600"
+                          disabled={ventaBloqueada}
+                          className="text-slate-400 hover:text-slate-600 disabled:cursor-not-allowed"
                         >
                           <MinusCircle size={16} />
                         </button>
@@ -922,14 +1123,16 @@ export default function Ventas() {
                               Number(event.target.value || 1)
                             )
                           }
-                          className="w-14 rounded border border-slate-200 px-2 py-0.5 text-center text-sm"
+                          disabled={ventaBloqueada}
+                          className="w-14 rounded border border-slate-200 px-2 py-0.5 text-center text-sm disabled:cursor-not-allowed disabled:bg-slate-100"
                         />
                         <button
                           type="button"
                           onClick={() =>
                             handleActualizarCantidad(item.id, item.cantidad + 1)
                           }
-                          className="text-slate-400 hover:text-slate-600"
+                          disabled={ventaBloqueada}
+                          className="text-slate-400 hover:text-slate-600 disabled:cursor-not-allowed"
                         >
                           <PlusCircle size={16} />
                         </button>
@@ -958,8 +1161,8 @@ export default function Ventas() {
                             Number(event.target.value || 0)
                           )
                         }
-                        className="w-16 rounded border border-slate-200 px-2 py-0.5 text-right text-sm"
-                        disabled={!descuentoAutorizado}
+                        className="w-16 rounded border border-slate-200 px-2 py-0.5 text-right text-sm disabled:cursor-not-allowed disabled:bg-slate-100"
+                        disabled={!descuentoAutorizado || ventaBloqueada}
                       />
                     </td>
                     <td className="px-3 py-1.5 text-right">{item.stock}</td>
@@ -967,7 +1170,8 @@ export default function Ventas() {
                       <button
                         type="button"
                         onClick={() => handleEliminarItem(item.id)}
-                        className="rounded-lg border border-slate-200 p-1.5 text-rose-600 hover:bg-rose-50"
+                        disabled={ventaBloqueada}
+                        className="rounded-lg border border-slate-200 p-1.5 text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:bg-slate-100"
                       >
                         <Trash2 size={16} />
                       </button>
@@ -1202,57 +1406,140 @@ export default function Ventas() {
                 />
               </div>
             </div>
-            <div className="max-h-[420px] overflow-auto px-4 pb-4">
-              <table className="min-w-full text-left text-sm">
-                <thead className="sticky top-0 bg-slate-100 text-xs uppercase text-slate-500">
-                  <tr>
-                    <th className="px-3 py-2">Código</th>
-                    <th className="px-3 py-2">Artículo</th>
-                    <th className="px-3 py-2 text-right">Precio</th>
-                    <th className="px-3 py-2 text-right">Stock</th>
-                    <th className="px-3 py-2 text-right">Agregar</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {productos.length === 0 && (
-                    <tr>
-                      <td
-                        colSpan={5}
-                        className="px-3 py-6 text-center text-slate-500"
+            <div className="grid gap-4 px-4 pb-4 lg:grid-cols-[260px,1fr]">
+              <div className="space-y-3">
+                <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                  <p className="text-xs font-semibold uppercase text-slate-500">
+                    Favoritos
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {favoritos.length === 0 && (
+                      <span className="text-xs text-slate-500">
+                        Agrega productos como favoritos.
+                      </span>
+                    )}
+                    {favoritos.map((favorito) => (
+                      <button
+                        key={favorito.id}
+                        type="button"
+                        onClick={() => {
+                          setFavoritoSeleccionado(favorito);
+                          setProductoInfo(favorito);
+                        }}
+                        className="group flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
                       >
-                        No hay resultados.
-                      </td>
-                    </tr>
-                  )}
-                  {productos.map((producto) => (
-                    <tr
-                      key={producto.id}
-                      onDoubleClick={() => handleSeleccionarProducto(producto.id)}
-                      className="cursor-pointer border-b border-slate-100 hover:bg-slate-50"
-                    >
-                      <td className="px-3 py-2 text-slate-600">{producto.codigo}</td>
-                      <td className="px-3 py-2 font-medium text-slate-800">
-                        {producto.nombre}
-                      </td>
-                      <td className="px-3 py-2 text-right text-slate-600">
-                        {currencyFormatter.format(Number(producto.precio_venta))}
-                      </td>
-                      <td className="px-3 py-2 text-right text-slate-600">
-                        {producto.stock}
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        <button
-                          type="button"
-                          onClick={() => handleSeleccionarProducto(producto.id)}
-                          className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-semibold uppercase text-slate-600 hover:bg-slate-50"
+                        <Star size={12} className="text-amber-400" />
+                        <span>
+                          {favorito.alias || favorito.producto_nombre}
+                        </span>
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleEliminarFavorito(favorito.id);
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                              event.stopPropagation();
+                              handleEliminarFavorito(favorito.id);
+                            }
+                          }}
+                          className="ml-1 text-slate-300 group-hover:text-slate-500"
                         >
-                          Añadir
-                        </button>
-                      </td>
+                          ×
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-slate-100 bg-white px-3 py-3">
+                  <p className="text-xs font-semibold uppercase text-slate-500">
+                    Consulta rápida
+                  </p>
+                  {(() => {
+                    const info = obtenerInfoProducto(productoInfo ?? favoritoSeleccionado);
+                    if (!info) {
+                      return (
+                        <p className="mt-2 text-xs text-slate-400">
+                          Selecciona un producto para ver precio y stock.
+                        </p>
+                      );
+                    }
+                    return (
+                      <div className="mt-2 space-y-1 text-xs text-slate-600">
+                        <p className="font-semibold text-slate-800">{info.nombre}</p>
+                        <p>Código: {info.codigo}</p>
+                        <p>Precio: {currencyFormatter.format(Number(info.precio))}</p>
+                        <p>Stock: {info.stock}</p>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+              <div className="max-h-[420px] overflow-auto">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="sticky top-0 bg-slate-100 text-xs uppercase text-slate-500">
+                    <tr>
+                      <th className="px-3 py-2">Código</th>
+                      <th className="px-3 py-2">Artículo</th>
+                      <th className="px-3 py-2 text-right">Precio</th>
+                      <th className="px-3 py-2 text-right">Stock</th>
+                      <th className="px-3 py-2 text-right">Acciones</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {productos.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan={5}
+                          className="px-3 py-6 text-center text-slate-500"
+                        >
+                          No hay resultados.
+                        </td>
+                      </tr>
+                    )}
+                    {productos.map((producto) => (
+                      <tr
+                        key={producto.id}
+                        onDoubleClick={() => handleSeleccionarProducto(producto.id)}
+                        onClick={() => setProductoInfo(producto)}
+                        className="cursor-pointer border-b border-slate-100 hover:bg-slate-50"
+                      >
+                        <td className="px-3 py-2 text-slate-600">{producto.codigo}</td>
+                        <td className="px-3 py-2 font-medium text-slate-800">
+                          {producto.nombre}
+                        </td>
+                        <td className="px-3 py-2 text-right text-slate-600">
+                          {currencyFormatter.format(Number(producto.precio_venta))}
+                        </td>
+                        <td className="px-3 py-2 text-right text-slate-600">
+                          {producto.stock}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <div className="flex justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleSeleccionarProducto(producto.id)}
+                              className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-semibold uppercase text-slate-600 hover:bg-slate-50"
+                            >
+                              Añadir
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleAgregarFavorito(producto.id)}
+                              disabled={favoritosIds.has(producto.id)}
+                              className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-semibold uppercase text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
+                            >
+                              <Star size={14} className="text-amber-400" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>
