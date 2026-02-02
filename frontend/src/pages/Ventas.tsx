@@ -1123,15 +1123,26 @@ export default function Ventas() {
                   </button>
                 </>
               ) : (
-                <button
-                  type="button"
-                  onClick={handleEnviarCaja}
-                  disabled={ventaBloqueada || enviandoCaja}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 py-1.5 text-[11px] font-semibold uppercase text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-                >
-                  <span>{enviandoCaja ? 'Enviando...' : 'Enviar a caja'}</span>
-                  <Send size={16} />
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleGenerarDocumento('COTIZACION')}
+                    disabled={ventaBloqueada}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-1.5 text-[11px] font-semibold uppercase text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
+                  >
+                    <span>Cotizar</span>
+                    <FileText size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleEnviarCaja}
+                    disabled={ventaBloqueada || enviandoCaja}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 py-1.5 text-[11px] font-semibold uppercase text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  >
+                    <span>{enviandoCaja ? 'Enviando...' : 'Enviar a caja'}</span>
+                    <Send size={16} />
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -1177,6 +1188,12 @@ export default function Ventas() {
           </p>
         )}
       </section>
+
+      {mensaje && (
+        <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+          {mensaje}
+        </div>
+      )}
 
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-200 bg-yellow-50 px-5 py-2 text-xs font-semibold uppercase tracking-wide text-slate-700">
@@ -1381,7 +1398,7 @@ export default function Ventas() {
               Actualizar
             </button>
           </div>
-          <div className="mt-4 grid gap-4 lg:grid-cols-[1.2fr,1fr]">
+          <div className="mt-4">
             <div className="overflow-x-auto">
               <table className="min-w-full text-left text-sm">
                 <thead className="bg-slate-100 text-xs uppercase text-slate-500">
@@ -1436,46 +1453,8 @@ export default function Ventas() {
                 </tbody>
               </table>
             </div>
-            <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-semibold uppercase text-slate-500">
-                    Detalle en caja
-                  </p>
-                  <p className="text-sm font-semibold text-slate-700">
-                    {detalleCaja?.numero_comprobante || (detalleCaja ? `Venta #${detalleCaja.id}` : 'Selecciona una venta')}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleFacturarPendiente}
-                  disabled={!detalleCaja || facturandoCaja}
-                  className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold uppercase text-white disabled:cursor-not-allowed disabled:bg-slate-300"
-                >
-                  {facturandoCaja ? 'Facturando...' : 'Facturar'}
-                </button>
-              </div>
-              {cargandoDetalleCaja && (
-                <p className="mt-3 text-xs text-slate-500">Cargando detalle...</p>
-              )}
-              {!cargandoDetalleCaja && detalleCaja && (
-                <div className="mt-3 space-y-2 text-xs text-slate-600">
-                  <p className="font-semibold text-slate-800">
-                    Cliente: {detalleCaja.cliente_info?.nombre ?? detalleCaja.cliente}
-                  </p>
-                  <p>Total: {currencyFormatter.format(Number(detalleCaja.total))}</p>
-                  <p>Estado: {detalleCaja.estado_display}</p>
-                </div>
-              )}
-            </div>
           </div>
         </section>
-      )}
-
-      {mensaje && (
-        <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
-          {mensaje}
-        </div>
       )}
 
       {documentoGenerado && (
