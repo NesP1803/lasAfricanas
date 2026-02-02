@@ -133,6 +133,15 @@ class VentaViewSet(viewsets.ModelViewSet):
             estado=estado,
         )
 
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        venta = serializer.instance
+        detail_serializer = VentaDetailSerializer(venta, context=self.get_serializer_context())
+        headers = self.get_success_headers(detail_serializer.data)
+        return Response(detail_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
     def update(self, request, *args, **kwargs):
         venta = self.get_object()
         if venta.estado != 'BORRADOR' and not _is_admin(request.user):

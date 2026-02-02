@@ -339,7 +339,14 @@ export const ventasApi = {
     if (!response.ok) {
       throw new Error('Error al obtener ventas pendientes');
     }
-    return response.json();
+    const data = await response.json();
+    if (Array.isArray(data)) {
+      return data;
+    }
+    if (Array.isArray(data?.results)) {
+      return data.results;
+    }
+    return [];
   },
 
   async facturarEnCaja(ventaId: number): Promise<Venta> {

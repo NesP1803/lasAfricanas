@@ -243,7 +243,14 @@ export const inventarioApi = {
     });
 
     if (!response.ok) throw new Error('Error al obtener favoritos');
-    return response.json();
+    const data = await response.json();
+    if (Array.isArray(data)) {
+      return data;
+    }
+    if (Array.isArray(data?.results)) {
+      return data.results;
+    }
+    return [];
   },
 
   async agregarFavorito(data: { producto: number; alias?: string; orden?: number }): Promise<ProductoFavorito> {
