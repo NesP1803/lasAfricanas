@@ -183,6 +183,21 @@ export default function Ventas() {
   }, [esCaja]);
 
   useEffect(() => {
+    if (!esCaja) return;
+    setCargandoPendientes(true);
+    ventasApi
+      .getPendientesCaja()
+      .then((data) => {
+        const ordenadas = [...data].sort(
+          (a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime()
+        );
+        setPendientesCaja(ordenadas);
+      })
+      .catch(() => setPendientesCaja([]))
+      .finally(() => setCargandoPendientes(false));
+  }, [esCaja]);
+
+  useEffect(() => {
     if (!mostrarPermiso) return;
     const cached = window.localStorage.getItem('usuarios_aprobadores');
     if (cached && usuariosAprobadores.length === 0) {
