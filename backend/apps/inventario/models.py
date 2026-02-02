@@ -281,3 +281,43 @@ class MovimientoInventario(BaseModel):
     
     def __str__(self):
         return f"{self.get_tipo_display()} - {self.producto.codigo} ({self.cantidad})"
+
+
+class ProductoFavorito(BaseModel):
+    """Productos favoritos por usuario para consulta rápida."""
+    usuario = models.ForeignKey(
+        'usuarios.Usuario',
+        on_delete=models.CASCADE,
+        related_name='productos_favoritos',
+        verbose_name='Usuario',
+    )
+    producto = models.ForeignKey(
+        Producto,
+        on_delete=models.CASCADE,
+        related_name='favoritos',
+        verbose_name='Producto',
+    )
+    alias = models.CharField(
+        max_length=120,
+        blank=True,
+        verbose_name='Alias',
+    )
+    orden = models.IntegerField(
+        default=0,
+        verbose_name='Orden',
+        help_text='Orden sugerido para mostrar en la lista',
+    )
+
+    class Meta:
+        db_table = 'productos_favoritos'
+        verbose_name = 'Producto favorito'
+        verbose_name_plural = 'Productos favoritos'
+        ordering = ['orden', '-created_at']
+        unique_together = ('usuario', 'producto')
+        indexes = [
+            models.Index(fields=['usuario']),
+            models.Index(fields=['producto']),
+        ]
+
+    def __str__(self):
+        return f"{self.usuario.username} - {self.producto.codigo}"

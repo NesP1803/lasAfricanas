@@ -33,7 +33,7 @@ export interface VentaCreate {
 
 export interface Venta {
   id: number;
-  numero_comprobante: string;
+  numero_comprobante: string | null;
   tipo_comprobante: string;
   tipo_comprobante_display: string;
   fecha: string;
@@ -50,12 +50,17 @@ export interface Venta {
   medio_pago_display: string;
   estado: string;
   estado_display: string;
+  creada_por?: number;
+  enviada_a_caja_por?: number | null;
+  enviada_a_caja_at?: string | null;
+  facturada_por?: number | null;
+  facturada_at?: string | null;
   detalles: any[];
 }
 
 export interface VentaListItem {
   id: number;
-  numero_comprobante: string;
+  numero_comprobante: string | null;
   tipo_comprobante: string;
   tipo_comprobante_display: string;
   fecha: string;
@@ -67,6 +72,18 @@ export interface VentaListItem {
   total: string;
   medio_pago: string;
   medio_pago_display: string;
+  estado: string;
+  estado_display: string;
+}
+
+export interface CajaPendiente {
+  id: number;
+  numero_comprobante: string | null;
+  tipo_comprobante: string;
+  tipo_comprobante_display: string;
+  fecha: string;
+  cliente_nombre: string;
+  total: string;
   estado: string;
   estado_display: string;
 }
@@ -210,6 +227,24 @@ export const ventasApi = {
     return response.json();
   },
 
+  async actualizarVenta(id: number, data: Partial<VentaCreate>): Promise<Venta> {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/ventas/${id}/`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw error;
+    }
+    return response.json();
+  },
+
   async getVentas(params?: {
     tipoComprobante?: string;
     estado?: string;
@@ -272,6 +307,55 @@ export const ventasApi = {
     });
 
     if (!response.ok) throw new Error('Error al obtener remisiones');
+    return response.json();
+  },
+
+  async enviarACaja(ventaId: number): Promise<Venta> {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/ventas/${ventaId}/enviar-a-caja/`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Error al enviar a caja');
+    }
+    return response.json();
+  },
+
+  async getPendientesCaja(): Promise<VentaListItem[]> {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/caja/pendientes/`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error('Error al obtener ventas pendientes');
+    }
+    return response.json();
+  },
+
+  async facturarEnCaja(ventaId: number): Promise<Venta> {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/caja/${ventaId}/facturar/`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Error al facturar en caja');
+    }
     return response.json();
   },
 
