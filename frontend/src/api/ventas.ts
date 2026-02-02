@@ -6,6 +6,8 @@ const API_URL = '/api';
 
 export interface DetalleVenta {
   producto: number;
+  producto_codigo?: string;
+  producto_nombre?: string;
   cantidad: number;
   precio_unitario: string;
   descuento_unitario: string;
@@ -49,6 +51,8 @@ export interface Venta {
   total: string;
   medio_pago: string;
   medio_pago_display: string;
+  efectivo_recibido: string;
+  cambio: string;
   estado: string;
   estado_display: string;
   creada_por?: number;
@@ -56,7 +60,7 @@ export interface Venta {
   enviada_a_caja_at?: string | null;
   facturada_por?: number | null;
   facturada_at?: string | null;
-  detalles: any[];
+  detalles: DetalleVenta[];
 }
 
 export interface VentaListItem {

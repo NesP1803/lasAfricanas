@@ -142,7 +142,9 @@ export default function Ventas() {
   const lastSolicitudFetchRef = useRef(0);
   const esAdmin = useMemo(() => user?.role === 'ADMIN', [user?.role]);
   const esCaja = useMemo(() => Boolean(user?.es_cajero || esAdmin), [user?.es_cajero, esAdmin]);
-  const ventaBloqueada = Boolean(ventaBorrador && ventaBorrador.estado !== 'BORRADOR');
+  const ventaBloqueada = Boolean(
+    ventaBorrador && ventaBorrador.estado !== 'BORRADOR' && !esCaja
+  );
   const favoritosIds = useMemo(
     () => new Set(favoritos.map((fav) => fav.producto)),
     [favoritos]
@@ -596,7 +598,10 @@ export default function Ventas() {
       });
   };
 
-  const buildVentaPayload = (tipo: DocumentoGenerado['tipo']) => {
+  const buildVentaPayload = (
+    tipo: DocumentoGenerado['tipo'],
+    vendedorId = ventaBorrador?.vendedor ?? user?.id ?? 0
+  ) => {
     const efectivoRecibidoNumero = roundCop(parseNumber(efectivoRecibido));
     const cambioCalculado = Math.max(
       0,
@@ -605,7 +610,7 @@ export default function Ventas() {
     return {
       tipo_comprobante: tipo,
       cliente: clienteId ?? 0,
-      vendedor: user?.id ?? 0,
+      vendedor: vendedorId,
       subtotal: totals.subtotal.toFixed(2),
       descuento_porcentaje: descuentoAutorizado ? descuentoGeneral : '0',
       descuento_valor: totals.descuentoTotalAplicado.toFixed(2),
@@ -726,15 +731,57 @@ export default function Ventas() {
     setCargandoDetalleCaja(true);
     ventasApi
       .getVenta(ventaId)
-      .then((data) => setDetalleCaja(data))
+      .then((data) => {
+        const nuevosItems: CartItem[] = (data.detalles ?? []).map((detalle) => {
+          const subtotal = Number(detalle.subtotal);
+          const descuentoUnitario = Number(detalle.descuento_unitario);
+          const descuentoPorcentaje =
+            subtotal > 0 ? (descuentoUnitario / subtotal) * 100 : 0;
+          return {
+            id: detalle.producto,
+            codigo: detalle.producto_codigo ?? '',
+            nombre: detalle.producto_nombre ?? '',
+            ivaPorcentaje: Number(detalle.iva_porcentaje),
+            precioUnitario: Number(detalle.precio_unitario),
+            stock: 0,
+            cantidad: Number(detalle.cantidad),
+            descuentoPorcentaje,
+          };
+        });
+        setDetalleCaja(data);
+        setVentaBorrador(data);
+        setCartItems(nuevosItems);
+        setClienteId(data.cliente);
+        setClienteNombre(data.cliente_info?.nombre ?? 'Cliente general');
+        setClienteDocumento(data.cliente_info?.numero_documento ?? '');
+        setDescuentoGeneral(data.descuento_porcentaje ?? '0');
+        const medioPagoActual = [
+          'EFECTIVO',
+          'TARJETA',
+          'TRANSFERENCIA',
+          'CREDITO',
+        ].includes(data.medio_pago)
+          ? (data.medio_pago as typeof medioPago)
+          : 'EFECTIVO';
+        setMedioPago(medioPagoActual);
+        setEfectivoRecibido(data.efectivo_recibido ?? '0');
+        setDescuentoAutorizado(true);
+        setEstadoSolicitud(null);
+        setMostrarPermiso(false);
+        setDocumentoGenerado(null);
+        setDocumentoPreview(null);
+        setMensaje('Detalle cargado en la factura.');
+      })
       .catch(() => setDetalleCaja(null))
       .finally(() => setCargandoDetalleCaja(false));
   };
 
   const handleFacturarPendiente = async () => {
     if (!detalleCaja) return;
+    if (!validarVenta()) return;
     setFacturandoCaja(true);
     try {
+      await ventasApi.actualizarVenta(detalleCaja.id, buildVentaPayload('FACTURA'));
       const facturada = await ventasApi.facturarEnCaja(detalleCaja.id);
       setDetalleCaja(facturada);
       showNotification({
@@ -1060,35 +1107,35 @@ export default function Ventas() {
               Generar documento / caja
             </label>
             <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => handleGenerarDocumento('COTIZACION')}
-                disabled={ventaBloqueada}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-1.5 text-[11px] font-semibold uppercase text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
-              >
-                <span>Cotizar</span>
-                <FileText size={16} />
-              </button>
-              <button
-                type="button"
-                onClick={() => handleGenerarDocumento('REMISION')}
-                disabled={ventaBloqueada}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-1.5 text-[11px] font-semibold uppercase text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
-              >
-                <span>Remisión</span>
-                <FileText size={16} />
-              </button>
-              <button
-                type="button"
-                onClick={handleFacturarDirecto}
-                disabled={ventaBloqueada || guardandoBorrador}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 py-1.5 text-[11px] font-semibold uppercase text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-              >
-                <span>{guardandoBorrador ? 'Facturando...' : 'Facturar'}</span>
-                <FileText size={16} />
-              </button>
-              {!esCaja && (
+              {esCaja ? (
                 <>
+                  <button
+                    type="button"
+                    onClick={() => handleGenerarDocumento('COTIZACION')}
+                    disabled={ventaBloqueada}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-1.5 text-[11px] font-semibold uppercase text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
+                  >
+                    <span>Cotizar</span>
+                    <FileText size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleGenerarDocumento('REMISION')}
+                    disabled={ventaBloqueada}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-1.5 text-[11px] font-semibold uppercase text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
+                  >
+                    <span>Remisión</span>
+                    <FileText size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleFacturarDirecto}
+                    disabled={ventaBloqueada || guardandoBorrador}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 py-1.5 text-[11px] font-semibold uppercase text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  >
+                    <span>{guardandoBorrador ? 'Facturando...' : 'Facturar'}</span>
+                    <FileText size={16} />
+                  </button>
                   <button
                     type="button"
                     onClick={guardarBorrador}
@@ -1098,16 +1145,17 @@ export default function Ventas() {
                     <span>{guardandoBorrador ? 'Guardando...' : 'Guardar borrador'}</span>
                     <ShieldCheck size={16} />
                   </button>
-                  <button
-                    type="button"
-                    onClick={handleEnviarCaja}
-                    disabled={ventaBloqueada || enviandoCaja}
-                    className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 py-1.5 text-[11px] font-semibold uppercase text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-                  >
-                    <span>{enviandoCaja ? 'Enviando...' : 'Enviar a caja'}</span>
-                    <Send size={16} />
-                  </button>
                 </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleEnviarCaja}
+                  disabled={ventaBloqueada || enviandoCaja}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 py-1.5 text-[11px] font-semibold uppercase text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                >
+                  <span>{enviandoCaja ? 'Enviando...' : 'Enviar a caja'}</span>
+                  <Send size={16} />
+                </button>
               )}
             </div>
           </div>
