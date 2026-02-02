@@ -19,7 +19,7 @@ import {
   type ProductoList,
   type ProductoFavorito,
 } from '../api/inventario';
-import { ventasApi, type Venta } from '../api/ventas';
+import { ventasApi, type Venta, type VentaListItem } from '../api/ventas';
 import { configuracionAPI } from '../api/configuracion';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../contexts/NotificationContext';
@@ -130,12 +130,18 @@ export default function Ventas() {
   const [guardandoBorrador, setGuardandoBorrador] = useState(false);
   const [enviandoCaja, setEnviandoCaja] = useState(false);
   const [ventaBorrador, setVentaBorrador] = useState<Venta | null>(null);
+  const [pendientesCaja, setPendientesCaja] = useState<VentaListItem[]>([]);
+  const [detalleCaja, setDetalleCaja] = useState<Venta | null>(null);
+  const [cargandoPendientes, setCargandoPendientes] = useState(false);
+  const [cargandoDetalleCaja, setCargandoDetalleCaja] = useState(false);
+  const [facturandoCaja, setFacturandoCaja] = useState(false);
   const [mostrarPermiso, setMostrarPermiso] = useState(false);
   const [usuariosAprobadores, setUsuariosAprobadores] = useState<{ id: number; nombre: string }[]>([]);
   const [cargandoAprobadores, setCargandoAprobadores] = useState(false);
   const codigoInputRef = useRef<HTMLInputElement | null>(null);
   const lastSolicitudFetchRef = useRef(0);
   const esAdmin = useMemo(() => user?.role === 'ADMIN', [user?.role]);
+  const esCaja = useMemo(() => Boolean(user?.es_cajero || esAdmin), [user?.es_cajero, esAdmin]);
   const ventaBloqueada = Boolean(ventaBorrador && ventaBorrador.estado !== 'BORRADOR');
   const favoritosIds = useMemo(
     () => new Set(favoritos.map((fav) => fav.producto)),
@@ -173,6 +179,21 @@ export default function Ventas() {
       .then((data) => setFavoritos(data))
       .catch(() => setFavoritos([]));
   }, [mostrarBusqueda]);
+
+  useEffect(() => {
+    if (!esCaja) return;
+    setCargandoPendientes(true);
+    ventasApi
+      .getPendientesCaja()
+      .then((data) => {
+        const ordenadas = [...data].sort(
+          (a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime()
+        );
+        setPendientesCaja(ordenadas);
+      })
+      .catch(() => setPendientesCaja([]))
+      .finally(() => setCargandoPendientes(false));
+  }, [esCaja]);
 
   useEffect(() => {
     if (!mostrarPermiso) return;
@@ -678,6 +699,63 @@ export default function Ventas() {
     }
   };
 
+  const handleFacturarDirecto = async () => {
+    if (!validarVenta()) return;
+    setGuardandoBorrador(true);
+    try {
+      const venta = await ventasApi.crearVenta({
+        ...buildVentaPayload('FACTURA'),
+        facturar_directo: true,
+      });
+      setVentaBorrador(venta);
+      setDocumentoGenerado({
+        tipo: 'FACTURA',
+        numero: venta.numero_comprobante || `FAC-${venta.id}`,
+        cliente: clienteNombre,
+        total: currencyFormatter.format(totals.totalAplicado),
+      });
+      setMensaje('Factura generada correctamente.');
+    } catch (error) {
+      setMensaje('No se pudo facturar. Revisa la conexión.');
+    } finally {
+      setGuardandoBorrador(false);
+    }
+  };
+
+  const handleSeleccionarPendiente = (ventaId: number) => {
+    setCargandoDetalleCaja(true);
+    ventasApi
+      .getVenta(ventaId)
+      .then((data) => setDetalleCaja(data))
+      .catch(() => setDetalleCaja(null))
+      .finally(() => setCargandoDetalleCaja(false));
+  };
+
+  const handleFacturarPendiente = async () => {
+    if (!detalleCaja) return;
+    setFacturandoCaja(true);
+    try {
+      const facturada = await ventasApi.facturarEnCaja(detalleCaja.id);
+      setDetalleCaja(facturada);
+      showNotification({
+        type: 'success',
+        message: 'Venta facturada desde caja.',
+      });
+      const data = await ventasApi.getPendientesCaja();
+      const ordenadas = [...data].sort(
+        (a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime()
+      );
+      setPendientesCaja(ordenadas);
+    } catch (error) {
+      showNotification({
+        type: 'error',
+        message: 'No se pudo facturar la venta.',
+      });
+    } finally {
+      setFacturandoCaja(false);
+    }
+  };
+
   const handleGenerarDocumento = async (tipo: DocumentoGenerado['tipo']) => {
     if (!validarVenta()) return;
     try {
@@ -1002,22 +1080,35 @@ export default function Ventas() {
               </button>
               <button
                 type="button"
-                onClick={guardarBorrador}
+                onClick={handleFacturarDirecto}
                 disabled={ventaBloqueada || guardandoBorrador}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-1.5 text-[11px] font-semibold uppercase text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 py-1.5 text-[11px] font-semibold uppercase text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
-                <span>{guardandoBorrador ? 'Guardando...' : 'Guardar borrador'}</span>
-                <ShieldCheck size={16} />
+                <span>{guardandoBorrador ? 'Facturando...' : 'Facturar'}</span>
+                <FileText size={16} />
               </button>
-              <button
-                type="button"
-                onClick={handleEnviarCaja}
-                disabled={ventaBloqueada || enviandoCaja}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 py-1.5 text-[11px] font-semibold uppercase text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-              >
-                <span>{enviandoCaja ? 'Enviando...' : 'Enviar a caja'}</span>
-                <Send size={16} />
-              </button>
+              {!esCaja && (
+                <>
+                  <button
+                    type="button"
+                    onClick={guardarBorrador}
+                    disabled={ventaBloqueada || guardandoBorrador}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-1.5 text-[11px] font-semibold uppercase text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
+                  >
+                    <span>{guardandoBorrador ? 'Guardando...' : 'Guardar borrador'}</span>
+                    <ShieldCheck size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleEnviarCaja}
+                    disabled={ventaBloqueada || enviandoCaja}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 py-1.5 text-[11px] font-semibold uppercase text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  >
+                    <span>{enviandoCaja ? 'Enviando...' : 'Enviar a caja'}</span>
+                    <Send size={16} />
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
@@ -1239,6 +1330,128 @@ export default function Ventas() {
           </div>
         </div>
       </section>
+
+      {esCaja && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase text-slate-500">
+                Caja
+              </p>
+              <h3 className="text-lg font-semibold text-slate-900">
+                Ventas pendientes por facturar
+              </h3>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setCargandoPendientes(true);
+                ventasApi
+                  .getPendientesCaja()
+                  .then((data) => {
+                    const ordenadas = [...data].sort(
+                      (a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime()
+                    );
+                    setPendientesCaja(ordenadas);
+                  })
+                  .catch(() => setPendientesCaja([]))
+                  .finally(() => setCargandoPendientes(false));
+              }}
+              className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50"
+            >
+              Actualizar
+            </button>
+          </div>
+          <div className="mt-4 grid gap-4 lg:grid-cols-[1.2fr,1fr]">
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-left text-sm">
+                <thead className="bg-slate-100 text-xs uppercase text-slate-500">
+                  <tr>
+                    <th className="px-3 py-2">Documento</th>
+                    <th className="px-3 py-2">Cliente</th>
+                    <th className="px-3 py-2">Fecha</th>
+                    <th className="px-3 py-2 text-right">Total</th>
+                    <th className="px-3 py-2 text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cargandoPendientes && (
+                    <tr>
+                      <td colSpan={5} className="px-3 py-6 text-center text-slate-500">
+                        Cargando pendientes...
+                      </td>
+                    </tr>
+                  )}
+                  {!cargandoPendientes && pendientesCaja.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-3 py-6 text-center text-slate-500">
+                        No hay ventas pendientes.
+                      </td>
+                    </tr>
+                  )}
+                  {pendientesCaja.map((venta) => (
+                    <tr key={venta.id} className="border-b border-slate-100">
+                      <td className="px-3 py-2 font-semibold text-slate-700">
+                        {venta.numero_comprobante || `#${venta.id}`}
+                      </td>
+                      <td className="px-3 py-2 text-slate-600">
+                        {venta.cliente_nombre}
+                      </td>
+                      <td className="px-3 py-2 text-slate-500">
+                        {new Date(venta.fecha).toLocaleString('es-CO')}
+                      </td>
+                      <td className="px-3 py-2 text-right font-semibold text-slate-700">
+                        {currencyFormatter.format(Number(venta.total))}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <button
+                          type="button"
+                          onClick={() => handleSeleccionarPendiente(venta.id)}
+                          className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-semibold uppercase text-slate-600 hover:bg-slate-50"
+                        >
+                          Ver detalle
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase text-slate-500">
+                    Detalle en caja
+                  </p>
+                  <p className="text-sm font-semibold text-slate-700">
+                    {detalleCaja?.numero_comprobante || (detalleCaja ? `Venta #${detalleCaja.id}` : 'Selecciona una venta')}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleFacturarPendiente}
+                  disabled={!detalleCaja || facturandoCaja}
+                  className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold uppercase text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                >
+                  {facturandoCaja ? 'Facturando...' : 'Facturar'}
+                </button>
+              </div>
+              {cargandoDetalleCaja && (
+                <p className="mt-3 text-xs text-slate-500">Cargando detalle...</p>
+              )}
+              {!cargandoDetalleCaja && detalleCaja && (
+                <div className="mt-3 space-y-2 text-xs text-slate-600">
+                  <p className="font-semibold text-slate-800">
+                    Cliente: {detalleCaja.cliente_info?.nombre ?? detalleCaja.cliente}
+                  </p>
+                  <p>Total: {currencyFormatter.format(Number(detalleCaja.total))}</p>
+                  <p>Estado: {detalleCaja.estado_display}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
 
       {mensaje && (
         <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">

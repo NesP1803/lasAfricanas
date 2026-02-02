@@ -1,5 +1,4 @@
 from decimal import Decimal
-from django.contrib.auth.models import Permission
 from django.test import TestCase
 from rest_framework.test import APIClient
 
@@ -21,8 +20,8 @@ class CajaVentaFlowTests(TestCase):
             password='pass1234',
             tipo_usuario='VENDEDOR',
         )
-        permiso = Permission.objects.get(codename='caja_facturar')
-        self.cajero.user_permissions.add(permiso)
+        self.cajero.es_cajero = True
+        self.cajero.save(update_fields=['es_cajero'])
 
         self.categoria = Categoria.objects.create(nombre='General')
         self.proveedor = Proveedor.objects.create(nombre='Proveedor')

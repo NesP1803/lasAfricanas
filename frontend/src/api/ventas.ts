@@ -29,6 +29,7 @@ export interface VentaCreate {
   observaciones?: string;
   detalles: DetalleVenta[];
   descuento_aprobado_por?: number;
+  facturar_directo?: boolean;
 }
 
 export interface Venta {

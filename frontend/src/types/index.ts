@@ -8,6 +8,7 @@ export interface Usuario {
   first_name: string;
   last_name: string;
   tipo_usuario: 'ADMIN' | 'VENDEDOR' | 'MECANICO' | 'BODEGUERO';
+  es_cajero?: boolean;
   sede: string;
   is_active: boolean;
 }

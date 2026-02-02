@@ -176,6 +176,7 @@ El frontend quedará disponible en `http://localhost:5173/`.
 
 - Otorga el permiso **`ventas.caja_facturar`** (por grupo o usuario) para habilitar la acción de facturar en caja.
 - Administradores (`is_staff`, `is_superuser` o `tipo_usuario=ADMIN`) también pueden facturar.
+- Marca el campo **`es_cajero`** en el usuario para habilitar vistas de caja dentro de Ventas.
 
 ### Endpoints nuevos (DRF)
 

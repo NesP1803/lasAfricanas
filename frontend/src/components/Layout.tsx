@@ -289,9 +289,6 @@ export default function Layout() {
         return { moduleKey: "facturacion", sectionKey: "listados" };
       }
 
-      if (pathname.startsWith("/facturacion/caja")) {
-        return { moduleKey: "facturacion", sectionKey: "caja" };
-      }
 
       return null;
     };

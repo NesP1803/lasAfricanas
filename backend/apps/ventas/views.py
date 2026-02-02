@@ -33,7 +33,84 @@ def _is_admin(user):
 
 
 def _is_caja(user):
-    return _is_admin(user) or user.has_perm('ventas.caja_facturar')
+    return bool(
+        _is_admin(user)
+        or getattr(user, 'es_cajero', False)
+        or user.has_perm('ventas.caja_facturar')
+    )
+
+
+def _validar_detalles_venta(venta):
+    detalles = list(venta.detalles.select_related('producto'))
+    if not detalles:
+        raise ValidationError('La venta no tiene detalles para facturar.')
+
+    subtotal = sum((detalle.subtotal for detalle in detalles), Decimal('0.00'))
+    total = sum((detalle.total for detalle in detalles), Decimal('0.00'))
+
+    normalized_subtotal = Decimal(subtotal).quantize(Decimal('0.01'))
+    normalized_total = Decimal(total).quantize(Decimal('0.01'))
+
+    if normalized_subtotal != Decimal(venta.subtotal).quantize(Decimal('0.01')):
+        raise ValidationError('El subtotal no coincide con los detalles.')
+
+    if normalized_total != Decimal(venta.total).quantize(Decimal('0.01')):
+        raise ValidationError('El total no coincide con los detalles.')
+
+    return detalles
+
+
+def _registrar_salida_inventario(venta, user, detalles=None):
+    if not venta.afecta_inventario:
+        return
+
+    from apps.inventario.models import MovimientoInventario, Producto
+
+    detalles = detalles or list(venta.detalles.select_related('producto'))
+    productos_ids = [detalle.producto_id for detalle in detalles if detalle.afecto_inventario]
+    if productos_ids:
+        productos = {
+            producto.id: producto
+            for producto in Producto.objects.select_for_update().filter(id__in=productos_ids)
+        }
+    else:
+        productos = {}
+
+    for detalle in detalles:
+        if not detalle.afecto_inventario:
+            continue
+        producto = productos.get(detalle.producto_id) or detalle.producto
+        stock_anterior = producto.stock
+        stock_nuevo = stock_anterior - detalle.cantidad
+        if stock_nuevo < 0:
+            raise ValidationError(f'Stock insuficiente para {producto.nombre}.')
+        MovimientoInventario.objects.create(
+            producto=producto,
+            tipo='SALIDA',
+            cantidad=-abs(detalle.cantidad),
+            stock_anterior=stock_anterior,
+            stock_nuevo=stock_nuevo,
+            costo_unitario=detalle.precio_unitario,
+            usuario=user,
+            referencia=venta.numero_comprobante or f'VENTA-{venta.id}',
+            observaciones='Facturación en caja',
+        )
+
+
+def _facturar_venta(venta, user):
+    if venta.estado == 'FACTURADA':
+        raise ValidationError('La venta ya está facturada.')
+    if venta.estado not in {'BORRADOR', 'ENVIADA_A_CAJA'}:
+        raise ValidationError('La venta no se puede facturar en este estado.')
+
+    detalles = _validar_detalles_venta(venta)
+
+    venta.estado = 'FACTURADA'
+    venta.facturada_por = user
+    venta.facturada_at = timezone.now()
+    venta.save()
+
+    _registrar_salida_inventario(venta, user, detalles=detalles)
 
 
 class ClienteViewSet(viewsets.ModelViewSet):
@@ -134,10 +211,15 @@ class VentaViewSet(viewsets.ModelViewSet):
         )
 
     def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
+        payload = request.data.copy()
+        facturar_directo = bool(payload.pop('facturar_directo', False))
+        serializer = self.get_serializer(data=payload)
         serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)
-        venta = serializer.instance
+        with transaction.atomic():
+            self.perform_create(serializer)
+            venta = serializer.instance
+            if facturar_directo and venta.tipo_comprobante == 'FACTURA':
+                _facturar_venta(venta, request.user)
         detail_serializer = VentaDetailSerializer(venta, context=self.get_serializer_context())
         headers = self.get_success_headers(detail_serializer.data)
         return Response(detail_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
@@ -396,32 +478,11 @@ class CajaViewSet(viewsets.GenericViewSet):
             return Response({'detail': 'No autorizado.'}, status=status.HTTP_403_FORBIDDEN)
         return None
 
-    def _normalize_decimal(self, value):
-        return Decimal(value).quantize(Decimal('0.01'))
-
     def _validar_para_facturar(self, venta):
         if venta.estado != 'ENVIADA_A_CAJA':
             raise ValidationError('La venta no está enviada a caja.')
 
-        detalles = list(venta.detalles.select_related('producto'))
-        if not detalles:
-            raise ValidationError('La venta no tiene detalles para facturar.')
-
-        subtotal = sum((detalle.subtotal for detalle in detalles), Decimal('0.00'))
-        total = sum((detalle.total for detalle in detalles), Decimal('0.00'))
-
-        if self._normalize_decimal(subtotal) != self._normalize_decimal(venta.subtotal):
-            raise ValidationError('El subtotal no coincide con los detalles.')
-
-        if self._normalize_decimal(total) != self._normalize_decimal(venta.total):
-            raise ValidationError('El total no coincide con los detalles.')
-
-        if venta.afecta_inventario:
-            for detalle in detalles:
-                if detalle.afecto_inventario and detalle.producto.stock < detalle.cantidad:
-                    raise ValidationError(
-                        f'Stock insuficiente para {detalle.producto.nombre}.'
-                    )
+        _validar_detalles_venta(venta)
 
     @action(detail=False, methods=['get'], url_path='pendientes')
     def pendientes(self, request):
@@ -429,7 +490,11 @@ class CajaViewSet(viewsets.GenericViewSet):
         if permission_response:
             return permission_response
 
-        ventas = self.get_queryset().filter(estado='ENVIADA_A_CAJA')
+        ventas = self.get_queryset().filter(estado='ENVIADA_A_CAJA').order_by(
+            'enviada_a_caja_at',
+            'fecha',
+            'id',
+        )
         serializer = VentaListSerializer(ventas, many=True)
         return Response(serializer.data)
 
@@ -439,42 +504,18 @@ class CajaViewSet(viewsets.GenericViewSet):
         if permission_response:
             return permission_response
 
-        venta = self.get_object()
-        try:
-            self._validar_para_facturar(venta)
-        except ValidationError as error:
-            return Response({'error': error.detail}, status=status.HTTP_400_BAD_REQUEST)
-
-        from apps.inventario.models import MovimientoInventario
-
         with transaction.atomic():
-            venta.estado = 'FACTURADA'
-            venta.facturada_por = request.user
-            venta.facturada_at = timezone.now()
-            venta.save()
-
-            if venta.afecta_inventario:
-                for detalle in venta.detalles.select_related('producto'):
-                    if not detalle.afecto_inventario:
-                        continue
-                    producto = detalle.producto
-                    stock_anterior = producto.stock
-                    stock_nuevo = stock_anterior - detalle.cantidad
-                    if stock_nuevo < 0:
-                        raise ValidationError(
-                            f'Stock insuficiente para {producto.nombre}.'
-                        )
-                    MovimientoInventario.objects.create(
-                        producto=producto,
-                        tipo='SALIDA',
-                        cantidad=-abs(detalle.cantidad),
-                        stock_anterior=stock_anterior,
-                        stock_nuevo=stock_nuevo,
-                        costo_unitario=detalle.precio_unitario,
-                        usuario=request.user,
-                        referencia=venta.numero_comprobante or f'VENTA-{venta.id}',
-                        observaciones='Facturación en caja',
-                    )
+            venta = (
+                Venta.objects.select_for_update()
+                .select_related('cliente', 'vendedor')
+                .prefetch_related('detalles', 'detalles__producto')
+                .get(pk=pk)
+            )
+            try:
+                self._validar_para_facturar(venta)
+                _facturar_venta(venta, request.user)
+            except ValidationError as error:
+                return Response({'error': error.detail}, status=status.HTTP_400_BAD_REQUEST)
 
         serializer = VentaDetailSerializer(venta)
         return Response(serializer.data)
