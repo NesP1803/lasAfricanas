@@ -8,11 +8,16 @@ import {
   PlusCircle,
   Search,
   ShieldCheck,
+  Send,
   Trash2,
   X,
 } from 'lucide-react';
-import { inventarioApi, type Producto, type ProductoList } from '../api/inventario';
-import { ventasApi } from '../api/ventas';
+import {
+  inventarioApi,
+  type Producto,
+  type ProductoList,
+} from '../api/inventario';
+import { ventasApi, type Venta, type VentaListItem } from '../api/ventas';
 import { configuracionAPI } from '../api/configuracion';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../contexts/NotificationContext';
@@ -117,12 +122,25 @@ export default function Ventas() {
   const [documentoPreview, setDocumentoPreview] = useState<DocumentoPreview | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [mostrarBusqueda, setMostrarBusqueda] = useState(false);
+  const [productoInfo, setProductoInfo] = useState<ProductoList | Producto | null>(null);
+  const [guardandoBorrador, setGuardandoBorrador] = useState(false);
+  const [enviandoCaja, setEnviandoCaja] = useState(false);
+  const [ventaBorrador, setVentaBorrador] = useState<Venta | null>(null);
+  const [pendientesCaja, setPendientesCaja] = useState<VentaListItem[]>([]);
+  const [detalleCaja, setDetalleCaja] = useState<Venta | null>(null);
+  const [cargandoPendientes, setCargandoPendientes] = useState(false);
+  const [cargandoDetalleCaja, setCargandoDetalleCaja] = useState(false);
+  const [facturandoCaja, setFacturandoCaja] = useState(false);
   const [mostrarPermiso, setMostrarPermiso] = useState(false);
   const [usuariosAprobadores, setUsuariosAprobadores] = useState<{ id: number; nombre: string }[]>([]);
   const [cargandoAprobadores, setCargandoAprobadores] = useState(false);
   const codigoInputRef = useRef<HTMLInputElement | null>(null);
   const lastSolicitudFetchRef = useRef(0);
   const esAdmin = useMemo(() => user?.role === 'ADMIN', [user?.role]);
+  const esCaja = useMemo(() => Boolean(user?.es_cajero || esAdmin), [user?.es_cajero, esAdmin]);
+  const ventaBloqueada = Boolean(
+    ventaBorrador && ventaBorrador.estado !== 'BORRADOR' && !esCaja
+  );
 
   const tallerPayload = useMemo(() => {
     const state = location.state as { fromTaller?: TallerVentaPayload } | null;
@@ -147,6 +165,21 @@ export default function Ventas() {
       .then((response) => setProductos(response.results ?? []))
       .catch(() => setProductos([]));
   }, [busquedaProducto, mostrarBusqueda]);
+
+  useEffect(() => {
+    if (!esCaja) return;
+    setCargandoPendientes(true);
+    ventasApi
+      .getPendientesCaja()
+      .then((data) => {
+        const ordenadas = [...data].sort(
+          (a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime()
+        );
+        setPendientesCaja(ordenadas);
+      })
+      .catch(() => setPendientesCaja([]))
+      .finally(() => setCargandoPendientes(false));
+  }, [esCaja]);
 
   useEffect(() => {
     if (!mostrarPermiso) return;
@@ -355,6 +388,7 @@ export default function Ventas() {
   }, [cartItems, descuentoAutorizado, descuentoGeneral]);
 
   const handleBuscarCliente = async () => {
+    if (ventaBloqueada) return;
     if (!clienteDocumento.trim()) return;
     try {
       const cliente = await ventasApi.buscarCliente(clienteDocumento.trim());
@@ -369,6 +403,7 @@ export default function Ventas() {
   };
 
   const agregarProducto = (producto: Producto) => {
+    if (ventaBloqueada) return;
     setCartItems((prev) => {
       const existing = prev.find((item) => item.id === producto.id);
       if (existing) {
@@ -395,6 +430,7 @@ export default function Ventas() {
   };
 
   const handleBuscarProductoPorCodigo = async () => {
+    if (ventaBloqueada) return;
     if (!codigoProducto.trim()) return;
     try {
       const producto = await inventarioApi.buscarPorCodigo(codigoProducto.trim());
@@ -408,13 +444,17 @@ export default function Ventas() {
   };
 
   const handleAbrirBusqueda = () => {
+    if (ventaBloqueada) return;
     setMostrarBusqueda(true);
     setBusquedaProducto('');
+    setProductoInfo(null);
   };
 
   const handleSeleccionarProducto = async (productoId: number) => {
+    if (ventaBloqueada) return;
     try {
       const producto = await inventarioApi.getProducto(productoId);
+      setProductoInfo(producto);
       agregarProducto(producto);
       setMensaje('Producto agregado.');
     } catch (error) {
@@ -423,12 +463,14 @@ export default function Ventas() {
   };
 
   const handleActualizarCantidad = (id: number, cantidad: number) => {
+    if (ventaBloqueada) return;
     setCartItems((prev) =>
       prev.map((item) => (item.id === id ? { ...item, cantidad } : item))
     );
   };
 
   const handleActualizarDescuento = (id: number, descuento: number) => {
+    if (ventaBloqueada) return;
     setCartItems((prev) =>
       prev.map((item) =>
         item.id === id ? { ...item, descuentoPorcentaje: descuento } : item
@@ -437,16 +479,35 @@ export default function Ventas() {
   };
 
   const handleEliminarItem = (id: number) => {
+    if (ventaBloqueada) return;
     setCartItems((prev) => prev.filter((item) => item.id !== id));
   };
 
+  const resetDescuentoState = () => {
+    setDescuentoGeneral('0');
+    setDescuentoAutorizado(esAdmin);
+    setAprobadorId('');
+    setAprobadorNombre('');
+    setEstadoSolicitud(null);
+    setMostrarPermiso(false);
+  };
+
   const handleLimpiarTodo = () => {
+    if (ventaBloqueada) return;
     setCartItems([]);
     setDocumentoGenerado(null);
+    setVentaBorrador(null);
+    setClienteId(null);
+    setClienteNombre('Cliente general');
+    setClienteDocumento('');
+    setMedioPago('EFECTIVO');
+    setEfectivoRecibido('0');
+    resetDescuentoState();
     setMensaje('Venta reiniciada.');
   };
 
   const handleSolicitarPermiso = () => {
+    if (ventaBloqueada) return;
     if (esAdmin) {
       setMensaje('Los administradores no requieren permiso para aplicar descuentos.');
       return;
@@ -455,6 +516,7 @@ export default function Ventas() {
   };
 
   const handleConfirmarPermiso = () => {
+    if (ventaBloqueada) return;
     if (esAdmin) {
       setMostrarPermiso(false);
       setMensaje('Los administradores no requieren permiso para aplicar descuentos.');
@@ -497,58 +559,223 @@ export default function Ventas() {
       });
   };
 
-  const handleGenerarDocumento = async (tipo: DocumentoGenerado['tipo']) => {
+  const buildVentaPayload = (
+    tipo: DocumentoGenerado['tipo'],
+    vendedorId = ventaBorrador?.vendedor ?? user?.id ?? 0
+  ) => {
+    const efectivoRecibidoNumero = roundCop(parseNumber(efectivoRecibido));
+    const cambioCalculado = Math.max(
+      0,
+      efectivoRecibidoNumero - totals.totalAplicado
+    );
+    return {
+      tipo_comprobante: tipo,
+      cliente: clienteId ?? 0,
+      vendedor: vendedorId,
+      subtotal: totals.subtotal.toFixed(2),
+      descuento_porcentaje: descuentoAutorizado ? descuentoGeneral : '0',
+      descuento_valor: totals.descuentoTotalAplicado.toFixed(2),
+      iva: totals.iva.toFixed(2),
+      total: totals.totalAplicado.toFixed(2),
+      medio_pago: medioPago,
+      efectivo_recibido: efectivoRecibidoNumero.toFixed(2),
+      cambio: cambioCalculado.toFixed(2),
+      detalles: cartItems.map((item) => {
+        const subtotal = item.precioUnitario * item.cantidad;
+        const descuento = subtotal * (item.descuentoPorcentaje / 100);
+        const base = subtotal - descuento;
+        const iva = base * (item.ivaPorcentaje / 100);
+        const total = roundCop(base + iva);
+        return {
+          producto: item.id,
+          cantidad: item.cantidad,
+          precio_unitario: roundCop(item.precioUnitario).toFixed(2),
+          descuento_unitario: roundCop(descuento).toFixed(2),
+          iva_porcentaje: item.ivaPorcentaje.toFixed(2),
+          subtotal: roundCop(subtotal).toFixed(2),
+          total: total.toFixed(2),
+        };
+      }),
+      descuento_aprobado_por:
+        descuentoAutorizado && !esAdmin && aprobadorId
+          ? Number(aprobadorId)
+          : undefined,
+    };
+  };
+
+  const validarVenta = () => {
     if (!clienteId) {
       setMensaje('Selecciona un cliente para continuar.');
-      return;
+      return false;
     }
     if (cartItems.length === 0) {
       setMensaje('Agrega productos antes de continuar.');
-      return;
+      return false;
     }
     if (!descuentoAutorizado && parseNumber(descuentoGeneral) > 0) {
       setMensaje('El descuento general está pendiente de aprobación.');
-      return;
+      return false;
     }
+    return true;
+  };
+
+  const guardarBorrador = async () => {
+    if (!validarVenta()) return null;
+    const payload = buildVentaPayload('FACTURA');
+    setGuardandoBorrador(true);
+    try {
+      const venta = ventaBorrador
+        ? await ventasApi.actualizarVenta(ventaBorrador.id, payload)
+        : await ventasApi.crearVenta(payload);
+      setVentaBorrador(venta);
+      setMensaje('Venta guardada como borrador.');
+      return venta;
+    } catch (error) {
+      setMensaje('No se pudo guardar el borrador. Revisa la conexión.');
+      return null;
+    } finally {
+      setGuardandoBorrador(false);
+    }
+  };
+
+  const handleEnviarCaja = async () => {
+    if (ventaBloqueada) return;
+    let venta = ventaBorrador;
+    if (!venta) {
+      venta = await guardarBorrador();
+    }
+    if (!venta) return;
+    setEnviandoCaja(true);
+    try {
+      const enviada = await ventasApi.enviarACaja(venta.id);
+      setVentaBorrador(enviada);
+      resetDescuentoState();
+      setMensaje('Venta enviada a caja.');
+      showNotification({
+        type: 'success',
+        message: 'Venta enviada a caja.',
+      });
+    } catch (error) {
+      setMensaje('No se pudo enviar a caja. Revisa la conexión.');
+      showNotification({
+        type: 'error',
+        message: 'No se pudo enviar a caja.',
+      });
+    } finally {
+      setEnviandoCaja(false);
+    }
+  };
+
+  const handleFacturarDirecto = async () => {
+    if (!validarVenta()) return;
+    setGuardandoBorrador(true);
+    try {
+      const venta = await ventasApi.crearVenta({
+        ...buildVentaPayload('FACTURA'),
+        facturar_directo: true,
+      });
+      setVentaBorrador(venta);
+      setDocumentoGenerado({
+        tipo: 'FACTURA',
+        numero: venta.numero_comprobante || `FAC-${venta.id}`,
+        cliente: clienteNombre,
+        total: currencyFormatter.format(totals.totalAplicado),
+      });
+      resetDescuentoState();
+      setMensaje('Factura generada correctamente.');
+    } catch (error) {
+      setMensaje('No se pudo facturar. Revisa la conexión.');
+    } finally {
+      setGuardandoBorrador(false);
+    }
+  };
+
+  const handleSeleccionarPendiente = (ventaId: number) => {
+    setCargandoDetalleCaja(true);
+    ventasApi
+      .getVenta(ventaId)
+      .then((data) => {
+        const nuevosItems: CartItem[] = (data.detalles ?? []).map((detalle) => {
+          const subtotal = Number(detalle.subtotal);
+          const descuentoUnitario = Number(detalle.descuento_unitario);
+          const descuentoPorcentaje =
+            subtotal > 0 ? (descuentoUnitario / subtotal) * 100 : 0;
+          return {
+            id: detalle.producto,
+            codigo: detalle.producto_codigo ?? '',
+            nombre: detalle.producto_nombre ?? '',
+            ivaPorcentaje: Number(detalle.iva_porcentaje),
+            precioUnitario: Number(detalle.precio_unitario),
+            stock: 0,
+            cantidad: Number(detalle.cantidad),
+            descuentoPorcentaje,
+          };
+        });
+        setDetalleCaja(data);
+        setVentaBorrador(data);
+        setCartItems(nuevosItems);
+        setClienteId(data.cliente);
+        setClienteNombre(data.cliente_info?.nombre ?? 'Cliente general');
+        setClienteDocumento(data.cliente_info?.numero_documento ?? '');
+        setDescuentoGeneral(data.descuento_porcentaje ?? '0');
+        const medioPagoActual = [
+          'EFECTIVO',
+          'TARJETA',
+          'TRANSFERENCIA',
+          'CREDITO',
+        ].includes(data.medio_pago)
+          ? (data.medio_pago as typeof medioPago)
+          : 'EFECTIVO';
+        setMedioPago(medioPagoActual);
+        setEfectivoRecibido(data.efectivo_recibido ?? '0');
+        setDescuentoAutorizado(true);
+        setEstadoSolicitud(null);
+        setMostrarPermiso(false);
+        setDocumentoGenerado(null);
+        setDocumentoPreview(null);
+        setMensaje('Detalle cargado en la factura.');
+      })
+      .catch(() => setDetalleCaja(null))
+      .finally(() => setCargandoDetalleCaja(false));
+  };
+
+  const handleFacturarPendiente = async () => {
+    if (!detalleCaja) return;
+    if (!validarVenta()) return;
+    setFacturandoCaja(true);
+    try {
+      await ventasApi.actualizarVenta(detalleCaja.id, buildVentaPayload('FACTURA'));
+      const facturada = await ventasApi.facturarEnCaja(detalleCaja.id);
+      setDetalleCaja(facturada);
+      resetDescuentoState();
+      showNotification({
+        type: 'success',
+        message: 'Venta facturada desde caja.',
+      });
+      const data = await ventasApi.getPendientesCaja();
+      const ordenadas = [...data].sort(
+        (a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime()
+      );
+      setPendientesCaja(ordenadas);
+    } catch (error) {
+      showNotification({
+        type: 'error',
+        message: 'No se pudo facturar la venta.',
+      });
+    } finally {
+      setFacturandoCaja(false);
+    }
+  };
+
+  const handleGenerarDocumento = async (tipo: DocumentoGenerado['tipo']) => {
+    if (!validarVenta()) return;
     try {
       const efectivoRecibidoNumero = roundCop(parseNumber(efectivoRecibido));
       const cambioCalculado = Math.max(
         0,
         efectivoRecibidoNumero - totals.totalAplicado
       );
-      const venta = await ventasApi.crearVenta({
-        tipo_comprobante: tipo,
-        cliente: clienteId,
-        vendedor: user?.id ?? 0,
-        subtotal: totals.subtotal.toFixed(2),
-        descuento_porcentaje: descuentoAutorizado ? descuentoGeneral : '0',
-        descuento_valor: totals.descuentoTotalAplicado.toFixed(2),
-        iva: totals.iva.toFixed(2),
-        total: totals.totalAplicado.toFixed(2),
-        medio_pago: medioPago,
-        efectivo_recibido: efectivoRecibidoNumero.toFixed(2),
-        cambio: cambioCalculado.toFixed(2),
-        detalles: cartItems.map((item) => {
-          const subtotal = item.precioUnitario * item.cantidad;
-          const descuento = subtotal * (item.descuentoPorcentaje / 100);
-          const base = subtotal - descuento;
-          const iva = base * (item.ivaPorcentaje / 100);
-          const total = roundCop(base + iva);
-          return {
-            producto: item.id,
-            cantidad: item.cantidad,
-            precio_unitario: roundCop(item.precioUnitario).toFixed(2),
-            descuento_unitario: roundCop(descuento).toFixed(2),
-            iva_porcentaje: item.ivaPorcentaje.toFixed(2),
-            subtotal: roundCop(subtotal).toFixed(2),
-            total: total.toFixed(2),
-          };
-        }),
-        descuento_aprobado_por:
-          descuentoAutorizado && !esAdmin && aprobadorId
-            ? Number(aprobadorId)
-            : undefined,
-      });
+      const venta = await ventasApi.crearVenta(buildVentaPayload(tipo));
       const numeroComprobante =
         venta.numero_comprobante ||
         (tipo === 'FACTURA'
@@ -595,7 +822,7 @@ export default function Ventas() {
         clienteNombre,
         clienteDocumento: clienteDocumento || 'N/D',
         medioPago: medioPagoDisplay,
-        estado: 'CONFIRMADA',
+        estado: 'FACTURADA',
         detalles: detallesPreview,
         subtotal: totals.subtotal,
         descuento: totals.descuentoTotalAplicado,
@@ -604,6 +831,7 @@ export default function Ventas() {
         efectivoRecibido: efectivoRecibidoNumero,
         cambio: roundCop(cambioCalculado),
       });
+      resetDescuentoState();
       setMensaje(`${venta.tipo_comprobante_display} generado correctamente.`);
     } catch (error) {
       setMensaje('No se pudo generar el documento. Revisa la conexión.');
@@ -615,10 +843,19 @@ export default function Ventas() {
     return roundCop(calculado >= 0 ? calculado : 0);
   }, [efectivoRecibido, totals.totalPrevio]);
 
+  const obtenerInfoProducto = (info: ProductoList | Producto | null) => {
+    if (!info) return null;
+    const nombre = 'producto_nombre' in info ? info.producto_nombre : info.nombre;
+    const codigo = 'producto_codigo' in info ? info.producto_codigo : info.codigo;
+    const precio = 'producto_precio' in info ? info.producto_precio : info.precio_venta;
+    const stock = 'producto_stock' in info ? info.producto_stock : info.stock;
+    return { nombre, codigo, precio, stock };
+  };
+
   return (
     <div className="space-y-6">
       <section className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
-        <div className="grid gap-3 lg:grid-cols-6">
+        <div className="grid gap-3 lg:grid-cols-7">
           <div className="space-y-2">
             <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               Digite NIT/CC del cliente
@@ -634,12 +871,14 @@ export default function Ventas() {
                   }
                 }}
                 placeholder="Digite NIT/CC"
-                className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
+                disabled={ventaBloqueada}
+                className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100"
               />
               <button
                 type="button"
                 onClick={handleBuscarCliente}
-                className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50"
+                disabled={ventaBloqueada}
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
               >
                 <Search size={18} />
               </button>
@@ -665,6 +904,37 @@ export default function Ventas() {
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-semibold text-slate-800">
               {user?.username ?? 'Usuario'}
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              Estado venta
+            </label>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-semibold text-slate-800">
+              {ventaBorrador?.estado
+                ? {
+                    BORRADOR: 'Borrador',
+                    ENVIADA_A_CAJA: 'Enviada a caja',
+                    FACTURADA: 'Facturada',
+                    ANULADA: 'Anulada',
+                  }[ventaBorrador.estado]
+                : 'Nueva venta'}
+            </div>
+            {ventaBloqueada && (
+              <button
+                type="button"
+                onClick={() => {
+                  setVentaBorrador(null);
+                  setCartItems([]);
+                  setDocumentoGenerado(null);
+                  setDocumentoPreview(null);
+                  setMensaje(null);
+                }}
+                className="text-xs font-semibold uppercase text-blue-600 hover:text-blue-700"
+              >
+                Iniciar nueva venta
+              </button>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -697,6 +967,7 @@ export default function Ventas() {
               onChange={(event) =>
                 setMedioPago(event.target.value as typeof medioPago)
               }
+              disabled={ventaBloqueada}
               className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
             >
               <option value="EFECTIVO">Efectivo</option>
@@ -728,13 +999,15 @@ export default function Ventas() {
                     }
                   }}
                   placeholder="Digite código / QR / barra"
-                  className="w-full bg-transparent text-sm focus:outline-none"
+                  disabled={ventaBloqueada}
+                  className="w-full bg-transparent text-sm focus:outline-none disabled:cursor-not-allowed"
                 />
               </div>
               <button
                 type="button"
                 onClick={handleBuscarProductoPorCodigo}
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-white shadow-sm transition hover:bg-blue-700"
+                disabled={ventaBloqueada}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
                 <PlusCircle size={18} />
               </button>
@@ -743,14 +1016,16 @@ export default function Ventas() {
               <button
                 type="button"
                 onClick={handleAbrirBusqueda}
-                className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-1.5 text-[11px] font-semibold uppercase text-slate-600 hover:bg-slate-50"
+                disabled={ventaBloqueada}
+                className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-1.5 text-[11px] font-semibold uppercase text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
               >
                 <Search size={14} /> Consulta rápida
               </button>
               <button
                 type="button"
                 onClick={handleLimpiarTodo}
-                className="flex items-center gap-2 rounded-xl border border-rose-200 px-3 py-1.5 text-[11px] font-semibold uppercase text-rose-600 hover:bg-rose-50"
+                disabled={ventaBloqueada}
+                className="flex items-center gap-2 rounded-xl border border-rose-200 px-3 py-1.5 text-[11px] font-semibold uppercase text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:bg-slate-100"
               >
                 <Trash2 size={14} /> Borrar todo
               </button>
@@ -768,7 +1043,7 @@ export default function Ventas() {
                 max={100}
                 value={descuentoGeneral}
                 onChange={(event) => setDescuentoGeneral(event.target.value)}
-                disabled={descuentoBloqueado}
+                disabled={descuentoBloqueado || ventaBloqueada}
                 className="w-20 rounded-lg border border-slate-200 px-2 py-1.5 text-sm text-right disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
               />
               <span className="text-sm text-slate-500">% aplicado</span>
@@ -777,7 +1052,7 @@ export default function Ventas() {
               <button
                 type="button"
                 onClick={handleSolicitarPermiso}
-                disabled={descuentoBloqueado}
+                disabled={descuentoBloqueado || ventaBloqueada}
                 className="rounded-xl border border-slate-200 px-3 py-1.5 text-[11px] font-semibold uppercase text-slate-600 hover:bg-slate-50"
               >
                 Solicitar permiso
@@ -792,33 +1067,50 @@ export default function Ventas() {
 
           <div className="space-y-2 lg:col-span-3">
             <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-              Generar documento
+              Generar documento / caja
             </label>
             <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => handleGenerarDocumento('COTIZACION')}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-1.5 text-[11px] font-semibold uppercase text-slate-700 hover:bg-slate-50"
-              >
-                <span>Cotizar</span>
-                <FileText size={16} />
-              </button>
-              <button
-                type="button"
-                onClick={() => handleGenerarDocumento('REMISION')}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-1.5 text-[11px] font-semibold uppercase text-slate-700 hover:bg-slate-50"
-              >
-                <span>Remisión</span>
-                <FileText size={16} />
-              </button>
-              <button
-                type="button"
-                onClick={() => handleGenerarDocumento('FACTURA')}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 py-1.5 text-[11px] font-semibold uppercase text-white shadow-sm hover:bg-blue-700"
-              >
-                <span>Facturar</span>
-                <FileText size={16} />
-              </button>
+              {esCaja ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleGenerarDocumento('COTIZACION')}
+                    disabled={ventaBloqueada}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-1.5 text-[11px] font-semibold uppercase text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
+                  >
+                    <span>Cotizar</span>
+                    <FileText size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleGenerarDocumento('REMISION')}
+                    disabled={ventaBloqueada}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-1.5 text-[11px] font-semibold uppercase text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
+                  >
+                    <span>Remisión</span>
+                    <FileText size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleFacturarDirecto}
+                    disabled={ventaBloqueada || guardandoBorrador}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 py-1.5 text-[11px] font-semibold uppercase text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  >
+                    <span>{guardandoBorrador ? 'Facturando...' : 'Facturar'}</span>
+                    <FileText size={16} />
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleEnviarCaja}
+                  disabled={ventaBloqueada || enviandoCaja}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 py-1.5 text-[11px] font-semibold uppercase text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                >
+                  <span>{enviandoCaja ? 'Enviando...' : 'Enviar a caja'}</span>
+                  <Send size={16} />
+                </button>
+              )}
             </div>
           </div>
 
@@ -826,12 +1118,13 @@ export default function Ventas() {
             <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               Efectivo recibido
             </label>
-            <input
-              type="text"
-              value={efectivoRecibido}
-              onChange={(event) => setEfectivoRecibido(event.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
-            />
+          <input
+            type="text"
+            value={efectivoRecibido}
+            onChange={(event) => setEfectivoRecibido(event.target.value)}
+            disabled={ventaBloqueada}
+            className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
+          />
             {!descuentoAutorizado && parseNumber(descuentoGeneral) > 0 && (
               <p className="text-xs text-amber-600">
                 Descuento pendiente de aprobación.
@@ -908,7 +1201,8 @@ export default function Ventas() {
                               Math.max(1, item.cantidad - 1)
                             )
                           }
-                          className="text-slate-400 hover:text-slate-600"
+                          disabled={ventaBloqueada}
+                          className="text-slate-400 hover:text-slate-600 disabled:cursor-not-allowed"
                         >
                           <MinusCircle size={16} />
                         </button>
@@ -922,14 +1216,16 @@ export default function Ventas() {
                               Number(event.target.value || 1)
                             )
                           }
-                          className="w-14 rounded border border-slate-200 px-2 py-0.5 text-center text-sm"
+                          disabled={ventaBloqueada}
+                          className="w-14 rounded border border-slate-200 px-2 py-0.5 text-center text-sm disabled:cursor-not-allowed disabled:bg-slate-100"
                         />
                         <button
                           type="button"
                           onClick={() =>
                             handleActualizarCantidad(item.id, item.cantidad + 1)
                           }
-                          className="text-slate-400 hover:text-slate-600"
+                          disabled={ventaBloqueada}
+                          className="text-slate-400 hover:text-slate-600 disabled:cursor-not-allowed"
                         >
                           <PlusCircle size={16} />
                         </button>
@@ -958,8 +1254,8 @@ export default function Ventas() {
                             Number(event.target.value || 0)
                           )
                         }
-                        className="w-16 rounded border border-slate-200 px-2 py-0.5 text-right text-sm"
-                        disabled={!descuentoAutorizado}
+                        className="w-16 rounded border border-slate-200 px-2 py-0.5 text-right text-sm disabled:cursor-not-allowed disabled:bg-slate-100"
+                        disabled={!descuentoAutorizado || ventaBloqueada}
                       />
                     </td>
                     <td className="px-3 py-1.5 text-right">{item.stock}</td>
@@ -967,7 +1263,8 @@ export default function Ventas() {
                       <button
                         type="button"
                         onClick={() => handleEliminarItem(item.id)}
-                        className="rounded-lg border border-slate-200 p-1.5 text-rose-600 hover:bg-rose-50"
+                        disabled={ventaBloqueada}
+                        className="rounded-lg border border-slate-200 p-1.5 text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:bg-slate-100"
                       >
                         <Trash2 size={16} />
                       </button>
@@ -1035,6 +1332,128 @@ export default function Ventas() {
           </div>
         </div>
       </section>
+
+      {esCaja && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase text-slate-500">
+                Caja
+              </p>
+              <h3 className="text-lg font-semibold text-slate-900">
+                Ventas pendientes por facturar
+              </h3>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setCargandoPendientes(true);
+                ventasApi
+                  .getPendientesCaja()
+                  .then((data) => {
+                    const ordenadas = [...data].sort(
+                      (a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime()
+                    );
+                    setPendientesCaja(ordenadas);
+                  })
+                  .catch(() => setPendientesCaja([]))
+                  .finally(() => setCargandoPendientes(false));
+              }}
+              className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50"
+            >
+              Actualizar
+            </button>
+          </div>
+          <div className="mt-4 grid gap-4 lg:grid-cols-[1.2fr,1fr]">
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-left text-sm">
+                <thead className="bg-slate-100 text-xs uppercase text-slate-500">
+                  <tr>
+                    <th className="px-3 py-2">Documento</th>
+                    <th className="px-3 py-2">Cliente</th>
+                    <th className="px-3 py-2">Fecha</th>
+                    <th className="px-3 py-2 text-right">Total</th>
+                    <th className="px-3 py-2 text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cargandoPendientes && (
+                    <tr>
+                      <td colSpan={5} className="px-3 py-6 text-center text-slate-500">
+                        Cargando pendientes...
+                      </td>
+                    </tr>
+                  )}
+                  {!cargandoPendientes && pendientesCaja.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-3 py-6 text-center text-slate-500">
+                        No hay ventas pendientes.
+                      </td>
+                    </tr>
+                  )}
+                  {pendientesCaja.map((venta) => (
+                    <tr key={venta.id} className="border-b border-slate-100">
+                      <td className="px-3 py-2 font-semibold text-slate-700">
+                        {venta.numero_comprobante || `#${venta.id}`}
+                      </td>
+                      <td className="px-3 py-2 text-slate-600">
+                        {venta.cliente_nombre}
+                      </td>
+                      <td className="px-3 py-2 text-slate-500">
+                        {new Date(venta.fecha).toLocaleString('es-CO')}
+                      </td>
+                      <td className="px-3 py-2 text-right font-semibold text-slate-700">
+                        {currencyFormatter.format(Number(venta.total))}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <button
+                          type="button"
+                          onClick={() => handleSeleccionarPendiente(venta.id)}
+                          className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-semibold uppercase text-slate-600 hover:bg-slate-50"
+                        >
+                          Ver detalle
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase text-slate-500">
+                    Detalle en caja
+                  </p>
+                  <p className="text-sm font-semibold text-slate-700">
+                    {detalleCaja?.numero_comprobante || (detalleCaja ? `Venta #${detalleCaja.id}` : 'Selecciona una venta')}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleFacturarPendiente}
+                  disabled={!detalleCaja || facturandoCaja}
+                  className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold uppercase text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                >
+                  {facturandoCaja ? 'Facturando...' : 'Facturar'}
+                </button>
+              </div>
+              {cargandoDetalleCaja && (
+                <p className="mt-3 text-xs text-slate-500">Cargando detalle...</p>
+              )}
+              {!cargandoDetalleCaja && detalleCaja && (
+                <div className="mt-3 space-y-2 text-xs text-slate-600">
+                  <p className="font-semibold text-slate-800">
+                    Cliente: {detalleCaja.cliente_info?.nombre ?? detalleCaja.cliente}
+                  </p>
+                  <p>Total: {currencyFormatter.format(Number(detalleCaja.total))}</p>
+                  <p>Estado: {detalleCaja.estado_display}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
 
       {mensaje && (
         <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
@@ -1202,57 +1621,83 @@ export default function Ventas() {
                 />
               </div>
             </div>
-            <div className="max-h-[420px] overflow-auto px-4 pb-4">
-              <table className="min-w-full text-left text-sm">
-                <thead className="sticky top-0 bg-slate-100 text-xs uppercase text-slate-500">
-                  <tr>
-                    <th className="px-3 py-2">Código</th>
-                    <th className="px-3 py-2">Artículo</th>
-                    <th className="px-3 py-2 text-right">Precio</th>
-                    <th className="px-3 py-2 text-right">Stock</th>
-                    <th className="px-3 py-2 text-right">Agregar</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {productos.length === 0 && (
+            <div className="grid gap-4 px-4 pb-4 lg:grid-cols-[260px,1fr]">
+              <div className="rounded-xl border border-slate-100 bg-white px-3 py-3">
+                <p className="text-xs font-semibold uppercase text-slate-500">
+                  Consulta rápida
+                </p>
+                {(() => {
+                  const info = obtenerInfoProducto(productoInfo);
+                  if (!info) {
+                    return (
+                      <p className="mt-2 text-xs text-slate-400">
+                        Selecciona un producto para ver precio y stock.
+                      </p>
+                    );
+                  }
+                  return (
+                    <div className="mt-2 space-y-1 text-xs text-slate-600">
+                      <p className="font-semibold text-slate-800">{info.nombre}</p>
+                      <p>Código: {info.codigo}</p>
+                      <p>Precio: {currencyFormatter.format(Number(info.precio))}</p>
+                      <p>Stock: {info.stock}</p>
+                    </div>
+                  );
+                })()}
+              </div>
+              <div className="max-h-[420px] overflow-auto">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="sticky top-0 bg-slate-100 text-xs uppercase text-slate-500">
                     <tr>
-                      <td
-                        colSpan={5}
-                        className="px-3 py-6 text-center text-slate-500"
-                      >
-                        No hay resultados.
-                      </td>
+                      <th className="px-3 py-2">Código</th>
+                      <th className="px-3 py-2">Artículo</th>
+                      <th className="px-3 py-2 text-right">Precio</th>
+                      <th className="px-3 py-2 text-right">Stock</th>
+                      <th className="px-3 py-2 text-right">Acciones</th>
                     </tr>
-                  )}
-                  {productos.map((producto) => (
-                    <tr
-                      key={producto.id}
-                      onDoubleClick={() => handleSeleccionarProducto(producto.id)}
-                      className="cursor-pointer border-b border-slate-100 hover:bg-slate-50"
-                    >
-                      <td className="px-3 py-2 text-slate-600">{producto.codigo}</td>
-                      <td className="px-3 py-2 font-medium text-slate-800">
-                        {producto.nombre}
-                      </td>
-                      <td className="px-3 py-2 text-right text-slate-600">
-                        {currencyFormatter.format(Number(producto.precio_venta))}
-                      </td>
-                      <td className="px-3 py-2 text-right text-slate-600">
-                        {producto.stock}
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        <button
-                          type="button"
-                          onClick={() => handleSeleccionarProducto(producto.id)}
-                          className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-semibold uppercase text-slate-600 hover:bg-slate-50"
+                  </thead>
+                  <tbody>
+                    {productos.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan={5}
+                          className="px-3 py-6 text-center text-slate-500"
                         >
-                          Añadir
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                          No hay resultados.
+                        </td>
+                      </tr>
+                    )}
+                    {productos.map((producto) => (
+                      <tr
+                        key={producto.id}
+                        onDoubleClick={() => handleSeleccionarProducto(producto.id)}
+                        onClick={() => setProductoInfo(producto)}
+                        className="cursor-pointer border-b border-slate-100 hover:bg-slate-50"
+                      >
+                        <td className="px-3 py-2 text-slate-600">{producto.codigo}</td>
+                        <td className="px-3 py-2 font-medium text-slate-800">
+                          {producto.nombre}
+                        </td>
+                        <td className="px-3 py-2 text-right text-slate-600">
+                          {currencyFormatter.format(Number(producto.precio_venta))}
+                        </td>
+                        <td className="px-3 py-2 text-right text-slate-600">
+                          {producto.stock}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleSeleccionarProducto(producto.id)}
+                            className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-semibold uppercase text-slate-600 hover:bg-slate-50"
+                          >
+                            Añadir
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>

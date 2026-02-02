@@ -8,6 +8,7 @@ interface User {
   username: string;
   role: string;
   email?: string;
+  es_cajero?: boolean;
   modulos_permitidos?: ModulosPermitidos | null;
 }
 
@@ -124,6 +125,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         username: data.user.username,
         role: data.user.role,
         email: data.user.email,
+        es_cajero: data.user.es_cajero ?? false,
         modulos_permitidos: data.user.modulos_permitidos ?? null,
       });
     } catch (error) {
@@ -161,6 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           username: data.username,
           role: data.tipo_usuario ?? user.role,
           email: data.email,
+          es_cajero: data.es_cajero ?? user.es_cajero ?? false,
           modulos_permitidos: data.modulos_permitidos ?? user.modulos_permitidos ?? null,
         };
         persistUser(updatedUser);

@@ -7,14 +7,15 @@ from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q
 
-from .models import Categoria, Proveedor, Producto, MovimientoInventario
+from .models import Categoria, Proveedor, Producto, MovimientoInventario, ProductoFavorito
 from .serializers import (
     CategoriaSerializer,
     ProveedorSerializer,
     ProductoListSerializer,
     ProductoDetailSerializer,
     ProductoCreateUpdateSerializer,
-    MovimientoInventarioSerializer
+    MovimientoInventarioSerializer,
+    ProductoFavoritoSerializer,
 )
 
 
@@ -292,3 +293,20 @@ class MovimientoInventarioViewSet(viewsets.ReadOnlyModelViewSet):
         movimientos = self.get_queryset().filter(producto_id=producto_id)
         serializer = self.get_serializer(movimientos, many=True)
         return Response(serializer.data)
+
+
+class ProductoFavoritoViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para gestionar productos favoritos del usuario.
+    """
+    serializer_class = ProductoFavoritoSerializer
+    permission_classes = [IsAuthenticated]
+    http_method_names = ['get', 'post', 'delete']
+
+    def get_queryset(self):
+        return ProductoFavorito.objects.filter(
+            usuario=self.request.user
+        ).select_related('producto')
+
+    def perform_create(self, serializer):
+        serializer.save(usuario=self.request.user)
