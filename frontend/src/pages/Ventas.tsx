@@ -865,9 +865,9 @@ export default function Ventas() {
   };
 
   const cambio = useMemo(() => {
-    const calculado = roundCop(parseNumber(efectivoRecibido)) - totals.totalPrevio;
+    const calculado = roundCop(parseNumber(efectivoRecibido)) - totals.totalAplicado;
     return roundCop(calculado >= 0 ? calculado : 0);
-  }, [efectivoRecibido, totals.totalPrevio]);
+  }, [efectivoRecibido, totals.totalAplicado]);
 
   const obtenerInfoProducto = (info: ProductoList | Producto | null) => {
     if (!info) return null;
@@ -1353,7 +1353,7 @@ export default function Ventas() {
             </div>
             <div className="mt-4 space-y-3 text-sm">
               <div className="rounded-xl border border-amber-200 bg-amber-100 px-4 py-3 text-lg font-semibold text-slate-900">
-                {currencyFormatter.format(totals.totalPrevio)}
+                {currencyFormatter.format(totals.totalAplicado)}
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-500">Efectivo recibido</span>

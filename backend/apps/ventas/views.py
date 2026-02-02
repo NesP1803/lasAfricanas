@@ -224,9 +224,20 @@ class VentaViewSet(viewsets.ModelViewSet):
         headers = self.get_success_headers(detail_serializer.data)
         return Response(detail_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
+    def _puede_editar_venta(self, user, venta):
+        """Verifica si el usuario puede editar la venta según su estado."""
+        if _is_admin(user):
+            return True
+        if venta.estado == 'BORRADOR':
+            return True
+        # Cajeros pueden editar ventas enviadas a caja (para actualizar pago)
+        if venta.estado == 'ENVIADA_A_CAJA' and _is_caja(user):
+            return True
+        return False
+
     def update(self, request, *args, **kwargs):
         venta = self.get_object()
-        if venta.estado != 'BORRADOR' and not _is_admin(request.user):
+        if not self._puede_editar_venta(request.user, venta):
             return Response(
                 {'error': 'Solo se pueden editar ventas en borrador.'},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -235,7 +246,7 @@ class VentaViewSet(viewsets.ModelViewSet):
 
     def partial_update(self, request, *args, **kwargs):
         venta = self.get_object()
-        if venta.estado != 'BORRADOR' and not _is_admin(request.user):
+        if not self._puede_editar_venta(request.user, venta):
             return Response(
                 {'error': 'Solo se pueden editar ventas en borrador.'},
                 status=status.HTTP_400_BAD_REQUEST,
