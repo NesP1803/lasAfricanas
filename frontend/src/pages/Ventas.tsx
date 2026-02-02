@@ -134,6 +134,7 @@ export default function Ventas() {
   const [mostrarPermiso, setMostrarPermiso] = useState(false);
   const [usuariosAprobadores, setUsuariosAprobadores] = useState<{ id: number; nombre: string }[]>([]);
   const [cargandoAprobadores, setCargandoAprobadores] = useState(false);
+  const [solicitudActivaId, setSolicitudActivaId] = useState<number | null>(null);
   const codigoInputRef = useRef<HTMLInputElement | null>(null);
   const lastSolicitudFetchRef = useRef(0);
   const esAdmin = useMemo(() => user?.role === 'ADMIN', [user?.role]);
@@ -165,6 +166,21 @@ export default function Ventas() {
       .then((response) => setProductos(response.results ?? []))
       .catch(() => setProductos([]));
   }, [busquedaProducto, mostrarBusqueda]);
+
+  const ordenarPendientes = (data: VentaListItem[]) =>
+    [...data]
+      .filter((venta) => venta.estado === 'ENVIADA_A_CAJA')
+      .sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
+
+  useEffect(() => {
+    if (!esCaja) return;
+    setCargandoPendientes(true);
+    ventasApi
+      .getPendientesCaja()
+      .then((data) => setPendientesCaja(ordenarPendientes(data)))
+      .catch(() => setPendientesCaja([]))
+      .finally(() => setCargandoPendientes(false));
+  }, [esCaja]);
 
   useEffect(() => {
     if (!esCaja) return;
@@ -222,6 +238,11 @@ export default function Ventas() {
 
   useEffect(() => {
     if (!user?.id || esAdmin) return;
+    if (!solicitudActivaId) {
+      setEstadoSolicitud(null);
+      setDescuentoAutorizado(false);
+      return;
+    }
     const actualizarEstadoSolicitud = async () => {
       const now = Date.now();
       if (now - lastSolicitudFetchRef.current < 2000) {
@@ -230,15 +251,14 @@ export default function Ventas() {
       lastSolicitudFetchRef.current = now;
       try {
         const solicitudes = await descuentosApi.listarSolicitudes();
-        if (solicitudes.length === 0) {
+        const solicitud = solicitudes.find(
+          (item) => item.id === solicitudActivaId
+        );
+        if (!solicitud) {
           setEstadoSolicitud(null);
           setDescuentoAutorizado(false);
           return;
         }
-        const sorted = [...solicitudes].sort(
-          (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-        );
-        const solicitud = sorted[0];
         setEstadoSolicitud(solicitud);
         const solicitado = Number(solicitud.descuento_solicitado || 0);
         if (solicitud.estado === 'APROBADO') {
@@ -288,7 +308,7 @@ export default function Ventas() {
       stopPolling();
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [esAdmin, estadoSolicitud?.estado, user?.id]);
+  }, [esAdmin, estadoSolicitud?.estado, solicitudActivaId, user?.id]);
 
   const descuentoBloqueado =
     !esAdmin && estadoSolicitud?.estado === 'APROBADO';
@@ -490,19 +510,27 @@ export default function Ventas() {
     setAprobadorNombre('');
     setEstadoSolicitud(null);
     setMostrarPermiso(false);
+    setSolicitudActivaId(null);
   };
 
-  const handleLimpiarTodo = () => {
-    if (ventaBloqueada) return;
+  const resetVentaState = () => {
     setCartItems([]);
     setDocumentoGenerado(null);
+    setDocumentoPreview(null);
     setVentaBorrador(null);
+    setDetalleCaja(null);
     setClienteId(null);
     setClienteNombre('Cliente general');
     setClienteDocumento('');
     setMedioPago('EFECTIVO');
     setEfectivoRecibido('0');
     resetDescuentoState();
+    setMensaje(null);
+  };
+
+  const handleLimpiarTodo = () => {
+    if (ventaBloqueada) return;
+    resetVentaState();
     setMensaje('Venta reiniciada.');
   };
 
@@ -541,6 +569,7 @@ export default function Ventas() {
       })
       .then((nuevaSolicitud) => {
         setEstadoSolicitud(nuevaSolicitud);
+        setSolicitudActivaId(nuevaSolicitud.id);
         setAprobadorNombre(aprobador?.nombre ?? 'Administrador');
         setDescuentoAutorizado(false);
         setMostrarPermiso(false);
@@ -753,10 +782,7 @@ export default function Ventas() {
         message: 'Venta facturada desde caja.',
       });
       const data = await ventasApi.getPendientesCaja();
-      const ordenadas = [...data].sort(
-        (a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime()
-      );
-      setPendientesCaja(ordenadas);
+      setPendientesCaja(ordenarPendientes(data));
     } catch (error) {
       showNotification({
         type: 'error',
@@ -924,11 +950,7 @@ export default function Ventas() {
               <button
                 type="button"
                 onClick={() => {
-                  setVentaBorrador(null);
-                  setCartItems([]);
-                  setDocumentoGenerado(null);
-                  setDocumentoPreview(null);
-                  setMensaje(null);
+                  resetVentaState();
                 }}
                 className="text-xs font-semibold uppercase text-blue-600 hover:text-blue-700"
               >
@@ -1350,12 +1372,7 @@ export default function Ventas() {
                 setCargandoPendientes(true);
                 ventasApi
                   .getPendientesCaja()
-                  .then((data) => {
-                    const ordenadas = [...data].sort(
-                      (a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime()
-                    );
-                    setPendientesCaja(ordenadas);
-                  })
+                  .then((data) => setPendientesCaja(ordenarPendientes(data)))
                   .catch(() => setPendientesCaja([]))
                   .finally(() => setCargandoPendientes(false));
               }}
