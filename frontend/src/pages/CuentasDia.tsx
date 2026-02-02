@@ -77,7 +77,7 @@ export default function CuentasDia() {
   ): Promise<{ ventas: VentaListItem[]; total: number }> => {
     const ventas = await ventasApi.getVentas({
       tipoComprobante,
-      estado: 'CONFIRMADA',
+      estado: 'FACTURADA',
       fechaInicio,
       fechaFin,
       ordering: '-fecha',
