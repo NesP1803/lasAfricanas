@@ -15,6 +15,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'username': self.user.username,
             'email': self.user.email,
             'role': role,
+            'es_cajero': self.user.es_cajero,
             'modulos_permitidos': self.user.modulos_permitidos,
         }
 
@@ -36,6 +37,7 @@ class UsuarioSerializer(serializers.ModelSerializer):
             'first_name',
             'last_name',
             'tipo_usuario',
+            'es_cajero',
             'telefono',
             'sede',
             'is_active',

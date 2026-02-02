@@ -8,6 +8,7 @@ export interface Usuario {
   first_name: string;
   last_name: string;
   tipo_usuario: 'ADMIN' | 'VENDEDOR' | 'MECANICO' | 'BODEGUERO';
+  es_cajero?: boolean;
   sede: string;
   is_active: boolean;
 }
@@ -106,7 +107,7 @@ export interface DetalleVenta {
 export interface Venta {
   id: number;
   tipo_comprobante: 'COTIZACION' | 'REMISION' | 'FACTURA';
-  numero_comprobante: string;
+  numero_comprobante: string | null;
   fecha: string;
   cliente: number;
   cliente_nombre?: string;
@@ -120,7 +121,7 @@ export interface Venta {
   medio_pago: 'EFECTIVO' | 'TRANSFERENCIA' | 'TARJETA' | 'CREDITO';
   efectivo_recibido: string;
   cambio: string;
-  estado: 'BORRADOR' | 'CONFIRMADA' | 'ANULADA';
+  estado: 'BORRADOR' | 'ENVIADA_A_CAJA' | 'FACTURADA' | 'ANULADA';
   observaciones: string;
   detalles?: DetalleVenta[];
 }
