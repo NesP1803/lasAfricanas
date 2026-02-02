@@ -289,6 +289,10 @@ export default function Layout() {
         return { moduleKey: "facturacion", sectionKey: "listados" };
       }
 
+      if (pathname.startsWith("/facturacion/caja")) {
+        return { moduleKey: "facturacion", sectionKey: "caja" };
+      }
+
       return null;
     };
 
@@ -421,6 +425,9 @@ export default function Layout() {
         const facturacionItems: MenuItem[] = [];
         if (isAdmin || sectionEnabled("facturacion", "venta_rapida")) {
           facturacionItems.push({ label: "Venta rápida", path: "/ventas" });
+        }
+        if (isAdmin || sectionEnabled("facturacion", "caja")) {
+          facturacionItems.push({ label: "Caja", path: "/facturacion/caja" });
         }
         if (isAdmin || sectionEnabled("facturacion", "cuentas")) {
           facturacionItems.push({

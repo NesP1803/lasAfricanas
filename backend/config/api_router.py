@@ -9,12 +9,14 @@ from apps.inventario.views import (
     CategoriaViewSet,
     ProveedorViewSet,
     ProductoViewSet,
-    MovimientoInventarioViewSet
+    MovimientoInventarioViewSet,
+    ProductoFavoritoViewSet,
 )
 from apps.ventas.views import (
     ClienteViewSet,
     VentaViewSet,
     SolicitudDescuentoViewSet,
+    CajaViewSet,
 )
 
 from apps.core.views import (
@@ -35,10 +37,12 @@ router.register(r'categorias', CategoriaViewSet, basename='categoria')
 router.register(r'proveedores', ProveedorViewSet, basename='proveedor')
 router.register(r'productos', ProductoViewSet, basename='producto')
 router.register(r'movimientos', MovimientoInventarioViewSet, basename='movimiento')
+router.register(r'productos-favoritos', ProductoFavoritoViewSet, basename='producto-favorito')
 
 # Registrar ViewSets de Ventas
 router.register(r'clientes', ClienteViewSet, basename='cliente')
 router.register(r'ventas', VentaViewSet, basename='venta')
+router.register(r'caja', CajaViewSet, basename='caja')
 router.register(r'solicitudes-descuento', SolicitudDescuentoViewSet, basename='solicitud-descuento')
 
 

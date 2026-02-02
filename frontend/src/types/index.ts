@@ -106,7 +106,7 @@ export interface DetalleVenta {
 export interface Venta {
   id: number;
   tipo_comprobante: 'COTIZACION' | 'REMISION' | 'FACTURA';
-  numero_comprobante: string;
+  numero_comprobante: string | null;
   fecha: string;
   cliente: number;
   cliente_nombre?: string;
@@ -120,7 +120,7 @@ export interface Venta {
   medio_pago: 'EFECTIVO' | 'TRANSFERENCIA' | 'TARJETA' | 'CREDITO';
   efectivo_recibido: string;
   cambio: string;
-  estado: 'BORRADOR' | 'CONFIRMADA' | 'ANULADA';
+  estado: 'BORRADOR' | 'ENVIADA_A_CAJA' | 'FACTURADA' | 'ANULADA';
   observaciones: string;
   detalles?: DetalleVenta[];
 }

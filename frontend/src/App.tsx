@@ -14,6 +14,7 @@ import CuentasDia from './pages/CuentasDia';
 import DetallesCuentas from './pages/DetallesCuentas';
 import Facturas from './pages/Facturas';
 import Remisiones from './pages/Remisiones';
+import Caja from './pages/Caja';
 import { NotificationProvider } from './contexts/NotificationContext';
 
 function App() {
@@ -36,6 +37,7 @@ function App() {
               <Route path="ventas/detalles-cuentas" element={<DetallesCuentas />} />
               <Route path="facturacion/facturas" element={<Facturas />} />
               <Route path="facturacion/remisiones" element={<Remisiones />} />
+              <Route path="facturacion/caja" element={<Caja />} />
             </Route>
           </Routes>
         </BrowserRouter>

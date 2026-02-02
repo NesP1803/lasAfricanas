@@ -79,7 +79,8 @@ class Venta(BaseModel):
     
     ESTADO = [
         ('BORRADOR', 'Borrador'),
-        ('CONFIRMADA', 'Confirmada'),
+        ('ENVIADA_A_CAJA', 'Enviada a caja'),
+        ('FACTURADA', 'Facturada'),
         ('ANULADA', 'Anulada'),
     ]
     
@@ -104,6 +105,8 @@ class Venta(BaseModel):
         max_length=50,
         unique=True,
         db_index=True,
+        null=True,
+        blank=True,
         verbose_name='Número de comprobante',
         help_text='FAC-100702, REM-154239, COT-001234'
     )
@@ -199,9 +202,43 @@ class Venta(BaseModel):
     estado = models.CharField(
         max_length=20,
         choices=ESTADO,
-        default='CONFIRMADA',
+        default='BORRADOR',
         db_index=True,
         verbose_name='Estado'
+    )
+    creada_por = models.ForeignKey(
+        'usuarios.Usuario',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='ventas_creadas',
+        verbose_name='Creada por'
+    )
+    enviada_a_caja_por = models.ForeignKey(
+        'usuarios.Usuario',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='ventas_enviadas_a_caja',
+        verbose_name='Enviada a caja por'
+    )
+    enviada_a_caja_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Enviada a caja en'
+    )
+    facturada_por = models.ForeignKey(
+        'usuarios.Usuario',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='ventas_facturadas',
+        verbose_name='Facturada por'
+    )
+    facturada_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Facturada en'
     )
     observaciones = models.TextField(
         blank=True,
@@ -242,6 +279,9 @@ class Venta(BaseModel):
         verbose_name = 'Venta'
         verbose_name_plural = 'Ventas'
         ordering = ['-fecha']
+        permissions = [
+            ('caja_facturar', 'Puede facturar ventas en caja'),
+        ]
         indexes = [
             models.Index(fields=['numero_comprobante']),
             models.Index(fields=['tipo_comprobante', 'fecha']),
@@ -269,7 +309,8 @@ class Venta(BaseModel):
         return ultimo_numero + 1
     
     def __str__(self):
-        return f"{self.get_tipo_comprobante_display()} {self.numero_comprobante}"
+        numero = self.numero_comprobante or 'SIN-NUMERO'
+        return f"{self.get_tipo_comprobante_display()} {numero}"
     
     def clean(self):
         """Validaciones personalizadas"""
