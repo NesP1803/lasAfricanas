@@ -182,11 +182,13 @@ class VentaViewSet(viewsets.ModelViewSet):
         ).prefetch_related('detalles').all()
         fecha_inicio = self.request.query_params.get('fecha_inicio')
         fecha_fin = self.request.query_params.get('fecha_fin')
+        estado = self.request.query_params.get('estado')
         inicio_dt, fin_dt = self._get_fecha_range(fecha_inicio, fecha_fin)
+        date_field = 'facturada_at' if estado == 'FACTURADA' else 'fecha'
         if inicio_dt:
-            queryset = queryset.filter(fecha__gte=inicio_dt)
+            queryset = queryset.filter(**{f'{date_field}__gte': inicio_dt})
         if fin_dt:
-            queryset = queryset.filter(fecha__lte=fin_dt)
+            queryset = queryset.filter(**{f'{date_field}__lte': fin_dt})
         return queryset
     
     def get_serializer_class(self):
