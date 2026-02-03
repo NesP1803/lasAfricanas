@@ -125,18 +125,29 @@ export const printComprobante = ({
   const estilos =
     formato === 'POS'
       ? `
-        body { font-family: Arial, sans-serif; padding: 16px; color: #0f172a; font-size: 11px; }
-        h1 { font-size: 12px; text-transform: uppercase; margin: 0; }
-        h2 { font-size: 11px; margin: 6px 0; text-transform: uppercase; }
+        :root { --ticket-width: 80mm; }
+        @page { size: var(--ticket-width) auto; margin: 0; }
+        @media print {
+          html, body { width: var(--ticket-width); margin: 0; padding: 0; }
+        }
+        body {
+          font-family: "Courier New", Courier, monospace;
+          padding: 8px;
+          color: #0f172a;
+          font-size: 10px;
+          line-height: 1.2;
+        }
+        h1 { font-size: 11px; text-transform: uppercase; margin: 0; }
+        h2 { font-size: 10px; margin: 6px 0; text-transform: uppercase; }
         p { margin: 2px 0; }
-        .box { border-top: 1px dashed #94a3b8; margin-top: 8px; padding-top: 8px; }
-        .row { display: flex; justify-content: space-between; margin-bottom: 4px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 10px; }
-        th, td { padding: 4px 0; border-bottom: 1px dashed #cbd5f5; vertical-align: top; }
-        th { text-align: left; text-transform: uppercase; font-size: 9px; color: #475569; }
+        .box { border-top: 1px dashed #94a3b8; margin-top: 6px; padding-top: 6px; }
+        .row { display: flex; justify-content: space-between; margin-bottom: 3px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 9px; }
+        th, td { padding: 3px 0; border-bottom: 1px dashed #cbd5f5; vertical-align: top; }
+        th { text-align: left; text-transform: uppercase; font-size: 8px; color: #475569; }
         .right { text-align: right; }
-        .muted { color: #64748b; font-size: 9px; }
-        .nota { margin-top: 8px; font-size: 9px; color: #64748b; }
+        .muted { color: #64748b; font-size: 8px; }
+        .nota { margin-top: 6px; font-size: 8px; color: #64748b; }
       `
       : `
         body { font-family: Arial, sans-serif; padding: 32px; color: #0f172a; font-size: 13px; }
