@@ -55,6 +55,7 @@ class Moto(BaseModel):
         null=True,
         blank=True
     )
+    fecha_ingreso = models.DateField(null=True, blank=True)
     observaciones = models.TextField(blank=True)
 
     class Meta:

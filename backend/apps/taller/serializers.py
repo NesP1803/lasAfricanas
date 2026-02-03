@@ -45,6 +45,7 @@ class MotoSerializer(serializers.ModelSerializer):
             'mecanico_nombre',
             'proveedor',
             'proveedor_nombre',
+            'fecha_ingreso',
             'observaciones',
             'is_active',
             'created_at',
