@@ -129,7 +129,11 @@ class OrdenRepuesto(BaseModel):
         on_delete=models.PROTECT,
         related_name='repuestos_taller'
     )
-    cantidad = models.PositiveIntegerField(validators=[MinValueValidator(1)])
+    cantidad = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))]
+    )
     precio_unitario = models.DecimalField(max_digits=12, decimal_places=2)
     subtotal = models.DecimalField(max_digits=12, decimal_places=2)
 

@@ -1,3 +1,4 @@
+from decimal import Decimal, InvalidOperation
 from django.db import models
 from django.db.models import F, Sum
 from rest_framework import viewsets, filters, status
@@ -220,10 +221,22 @@ class ProductoViewSet(viewsets.ModelViewSet):
             )
         
         try:
-            cantidad = int(cantidad)
-        except ValueError:
+            cantidad = Decimal(str(cantidad))
+        except (InvalidOperation, TypeError, ValueError):
             return Response(
-                {'error': 'La cantidad debe ser un número entero'},
+                {'error': 'La cantidad debe ser un número válido'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if cantidad <= 0:
+            return Response(
+                {'error': 'La cantidad debe ser mayor a cero'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if producto.unidad_medida == 'N/A' and cantidad != cantidad.quantize(Decimal('1')):
+            return Response(
+                {'error': 'Para unidad N/A solo se permiten enteros'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         

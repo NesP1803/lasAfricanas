@@ -73,6 +73,7 @@ class ProductoListSerializer(serializers.ModelSerializer):
             'proveedor_nombre',
             'precio_venta',
             'stock',
+            'unidad_medida',
             'stock_estado',
             'is_active',
             'created_at',
@@ -178,6 +179,14 @@ class ProductoCreateUpdateSerializer(serializers.ModelSerializer):
             if Producto.objects.filter(codigo=value).exists():
                 raise serializers.ValidationError("Ya existe un producto con este código")
         return value
+
+    def validate_unidad_medida(self, value):
+        unidades_validas = {codigo for codigo, _ in Producto.UNIDADES_MEDIDA}
+        if value not in unidades_validas:
+            raise serializers.ValidationError(
+                'Unidad de medida no válida. Use N/A, KG, LT o MT.'
+            )
+        return value
     
     def validate(self, data):
         """Validaciones generales"""
@@ -190,6 +199,23 @@ class ProductoCreateUpdateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 "El precio de costo no puede ser mayor al precio de venta"
             )
+
+        unidad_medida = data.get('unidad_medida') or getattr(self.instance, 'unidad_medida', None)
+        if unidad_medida == 'N/A':
+            for field_name in ['stock', 'stock_minimo']:
+                value = data.get(field_name)
+                if value is None:
+                    continue
+                try:
+                    decimal_value = Decimal(str(value))
+                except (InvalidOperation, TypeError, ValueError):
+                    raise serializers.ValidationError(
+                        {field_name: 'La cantidad debe ser un número válido.'}
+                    )
+                if decimal_value != decimal_value.quantize(Decimal('1')):
+                    raise serializers.ValidationError(
+                        {field_name: 'Para unidad N/A solo se permiten enteros.'}
+                    )
         
         return data
 

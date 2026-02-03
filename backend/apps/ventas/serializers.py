@@ -1,3 +1,4 @@
+from decimal import Decimal
 from rest_framework import serializers
 from .models import (
     Cliente,
@@ -58,6 +59,7 @@ class DetalleVentaSerializer(serializers.ModelSerializer):
     """Serializer para detalles de venta"""
     producto_codigo = serializers.CharField(source='producto.codigo', read_only=True)
     producto_nombre = serializers.CharField(source='producto.nombre', read_only=True)
+    unidad_medida = serializers.CharField(source='producto.unidad_medida', read_only=True)
     
     class Meta:
         model = DetalleVenta
@@ -66,6 +68,7 @@ class DetalleVentaSerializer(serializers.ModelSerializer):
             'producto',
             'producto_codigo',
             'producto_nombre',
+            'unidad_medida',
             'cantidad',
             'precio_unitario',
             'descuento_unitario',
@@ -73,6 +76,20 @@ class DetalleVentaSerializer(serializers.ModelSerializer):
             'subtotal',
             'total'
         ]
+
+    def validate(self, attrs):
+        producto = attrs.get('producto')
+        cantidad = attrs.get('cantidad')
+        if producto and cantidad:
+            try:
+                decimal_cantidad = Decimal(str(cantidad))
+            except Exception:
+                raise serializers.ValidationError({'cantidad': 'Cantidad inválida.'})
+            if producto.unidad_medida == 'N/A' and decimal_cantidad != decimal_cantidad.quantize(Decimal('1')):
+                raise serializers.ValidationError(
+                    {'cantidad': 'Para unidad N/A solo se permiten enteros.'}
+                )
+        return attrs
 
 
 class VentaListSerializer(serializers.ModelSerializer):
