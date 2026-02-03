@@ -10,7 +10,6 @@ export type DocumentoDetalle = {
   total: number;
 };
 
-type DocumentoFormato = 'POS' | 'CARTA';
 type DocumentoTipo = 'FACTURA' | 'REMISION' | 'COTIZACION';
 
 type DocumentoTemplateProps = {

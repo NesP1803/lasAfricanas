@@ -1,19 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import {
-  FileSearch,
-  Printer,
-  FileText,
-  Ban,
-  Eye,
-  X,
-  ChevronDown,
-} from 'lucide-react';
+import { FileSearch, Printer, Ban, Eye, X, ChevronDown } from 'lucide-react';
 import { configuracionAPI } from '../api/configuracion';
 import { ventasApi, type Venta, type VentaListItem } from '../api/ventas';
 import ComprobanteTemplate from '../components/ComprobanteTemplate';
 import type { ConfiguracionEmpresa, ConfiguracionFacturacion } from '../types';
 
-type DocumentoTipo = 'POS' | 'CARTA';
+type DocumentoTipo = 'POS';
 
 type RemisionItem = {
   id: number;
@@ -322,15 +314,6 @@ export default function Remisiones() {
               <Printer size={14} />
               Imprimir POS
             </button>
-            <button
-              type="button"
-              onClick={() => abrirDocumento('CARTA')}
-              className="flex items-center gap-2 rounded border border-slate-300 px-3 py-1.5 text-xs font-semibold uppercase text-slate-600 disabled:opacity-50"
-              disabled={!selectedRemision}
-            >
-              <FileText size={14} />
-              Carta
-            </button>
           </div>
         </div>
 
@@ -517,7 +500,6 @@ export default function Remisiones() {
                   <p className="text-center text-sm text-rose-600">{detalleError}</p>
                 ) : null}
                 <ComprobanteTemplate
-                  formato={documento.tipo}
                   tipo="REMISION"
                   numero={`${documento.remision.prefijo} ${documento.remision.numero}`}
                   fecha={detalleRemision?.fecha ?? documento.remision.fechaIso}
