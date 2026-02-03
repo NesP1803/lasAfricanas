@@ -314,6 +314,15 @@ export default function Facturas() {
               <Printer size={14} />
               Imprimir POS
             </button>
+            <button
+              type="button"
+              onClick={() => abrirDocumento('CARTA')}
+              className="flex items-center gap-2 rounded border border-slate-300 px-3 py-1.5 text-xs font-semibold uppercase text-slate-600 disabled:opacity-50"
+              disabled={!selectedFactura}
+            >
+              <FileText size={14} />
+              Imprimir Carta
+            </button>
           </div>
         </div>
 
