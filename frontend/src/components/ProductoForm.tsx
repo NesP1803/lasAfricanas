@@ -1,10 +1,11 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { X, Plus, ChevronDown } from 'lucide-react';
 import { inventarioApi } from '../api/inventario';
 import { configuracionAPI } from '../api/configuracion';
 import type { Producto, Categoria, Proveedor} from "../api/inventario";
 import type { Impuesto } from '../types';
 import { useNotification } from '../contexts/NotificationContext';
+import ConfirmModal from './ConfirmModal';
 
 
 interface ProductoFormProps {
@@ -15,6 +16,8 @@ interface ProductoFormProps {
 
 export default function ProductoForm({ producto, onClose, onSuccess }: ProductoFormProps) {
   const { showNotification } = useNotification();
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const allowSubmitRef = useRef(false);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [impuestos, setImpuestos] = useState<Impuesto[]>([]);
@@ -29,6 +32,8 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
   const [mostrarListaProveedores, setMostrarListaProveedores] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<any>({});
+  const [confirmCloseOpen, setConfirmCloseOpen] = useState(false);
+  const [confirmSaveOpen, setConfirmSaveOpen] = useState(false);
 
   const normalizeIva = (value: string | number) => {
     const numericValue = Number(value);
@@ -239,6 +244,11 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!allowSubmitRef.current) {
+      setConfirmSaveOpen(true);
+      return;
+    }
+    allowSubmitRef.current = false;
     setLoading(true);
     setErrors({});
 
@@ -336,6 +346,25 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
     Number(formData.precio_venta || 0)
   );
 
+  const handleRequestClose = () => {
+    setConfirmCloseOpen(true);
+  };
+
+  const handleConfirmClose = () => {
+    setConfirmCloseOpen(false);
+    onClose();
+  };
+
+  const handleRequestSave = () => {
+    setConfirmSaveOpen(true);
+  };
+
+  const handleConfirmSave = () => {
+    setConfirmSaveOpen(false);
+    allowSubmitRef.current = true;
+    formRef.current?.requestSubmit();
+  };
+
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
       <div className="bg-white shadow-xl max-w-3xl w-full rounded-md border border-gray-400 max-h-[90vh] overflow-y-auto">
@@ -345,7 +374,7 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
             {producto ? 'Actualizar mercancía' : 'Registrar nuevo artículo'}
           </h2>
           <button
-            onClick={onClose}
+            onClick={handleRequestClose}
             className="text-white hover:text-gray-100 transition-colors"
           >
             <X size={18} />
@@ -353,7 +382,7 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="p-4 space-y-4 text-sm">
+        <form ref={formRef} onSubmit={handleSubmit} className="p-4 space-y-4 text-sm">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <label className="flex items-center gap-2 font-semibold text-gray-800 mb-1">
@@ -677,7 +706,8 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
 
           <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-gray-200">
             <button
-              type="submit"
+              type="button"
+              onClick={handleRequestSave}
               disabled={loading}
               className="px-4 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-xs font-semibold"
             >
@@ -685,7 +715,7 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
             </button>
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleRequestClose}
               className="px-4 py-1 border border-gray-400 rounded text-gray-700 hover:bg-gray-100 transition-colors text-xs font-semibold"
             >
               Cerrar
@@ -693,6 +723,25 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
           </div>
         </form>
       </div>
+      <ConfirmModal
+        open={confirmCloseOpen}
+        title="Cerrar formulario"
+        description="Si cierras ahora, se perderán los cambios no guardados. ¿Deseas continuar?"
+        confirmLabel="Cerrar"
+        confirmVariant="danger"
+        onConfirm={handleConfirmClose}
+        onCancel={() => setConfirmCloseOpen(false)}
+      />
+      <ConfirmModal
+        open={confirmSaveOpen}
+        title="Confirmar guardado"
+        description="¿Deseas guardar los cambios del artículo?"
+        confirmLabel="Guardar"
+        confirmVariant="primary"
+        onConfirm={handleConfirmSave}
+        onCancel={() => setConfirmSaveOpen(false)}
+        loading={loading}
+      />
     </div>
   );
 }
