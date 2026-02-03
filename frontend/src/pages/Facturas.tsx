@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { FileSearch, Printer, Ban, Eye, X, ChevronDown } from 'lucide-react';
+import { FileSearch, Printer, Ban, Eye, X, ChevronDown, FileText } from 'lucide-react';
 import { configuracionAPI } from '../api/configuracion';
 import { ventasApi, type Venta, type VentaListItem } from '../api/ventas';
 import ComprobanteTemplate from '../components/ComprobanteTemplate';
 import type { ConfiguracionEmpresa, ConfiguracionFacturacion } from '../types';
 import { printComprobante } from '../utils/printComprobante';
 
-type DocumentoTipo = 'POS';
+type DocumentoTipo = 'POS' | 'CARTA';
 
 type FacturaItem = {
   id: number;
