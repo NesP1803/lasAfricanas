@@ -5,6 +5,7 @@ import { configuracionAPI } from '../api/configuracion';
 import type { Producto, Categoria, Proveedor} from "../api/inventario";
 import type { Impuesto } from '../types';
 import { useNotification } from '../contexts/NotificationContext';
+import ConfirmModal from './ConfirmModal';
 
 
 interface ProductoFormProps {
@@ -29,6 +30,7 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
   const [mostrarListaProveedores, setMostrarListaProveedores] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<any>({});
+  const [confirmCloseOpen, setConfirmCloseOpen] = useState(false);
 
   const normalizeIva = (value: string | number) => {
     const numericValue = Number(value);
@@ -336,6 +338,15 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
     Number(formData.precio_venta || 0)
   );
 
+  const handleRequestClose = () => {
+    setConfirmCloseOpen(true);
+  };
+
+  const handleConfirmClose = () => {
+    setConfirmCloseOpen(false);
+    onClose();
+  };
+
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
       <div className="bg-white shadow-xl max-w-3xl w-full rounded-md border border-gray-400 max-h-[90vh] overflow-y-auto">
@@ -345,7 +356,7 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
             {producto ? 'Actualizar mercancía' : 'Registrar nuevo artículo'}
           </h2>
           <button
-            onClick={onClose}
+            onClick={handleRequestClose}
             className="text-white hover:text-gray-100 transition-colors"
           >
             <X size={18} />
@@ -685,7 +696,7 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
             </button>
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleRequestClose}
               className="px-4 py-1 border border-gray-400 rounded text-gray-700 hover:bg-gray-100 transition-colors text-xs font-semibold"
             >
               Cerrar
@@ -693,6 +704,15 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
           </div>
         </form>
       </div>
+      <ConfirmModal
+        open={confirmCloseOpen}
+        title="Cerrar formulario"
+        description="Si cierras ahora, se perderán los cambios no guardados. ¿Deseas continuar?"
+        confirmLabel="Cerrar"
+        confirmVariant="danger"
+        onConfirm={handleConfirmClose}
+        onCancel={() => setConfirmCloseOpen(false)}
+      />
     </div>
   );
 }
