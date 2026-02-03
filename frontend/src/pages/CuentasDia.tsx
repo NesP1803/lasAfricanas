@@ -86,10 +86,7 @@ export default function CuentasDia() {
     return { ventas, total };
   };
 
-  const imprimirRecibo = async (
-    tipo: 'FACTURAS' | 'REMISIONES',
-    formato: 'POS' | 'CARTA'
-  ) => {
+  const imprimirRecibo = async (tipo: 'FACTURAS' | 'REMISIONES') => {
     setPrinting(true);
     const titulo = tipo === 'FACTURAS' ? 'Recibo de facturas' : 'Recibo de remisiones';
     try {
@@ -131,35 +128,30 @@ export default function CuentasDia() {
           ? filas
           : `<tr><td colspan="4" class="empty">Sin documentos en el rango.</td></tr>`;
 
-      const estilos =
-        formato === 'POS'
-          ? `
-            body { font-family: Arial, sans-serif; padding: 16px; color: #0f172a; font-size: 11px; }
-            h1 { font-size: 12px; text-transform: uppercase; margin: 0; }
-            h2 { font-size: 11px; margin: 6px 0; text-transform: uppercase; }
-            p { margin: 2px 0; }
-            .box { border-top: 1px dashed #94a3b8; margin-top: 8px; padding-top: 8px; }
-            .row { display: flex; justify-content: space-between; margin-bottom: 4px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 10px; }
-            th, td { padding: 4px 0; border-bottom: 1px dashed #cbd5f5; }
-            th { text-align: left; text-transform: uppercase; font-size: 9px; color: #475569; }
-            .right { text-align: right; }
-            .empty { text-align: center; padding: 8px 0; color: #64748b; }
-          `
-          : `
-            body { font-family: Arial, sans-serif; padding: 32px; color: #0f172a; font-size: 13px; }
-            h1 { font-size: 18px; margin-bottom: 4px; }
-            h2 { font-size: 16px; margin: 12px 0 6px; }
-            p { margin: 2px 0; color: #475569; }
-            .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
-            .box { border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; }
-            .row { display: flex; justify-content: space-between; margin-bottom: 8px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 12px; }
-            th, td { padding: 8px 6px; border-bottom: 1px solid #e2e8f0; }
-            th { text-align: left; text-transform: uppercase; font-size: 11px; color: #475569; }
-            .right { text-align: right; }
-            .empty { text-align: center; padding: 12px 0; color: #64748b; }
-          `;
+      const estilos = `
+        :root {
+          --ticket-width: 80mm;
+          --ticket-padding: 6mm;
+        }
+        * { box-sizing: border-box; }
+        @page { size: var(--ticket-width) auto; margin: 0; }
+        html, body { width: var(--ticket-width); margin: 0; padding: 0; }
+        @media print {
+          html, body { width: var(--ticket-width); }
+          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+        body { font-family: Arial, sans-serif; padding: var(--ticket-padding); color: #0f172a; font-size: 11px; }
+        h1 { font-size: 12px; text-transform: uppercase; margin: 0; }
+        h2 { font-size: 11px; margin: 6px 0; text-transform: uppercase; }
+        p { margin: 2px 0; }
+        .box { border-top: 1px dashed #94a3b8; margin-top: 8px; padding-top: 8px; }
+        .row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 10px; }
+        th, td { padding: 4px 0; border-bottom: 1px dashed #cbd5f5; }
+        th { text-align: left; text-transform: uppercase; font-size: 9px; color: #475569; }
+        .right { text-align: right; }
+        .empty { text-align: center; padding: 8px 0; color: #64748b; }
+      `;
 
       printWindow.document.write(`
         <!doctype html>
@@ -170,20 +162,15 @@ export default function CuentasDia() {
             <style>${estilos}</style>
           </head>
           <body>
-            <div class="${formato === 'POS' ? '' : 'header'}">
+            <div>
               <div>
                 <h1>${nombreEmpresa}</h1>
                 <p>${nitEmpresa}</p>
                 <p>${direccionEmpresa}</p>
                 ${telefonoEmpresa ? `<p>${telefonoEmpresa}</p>` : ''}
               </div>
-              ${
-                formato === 'CARTA'
-                  ? `<div class="right"><p>${titulo}</p><p>${fechaImpresion}</p></div>`
-                  : ''
-              }
             </div>
-            ${formato === 'POS' ? `<h2>${titulo}</h2>` : ''}
+            <h2>${titulo}</h2>
             <p>Rango: ${rango}</p>
             <p>Fecha impresión: ${fechaImpresion}</p>
             <div class="box">
@@ -319,20 +306,11 @@ export default function CuentasDia() {
               <div className="grid gap-2 sm:grid-cols-2">
                 <button
                   type="button"
-                  onClick={() => imprimirRecibo('FACTURAS', 'POS')}
+                  onClick={() => imprimirRecibo('FACTURAS')}
                   className="flex items-center justify-between rounded-lg border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                   disabled={loading || printing}
                 >
                   Tirilla
-                  <Printer size={18} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => imprimirRecibo('FACTURAS', 'CARTA')}
-                  className="flex items-center justify-between rounded-lg border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={loading || printing}
-                >
-                  Carta
                   <Printer size={18} />
                 </button>
               </div>
@@ -344,20 +322,11 @@ export default function CuentasDia() {
               <div className="grid gap-2 sm:grid-cols-2">
                 <button
                   type="button"
-                  onClick={() => imprimirRecibo('REMISIONES', 'POS')}
+                  onClick={() => imprimirRecibo('REMISIONES')}
                   className="flex items-center justify-between rounded-lg border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                   disabled={loading || printing}
                 >
                   Tirilla
-                  <Printer size={18} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => imprimirRecibo('REMISIONES', 'CARTA')}
-                  className="flex items-center justify-between rounded-lg border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={loading || printing}
-                >
-                  Carta
                   <Printer size={18} />
                 </button>
               </div>

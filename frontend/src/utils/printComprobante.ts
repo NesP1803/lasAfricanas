@@ -10,11 +10,9 @@ export type DocumentoDetalle = {
   total: number;
 };
 
-type DocumentoFormato = 'POS' | 'CARTA';
 type DocumentoTipo = 'FACTURA' | 'REMISION' | 'COTIZACION';
 
 type PrintComprobanteParams = {
-  formato: DocumentoFormato;
   tipo: DocumentoTipo;
   numero: string;
   fecha: string;
@@ -66,7 +64,6 @@ const getTituloDocumento = (tipo: DocumentoTipo) =>
   tipo === 'COTIZACION' ? 'Cotización' : tipo === 'REMISION' ? 'Remisión' : 'Factura de venta';
 
 export const printComprobante = ({
-  formato,
   tipo,
   numero,
   fecha,
@@ -122,48 +119,38 @@ export const printComprobante = ({
     )
     .join('');
 
-  const estilos =
-    formato === 'POS'
-      ? `
-        :root { --ticket-width: 80mm; }
-        @page { size: var(--ticket-width) auto; margin: 0; }
-        @media print {
-          html, body { width: var(--ticket-width); margin: 0; padding: 0; }
-        }
-        body {
-          font-family: "Courier New", Courier, monospace;
-          padding: 8px;
-          color: #0f172a;
-          font-size: 10px;
-          line-height: 1.2;
-        }
-        h1 { font-size: 11px; text-transform: uppercase; margin: 0; }
-        h2 { font-size: 10px; margin: 6px 0; text-transform: uppercase; }
-        p { margin: 2px 0; }
-        .box { border-top: 1px dashed #94a3b8; margin-top: 6px; padding-top: 6px; }
-        .row { display: flex; justify-content: space-between; margin-bottom: 3px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 9px; }
-        th, td { padding: 3px 0; border-bottom: 1px dashed #cbd5f5; vertical-align: top; }
-        th { text-align: left; text-transform: uppercase; font-size: 8px; color: #475569; }
-        .right { text-align: right; }
-        .muted { color: #64748b; font-size: 8px; }
-        .nota { margin-top: 6px; font-size: 8px; color: #64748b; }
-      `
-      : `
-        body { font-family: Arial, sans-serif; padding: 32px; color: #0f172a; font-size: 13px; }
-        h1 { font-size: 18px; margin-bottom: 4px; }
-        h2 { font-size: 16px; margin: 12px 0 6px; }
-        p { margin: 2px 0; color: #475569; }
-        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
-        .box { border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-top: 12px; }
-        .row { display: flex; justify-content: space-between; margin-bottom: 8px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 12px; }
-        th, td { padding: 8px 6px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
-        th { text-align: left; text-transform: uppercase; font-size: 11px; color: #475569; }
-        .right { text-align: right; }
-        .muted { color: #64748b; font-size: 11px; }
-        .nota { margin-top: 12px; font-size: 11px; color: #64748b; }
-      `;
+  const estilos = `
+    :root {
+      --ticket-width: 80mm;
+      --ticket-padding: 6mm;
+    }
+    * { box-sizing: border-box; }
+    @page { size: var(--ticket-width) auto; margin: 0; }
+    html, body { width: var(--ticket-width); margin: 0; padding: 0; }
+    @media print {
+      html, body { width: var(--ticket-width); }
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+    body {
+      font-family: "Courier New", Courier, monospace;
+      padding: var(--ticket-padding);
+      color: #0f172a;
+      font-size: 10px;
+      line-height: 1.2;
+      background: #fff;
+    }
+    h1 { font-size: 11px; text-transform: uppercase; margin: 0; }
+    h2 { font-size: 10px; margin: 6px 0; text-transform: uppercase; }
+    p { margin: 2px 0; }
+    .box { border-top: 1px dashed #94a3b8; margin-top: 6px; padding-top: 6px; }
+    .row { display: flex; justify-content: space-between; margin-bottom: 3px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 9px; }
+    th, td { padding: 3px 0; border-bottom: 1px dashed #cbd5f5; vertical-align: top; }
+    th { text-align: left; text-transform: uppercase; font-size: 8px; color: #475569; }
+    .right { text-align: right; }
+    .muted { color: #64748b; font-size: 8px; }
+    .nota { margin-top: 6px; font-size: 8px; color: #64748b; }
+  `;
 
   printWindow.document.write(`
     <!doctype html>
@@ -174,7 +161,7 @@ export const printComprobante = ({
         <style>${estilos}</style>
       </head>
       <body>
-        <div class="${formato === 'POS' ? '' : 'header'}">
+        <div>
           <div>
             <h1>${infoEmpresa.nombre}</h1>
             <p>${infoEmpresa.nit}</p>
@@ -183,13 +170,8 @@ export const printComprobante = ({
             ${infoEmpresa.telefono ? `<p>Tel: ${infoEmpresa.telefono}</p>` : ''}
             ${resolucion ? `<p class="muted">${resolucion}</p>` : ''}
           </div>
-          ${
-            formato === 'CARTA'
-              ? `<div class="right"><p>${tituloDocumento}</p><p>${fechaFormateada}</p></div>`
-              : ''
-          }
         </div>
-        ${formato === 'POS' ? `<h2>${tituloDocumento}</h2>` : ''}
+        <h2>${tituloDocumento}</h2>
         <p><strong>${numero}</strong></p>
         <p>Fecha: ${fechaFormateada}</p>
         <p>Cliente: ${clienteNombre}</p>
