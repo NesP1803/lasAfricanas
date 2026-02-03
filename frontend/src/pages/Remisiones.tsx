@@ -329,7 +329,7 @@ export default function Remisiones() {
               disabled={!selectedRemision}
             >
               <FileText size={14} />
-              Carta
+              Imprimir Carta
             </button>
           </div>
         </div>

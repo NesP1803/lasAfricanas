@@ -56,7 +56,6 @@ type DocumentoGenerado = {
 
 type DocumentoPreview = {
   tipo: 'COTIZACION' | 'REMISION' | 'FACTURA';
-  formato: 'POS' | 'CARTA';
   numero: string;
   fecha: string;
   clienteNombre: string;
@@ -164,10 +163,7 @@ const buildCartItemsFromDetalles = (
     };
   });
 
-const buildDocumentoPreviewFromVenta = (
-  venta: Venta,
-  formato: 'POS' | 'CARTA' = 'POS'
-): DocumentoPreview => {
+const buildDocumentoPreviewFromVenta = (venta: Venta): DocumentoPreview => {
   const detallesPreview: DocumentoDetalle[] =
     venta.detalles?.map((detalle) => ({
       descripcion: detalle.producto_nombre ?? 'Producto',
@@ -181,7 +177,6 @@ const buildDocumentoPreviewFromVenta = (
 
   return {
     tipo: venta.tipo_comprobante as DocumentoPreview['tipo'],
-    formato,
     numero: venta.numero_comprobante || `#${venta.id}`,
     fecha: venta.facturada_at || venta.fecha,
     clienteNombre: venta.cliente_info?.nombre ?? 'Cliente general',
@@ -578,7 +573,7 @@ export default function Ventas() {
         cliente: facturada.cliente_info?.nombre ?? 'Cliente general',
         total: currencyFormatter.format(Number(facturada.total)),
       });
-      setDocumentoPreview(buildDocumentoPreviewFromVenta(facturada, 'POS'));
+      setDocumentoPreview(buildDocumentoPreviewFromVenta(facturada));
       setMensaje('Venta facturada correctamente.');
       cargarPendientesCaja();
     } catch (error) {
@@ -920,7 +915,7 @@ export default function Ventas() {
         cliente: clienteNombre,
         total: currencyFormatter.format(totals.totalAplicado),
       });
-      setDocumentoPreview(buildDocumentoPreviewFromVenta(venta, 'POS'));
+      setDocumentoPreview(buildDocumentoPreviewFromVenta(venta));
       resetDescuentoState();
       setMensaje('Factura generada correctamente.');
     } catch (error) {
@@ -1001,7 +996,6 @@ export default function Ventas() {
 
       setDocumentoPreview({
         tipo,
-        formato: 'POS',
         numero: numeroComprobante,
         fecha: new Date().toISOString(),
         clienteNombre,
@@ -1665,28 +1659,6 @@ export default function Ventas() {
             <div className="mt-4 flex flex-wrap items-center gap-2 text-xs font-semibold uppercase text-emerald-700">
               <button
                 type="button"
-                onClick={() =>
-                  setDocumentoPreview((prev) =>
-                    prev ? { ...prev, formato: 'POS' } : prev
-                  )
-                }
-                className="rounded border border-emerald-300 px-3 py-1"
-              >
-                Ver POS
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  setDocumentoPreview((prev) =>
-                    prev ? { ...prev, formato: 'CARTA' } : prev
-                  )
-                }
-                className="rounded border border-emerald-300 px-3 py-1"
-              >
-                Ver carta
-              </button>
-              <button
-                type="button"
                 onClick={() => setDocumentoPreview(null)}
                 className="rounded border border-emerald-300 px-3 py-1"
               >
@@ -1711,12 +1683,11 @@ export default function Ventas() {
               <div className="text-center">
                 <p className="text-xs uppercase text-slate-500">Documento generado</p>
                 <h3 className="text-lg font-semibold text-slate-800">
-                  {documentoPreview.tipo} ({documentoPreview.formato})
+                  {documentoPreview.tipo}
                 </h3>
               </div>
               <div className="max-h-[70vh] overflow-auto rounded border border-slate-200 bg-slate-50 p-4">
                 <ComprobanteTemplate
-                  formato={documentoPreview.formato}
                   tipo={documentoPreview.tipo}
                   numero={documentoPreview.numero}
                   fecha={documentoPreview.fecha}
@@ -1739,32 +1710,9 @@ export default function Ventas() {
               <div className="flex flex-wrap justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() =>
-                    setDocumentoPreview((prev) =>
-                      prev ? { ...prev, formato: 'POS' } : prev
-                    )
-                  }
-                  className="rounded border border-slate-300 px-4 py-2 text-sm text-slate-600"
-                >
-                  POS
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setDocumentoPreview((prev) =>
-                      prev ? { ...prev, formato: 'CARTA' } : prev
-                    )
-                  }
-                  className="rounded border border-slate-300 px-4 py-2 text-sm text-slate-600"
-                >
-                  Carta
-                </button>
-                <button
-                  type="button"
                   onClick={() => {
                     if (!documentoPreview) return;
                     printComprobante({
-                      formato: 'POS',
                       tipo: documentoPreview.tipo,
                       numero: documentoPreview.numero,
                       fecha: documentoPreview.fecha,

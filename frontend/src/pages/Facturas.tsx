@@ -329,7 +329,7 @@ export default function Facturas() {
               disabled={!selectedFactura}
             >
               <FileText size={14} />
-              Carta
+              Imprimir Carta
             </button>
           </div>
         </div>
