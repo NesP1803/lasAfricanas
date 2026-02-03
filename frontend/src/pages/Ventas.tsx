@@ -911,6 +911,7 @@ export default function Ventas() {
         cliente: clienteNombre,
         total: currencyFormatter.format(totals.totalAplicado),
       });
+      setDocumentoPreview(buildDocumentoPreviewFromVenta(venta, 'POS'));
       resetDescuentoState();
       setMensaje('Factura generada correctamente.');
     } catch (error) {
