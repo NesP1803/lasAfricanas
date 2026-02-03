@@ -996,10 +996,8 @@ export default function Taller() {
                     <tr>
                       <th className="px-4 py-3">Placa</th>
                       <th className="px-4 py-3">Marca</th>
-                      <th className="px-4 py-3">Modelo</th>
+                      <th className="px-4 py-3">Fecha ingreso</th>
                       <th className="px-4 py-3">Mecánico</th>
-                      <th className="px-4 py-3">Proveedor</th>
-                      <th className="px-4 py-3">Cliente</th>
                       <th className="px-4 py-3">Estado</th>
                     </tr>
                   </thead>
@@ -1015,10 +1013,8 @@ export default function Taller() {
                       >
                         <td className="px-4 py-3 font-medium text-slate-800">{moto.placa}</td>
                         <td className="px-4 py-3">{moto.marca}</td>
-                        <td className="px-4 py-3">{moto.modelo || '—'}</td>
+                        <td className="px-4 py-3">{moto.fecha_ingreso || '—'}</td>
                         <td className="px-4 py-3">{moto.mecanico_nombre || '—'}</td>
-                        <td className="px-4 py-3">{moto.proveedor_nombre || '—'}</td>
-                        <td className="px-4 py-3">{moto.cliente_nombre || '—'}</td>
                         <td className="px-4 py-3">
                           <span
                             className={`rounded-full px-2 py-1 text-xs font-semibold ${
