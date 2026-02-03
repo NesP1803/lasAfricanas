@@ -12,6 +12,7 @@ import { configuracionAPI } from '../api/configuracion';
 import { ventasApi, type Venta, type VentaListItem } from '../api/ventas';
 import ComprobanteTemplate from '../components/ComprobanteTemplate';
 import type { ConfiguracionEmpresa, ConfiguracionFacturacion } from '../types';
+import { printComprobante } from '../utils/printComprobante';
 
 type DocumentoTipo = 'POS' | 'CARTA';
 
@@ -329,7 +330,7 @@ export default function Facturas() {
               disabled={!selectedFactura}
             >
               <FileText size={14} />
-              Carta
+              Imprimir Carta
             </button>
           </div>
         </div>
@@ -571,6 +572,47 @@ export default function Facturas() {
                 </button>
                 <button
                   type="button"
+                  onClick={() => {
+                    if (!documento) return;
+                    const detalle = detalleFactura;
+                    const detalles = detalle?.detalles?.map((item) => ({
+                      descripcion: item.producto_nombre ?? 'Producto',
+                      codigo: item.producto_codigo ?? '',
+                      cantidad: Number(item.cantidad),
+                      precioUnitario: Number(item.precio_unitario),
+                      descuento: Number(item.descuento_unitario),
+                      ivaPorcentaje: Number(item.iva_porcentaje),
+                      total: Number(item.total),
+                    }));
+                    printComprobante({
+                      formato: documento.tipo,
+                      tipo: 'FACTURA',
+                      numero: `${documento.factura.prefijo} ${documento.factura.numero}`,
+                      fecha: detalle?.fecha ?? documento.factura.fechaIso,
+                      clienteNombre: detalle?.cliente_info?.nombre ?? documento.factura.cliente,
+                      clienteDocumento:
+                        detalle?.cliente_info?.numero_documento ?? documento.factura.nitCc,
+                      medioPago: detalle?.medio_pago_display ?? documento.factura.medioPagoDisplay,
+                      estado: detalle?.estado_display ?? documento.factura.estadoDisplay,
+                      detalles: detalles ?? [],
+                      subtotal: detalle ? Number(detalle.subtotal) : documento.factura.total,
+                      descuento: detalle ? Number(detalle.descuento_valor) : 0,
+                      iva: detalle ? Number(detalle.iva) : 0,
+                      total: detalle ? Number(detalle.total) : documento.factura.total,
+                      efectivoRecibido:
+                        detalle?.efectivo_recibido !== undefined &&
+                        detalle?.efectivo_recibido !== null
+                          ? Number(detalle.efectivo_recibido)
+                          : undefined,
+                      cambio:
+                        detalle?.cambio !== undefined && detalle?.cambio !== null
+                          ? Number(detalle.cambio)
+                          : undefined,
+                      notas: facturacion?.notas_factura,
+                      resolucion: facturacion?.resolucion,
+                      empresa,
+                    });
+                  }}
                   className="flex items-center gap-2 rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
                 >
                   <Printer size={16} />

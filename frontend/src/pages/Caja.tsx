@@ -20,7 +20,6 @@ export default function Caja() {
   const [cargando, setCargando] = useState(false);
   const [facturandoId, setFacturandoId] = useState<number | null>(null);
   const [documento, setDocumento] = useState<Venta | null>(null);
-  const [formato, setFormato] = useState<'POS' | 'CARTA'>('POS');
   const [empresa, setEmpresa] = useState<ConfiguracionEmpresa | null>(null);
   const [facturacion, setFacturacion] = useState<ConfiguracionFacturacion | null>(null);
 
@@ -57,7 +56,6 @@ export default function Caja() {
         message: `Venta ${facturada.numero_comprobante ?? facturada.id} facturada.`,
       });
       setDocumento(facturada);
-      setFormato('POS');
       cargarPendientes();
     } catch (error) {
       showNotification({
@@ -85,7 +83,6 @@ export default function Caja() {
   const handleImprimir = () => {
     if (!documento) return;
     printComprobante({
-      formato: 'POS',
       tipo: documento.tipo_comprobante as 'FACTURA' | 'REMISION' | 'COTIZACION',
       numero: documento.numero_comprobante || `#${documento.id}`,
       fecha: documento.facturada_at || documento.fecha,
@@ -208,7 +205,6 @@ export default function Caja() {
               </div>
               <div className="max-h-[70vh] overflow-auto rounded border border-slate-200 bg-slate-50 p-4">
                 <ComprobanteTemplate
-                  formato={formato}
                   tipo={documento.tipo_comprobante as 'FACTURA' | 'REMISION' | 'COTIZACION'}
                   numero={documento.numero_comprobante || `#${documento.id}`}
                   fecha={documento.facturada_at || documento.fecha}
@@ -238,20 +234,6 @@ export default function Caja() {
                 />
               </div>
               <div className="flex flex-wrap justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setFormato('POS')}
-                  className="rounded border border-slate-300 px-4 py-2 text-sm text-slate-600"
-                >
-                  POS
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFormato('CARTA')}
-                  className="rounded border border-slate-300 px-4 py-2 text-sm text-slate-600"
-                >
-                  Carta
-                </button>
                 <button
                   type="button"
                   onClick={handleImprimir}
