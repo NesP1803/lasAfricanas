@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ventasApi, type Venta, type VentaListItem } from '../api/ventas';
+import { ventasApi, type VentaListItem } from '../api/ventas';
 import { useNotification } from '../contexts/NotificationContext';
 
 const currencyFormatter = new Intl.NumberFormat('es-CO', {
@@ -12,10 +12,8 @@ const currencyFormatter = new Intl.NumberFormat('es-CO', {
 export default function Caja() {
   const { showNotification } = useNotification();
   const [pendientes, setPendientes] = useState<VentaListItem[]>([]);
-  const [detalle, setDetalle] = useState<Venta | null>(null);
   const [cargando, setCargando] = useState(false);
-  const [cargandoDetalle, setCargandoDetalle] = useState(false);
-  const [cargandoFacturar, setCargandoFacturar] = useState(false);
+  const [facturandoId, setFacturandoId] = useState<number | null>(null);
 
   const cargarPendientes = () => {
     setCargando(true);
@@ -30,25 +28,14 @@ export default function Caja() {
     cargarPendientes();
   }, []);
 
-  const handleSeleccionar = (ventaId: number) => {
-    setCargandoDetalle(true);
-    ventasApi
-      .getVenta(ventaId)
-      .then((data) => setDetalle(data))
-      .catch(() => setDetalle(null))
-      .finally(() => setCargandoDetalle(false));
-  };
-
-  const handleFacturar = async () => {
-    if (!detalle) return;
-    setCargandoFacturar(true);
+  const handleFacturar = async (ventaId: number) => {
+    setFacturandoId(ventaId);
     try {
-      const facturada = await ventasApi.facturarEnCaja(detalle.id);
+      const facturada = await ventasApi.facturarEnCaja(ventaId);
       showNotification({
         type: 'success',
         message: `Venta ${facturada.numero_comprobante ?? facturada.id} facturada.`,
       });
-      setDetalle(facturada);
       cargarPendientes();
     } catch (error) {
       showNotification({
@@ -56,7 +43,7 @@ export default function Caja() {
         message: 'No se pudo facturar la venta.',
       });
     } finally {
-      setCargandoFacturar(false);
+      setFacturandoId(null);
     }
   };
 
@@ -123,10 +110,11 @@ export default function Caja() {
                   <td className="px-3 py-2 text-right">
                     <button
                       type="button"
-                      onClick={() => handleSeleccionar(venta.id)}
-                      className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-semibold uppercase text-slate-600 hover:bg-slate-50"
+                      onClick={() => handleFacturar(venta.id)}
+                      disabled={facturandoId === venta.id}
+                      className="rounded-lg bg-emerald-600 px-3 py-1 text-xs font-semibold uppercase text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
                     >
-                      Ver detalle
+                      {facturandoId === venta.id ? 'Facturando...' : 'Facturar'}
                     </button>
                   </td>
                 </tr>
@@ -134,87 +122,6 @@ export default function Caja() {
             </tbody>
           </table>
         </div>
-      </section>
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase text-slate-500">
-              Detalle de venta
-            </p>
-            <h3 className="text-lg font-semibold text-slate-900">
-              {detalle?.numero_comprobante || (detalle ? `Venta #${detalle.id}` : 'Selecciona una venta')}
-            </h3>
-          </div>
-          <button
-            type="button"
-            onClick={handleFacturar}
-            disabled={!detalle || cargandoFacturar}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition disabled:cursor-not-allowed disabled:bg-slate-300"
-          >
-            {cargandoFacturar ? 'Facturando...' : 'Facturar'}
-          </button>
-        </div>
-        {cargandoDetalle && (
-          <p className="mt-4 text-sm text-slate-500">Cargando detalle...</p>
-        )}
-        {!cargandoDetalle && detalle && (
-          <div className="mt-4 space-y-4">
-            <div className="grid gap-3 md:grid-cols-3">
-              <div className="rounded-lg border border-slate-100 bg-slate-50 p-3 text-sm">
-                <p className="text-xs text-slate-500">Cliente</p>
-                <p className="font-semibold text-slate-700">
-                  {detalle.cliente_info?.nombre ?? detalle.cliente}
-                </p>
-              </div>
-              <div className="rounded-lg border border-slate-100 bg-slate-50 p-3 text-sm">
-                <p className="text-xs text-slate-500">Total</p>
-                <p className="font-semibold text-slate-700">
-                  {currencyFormatter.format(Number(detalle.total))}
-                </p>
-              </div>
-              <div className="rounded-lg border border-slate-100 bg-slate-50 p-3 text-sm">
-                <p className="text-xs text-slate-500">Estado</p>
-                <p className="font-semibold text-slate-700">{detalle.estado_display}</p>
-              </div>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-left text-sm">
-                <thead className="bg-slate-100 text-xs uppercase text-slate-500">
-                  <tr>
-                    <th className="px-3 py-2">Producto</th>
-                    <th className="px-3 py-2 text-right">Cantidad</th>
-                    <th className="px-3 py-2 text-right">Precio</th>
-                    <th className="px-3 py-2 text-right">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {detalle.detalles.map((item) => (
-                    <tr key={item.id} className="border-b border-slate-100">
-                      <td className="px-3 py-2 text-slate-700">
-                        {item.producto_nombre || item.producto}
-                      </td>
-                      <td className="px-3 py-2 text-right text-slate-600">
-                        {item.cantidad}
-                      </td>
-                      <td className="px-3 py-2 text-right text-slate-600">
-                        {currencyFormatter.format(Number(item.precio_unitario))}
-                      </td>
-                      <td className="px-3 py-2 text-right font-semibold text-slate-700">
-                        {currencyFormatter.format(Number(item.total))}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-        {!cargandoDetalle && !detalle && (
-          <p className="mt-4 text-sm text-slate-500">
-            Selecciona una venta pendiente para visualizarla aquí.
-          </p>
-        )}
       </section>
     </div>
   );

@@ -167,10 +167,18 @@ export default function Ventas() {
       .catch(() => setProductos([]));
   }, [busquedaProducto, mostrarBusqueda]);
 
-  const ordenarPendientes = (data: VentaListItem[]) =>
-    [...data]
-      .filter((venta) => venta.estado === 'ENVIADA_A_CAJA')
+  const ordenarPendientes = (data: VentaListItem[]) => {
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+    return [...data]
+      .filter((venta) => {
+        if (venta.estado !== 'ENVIADA_A_CAJA') return false;
+        const fechaVenta = new Date(venta.fecha);
+        fechaVenta.setHours(0, 0, 0, 0);
+        return fechaVenta.getTime() === hoy.getTime();
+      })
       .sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
+  };
 
   useEffect(() => {
     if (!esCaja) return;
