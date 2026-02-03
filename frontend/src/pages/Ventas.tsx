@@ -17,7 +17,7 @@ import {
   type Producto,
   type ProductoList,
 } from '../api/inventario';
-import { ventasApi, type Venta } from '../api/ventas';
+import { ventasApi, type Venta, type VentaListItem } from '../api/ventas';
 import { configuracionAPI } from '../api/configuracion';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../contexts/NotificationContext';
@@ -147,6 +147,11 @@ export default function Ventas() {
   const [guardandoBorrador, setGuardandoBorrador] = useState(false);
   const [enviandoCaja, setEnviandoCaja] = useState(false);
   const [ventaBorrador, setVentaBorrador] = useState<Venta | null>(null);
+  const [pendientesCaja, setPendientesCaja] = useState<VentaListItem[]>([]);
+  const [cargandoPendientesCaja, setCargandoPendientesCaja] = useState(false);
+  const [fechaCaja, setFechaCaja] = useState(
+    () => new Date().toISOString().split('T')[0]
+  );
   const [mostrarPermiso, setMostrarPermiso] = useState(false);
   const [usuariosAprobadores, setUsuariosAprobadores] = useState<{ id: number; nombre: string }[]>([]);
   const [cargandoAprobadores, setCargandoAprobadores] = useState(false);
@@ -221,6 +226,16 @@ export default function Ventas() {
       setMostrarPermiso(false);
     }
   }, [esAdmin]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      const hoy = new Date().toISOString().split('T')[0];
+      setFechaCaja((prev) => (prev === hoy ? prev : hoy));
+    }, 60000);
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, []);
 
   useEffect(() => {
     if (!user?.id || esAdmin) return;
@@ -393,6 +408,30 @@ export default function Ventas() {
       totalAplicado,
     };
   }, [cartItems, descuentoAutorizado, descuentoGeneral]);
+
+  const cargarPendientesCaja = useCallback(() => {
+    setCargandoPendientesCaja(true);
+    ventasApi
+      .getPendientesCaja()
+      .then((data) => setPendientesCaja(data))
+      .catch(() => setPendientesCaja([]))
+      .finally(() => setCargandoPendientesCaja(false));
+  }, []);
+
+  useEffect(() => {
+    if (!esCaja) {
+      setPendientesCaja([]);
+      return;
+    }
+    cargarPendientesCaja();
+  }, [cargarPendientesCaja, esCaja]);
+
+  const pendientesCajaHoy = useMemo(() => {
+    return pendientesCaja.filter((venta) => {
+      const fechaVenta = new Date(venta.fecha).toISOString().split('T')[0];
+      return fechaVenta === fechaCaja;
+    });
+  }, [fechaCaja, pendientesCaja]);
 
   const handleBuscarCliente = async () => {
     if (ventaBloqueada) return;
@@ -685,6 +724,7 @@ export default function Ventas() {
         type: 'success',
         message: 'Venta enviada a caja.',
       });
+      cargarPendientesCaja();
     } catch (error) {
       setMensaje('No se pudo enviar a caja. Revisa la conexión.');
       showNotification({
@@ -1120,6 +1160,75 @@ export default function Ventas() {
         <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
           {mensaje}
         </div>
+      )}
+
+      {esCaja && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase text-slate-500">
+                Caja
+              </p>
+              <h2 className="text-lg font-semibold text-slate-900">
+                CAJA - Ventas pendientes por facturar
+              </h2>
+            </div>
+            <button
+              type="button"
+              onClick={cargarPendientesCaja}
+              className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50"
+            >
+              Actualizar
+            </button>
+          </div>
+          <div className="mt-4 overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-slate-100 text-xs uppercase text-slate-500">
+                <tr>
+                  <th className="px-3 py-2">Documento</th>
+                  <th className="px-3 py-2">Cliente</th>
+                  <th className="px-3 py-2">Hora</th>
+                  <th className="px-3 py-2 text-right">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cargandoPendientesCaja && (
+                  <tr>
+                    <td colSpan={4} className="px-3 py-6 text-center text-slate-500">
+                      Cargando pendientes...
+                    </td>
+                  </tr>
+                )}
+                {!cargandoPendientesCaja && pendientesCajaHoy.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="px-3 py-6 text-center text-slate-500">
+                      No hay ventas pendientes.
+                    </td>
+                  </tr>
+                )}
+                {pendientesCajaHoy.map((venta) => (
+                  <tr key={venta.id} className="border-b border-slate-100">
+                    <td className="px-3 py-2 font-semibold text-slate-700">
+                      {venta.numero_comprobante || `#${venta.id}`}
+                    </td>
+                    <td className="px-3 py-2 text-slate-600">
+                      {venta.cliente_nombre}
+                    </td>
+                    <td className="px-3 py-2 text-slate-500">
+                      {new Date(venta.fecha).toLocaleTimeString('es-CO', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </td>
+                    <td className="px-3 py-2 text-right font-semibold text-slate-700">
+                      {currencyFormatter.format(Number(venta.total))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
       )}
 
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
