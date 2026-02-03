@@ -5,8 +5,8 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Sum, Count, Q
-from django.utils import timezone
 from django.db import transaction
+from django.utils import timezone
 from datetime import datetime, time
 from decimal import Decimal
 
@@ -501,7 +501,11 @@ class CajaViewSet(viewsets.GenericViewSet):
         if permission_response:
             return permission_response
 
-        ventas = self.get_queryset().filter(estado='ENVIADA_A_CAJA').order_by(
+        hoy = timezone.localdate()
+        ventas = self.get_queryset().filter(
+            estado='ENVIADA_A_CAJA',
+            enviada_a_caja_at__date=hoy,
+        ).order_by(
             'enviada_a_caja_at',
             'fecha',
             'id',
