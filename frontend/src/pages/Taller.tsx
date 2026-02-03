@@ -24,6 +24,15 @@ import {
   normalizeModuleAccess,
 } from '../store/moduleAccess';
 
+const unidadPermiteDecimales = (unidadMedida?: string) =>
+  Boolean(unidadMedida && unidadMedida !== 'N/A');
+
+const getCantidadStep = (unidadMedida?: string) =>
+  unidadPermiteDecimales(unidadMedida) ? 0.01 : 1;
+
+const getCantidadMin = (unidadMedida?: string) =>
+  unidadPermiteDecimales(unidadMedida) ? 0.01 : 1;
+
 const parseListado = <T,>(data: PaginatedResponse<T> | T[]) => {
   if (Array.isArray(data)) {
     return { items: data, count: data.length };
@@ -282,7 +291,9 @@ export default function Taller() {
       });
       return;
     }
-    const cantidad = cantidades[productoId] ?? 1;
+    const repuesto = repuestos.find((item) => item.id === productoId);
+    const min = getCantidadMin(repuesto?.unidad_medida);
+    const cantidad = Math.max(min, cantidades[productoId] ?? min);
     try {
       const orden = await tallerApi.agregarRepuesto(ordenActual.id, {
         producto: productoId,
@@ -300,7 +311,7 @@ export default function Taller() {
       if (searchRepuesto) {
         await buscarRepuestos(searchRepuesto);
       }
-      setCantidades((prev) => ({ ...prev, [productoId]: 1 }));
+      setCantidades((prev) => ({ ...prev, [productoId]: min }));
       setRepuestoModalOpen(false);
       showNotification({
         message: 'Repuesto agregado correctamente.',
@@ -1409,14 +1420,20 @@ export default function Taller() {
                           <td className="px-3 py-2">
                             <input
                               type="number"
-                              min={1}
+                              min={getCantidadMin(item.unidad_medida)}
+                              step={getCantidadStep(item.unidad_medida)}
                               value={cantidades[item.id] ?? 1}
-                              onChange={(event) =>
+                              onChange={(event) => {
+                                const min = getCantidadMin(item.unidad_medida);
+                                const rawValue = Number(event.target.value);
+                                const value = Number.isFinite(rawValue)
+                                  ? Math.max(min, rawValue)
+                                  : min;
                                 setCantidades((prev) => ({
                                   ...prev,
-                                  [item.id]: Number(event.target.value) || 1,
-                                }))
-                              }
+                                  [item.id]: value,
+                                }));
+                              }}
                               className="w-20 rounded-md border border-slate-200 px-2 py-1 text-xs"
                             />
                           </td>

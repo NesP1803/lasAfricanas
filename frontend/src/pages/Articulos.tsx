@@ -412,6 +412,18 @@ export default function Articulos() {
     );
   };
 
+  const formatStockValue = (stock: string, unidadMedida?: string) => {
+    const numeric = Number(stock);
+    if (!Number.isFinite(numeric)) {
+      return stock;
+    }
+    if (unidadMedida === 'N/A') {
+      return Math.trunc(numeric).toString();
+    }
+    const hasDecimals = Math.abs(numeric % 1) > 0;
+    return hasDecimals ? numeric.toFixed(2) : numeric.toFixed(0);
+  };
+
   const totalPages = Math.max(1, Math.ceil(totalRegistros / PAGE_SIZE));
 
   return (
@@ -654,7 +666,7 @@ export default function Articulos() {
                       {currency.format(Number(producto.precio_venta))}
                     </td>
                     <td className="px-4 py-3 text-right font-semibold text-slate-700">
-                      {producto.stock}
+                      {formatStockValue(producto.stock, producto.unidad_medida)}
                     </td>
                     <td className="px-4 py-3">{renderEstadoStock(producto.stock_estado)}</td>
                   </tr>
@@ -703,7 +715,7 @@ export default function Articulos() {
                     </td>
                     <td className="px-4 py-3 text-slate-500">{producto.codigo}</td>
                     <td className="px-4 py-3 text-right font-semibold text-slate-700">
-                      {producto.stock}
+                      {formatStockValue(producto.stock, producto.unidad_medida)}
                     </td>
                     <td className="px-4 py-3">{renderEstadoStock(producto.stock_estado)}</td>
                   </tr>
@@ -770,7 +782,9 @@ export default function Articulos() {
                 <div className="rounded-lg border border-slate-100 bg-slate-50 p-4 text-sm text-slate-700">
                   <p className="font-semibold">{productoBaja.nombre}</p>
                   <p className="text-slate-500">Código: {productoBaja.codigo}</p>
-                  <p className="text-slate-500">Stock actual: {productoBaja.stock}</p>
+                  <p className="text-slate-500">
+                    Stock actual: {formatStockValue(productoBaja.stock, productoBaja.unidad_medida)}
+                  </p>
                 </div>
               )}
 
