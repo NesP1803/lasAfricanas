@@ -227,28 +227,16 @@ export default function Configuracion() {
   const plantillaOptions = useMemo(
     () => [
       {
-        id: "plantilla_factura_carta",
-        label: "Factura de venta · Carta",
-      },
-      {
         id: "plantilla_factura_tirilla",
-        label: "Factura de venta · Tirilla",
-      },
-      {
-        id: "plantilla_remision_carta",
-        label: "Remisión · Carta",
+        label: "Factura de venta · POS",
       },
       {
         id: "plantilla_remision_tirilla",
-        label: "Remisión · Tirilla",
-      },
-      {
-        id: "plantilla_nota_credito_carta",
-        label: "Nota crédito · Carta",
+        label: "Remisión · POS",
       },
       {
         id: "plantilla_nota_credito_tirilla",
-        label: "Nota crédito · Tirilla",
+        label: "Nota crédito · POS",
       },
     ],
     []
