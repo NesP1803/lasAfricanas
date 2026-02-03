@@ -17,7 +17,12 @@ import {
   type Producto,
   type ProductoList,
 } from '../api/inventario';
-import { ventasApi, type Venta } from '../api/ventas';
+import {
+  ventasApi,
+  type DetalleVenta,
+  type Venta,
+  type VentaListItem,
+} from '../api/ventas';
 import { configuracionAPI } from '../api/configuracion';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../contexts/NotificationContext';
@@ -91,8 +96,16 @@ const currencyFormatter = new Intl.NumberFormat('es-CO', {
 });
 
 const parseNumber = (value: string) => {
-  const normalized = value.replace(/[^\d.-]/g, '');
-  const parsed = Number(normalized);
+  const normalized = value.replace(/[^\d,.-]/g, '');
+  let cleaned = normalized;
+  if (normalized.includes(',') && normalized.includes('.')) {
+    cleaned = normalized.replace(/\./g, '').replace(',', '.');
+  } else if (normalized.includes(',')) {
+    cleaned = normalized.replace(',', '.');
+  } else if (/\.\d{3}(\D|$)/.test(normalized)) {
+    cleaned = normalized.replace(/\./g, '');
+  }
+  const parsed = Number(cleaned);
   return Number.isNaN(parsed) ? 0 : parsed;
 };
 
@@ -117,6 +130,27 @@ const normalizeCantidad = (cantidad: number, unidadMedida?: string) => {
   }
   return Math.round(clamped);
 };
+
+const buildCartItemsFromDetalles = (detalles: DetalleVenta[]): CartItem[] =>
+  detalles.map((detalle, index) => {
+    const precioUnitario = Number(detalle.precio_unitario || 0);
+    const descuentoUnitario = Number(detalle.descuento_unitario || 0);
+    const descuentoPorcentaje =
+      precioUnitario > 0
+        ? Math.min(100, (descuentoUnitario / precioUnitario) * 100)
+        : 0;
+    return {
+      id: detalle.producto || index,
+      codigo: detalle.producto_codigo ?? '',
+      nombre: detalle.producto_nombre ?? 'Producto',
+      ivaPorcentaje: Number(detalle.iva_porcentaje || 0),
+      precioUnitario,
+      stock: 0,
+      cantidad: Number(detalle.cantidad || 0),
+      descuentoPorcentaje,
+      unidadMedida: 'N/A',
+    };
+  });
 
 export default function Ventas() {
   const { user } = useAuth();
@@ -146,7 +180,16 @@ export default function Ventas() {
   const [productoInfo, setProductoInfo] = useState<ProductoList | Producto | null>(null);
   const [guardandoBorrador, setGuardandoBorrador] = useState(false);
   const [enviandoCaja, setEnviandoCaja] = useState(false);
+  const [facturandoCaja, setFacturandoCaja] = useState(false);
   const [ventaBorrador, setVentaBorrador] = useState<Venta | null>(null);
+  const [pendientesCaja, setPendientesCaja] = useState<VentaListItem[]>([]);
+  const [cargandoPendientesCaja, setCargandoPendientesCaja] = useState(false);
+  const [cargandoVentaCajaId, setCargandoVentaCajaId] = useState<number | null>(
+    null
+  );
+  const [fechaCaja, setFechaCaja] = useState(
+    () => new Date().toISOString().split('T')[0]
+  );
   const [mostrarPermiso, setMostrarPermiso] = useState(false);
   const [usuariosAprobadores, setUsuariosAprobadores] = useState<{ id: number; nombre: string }[]>([]);
   const [cargandoAprobadores, setCargandoAprobadores] = useState(false);
@@ -221,6 +264,16 @@ export default function Ventas() {
       setMostrarPermiso(false);
     }
   }, [esAdmin]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      const hoy = new Date().toISOString().split('T')[0];
+      setFechaCaja((prev) => (prev === hoy ? prev : hoy));
+    }, 60000);
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, []);
 
   useEffect(() => {
     if (!user?.id || esAdmin) return;
@@ -393,6 +446,84 @@ export default function Ventas() {
       totalAplicado,
     };
   }, [cartItems, descuentoAutorizado, descuentoGeneral]);
+
+  const cargarPendientesCaja = useCallback(() => {
+    setCargandoPendientesCaja(true);
+    ventasApi
+      .getPendientesCaja()
+      .then((data) => setPendientesCaja(data))
+      .catch(() => setPendientesCaja([]))
+      .finally(() => setCargandoPendientesCaja(false));
+  }, []);
+
+  useEffect(() => {
+    if (!esCaja) {
+      setPendientesCaja([]);
+      return;
+    }
+    cargarPendientesCaja();
+  }, [cargarPendientesCaja, esCaja]);
+
+  const pendientesCajaHoy = useMemo(() => {
+    return pendientesCaja.filter((venta) => {
+      const fechaVenta = new Date(venta.fecha).toISOString().split('T')[0];
+      return fechaVenta === fechaCaja;
+    });
+  }, [fechaCaja, pendientesCaja]);
+
+  const handleCargarPendienteCaja = async (ventaId: number) => {
+    if (ventaBloqueada || !esCaja) return;
+    setCargandoVentaCajaId(ventaId);
+    try {
+      const venta = await ventasApi.getVenta(ventaId);
+      setVentaBorrador(venta);
+      setClienteId(venta.cliente);
+      setClienteNombre(venta.cliente_info?.nombre ?? 'Cliente general');
+      setClienteDocumento(venta.cliente_info?.numero_documento ?? '');
+      setMedioPago(venta.medio_pago as typeof medioPago);
+      setEfectivoRecibido(venta.efectivo_recibido ?? '0');
+      setCartItems(buildCartItemsFromDetalles(venta.detalles || []));
+      setDescuentoGeneral(venta.descuento_porcentaje ?? '0');
+      setDescuentoAutorizado(true);
+      setDocumentoGenerado(null);
+      setDocumentoPreview(null);
+      setEstadoSolicitud(null);
+      setMostrarPermiso(false);
+      setSolicitudActivaId(null);
+      setMensaje('Venta cargada desde caja.');
+    } catch (error) {
+      setMensaje('No se pudo cargar la venta de caja.');
+      showNotification({
+        type: 'error',
+        message: 'No se pudo cargar la venta de caja.',
+      });
+    } finally {
+      setCargandoVentaCajaId(null);
+    }
+  };
+
+  const handleFacturarEnCaja = async () => {
+    if (!ventaBorrador || !esCaja) return;
+    setFacturandoCaja(true);
+    try {
+      const facturada = await ventasApi.facturarEnCaja(ventaBorrador.id);
+      resetVentaState();
+      setMensaje('Venta facturada correctamente.');
+      cargarPendientesCaja();
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'No se pudo facturar la venta. Revisa la conexión.';
+      setMensaje(message);
+      showNotification({
+        type: 'error',
+        message,
+      });
+    } finally {
+      setFacturandoCaja(false);
+    }
+  };
 
   const handleBuscarCliente = async () => {
     if (ventaBloqueada) return;
@@ -685,6 +816,7 @@ export default function Ventas() {
         type: 'success',
         message: 'Venta enviada a caja.',
       });
+      cargarPendientesCaja();
     } catch (error) {
       setMensaje('No se pudo enviar a caja. Revisa la conexión.');
       showNotification({
@@ -1041,11 +1173,23 @@ export default function Ventas() {
                   </button>
                   <button
                     type="button"
-                    onClick={handleFacturarDirecto}
-                    disabled={ventaBloqueada || guardandoBorrador}
+                    onClick={
+                      ventaBorrador?.estado === 'ENVIADA_A_CAJA'
+                        ? handleFacturarEnCaja
+                        : handleFacturarDirecto
+                    }
+                    disabled={
+                      ventaBloqueada || guardandoBorrador || facturandoCaja
+                    }
                     className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 py-1.5 text-[11px] font-semibold uppercase text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
                   >
-                    <span>{guardandoBorrador ? 'Facturando...' : 'Facturar'}</span>
+                    <span>
+                      {guardandoBorrador || facturandoCaja
+                        ? 'Facturando...'
+                        : ventaBorrador?.estado === 'ENVIADA_A_CAJA'
+                          ? 'Facturar en caja'
+                          : 'Facturar'}
+                    </span>
                     <FileText size={16} />
                   </button>
                 </>
@@ -1120,6 +1264,88 @@ export default function Ventas() {
         <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
           {mensaje}
         </div>
+      )}
+
+      {esCaja && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase text-slate-500">
+                Caja
+              </p>
+              <h2 className="text-lg font-semibold text-slate-900">
+                CAJA - Ventas pendientes por facturar
+              </h2>
+            </div>
+            <button
+              type="button"
+              onClick={cargarPendientesCaja}
+              className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50"
+            >
+              Actualizar
+            </button>
+          </div>
+          <div className="mt-4 overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-slate-100 text-xs uppercase text-slate-500">
+                <tr>
+                  <th className="px-3 py-2">Documento</th>
+                  <th className="px-3 py-2">Cliente</th>
+                  <th className="px-3 py-2">Hora</th>
+                  <th className="px-3 py-2 text-right">Total</th>
+                  <th className="px-3 py-2 text-right">Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cargandoPendientesCaja && (
+                  <tr>
+                    <td colSpan={5} className="px-3 py-6 text-center text-slate-500">
+                      Cargando pendientes...
+                    </td>
+                  </tr>
+                )}
+                {!cargandoPendientesCaja && pendientesCajaHoy.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="px-3 py-6 text-center text-slate-500">
+                      No hay ventas pendientes.
+                    </td>
+                  </tr>
+                )}
+                {pendientesCajaHoy.map((venta) => (
+                  <tr key={venta.id} className="border-b border-slate-100">
+                    <td className="px-3 py-2 font-semibold text-slate-700">
+                      {venta.numero_comprobante || `#${venta.id}`}
+                    </td>
+                    <td className="px-3 py-2 text-slate-600">
+                      {venta.cliente_nombre}
+                    </td>
+                    <td className="px-3 py-2 text-slate-500">
+                      {new Date(venta.fecha).toLocaleTimeString('es-CO', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </td>
+                    <td className="px-3 py-2 text-right font-semibold text-slate-700">
+                      {currencyFormatter.format(Number(venta.total))}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <button
+                        type="button"
+                        onClick={() => handleCargarPendienteCaja(venta.id)}
+                        disabled={cargandoVentaCajaId === venta.id}
+                        className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-semibold uppercase text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
+                      >
+                        {cargandoVentaCajaId === venta.id
+                          ? 'Cargando...'
+                          : 'Cargar'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
       )}
 
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
