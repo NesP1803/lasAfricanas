@@ -501,7 +501,12 @@ class CajaViewSet(viewsets.GenericViewSet):
         if permission_response:
             return permission_response
 
-        ventas = self.get_queryset().filter(estado='ENVIADA_A_CAJA').order_by(
+        # Solo mostrar ventas enviadas a caja HOY
+        hoy = timezone.localdate()
+        ventas = self.get_queryset().filter(
+            estado='ENVIADA_A_CAJA',
+            enviada_a_caja_at__date=hoy,
+        ).order_by(
             'enviada_a_caja_at',
             'fecha',
             'id',
