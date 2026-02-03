@@ -17,7 +17,7 @@ import {
   type Producto,
   type ProductoList,
 } from '../api/inventario';
-import { ventasApi, type Venta, type VentaListItem } from '../api/ventas';
+import { ventasApi, type Venta } from '../api/ventas';
 import { configuracionAPI } from '../api/configuracion';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../contexts/NotificationContext';
@@ -147,11 +147,6 @@ export default function Ventas() {
   const [guardandoBorrador, setGuardandoBorrador] = useState(false);
   const [enviandoCaja, setEnviandoCaja] = useState(false);
   const [ventaBorrador, setVentaBorrador] = useState<Venta | null>(null);
-  const [pendientesCaja, setPendientesCaja] = useState<VentaListItem[]>([]);
-  const [detalleCaja, setDetalleCaja] = useState<Venta | null>(null);
-  const [cargandoPendientes, setCargandoPendientes] = useState(false);
-  const [cargandoDetalleCaja, setCargandoDetalleCaja] = useState(false);
-  const [facturandoCaja, setFacturandoCaja] = useState(false);
   const [mostrarPermiso, setMostrarPermiso] = useState(false);
   const [usuariosAprobadores, setUsuariosAprobadores] = useState<{ id: number; nombre: string }[]>([]);
   const [cargandoAprobadores, setCargandoAprobadores] = useState(false);
@@ -187,42 +182,6 @@ export default function Ventas() {
       .then((response) => setProductos(response.results ?? []))
       .catch(() => setProductos([]));
   }, [busquedaProducto, mostrarBusqueda]);
-
-  const ordenarPendientes = useCallback((data: VentaListItem[]) => {
-    return [...data].sort((a, b) => {
-      const fechaA = a.enviada_a_caja_at ?? a.fecha;
-      const fechaB = b.enviada_a_caja_at ?? b.fecha;
-      return new Date(fechaA).getTime() - new Date(fechaB).getTime();
-    });
-  }, []);
-
-  const refreshPendientes = useCallback((showLoading = false) => {
-    if (!esCaja) return Promise.resolve();
-    if (showLoading) {
-      setCargandoPendientes(true);
-    }
-    return ventasApi
-      .getPendientesCaja()
-      .then((data) => setPendientesCaja(ordenarPendientes(data)))
-      .catch(() => setPendientesCaja([]))
-      .finally(() => {
-        if (showLoading) {
-          setCargandoPendientes(false);
-        }
-      });
-  }, [esCaja, ordenarPendientes]);
-
-  useEffect(() => {
-    if (!esCaja) return;
-    setPendientesCaja([]);
-    setCargandoPendientes(false);
-    refreshPendientes(false);
-    const interval = window.setInterval(() => {
-      refreshPendientes(false);
-    }, 30000);
-    return () => window.clearInterval(interval);
-  }, [esCaja, refreshPendientes]);
-
 
   useEffect(() => {
     if (!mostrarPermiso) return;
@@ -726,9 +685,6 @@ export default function Ventas() {
         type: 'success',
         message: 'Venta enviada a caja.',
       });
-      if (esCaja) {
-        await refreshPendientes(false);
-      }
     } catch (error) {
       setMensaje('No se pudo enviar a caja. Revisa la conexión.');
       showNotification({
@@ -761,80 +717,6 @@ export default function Ventas() {
       setMensaje('No se pudo facturar. Revisa la conexión.');
     } finally {
       setGuardandoBorrador(false);
-    }
-  };
-
-  const handleSeleccionarPendiente = (ventaId: number) => {
-    setCargandoDetalleCaja(true);
-    ventasApi
-      .getVenta(ventaId)
-      .then((data) => {
-        const nuevosItems: CartItem[] = (data.detalles ?? []).map((detalle) => {
-          const subtotal = Number(detalle.subtotal);
-          const descuentoUnitario = Number(detalle.descuento_unitario);
-          const descuentoPorcentaje =
-            subtotal > 0 ? (descuentoUnitario / subtotal) * 100 : 0;
-          return {
-            id: detalle.producto,
-            codigo: detalle.producto_codigo ?? '',
-            nombre: detalle.producto_nombre ?? '',
-            ivaPorcentaje: Number(detalle.iva_porcentaje),
-            precioUnitario: Number(detalle.precio_unitario),
-            stock: 0,
-            cantidad: Number(detalle.cantidad),
-            descuentoPorcentaje,
-            unidadMedida: detalle.unidad_medida ?? 'N/A',
-          };
-        });
-        setDetalleCaja(data);
-        setVentaBorrador(data);
-        setCartItems(nuevosItems);
-        setClienteId(data.cliente);
-        setClienteNombre(data.cliente_info?.nombre ?? 'Cliente general');
-        setClienteDocumento(data.cliente_info?.numero_documento ?? '');
-        setDescuentoGeneral(data.descuento_porcentaje ?? '0');
-        const medioPagoActual = [
-          'EFECTIVO',
-          'TARJETA',
-          'TRANSFERENCIA',
-          'CREDITO',
-        ].includes(data.medio_pago)
-          ? (data.medio_pago as typeof medioPago)
-          : 'EFECTIVO';
-        setMedioPago(medioPagoActual);
-        setEfectivoRecibido(data.efectivo_recibido ?? '0');
-        setDescuentoAutorizado(true);
-        setEstadoSolicitud(null);
-        setMostrarPermiso(false);
-        setDocumentoGenerado(null);
-        setDocumentoPreview(null);
-        setMensaje('Detalle cargado en la factura.');
-      })
-      .catch(() => setDetalleCaja(null))
-      .finally(() => setCargandoDetalleCaja(false));
-  };
-
-  const handleFacturarPendiente = async () => {
-    if (!detalleCaja) return;
-    if (!validarVenta()) return;
-    setFacturandoCaja(true);
-    try {
-      await ventasApi.actualizarVenta(detalleCaja.id, buildVentaPayload('FACTURA'));
-      const facturada = await ventasApi.facturarEnCaja(detalleCaja.id);
-      setDetalleCaja(facturada);
-      resetDescuentoState();
-      showNotification({
-        type: 'success',
-        message: 'Venta facturada desde caja.',
-      });
-      await refreshPendientes(false);
-    } catch (error) {
-      showNotification({
-        type: 'error',
-        message: 'No se pudo facturar la venta.',
-      });
-    } finally {
-      setFacturandoCaja(false);
     }
   };
 
@@ -1420,92 +1302,6 @@ export default function Ventas() {
           </div>
         </div>
       </section>
-
-      {esCaja && (
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase text-slate-500">
-                Caja
-              </p>
-              <h3 className="text-lg font-semibold text-slate-900">
-                Ventas pendientes por facturar
-              </h3>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                void refreshPendientes(true);
-              }}
-              className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50"
-            >
-              Actualizar
-            </button>
-          </div>
-          <div className="mt-4">
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-left text-sm">
-                <thead className="bg-slate-100 text-xs uppercase text-slate-500">
-                  <tr>
-                    <th className="px-3 py-2">Documento</th>
-                    <th className="px-3 py-2">Cliente</th>
-                    <th className="px-3 py-2">Fecha</th>
-                    <th className="px-3 py-2 text-right">Total</th>
-                    <th className="px-3 py-2 text-right">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {cargandoPendientes && (
-                    <tr>
-                      <td colSpan={5} className="px-3 py-6 text-center text-slate-500">
-                        Cargando pendientes...
-                      </td>
-                    </tr>
-                  )}
-                  {!cargandoPendientes && pendientesCaja.length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="px-3 py-6 text-center text-slate-500">
-                        No hay ventas pendientes.
-                      </td>
-                    </tr>
-                  )}
-                  {pendientesCaja.map((venta) => (
-                    <tr key={venta.id} className="border-b border-slate-100">
-                      <td className="px-3 py-2 font-semibold text-slate-700">
-                        {venta.numero_comprobante || `#${venta.id}`}
-                      </td>
-                      <td className="px-3 py-2 text-slate-600">
-                        {venta.cliente_nombre}
-                      </td>
-                      <td className="px-3 py-2 text-slate-500">
-                        {new Date(venta.enviada_a_caja_at ?? venta.fecha).toLocaleString('es-CO')}
-                      </td>
-                      <td className="px-3 py-2 text-right font-semibold text-slate-700">
-                        {currencyFormatter.format(Number(venta.total))}
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        {venta.estado === 'FACTURADA' ? (
-                          <span className="rounded-lg bg-emerald-100 px-3 py-1 text-xs font-semibold uppercase text-emerald-700">
-                            Facturada
-                          </span>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => handleSeleccionarPendiente(venta.id)}
-                            className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-semibold uppercase text-slate-600 hover:bg-slate-50"
-                          >
-                            Ver detalle
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </section>
-      )}
 
       {documentoGenerado && (
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm text-emerald-900 shadow-sm">
