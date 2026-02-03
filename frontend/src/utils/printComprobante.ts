@@ -105,6 +105,31 @@ export const printComprobante = ({
             total,
           },
         ];
+  const detallesConIva = detallesMostrar.map((detalle) => {
+    const base = detalle.cantidad * detalle.precioUnitario - detalle.descuento;
+    const ivaDetalle = base * (detalle.ivaPorcentaje / 100);
+    const totalDetalle = base + ivaDetalle;
+    return {
+      ...detalle,
+      base,
+      ivaDetalle,
+      totalDetalle,
+    };
+  });
+  const resumenIvaArray = Array.from(
+    detallesConIva.reduce((acc, detalle) => {
+      const item = acc.get(detalle.ivaPorcentaje) || { base: 0, iva: 0, total: 0 };
+      acc.set(detalle.ivaPorcentaje, {
+        base: item.base + detalle.base,
+        iva: item.iva + detalle.ivaDetalle,
+        total: item.total + detalle.totalDetalle,
+      });
+      return acc;
+    }, new Map<number, { base: number; iva: number; total: number }>())
+  ).map(([porcentaje, valores]) => ({
+    porcentaje,
+    ...valores,
+  }));
 
   const estilos =
     formato === 'POS'
@@ -155,19 +180,30 @@ export const printComprobante = ({
     .nota { margin-top: 6px; font-size: 9px; color: var(--muted); }
   `
       : `
-    body { font-family: Arial, sans-serif; padding: 32px; color: #0f172a; font-size: 13px; }
-    h1 { font-size: 18px; margin-bottom: 4px; }
-    h2 { font-size: 16px; margin: 12px 0 6px; }
-    p { margin: 2px 0; color: #475569; }
-    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
-    .box { border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-top: 12px; }
-    .row { display: flex; justify-content: space-between; margin-bottom: 8px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 12px; }
-    th, td { padding: 8px 6px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
-    th { text-align: left; text-transform: uppercase; font-size: 11px; color: #475569; }
+    body { font-family: Arial, sans-serif; padding: 32px; color: #0f172a; font-size: 12px; }
+    .sheet { max-width: 880px; margin: 0 auto; border: 1px solid #cbd5e1; padding: 24px; }
+    .header { display: flex; justify-content: space-between; gap: 16px; }
+    .header h1 { font-size: 14px; text-transform: uppercase; margin: 0 0 4px; }
+    .header p { margin: 2px 0; color: #475569; }
+    .doc-title { text-align: right; }
+    .doc-title p { margin: 2px 0; }
+    .doc-number { font-size: 18px; font-weight: 700; }
+    .resolucion { margin-top: 8px; color: #64748b; font-size: 11px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+    .label { text-transform: uppercase; color: #64748b; font-size: 11px; }
+    .section-title { font-weight: 600; margin-top: 2px; }
+    .table { width: 100%; border: 1px solid #e2e8f0; border-collapse: collapse; margin-top: 16px; }
+    .table th { background: #f1f5f9; text-transform: uppercase; font-size: 11px; color: #475569; padding: 8px; text-align: left; }
+    .table td { border-top: 1px solid #e2e8f0; padding: 8px; vertical-align: top; font-size: 11px; }
+    .table .right { text-align: right; }
+    .summary-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; margin-top: 16px; }
+    .box { border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; }
+    .box-title { font-size: 11px; text-transform: uppercase; font-weight: 600; color: #475569; margin-bottom: 8px; }
+    .iva-grid { display: grid; grid-template-columns: 0.6fr 1fr 1fr 1fr; gap: 6px; font-size: 11px; }
+    .totals-row { display: flex; justify-content: space-between; margin-top: 6px; }
+    .totals-row strong { font-size: 13px; }
     .right { text-align: right; }
-    .muted { color: #64748b; font-size: 11px; }
-    .nota { margin-top: 12px; font-size: 11px; color: #64748b; }
+    .nota { margin-top: 16px; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 11px; color: #64748b; }
   `;
 
   printWindow.document.write(`
@@ -243,70 +279,106 @@ export const printComprobante = ({
               </div>
             `
             : `
-              <div class="header">
-                <div>
-                  <h1>${infoEmpresa.nombre}</h1>
-                  <p>${infoEmpresa.nit}</p>
-                  <p>${infoEmpresa.regimen}</p>
-                  <p>${infoEmpresa.direccion}</p>
-                  ${infoEmpresa.telefono ? `<p>Tel: ${infoEmpresa.telefono}</p>` : ''}
-                  ${resolucion ? `<p class="muted">${resolucion}</p>` : ''}
+              <div class="sheet">
+                <div class="header">
+                  <div>
+                    <h1>${infoEmpresa.nombre}</h1>
+                    <p>${infoEmpresa.nit}</p>
+                    <p>${infoEmpresa.regimen}</p>
+                    <p>${infoEmpresa.direccion}</p>
+                    ${infoEmpresa.telefono ? `<p>Tel: ${infoEmpresa.telefono}</p>` : ''}
+                  </div>
+                  <div class="doc-title">
+                    <p class="label">${tituloDocumento}</p>
+                    <p class="doc-number">${numero}</p>
+                    <p class="label">${fechaFormateada}</p>
+                  </div>
                 </div>
-                <div class="right">
-                  <p>${tituloDocumento}</p>
-                  <p>${fechaFormateada}</p>
+                ${resolucion ? `<p class="resolucion">${resolucion}</p>` : ''}
+                <div class="grid">
+                  <div>
+                    <p class="label">Facturado a</p>
+                    <p class="section-title">${clienteNombre}</p>
+                    <p>NIT/CC: ${clienteDocumento}</p>
+                  </div>
+                  <div class="doc-title">
+                    <p class="label">Medio pago</p>
+                    <p class="section-title">${medioPago || 'N/D'}</p>
+                    <p>Estado: ${estado || 'N/D'}</p>
+                  </div>
                 </div>
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>Descripción</th>
+                      <th class="right">Cant.</th>
+                      <th class="right">Valor U.</th>
+                      <th class="right">Desc.</th>
+                      <th class="right">Total</th>
+                      <th class="right">IVA</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${detallesMostrar
+                      .map(
+                        (detalle) => `
+                          <tr>
+                            <td>
+                              <strong>${detalle.descripcion}</strong>
+                              ${detalle.codigo ? `<div class="label">Cod. ${detalle.codigo}</div>` : ''}
+                            </td>
+                            <td class="right">${detalle.cantidad}</td>
+                            <td class="right">${currencyFormatter.format(detalle.precioUnitario)}</td>
+                            <td class="right">${currencyFormatter.format(detalle.descuento)}</td>
+                            <td class="right">${currencyFormatter.format(detalle.total)}</td>
+                            <td class="right">${detalle.ivaPorcentaje}%</td>
+                          </tr>
+                        `
+                      )
+                      .join('')}
+                  </tbody>
+                </table>
+                <div class="summary-grid">
+                  <div class="box">
+                    <div class="box-title">Discriminación tarifas IVA</div>
+                    <div class="iva-grid">
+                      <span class="label">IVA %</span>
+                      <span class="label">Base</span>
+                      <span class="label">IVA</span>
+                      <span class="label">Total</span>
+                    </div>
+                    ${resumenIvaArray
+                      .map(
+                        (item) => `
+                          <div class="iva-grid">
+                            <span>${item.porcentaje}%</span>
+                            <span class="right">${currencyFormatter.format(item.base)}</span>
+                            <span class="right">${currencyFormatter.format(item.iva)}</span>
+                            <span class="right">${currencyFormatter.format(item.total)}</span>
+                          </div>
+                        `
+                      )
+                      .join('')}
+                  </div>
+                  <div class="box">
+                    <div class="totals-row"><span>Subtotal</span><span>${currencyFormatter.format(subtotal)}</span></div>
+                    <div class="totals-row"><span>Impuestos</span><span>${currencyFormatter.format(iva)}</span></div>
+                    <div class="totals-row"><span>Descuento</span><span>-${currencyFormatter.format(descuento)}</span></div>
+                    <div class="totals-row"><strong>Total a pagar</strong><strong>${currencyFormatter.format(total)}</strong></div>
+                    ${
+                      efectivoRecibido !== undefined && cambio !== undefined
+                        ? `
+                          <div class="totals-row"><span>Recibido</span><span>${currencyFormatter.format(
+                            efectivoRecibido
+                          )}</span></div>
+                          <div class="totals-row"><span>Cambio</span><span>${currencyFormatter.format(cambio)}</span></div>
+                        `
+                        : ''
+                    }
+                  </div>
+                </div>
+                <div class="nota">${notas || 'Gracias por su compra. Vuelva pronto.'}</div>
               </div>
-              <p><strong>${numero}</strong></p>
-              <p>Fecha: ${fechaFormateada}</p>
-              <p>Cliente: ${clienteNombre}</p>
-              <p>NIT/CC: ${clienteDocumento}</p>
-              <div class="box">
-                <div class="row"><span>Medio de pago</span><span>${medioPago || 'N/D'}</span></div>
-                <div class="row"><span>Estado</span><span>${estado || 'N/D'}</span></div>
-              </div>
-              <h2>Detalle</h2>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Descripción</th>
-                    <th class="right">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${detallesMostrar
-                    .map(
-                      (detalle) => `
-                        <tr>
-                          <td>
-                            <strong>${detalle.descripcion}</strong>
-                            ${detalle.codigo ? `<div class="muted">Código: ${detalle.codigo}</div>` : ''}
-                            <div class="muted">${detalle.cantidad} x ${currencyFormatter.format(detalle.precioUnitario)}</div>
-                          </td>
-                          <td class="right">${currencyFormatter.format(detalle.total)}</td>
-                        </tr>
-                      `
-                    )
-                    .join('')}
-                </tbody>
-              </table>
-              <div class="box">
-                <div class="row"><span>Subtotal</span><span>${currencyFormatter.format(subtotal)}</span></div>
-                <div class="row"><span>Impuestos</span><span>${currencyFormatter.format(iva)}</span></div>
-                <div class="row"><span>Descuentos</span><span>-${currencyFormatter.format(descuento)}</span></div>
-                <div class="row"><strong>Total</strong><strong>${currencyFormatter.format(total)}</strong></div>
-                ${
-                  efectivoRecibido !== undefined && cambio !== undefined
-                    ? `
-                      <div class="row"><span>Recibido</span><span>${currencyFormatter.format(
-                        efectivoRecibido
-                      )}</span></div>
-                      <div class="row"><span>Cambio</span><span>${currencyFormatter.format(cambio)}</span></div>
-                    `
-                    : ''
-                }
-              </div>
-              <p class="nota">${notas || 'Gracias por su compra. Vuelva pronto.'}</p>
             `
         }
       </body>
