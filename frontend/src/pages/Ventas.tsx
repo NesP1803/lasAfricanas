@@ -419,8 +419,12 @@ export default function Ventas() {
   }, []);
 
   useEffect(() => {
+    if (!esCaja) {
+      setPendientesCaja([]);
+      return;
+    }
     cargarPendientesCaja();
-  }, [cargarPendientesCaja]);
+  }, [cargarPendientesCaja, esCaja]);
 
   const pendientesCajaHoy = useMemo(() => {
     return pendientesCaja.filter((venta) => {
@@ -1158,72 +1162,74 @@ export default function Ventas() {
         </div>
       )}
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase text-slate-500">
-              Caja
-            </p>
-            <h2 className="text-lg font-semibold text-slate-900">
-              CAJA - Ventas pendientes por facturar
-            </h2>
+      {esCaja && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase text-slate-500">
+                Caja
+              </p>
+              <h2 className="text-lg font-semibold text-slate-900">
+                CAJA - Ventas pendientes por facturar
+              </h2>
+            </div>
+            <button
+              type="button"
+              onClick={cargarPendientesCaja}
+              className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50"
+            >
+              Actualizar
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={cargarPendientesCaja}
-            className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50"
-          >
-            Actualizar
-          </button>
-        </div>
-        <div className="mt-4 overflow-x-auto">
-          <table className="min-w-full text-left text-sm">
-            <thead className="bg-slate-100 text-xs uppercase text-slate-500">
-              <tr>
-                <th className="px-3 py-2">Documento</th>
-                <th className="px-3 py-2">Cliente</th>
-                <th className="px-3 py-2">Hora</th>
-                <th className="px-3 py-2 text-right">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {cargandoPendientesCaja && (
+          <div className="mt-4 overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-slate-100 text-xs uppercase text-slate-500">
                 <tr>
-                  <td colSpan={4} className="px-3 py-6 text-center text-slate-500">
-                    Cargando pendientes...
-                  </td>
+                  <th className="px-3 py-2">Documento</th>
+                  <th className="px-3 py-2">Cliente</th>
+                  <th className="px-3 py-2">Hora</th>
+                  <th className="px-3 py-2 text-right">Total</th>
                 </tr>
-              )}
-              {!cargandoPendientesCaja && pendientesCajaHoy.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="px-3 py-6 text-center text-slate-500">
-                    No hay ventas pendientes.
-                  </td>
-                </tr>
-              )}
-              {pendientesCajaHoy.map((venta) => (
-                <tr key={venta.id} className="border-b border-slate-100">
-                  <td className="px-3 py-2 font-semibold text-slate-700">
-                    {venta.numero_comprobante || `#${venta.id}`}
-                  </td>
-                  <td className="px-3 py-2 text-slate-600">
-                    {venta.cliente_nombre}
-                  </td>
-                  <td className="px-3 py-2 text-slate-500">
-                    {new Date(venta.fecha).toLocaleTimeString('es-CO', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </td>
-                  <td className="px-3 py-2 text-right font-semibold text-slate-700">
-                    {currencyFormatter.format(Number(venta.total))}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+              </thead>
+              <tbody>
+                {cargandoPendientesCaja && (
+                  <tr>
+                    <td colSpan={4} className="px-3 py-6 text-center text-slate-500">
+                      Cargando pendientes...
+                    </td>
+                  </tr>
+                )}
+                {!cargandoPendientesCaja && pendientesCajaHoy.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="px-3 py-6 text-center text-slate-500">
+                      No hay ventas pendientes.
+                    </td>
+                  </tr>
+                )}
+                {pendientesCajaHoy.map((venta) => (
+                  <tr key={venta.id} className="border-b border-slate-100">
+                    <td className="px-3 py-2 font-semibold text-slate-700">
+                      {venta.numero_comprobante || `#${venta.id}`}
+                    </td>
+                    <td className="px-3 py-2 text-slate-600">
+                      {venta.cliente_nombre}
+                    </td>
+                    <td className="px-3 py-2 text-slate-500">
+                      {new Date(venta.fecha).toLocaleTimeString('es-CO', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </td>
+                    <td className="px-3 py-2 text-right font-semibold text-slate-700">
+                      {currencyFormatter.format(Number(venta.total))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-200 bg-yellow-50 px-5 py-2 text-xs font-semibold uppercase tracking-wide text-slate-700">
