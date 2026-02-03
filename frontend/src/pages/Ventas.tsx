@@ -96,8 +96,16 @@ const currencyFormatter = new Intl.NumberFormat('es-CO', {
 });
 
 const parseNumber = (value: string) => {
-  const normalized = value.replace(/[^\d.-]/g, '');
-  const parsed = Number(normalized);
+  const normalized = value.replace(/[^\d,.-]/g, '');
+  let cleaned = normalized;
+  if (normalized.includes(',') && normalized.includes('.')) {
+    cleaned = normalized.replace(/\./g, '').replace(',', '.');
+  } else if (normalized.includes(',')) {
+    cleaned = normalized.replace(',', '.');
+  } else if (/\.\d{3}(\D|$)/.test(normalized)) {
+    cleaned = normalized.replace(/\./g, '');
+  }
+  const parsed = Number(cleaned);
   return Number.isNaN(parsed) ? 0 : parsed;
 };
 
@@ -503,7 +511,15 @@ export default function Ventas() {
       setMensaje('Venta facturada correctamente.');
       cargarPendientesCaja();
     } catch (error) {
-      setMensaje('No se pudo facturar la venta. Revisa la conexión.');
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'No se pudo facturar la venta. Revisa la conexión.';
+      setMensaje(message);
+      showNotification({
+        type: 'error',
+        message,
+      });
     } finally {
       setFacturandoCaja(false);
     }
