@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Barcode,
@@ -188,7 +188,7 @@ export default function Ventas() {
       .catch(() => setProductos([]));
   }, [busquedaProducto, mostrarBusqueda]);
 
-  const ordenarPendientes = (data: VentaListItem[]) => {
+  const ordenarPendientes = useCallback((data: VentaListItem[]) => {
     const hoy = new Date();
     hoy.setHours(0, 0, 0, 0);
     return [...data]
@@ -199,17 +199,34 @@ export default function Ventas() {
         return fechaVenta.getTime() === hoy.getTime();
       })
       .sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
-  };
+  }, []);
 
-  useEffect(() => {
-    if (!esCaja) return;
-    setCargandoPendientes(true);
-    ventasApi
+  const refreshPendientes = useCallback((showLoading = false) => {
+    if (!esCaja) return Promise.resolve();
+    if (showLoading) {
+      setCargandoPendientes(true);
+    }
+    return ventasApi
       .getPendientesCaja()
       .then((data) => setPendientesCaja(ordenarPendientes(data)))
       .catch(() => setPendientesCaja([]))
-      .finally(() => setCargandoPendientes(false));
-  }, [esCaja]);
+      .finally(() => {
+        if (showLoading) {
+          setCargandoPendientes(false);
+        }
+      });
+  }, [esCaja, ordenarPendientes]);
+
+  useEffect(() => {
+    if (!esCaja) return;
+    setPendientesCaja([]);
+    setCargandoPendientes(false);
+    refreshPendientes(false);
+    const interval = window.setInterval(() => {
+      refreshPendientes(false);
+    }, 30000);
+    return () => window.clearInterval(interval);
+  }, [esCaja, refreshPendientes]);
 
 
   useEffect(() => {
@@ -714,6 +731,9 @@ export default function Ventas() {
         type: 'success',
         message: 'Venta enviada a caja.',
       });
+      if (esCaja) {
+        await refreshPendientes(false);
+      }
     } catch (error) {
       setMensaje('No se pudo enviar a caja. Revisa la conexión.');
       showNotification({
@@ -812,8 +832,7 @@ export default function Ventas() {
         type: 'success',
         message: 'Venta facturada desde caja.',
       });
-      const data = await ventasApi.getPendientesCaja();
-      setPendientesCaja(ordenarPendientes(data));
+      await refreshPendientes(false);
     } catch (error) {
       showNotification({
         type: 'error',
@@ -1421,12 +1440,7 @@ export default function Ventas() {
             <button
               type="button"
               onClick={() => {
-                setCargandoPendientes(true);
-                ventasApi
-                  .getPendientesCaja()
-                  .then((data) => setPendientesCaja(ordenarPendientes(data)))
-                  .catch(() => setPendientesCaja([]))
-                  .finally(() => setCargandoPendientes(false));
+                void refreshPendientes(true);
               }}
               className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50"
             >
