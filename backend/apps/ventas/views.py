@@ -504,7 +504,7 @@ class CajaViewSet(viewsets.GenericViewSet):
         hoy = timezone.localdate()
         ventas = self.get_queryset().filter(
             estado='ENVIADA_A_CAJA',
-            fecha__date=hoy,
+            enviada_a_caja_at__date=hoy,
         ).order_by(
             'enviada_a_caja_at',
             'fecha',
