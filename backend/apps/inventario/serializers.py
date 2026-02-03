@@ -73,6 +73,7 @@ class ProductoListSerializer(serializers.ModelSerializer):
             'proveedor_nombre',
             'precio_venta',
             'stock',
+            'unidad_medida',
             'stock_estado',
             'is_active',
             'created_at',
@@ -177,6 +178,14 @@ class ProductoCreateUpdateSerializer(serializers.ModelSerializer):
             # Creación: código debe ser único
             if Producto.objects.filter(codigo=value).exists():
                 raise serializers.ValidationError("Ya existe un producto con este código")
+        return value
+
+    def validate_unidad_medida(self, value):
+        unidades_validas = {codigo for codigo, _ in Producto.UNIDADES_MEDIDA}
+        if value not in unidades_validas:
+            raise serializers.ValidationError(
+                'Unidad de medida no válida. Use KG, LT o MT.'
+            )
         return value
     
     def validate(self, data):

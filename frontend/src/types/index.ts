@@ -63,8 +63,8 @@ export interface Producto {
   precio_costo: string;
   precio_venta: string;
   precio_venta_minimo: string;
-  stock: number;
-  stock_minimo: number;
+  stock: string;
+  stock_minimo: string;
   stock_bajo: boolean;
   unidad_medida: string;
   iva_porcentaje: string;
@@ -96,6 +96,7 @@ export interface DetalleVenta {
   producto: number;
   producto_codigo?: string;
   producto_nombre?: string;
+  unidad_medida?: string;
   cantidad: number;
   precio_unitario: string;
   descuento_unitario: string;

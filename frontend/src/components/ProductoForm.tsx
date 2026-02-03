@@ -53,7 +53,7 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
     precio_venta_minimo: '',
     stock: '',
     stock_minimo: '5',
-    unidad_medida: 'UND',
+    unidad_medida: 'KG',
     aplica_descuento: true,
     es_servicio: false,
     is_active: true,
@@ -565,15 +565,12 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
                 onChange={handleChange}
                 className="w-full px-2 py-1 border border-gray-400 rounded bg-white"
               >
-                <option value="N/A">N/A</option>
-                <option value="UND">Unidad</option>
-                <option value="PAR">Par</option>
                 <option value="KG">Kilogramo</option>
                 <option value="LT">Litro</option>
                 <option value="MT">Metro</option>
               </select>
               <p className="text-[11px] text-red-600 mt-1">
-                Si el artículo se vende suelto seleccione unidad de medida (UM)
+                Selecciona una unidad de medida válida para el artículo.
               </p>
             </div>
 
@@ -608,6 +605,7 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
                 value={formData.stock}
                 onChange={handleChange}
                 min="0"
+                step="0.01"
                 className="w-full px-2 py-1 border border-gray-400 rounded bg-white"
                 required
               />
@@ -623,6 +621,7 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
                 value={formData.stock_minimo}
                 onChange={handleChange}
                 min="0"
+                step="0.01"
                 className="w-full px-2 py-1 border border-gray-400 rounded bg-white"
                 required
               />
