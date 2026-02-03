@@ -189,16 +189,11 @@ export default function Ventas() {
   }, [busquedaProducto, mostrarBusqueda]);
 
   const ordenarPendientes = useCallback((data: VentaListItem[]) => {
-    const hoy = new Date();
-    hoy.setHours(0, 0, 0, 0);
-    return [...data]
-      .filter((venta) => {
-        if (venta.estado !== 'ENVIADA_A_CAJA') return false;
-        const fechaVenta = new Date(venta.fecha);
-        fechaVenta.setHours(0, 0, 0, 0);
-        return fechaVenta.getTime() === hoy.getTime();
-      })
-      .sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
+    return [...data].sort((a, b) => {
+      const fechaA = a.enviada_a_caja_at ?? a.fecha;
+      const fechaB = b.enviada_a_caja_at ?? b.fecha;
+      return new Date(fechaA).getTime() - new Date(fechaB).getTime();
+    });
   }, []);
 
   const refreshPendientes = useCallback((showLoading = false) => {
@@ -1483,7 +1478,7 @@ export default function Ventas() {
                         {venta.cliente_nombre}
                       </td>
                       <td className="px-3 py-2 text-slate-500">
-                        {new Date(venta.fecha).toLocaleString('es-CO')}
+                        {new Date(venta.enviada_a_caja_at ?? venta.fecha).toLocaleString('es-CO')}
                       </td>
                       <td className="px-3 py-2 text-right font-semibold text-slate-700">
                         {currencyFormatter.format(Number(venta.total))}

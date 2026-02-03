@@ -69,6 +69,7 @@ export interface VentaListItem {
   tipo_comprobante: string;
   tipo_comprobante_display: string;
   fecha: string;
+  enviada_a_caja_at?: string | null;
   cliente: number;
   cliente_nombre: string;
   cliente_numero_documento: string;
