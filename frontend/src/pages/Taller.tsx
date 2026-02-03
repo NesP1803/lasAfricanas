@@ -63,14 +63,10 @@ type MotoFormData = {
   id?: number;
   placa: string;
   marca: string;
-  modelo: string;
-  color: string;
-  anio: string;
+  fecha_ingreso: string;
   cliente: string;
   mecanico: string;
-  proveedor: string;
   observaciones: string;
-  is_active: boolean;
 };
 
 type ClienteFormData = {
@@ -94,14 +90,10 @@ const documentoOptions = [
 const createDefaultMotoForm = (): MotoFormData => ({
   placa: '',
   marca: '',
-  modelo: '',
-  color: '',
-  anio: '',
+  fecha_ingreso: new Date().toISOString().split('T')[0],
   cliente: '',
   mecanico: '',
-  proveedor: '',
   observaciones: '',
-  is_active: true,
 });
 
 const createDefaultClienteForm = (): ClienteFormData => ({
@@ -479,14 +471,10 @@ export default function Taller() {
       id: moto.id,
       placa: moto.placa,
       marca: moto.marca,
-      modelo: moto.modelo ?? '',
-      color: moto.color ?? '',
-      anio: moto.anio ? String(moto.anio) : '',
+      fecha_ingreso: moto.fecha_ingreso ?? '',
       cliente: moto.cliente ? String(moto.cliente) : '',
       mecanico: moto.mecanico ? String(moto.mecanico) : '',
-      proveedor: moto.proveedor ? String(moto.proveedor) : '',
       observaciones: moto.observaciones ?? '',
-      is_active: moto.is_active,
     });
     resetClienteForm();
     setMotoModalOpen(true);
@@ -535,14 +523,10 @@ export default function Taller() {
     const payload: Partial<Moto> = {
       placa: motoFormData.placa,
       marca: motoFormData.marca,
-      modelo: motoFormData.modelo,
-      color: motoFormData.color,
-      anio: motoFormData.anio ? Number(motoFormData.anio) : null,
+      fecha_ingreso: motoFormData.fecha_ingreso || null,
       cliente: motoFormData.cliente ? Number(motoFormData.cliente) : null,
       mecanico: motoFormData.mecanico ? Number(motoFormData.mecanico) : null,
-      proveedor: motoFormData.proveedor ? Number(motoFormData.proveedor) : null,
       observaciones: motoFormData.observaciones,
-      is_active: motoFormData.is_active,
     };
 
     try {
@@ -1100,23 +1084,11 @@ export default function Taller() {
                   required
                 />
                 <InputField
-                  label="Modelo"
-                  name="modelo"
-                  value={motoFormData.modelo}
-                  onChange={(value) => setMotoFormData((prev) => ({ ...prev, modelo: value }))}
-                />
-                <InputField
-                  label="Color"
-                  name="color"
-                  value={motoFormData.color}
-                  onChange={(value) => setMotoFormData((prev) => ({ ...prev, color: value }))}
-                />
-                <InputField
-                  label="Año"
-                  name="anio"
-                  type="number"
-                  value={motoFormData.anio}
-                  onChange={(value) => setMotoFormData((prev) => ({ ...prev, anio: value }))}
+                  label="Fecha de ingreso"
+                  name="fecha_ingreso"
+                  type="date"
+                  value={motoFormData.fecha_ingreso}
+                  onChange={(value) => setMotoFormData((prev) => ({ ...prev, fecha_ingreso: value }))}
                 />
                 <div className="flex flex-col gap-2 text-sm font-medium text-slate-700">
                   <span>Cliente</span>
@@ -1310,12 +1282,6 @@ export default function Taller() {
                   name="observaciones"
                   value={motoFormData.observaciones}
                   onChange={(value) => setMotoFormData((prev) => ({ ...prev, observaciones: value }))}
-                />
-                <CheckboxField
-                  label="Moto activa"
-                  name="is_active"
-                  checked={motoFormData.is_active}
-                  onChange={(checked) => setMotoFormData((prev) => ({ ...prev, is_active: checked }))}
                 />
               </div>
               <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 pt-4">

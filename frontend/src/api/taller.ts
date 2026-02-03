@@ -25,6 +25,7 @@ export interface Moto {
   mecanico_nombre?: string;
   proveedor?: number | null;
   proveedor_nombre?: string;
+  fecha_ingreso?: string | null;
   observaciones?: string;
   is_active: boolean;
 }
