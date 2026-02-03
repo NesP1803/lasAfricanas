@@ -31,7 +31,7 @@ import {
   normalizeModuleAccess,
 } from '../store/moduleAccess';
 
-type ArticulosTab = 'mercancia' | 'stock_bajo' |  'dar_de_baja';
+type ArticulosTab = 'mercancia' | 'stock_bajo';
 type EstadoFiltro = 'todos' | 'agotado' | 'bajo' | 'ok';
 
 const PAGE_SIZE = 50;
@@ -51,11 +51,6 @@ const tabConfig: Array<{
     label: 'Stock bajo',
     description: 'Artículos con alerta de inventario.',
   },
-  {
-    key: 'dar_de_baja',
-    label: 'Dar de baja',
-    description: 'Registra salidas por daños o pérdidas.',
-  },
 ];
 
 const currency = new Intl.NumberFormat('es-CO', {
@@ -67,15 +62,6 @@ const dateFormatter = new Intl.DateTimeFormat('es-CO', {
   dateStyle: 'short',
   timeStyle: 'short',
 });
-
-const motivosBaja = [
-  { value: 'DEVOLUCION_PARCIAL', label: 'Devolución parcial' },
-  { value: 'DEVOLUCION_TOTAL', label: 'Devolución total' },
-  { value: 'ERROR_PRECIOS_REMISION', label: 'Error con precios en la remisión' },
-  { value: 'ERROR_CONCEPTOS_REMISION', label: 'Error por conceptos en la remisión' },
-  { value: 'NO_ACEPTA_ARTICULOS', label: 'El comprador no acepta los artículos' },
-  { value: 'OTROS', label: 'Otros' },
-];
 
 const parseListado = <T,>(data: PaginatedResponse<T> | T[]) => {
   if (Array.isArray(data)) {
@@ -131,12 +117,6 @@ export default function Articulos() {
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [loadingProducto, setLoadingProducto] = useState(false);
 
-  const [codigoBaja, setCodigoBaja] = useState('');
-  const [productoBaja, setProductoBaja] = useState<Producto | null>(null);
-  const [cantidadBaja, setCantidadBaja] = useState('');
-  const [motivoBaja, setMotivoBaja] = useState(motivosBaja[0]?.value ?? '');
-  const [motivoBajaDetalle, setMotivoBajaDetalle] = useState('');
-  const [bajaError, setBajaError] = useState<string | null>(null);
   const { showNotification } = useNotification();
 
   useEffect(() => {
@@ -326,67 +306,6 @@ export default function Articulos() {
     } finally {
       setLoading(false);
       setConfirmDeleteOpen(false);
-    }
-  };
-
-  const handleBuscarBaja = async () => {
-    if (!codigoBaja.trim()) return;
-    try {
-      setBajaError(null);
-      const producto = await inventarioApi.buscarPorCodigo(codigoBaja.trim());
-      setProductoBaja(producto);
-    } catch (error) {
-      console.error('Error al buscar producto:', error);
-      setProductoBaja(null);
-      setBajaError('No se encontró el código ingresado.');
-    }
-  };
-
-  const handleRegistrarBaja = async () => {
-    if (!productoBaja) {
-      setBajaError('Busca un artículo válido.');
-      return;
-    }
-    const cantidad = Number(cantidadBaja);
-    if (!cantidad || cantidad <= 0) {
-      setBajaError('Ingresa una cantidad válida.');
-      return;
-    }
-    const motivoSeleccionado = motivosBaja.find((motivo) => motivo.value === motivoBaja);
-    const motivoFinal =
-      motivoBaja === 'OTROS'
-        ? motivoBajaDetalle.trim()
-        : motivoSeleccionado?.label ?? '';
-
-    if (!motivoFinal) {
-      setBajaError('Indica el motivo de la baja.');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      await inventarioApi.ajustarStock(productoBaja.id, {
-        cantidad,
-        tipo: 'BAJA',
-        costo_unitario: productoBaja.precio_costo ?? '0',
-        observaciones: motivoFinal,
-      });
-      setCodigoBaja('');
-      setProductoBaja(null);
-      setCantidadBaja('');
-      setMotivoBaja(motivosBaja[0]?.value ?? '');
-      setMotivoBajaDetalle('');
-      setBajaError(null);
-      await refreshCurrent();
-      showNotification({
-        message: 'Baja registrada correctamente.',
-        type: 'success',
-      });
-    } catch (error) {
-      console.error('Error al dar de baja:', error);
-      setBajaError('No se pudo registrar la baja.');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -741,127 +660,6 @@ export default function Articulos() {
               className="text-slate-500"
             />
           )}
-        </div>
-      )}
-
-      {activeTab === 'dar_de_baja' && (
-        <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
-          <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="text-lg font-semibold text-slate-900">
-              Dar de baja artículos
-            </h2>
-            <p className="text-sm text-slate-500">
-              Registra salidas por daños, pérdidas u obsequios.
-            </p>
-
-            <div className="mt-6 space-y-4">
-              <div>
-                <label className="text-sm font-semibold text-slate-700">
-                  Código del artículo
-                </label>
-                <div className="mt-2 flex gap-2">
-                  <input
-                    type="text"
-                    value={codigoBaja}
-                    onChange={(event) => setCodigoBaja(event.target.value)}
-                    className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                    placeholder="Ingresa el código"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleBuscarBaja}
-                    className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
-                  >
-                    <Search size={16} />
-                    Buscar
-                  </button>
-                </div>
-              </div>
-
-              {productoBaja && (
-                <div className="rounded-lg border border-slate-100 bg-slate-50 p-4 text-sm text-slate-700">
-                  <p className="font-semibold">{productoBaja.nombre}</p>
-                  <p className="text-slate-500">Código: {productoBaja.codigo}</p>
-                  <p className="text-slate-500">
-                    Stock actual: {formatStockValue(productoBaja.stock, productoBaja.unidad_medida)}
-                  </p>
-                </div>
-              )}
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="text-sm font-semibold text-slate-700">
-                    Cantidad a dar de baja
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={cantidadBaja}
-                    onChange={(event) => setCantidadBaja(event.target.value)}
-                    className="mt-2 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-semibold text-slate-700">
-                    Motivo
-                  </label>
-                  <select
-                    value={motivoBaja}
-                    onChange={(event) => setMotivoBaja(event.target.value)}
-                    className="mt-2 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
-                  >
-                    {motivosBaja.map((motivo) => (
-                      <option key={motivo.value} value={motivo.value}>
-                        {motivo.label}
-                      </option>
-                    ))}
-                  </select>
-                  {motivoBaja === 'OTROS' && (
-                    <input
-                      type="text"
-                      value={motivoBajaDetalle}
-                      onChange={(event) => setMotivoBajaDetalle(event.target.value)}
-                      className="mt-2 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                      placeholder="Describe el motivo..."
-                    />
-                  )}
-                </div>
-              </div>
-
-              {bajaError && (
-                <p className="text-sm font-semibold text-red-600">{bajaError}</p>
-              )}
-
-              <button
-                type="button"
-                onClick={handleRegistrarBaja}
-                className="inline-flex items-center gap-2 rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700"
-              >
-                <ArchiveX size={16} />
-                Registrar baja
-              </button>
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h3 className="text-lg font-semibold text-slate-900">
-              Recomendaciones
-            </h3>
-            <ul className="mt-4 space-y-3 text-sm text-slate-600">
-              <li className="flex items-start gap-2">
-                <span className="mt-1 h-2 w-2 rounded-full bg-amber-400" />
-                Verifica el stock antes de dar de baja artículos sensibles.
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="mt-1 h-2 w-2 rounded-full bg-blue-400" />
-                Agrega siempre un motivo para mantener el historial ordenado.
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="mt-1 h-2 w-2 rounded-full bg-emerald-400" />
-                Los movimientos se registran en el backend para auditoría.
-              </li>
-            </ul>
-          </div>
         </div>
       )}
 
