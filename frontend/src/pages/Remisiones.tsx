@@ -510,6 +510,7 @@ export default function Remisiones() {
                   <p className="text-center text-sm text-rose-600">{detalleError}</p>
                 ) : null}
                 <ComprobanteTemplate
+                  formato={documento.tipo}
                   tipo="REMISION"
                   numero={`${documento.remision.prefijo} ${documento.remision.numero}`}
                   fecha={detalleRemision?.fecha ?? documento.remision.fechaIso}

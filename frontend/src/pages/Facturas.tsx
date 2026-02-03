@@ -509,6 +509,7 @@ export default function Facturas() {
                   <p className="text-center text-sm text-rose-600">{detalleError}</p>
                 ) : null}
                 <ComprobanteTemplate
+                  formato={documento.tipo}
                   tipo="FACTURA"
                   numero={`${documento.factura.prefijo} ${documento.factura.numero}`}
                   fecha={detalleFactura?.fecha ?? documento.factura.fechaIso}
