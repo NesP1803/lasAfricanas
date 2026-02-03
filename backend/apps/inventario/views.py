@@ -233,6 +233,12 @@ class ProductoViewSet(viewsets.ModelViewSet):
                 {'error': 'La cantidad debe ser mayor a cero'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+        if producto.unidad_medida == 'N/A' and cantidad != cantidad.quantize(Decimal('1')):
+            return Response(
+                {'error': 'Para unidad N/A solo se permiten enteros'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
         # Crear movimiento de inventario
         stock_anterior = producto.stock

@@ -156,16 +156,17 @@ class Producto(BaseModel):
         help_text='Alerta cuando el stock llegue a este nivel'
     )
     UNIDADES_MEDIDA = [
+        ('N/A', 'N/A'),
         ('KG', 'Kilogramo'),
         ('LT', 'Litro'),
         ('MT', 'Metro'),
     ]
     unidad_medida = models.CharField(
         max_length=20,
-        default='KG',
+        default='N/A',
         choices=UNIDADES_MEDIDA,
         verbose_name='Unidad de medida',
-        help_text='KG, LT, MT'
+        help_text='N/A, KG, LT, MT'
     )
     
     # IVA

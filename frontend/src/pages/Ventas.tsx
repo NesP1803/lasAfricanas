@@ -353,7 +353,7 @@ export default function Ventas() {
           stock: Number(producto?.stock ?? 0),
           cantidad: repuesto.cantidad,
           descuentoPorcentaje: 0,
-          unidadMedida: producto?.unidad_medida ?? 'KG',
+          unidadMedida: producto?.unidad_medida ?? 'N/A',
         }));
 
         setCartItems(items);
@@ -444,7 +444,13 @@ export default function Ventas() {
       if (existing) {
         return prev.map((item) =>
           item.id === producto.id
-            ? { ...item, cantidad: item.cantidad + 1 }
+            ? {
+                ...item,
+                cantidad: normalizeCantidad(
+                  item.cantidad + getCantidadStep(item.unidadMedida),
+                  item.unidadMedida
+                ),
+              }
             : item
         );
       }
@@ -459,7 +465,7 @@ export default function Ventas() {
           stock: Number(producto.stock),
           cantidad: 1,
           descuentoPorcentaje: 0,
-          unidadMedida: producto.unidad_medida,
+          unidadMedida: producto.unidad_medida ?? 'N/A',
         },
       ];
     });
@@ -761,7 +767,7 @@ export default function Ventas() {
             stock: 0,
             cantidad: Number(detalle.cantidad),
             descuentoPorcentaje,
-            unidadMedida: detalle.unidad_medida ?? 'KG',
+            unidadMedida: detalle.unidad_medida ?? 'N/A',
           };
         });
         setDetalleCaja(data);

@@ -67,6 +67,12 @@ class OrdenTallerViewSet(viewsets.ModelViewSet):
         except (InvalidOperation, TypeError, ValueError):
             return Response({'error': 'Cantidad inválida'}, status=status.HTTP_400_BAD_REQUEST)
 
+        if producto.unidad_medida == 'N/A' and cantidad != cantidad.quantize(Decimal('1')):
+            return Response(
+                {'error': 'Para unidad N/A solo se permiten enteros'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         with transaction.atomic():
             repuesto, created = OrdenRepuesto.objects.get_or_create(
                 orden=orden,
