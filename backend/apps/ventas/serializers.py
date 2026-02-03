@@ -234,6 +234,33 @@ class VentaCreateSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {'detalles': 'Debe incluir al menos un detalle.'}
                 )
+
+        # Las cotizaciones NO pueden tener descuentos
+        tipo_comprobante = attrs.get('tipo_comprobante')
+        if tipo_comprobante == 'COTIZACION':
+            descuento_porcentaje = attrs.get('descuento_porcentaje', 0)
+            descuento_valor = attrs.get('descuento_valor', 0)
+            detalles = attrs.get('detalles', [])
+
+            if descuento_porcentaje and float(descuento_porcentaje) > 0:
+                raise serializers.ValidationError({
+                    'descuento_porcentaje': 'Las cotizaciones no pueden tener descuentos. '
+                    'Si el cliente desea un descuento, debe realizar la compra directamente como remisión o factura.'
+                })
+            if descuento_valor and float(descuento_valor) > 0:
+                raise serializers.ValidationError({
+                    'descuento_valor': 'Las cotizaciones no pueden tener descuentos. '
+                    'Si el cliente desea un descuento, debe realizar la compra directamente como remisión o factura.'
+                })
+            # Validar descuentos en los detalles
+            for idx, detalle in enumerate(detalles):
+                descuento_unitario = detalle.get('descuento_unitario', 0)
+                if descuento_unitario and float(descuento_unitario) > 0:
+                    raise serializers.ValidationError({
+                        'detalles': f'Las cotizaciones no pueden tener descuentos en los productos (línea {idx + 1}). '
+                        'Si el cliente desea un descuento, debe realizar la compra directamente como remisión o factura.'
+                    })
+
         return attrs
 
 
