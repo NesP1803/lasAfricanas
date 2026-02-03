@@ -17,7 +17,12 @@ import {
   type Producto,
   type ProductoList,
 } from '../api/inventario';
-import { ventasApi, type Venta, type VentaListItem } from '../api/ventas';
+import {
+  ventasApi,
+  type DetalleVenta,
+  type Venta,
+  type VentaListItem,
+} from '../api/ventas';
 import { configuracionAPI } from '../api/configuracion';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../contexts/NotificationContext';
@@ -118,6 +123,27 @@ const normalizeCantidad = (cantidad: number, unidadMedida?: string) => {
   return Math.round(clamped);
 };
 
+const buildCartItemsFromDetalles = (detalles: DetalleVenta[]): CartItem[] =>
+  detalles.map((detalle, index) => {
+    const precioUnitario = Number(detalle.precio_unitario || 0);
+    const descuentoUnitario = Number(detalle.descuento_unitario || 0);
+    const descuentoPorcentaje =
+      precioUnitario > 0
+        ? Math.min(100, (descuentoUnitario / precioUnitario) * 100)
+        : 0;
+    return {
+      id: detalle.producto || index,
+      codigo: detalle.producto_codigo ?? '',
+      nombre: detalle.producto_nombre ?? 'Producto',
+      ivaPorcentaje: Number(detalle.iva_porcentaje || 0),
+      precioUnitario,
+      stock: 0,
+      cantidad: Number(detalle.cantidad || 0),
+      descuentoPorcentaje,
+      unidadMedida: 'N/A',
+    };
+  });
+
 export default function Ventas() {
   const { user } = useAuth();
   const { showNotification } = useNotification();
@@ -146,9 +172,13 @@ export default function Ventas() {
   const [productoInfo, setProductoInfo] = useState<ProductoList | Producto | null>(null);
   const [guardandoBorrador, setGuardandoBorrador] = useState(false);
   const [enviandoCaja, setEnviandoCaja] = useState(false);
+  const [facturandoCaja, setFacturandoCaja] = useState(false);
   const [ventaBorrador, setVentaBorrador] = useState<Venta | null>(null);
   const [pendientesCaja, setPendientesCaja] = useState<VentaListItem[]>([]);
   const [cargandoPendientesCaja, setCargandoPendientesCaja] = useState(false);
+  const [cargandoVentaCajaId, setCargandoVentaCajaId] = useState<number | null>(
+    null
+  );
   const [fechaCaja, setFechaCaja] = useState(
     () => new Date().toISOString().split('T')[0]
   );
@@ -432,6 +462,52 @@ export default function Ventas() {
       return fechaVenta === fechaCaja;
     });
   }, [fechaCaja, pendientesCaja]);
+
+  const handleCargarPendienteCaja = async (ventaId: number) => {
+    if (ventaBloqueada || !esCaja) return;
+    setCargandoVentaCajaId(ventaId);
+    try {
+      const venta = await ventasApi.getVenta(ventaId);
+      setVentaBorrador(venta);
+      setClienteId(venta.cliente);
+      setClienteNombre(venta.cliente_info?.nombre ?? 'Cliente general');
+      setClienteDocumento(venta.cliente_info?.numero_documento ?? '');
+      setMedioPago(venta.medio_pago as typeof medioPago);
+      setEfectivoRecibido(venta.efectivo_recibido ?? '0');
+      setCartItems(buildCartItemsFromDetalles(venta.detalles || []));
+      setDescuentoGeneral(venta.descuento_porcentaje ?? '0');
+      setDescuentoAutorizado(true);
+      setDocumentoGenerado(null);
+      setDocumentoPreview(null);
+      setEstadoSolicitud(null);
+      setMostrarPermiso(false);
+      setSolicitudActivaId(null);
+      setMensaje('Venta cargada desde caja.');
+    } catch (error) {
+      setMensaje('No se pudo cargar la venta de caja.');
+      showNotification({
+        type: 'error',
+        message: 'No se pudo cargar la venta de caja.',
+      });
+    } finally {
+      setCargandoVentaCajaId(null);
+    }
+  };
+
+  const handleFacturarEnCaja = async () => {
+    if (!ventaBorrador || !esCaja) return;
+    setFacturandoCaja(true);
+    try {
+      const facturada = await ventasApi.facturarEnCaja(ventaBorrador.id);
+      resetVentaState();
+      setMensaje('Venta facturada correctamente.');
+      cargarPendientesCaja();
+    } catch (error) {
+      setMensaje('No se pudo facturar la venta. Revisa la conexión.');
+    } finally {
+      setFacturandoCaja(false);
+    }
+  };
 
   const handleBuscarCliente = async () => {
     if (ventaBloqueada) return;
@@ -1081,11 +1157,23 @@ export default function Ventas() {
                   </button>
                   <button
                     type="button"
-                    onClick={handleFacturarDirecto}
-                    disabled={ventaBloqueada || guardandoBorrador}
+                    onClick={
+                      ventaBorrador?.estado === 'ENVIADA_A_CAJA'
+                        ? handleFacturarEnCaja
+                        : handleFacturarDirecto
+                    }
+                    disabled={
+                      ventaBloqueada || guardandoBorrador || facturandoCaja
+                    }
                     className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 py-1.5 text-[11px] font-semibold uppercase text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
                   >
-                    <span>{guardandoBorrador ? 'Facturando...' : 'Facturar'}</span>
+                    <span>
+                      {guardandoBorrador || facturandoCaja
+                        ? 'Facturando...'
+                        : ventaBorrador?.estado === 'ENVIADA_A_CAJA'
+                          ? 'Facturar en caja'
+                          : 'Facturar'}
+                    </span>
                     <FileText size={16} />
                   </button>
                 </>
@@ -1189,19 +1277,20 @@ export default function Ventas() {
                   <th className="px-3 py-2">Cliente</th>
                   <th className="px-3 py-2">Hora</th>
                   <th className="px-3 py-2 text-right">Total</th>
+                  <th className="px-3 py-2 text-right">Acción</th>
                 </tr>
               </thead>
               <tbody>
                 {cargandoPendientesCaja && (
                   <tr>
-                    <td colSpan={4} className="px-3 py-6 text-center text-slate-500">
+                    <td colSpan={5} className="px-3 py-6 text-center text-slate-500">
                       Cargando pendientes...
                     </td>
                   </tr>
                 )}
                 {!cargandoPendientesCaja && pendientesCajaHoy.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="px-3 py-6 text-center text-slate-500">
+                    <td colSpan={5} className="px-3 py-6 text-center text-slate-500">
                       No hay ventas pendientes.
                     </td>
                   </tr>
@@ -1222,6 +1311,18 @@ export default function Ventas() {
                     </td>
                     <td className="px-3 py-2 text-right font-semibold text-slate-700">
                       {currencyFormatter.format(Number(venta.total))}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <button
+                        type="button"
+                        onClick={() => handleCargarPendienteCaja(venta.id)}
+                        disabled={cargandoVentaCajaId === venta.id}
+                        className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-semibold uppercase text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
+                      >
+                        {cargandoVentaCajaId === venta.id
+                          ? 'Cargando...'
+                          : 'Cargar'}
+                      </button>
                     </td>
                   </tr>
                 ))}
