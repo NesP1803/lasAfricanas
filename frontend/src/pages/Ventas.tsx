@@ -131,13 +131,23 @@ const normalizeCantidad = (cantidad: number, unidadMedida?: string) => {
   return Math.round(clamped);
 };
 
-const buildCartItemsFromDetalles = (detalles: DetalleVenta[]): CartItem[] =>
+const buildCartItemsFromDetalles = (
+  detalles: DetalleVenta[],
+  descuentoGeneralPorcentaje: number
+): CartItem[] =>
   detalles.map((detalle, index) => {
     const precioUnitario = Number(detalle.precio_unitario || 0);
-    const descuentoUnitario = Number(detalle.descuento_unitario || 0);
+    const subtotalLinea = Number(detalle.subtotal || 0);
+    const descuentoUnitarioTotal = Number(detalle.descuento_unitario || 0);
+    const descuentoGeneralLinea =
+      subtotalLinea * (descuentoGeneralPorcentaje / 100);
+    const descuentoLinea = Math.max(
+      0,
+      descuentoUnitarioTotal - descuentoGeneralLinea
+    );
     const descuentoPorcentaje =
-      precioUnitario > 0
-        ? Math.min(100, (descuentoUnitario / precioUnitario) * 100)
+      subtotalLinea > 0
+        ? Math.min(100, (descuentoLinea / subtotalLinea) * 100)
         : 0;
     return {
       id: detalle.producto || index,
@@ -482,7 +492,10 @@ export default function Ventas() {
       setClienteDocumento(venta.cliente_info?.numero_documento ?? '');
       setMedioPago(venta.medio_pago as typeof medioPago);
       setEfectivoRecibido(venta.efectivo_recibido ?? '0');
-      setCartItems(buildCartItemsFromDetalles(venta.detalles || []));
+      const descuentoGeneralVenta = Number(venta.descuento_porcentaje || 0);
+      setCartItems(
+        buildCartItemsFromDetalles(venta.detalles || [], descuentoGeneralVenta)
+      );
       setDescuentoGeneral(venta.descuento_porcentaje ?? '0');
       setDescuentoAutorizado(true);
       setDocumentoGenerado(null);
@@ -506,7 +519,13 @@ export default function Ventas() {
     if (!ventaBorrador || !esCaja) return;
     setFacturandoCaja(true);
     try {
-      const facturada = await ventasApi.facturarEnCaja(ventaBorrador.id);
+      const tipoComprobante =
+        (ventaBorrador.tipo_comprobante as DocumentoGenerado['tipo']) || 'FACTURA';
+      await ventasApi.actualizarVenta(
+        ventaBorrador.id,
+        buildVentaPayload(tipoComprobante, ventaBorrador.vendedor)
+      );
+      await ventasApi.facturarEnCaja(ventaBorrador.id);
       resetVentaState();
       setMensaje('Venta facturada correctamente.');
       cargarPendientesCaja();
@@ -729,6 +748,9 @@ export default function Ventas() {
       0,
       efectivoRecibidoNumero - totals.totalAplicado
     );
+    const descuentoGeneralPorcentaje = descuentoAutorizado
+      ? parseNumber(descuentoGeneral)
+      : 0;
     return {
       tipo_comprobante: tipo,
       cliente: clienteId ?? 0,
@@ -743,15 +765,18 @@ export default function Ventas() {
       cambio: cambioCalculado.toFixed(2),
       detalles: cartItems.map((item) => {
         const subtotal = item.precioUnitario * item.cantidad;
-        const descuento = subtotal * (item.descuentoPorcentaje / 100);
-        const base = subtotal - descuento;
+        const descuentoLinea = subtotal * (item.descuentoPorcentaje / 100);
+        const descuentoGeneralLinea =
+          subtotal * (descuentoGeneralPorcentaje / 100);
+        const base = subtotal - descuentoLinea;
         const iva = base * (item.ivaPorcentaje / 100);
-        const total = roundCop(base + iva);
+        const total = roundCop(base + iva - descuentoGeneralLinea);
+        const descuentoTotalLinea = descuentoLinea + descuentoGeneralLinea;
         return {
           producto: item.id,
           cantidad: item.cantidad,
           precio_unitario: roundCop(item.precioUnitario).toFixed(2),
-          descuento_unitario: roundCop(descuento).toFixed(2),
+          descuento_unitario: roundCop(descuentoTotalLinea).toFixed(2),
           iva_porcentaje: item.ivaPorcentaje.toFixed(2),
           subtotal: roundCop(subtotal).toFixed(2),
           total: total.toFixed(2),
