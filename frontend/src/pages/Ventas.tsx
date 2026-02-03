@@ -37,6 +37,7 @@ type CartItem = {
   stock: number;
   cantidad: number;
   descuentoPorcentaje: number;
+  unidadMedida: string;
 };
 
 type DocumentoGenerado = {
@@ -96,6 +97,25 @@ const parseNumber = (value: string) => {
 };
 
 const roundCop = (value: number) => Math.round(value);
+const unidadesDecimales = new Set(['KG', 'LT', 'MT']);
+
+const getCantidadStep = (unidadMedida?: string) =>
+  unidadesDecimales.has(unidadMedida ?? '') ? 0.01 : 1;
+
+const getCantidadMin = (unidadMedida?: string) =>
+  unidadesDecimales.has(unidadMedida ?? '') ? 0.01 : 1;
+
+const normalizeCantidad = (cantidad: number, unidadMedida?: string) => {
+  const min = getCantidadMin(unidadMedida);
+  if (!Number.isFinite(cantidad)) {
+    return min;
+  }
+  const clamped = Math.max(min, cantidad);
+  if (unidadesDecimales.has(unidadMedida ?? '')) {
+    return Number(clamped.toFixed(2));
+  }
+  return Math.round(clamped);
+};
 
 export default function Ventas() {
   const { user } = useAuth();
@@ -330,9 +350,10 @@ export default function Ventas() {
           nombre: repuesto.nombre || producto?.nombre || 'Producto',
           ivaPorcentaje: Number(repuesto.ivaPorcentaje || producto?.iva_porcentaje || 0),
           precioUnitario: Number(repuesto.precioUnitario || producto?.precio_venta || 0),
-          stock: producto?.stock ?? 0,
+          stock: Number(producto?.stock ?? 0),
           cantidad: repuesto.cantidad,
           descuentoPorcentaje: 0,
+          unidadMedida: producto?.unidad_medida ?? 'N/A',
         }));
 
         setCartItems(items);
@@ -423,7 +444,13 @@ export default function Ventas() {
       if (existing) {
         return prev.map((item) =>
           item.id === producto.id
-            ? { ...item, cantidad: item.cantidad + 1 }
+            ? {
+                ...item,
+                cantidad: normalizeCantidad(
+                  item.cantidad + getCantidadStep(item.unidadMedida),
+                  item.unidadMedida
+                ),
+              }
             : item
         );
       }
@@ -435,9 +462,10 @@ export default function Ventas() {
           nombre: producto.nombre,
           ivaPorcentaje: Number(producto.iva_porcentaje ?? 0),
           precioUnitario: Number(producto.precio_venta),
-          stock: producto.stock,
+          stock: Number(producto.stock),
           cantidad: 1,
           descuentoPorcentaje: 0,
+          unidadMedida: producto.unidad_medida ?? 'N/A',
         },
       ];
     });
@@ -479,7 +507,14 @@ export default function Ventas() {
   const handleActualizarCantidad = (id: number, cantidad: number) => {
     if (ventaBloqueada) return;
     setCartItems((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, cantidad } : item))
+      prev.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              cantidad: normalizeCantidad(cantidad, item.unidadMedida),
+            }
+          : item
+      )
     );
   };
 
@@ -732,6 +767,7 @@ export default function Ventas() {
             stock: 0,
             cantidad: Number(detalle.cantidad),
             descuentoPorcentaje,
+            unidadMedida: detalle.unidad_medida ?? 'N/A',
           };
         });
         setDetalleCaja(data);
@@ -1231,7 +1267,7 @@ export default function Ventas() {
                           onClick={() =>
                             handleActualizarCantidad(
                               item.id,
-                              Math.max(1, item.cantidad - 1)
+                              item.cantidad - getCantidadStep(item.unidadMedida)
                             )
                           }
                           disabled={ventaBloqueada}
@@ -1241,7 +1277,8 @@ export default function Ventas() {
                         </button>
                         <input
                           type="number"
-                          min={1}
+                          min={getCantidadMin(item.unidadMedida)}
+                          step={getCantidadStep(item.unidadMedida)}
                           value={item.cantidad}
                           onChange={(event) =>
                             handleActualizarCantidad(
@@ -1255,7 +1292,10 @@ export default function Ventas() {
                         <button
                           type="button"
                           onClick={() =>
-                            handleActualizarCantidad(item.id, item.cantidad + 1)
+                            handleActualizarCantidad(
+                              item.id,
+                              item.cantidad + getCantidadStep(item.unidadMedida)
+                            )
                           }
                           disabled={ventaBloqueada}
                           className="text-slate-400 hover:text-slate-600 disabled:cursor-not-allowed"

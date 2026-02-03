@@ -417,8 +417,10 @@ class DetalleVenta(BaseModel):
         verbose_name='Producto'
     )
     
-    cantidad = models.IntegerField(
-        validators=[MinValueValidator(1)],
+    cantidad = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))],
         verbose_name='Cantidad'
     )
     precio_unitario = models.DecimalField(

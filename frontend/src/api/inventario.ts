@@ -12,8 +12,8 @@ export interface Producto {
   precio_costo: string;
   precio_venta: string;
   precio_venta_minimo: string;
-  stock: number;
-  stock_minimo: number;
+  stock: string;
+  stock_minimo: string;
   stock_bajo: boolean;
   unidad_medida: string;
   iva_porcentaje: string;
@@ -34,7 +34,8 @@ export interface ProductoList {
   categoria_nombre: string;
   proveedor_nombre: string;
   precio_venta: string;
-  stock: number;
+  stock: string;
+  unidad_medida: string;
   stock_estado: 'AGOTADO' | 'BAJO' | 'OK';
   is_active: boolean;
   created_at: string;
