@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
@@ -61,10 +61,10 @@ class OrdenTallerViewSet(viewsets.ModelViewSet):
             return Response({'error': 'Producto no encontrado'}, status=status.HTTP_404_NOT_FOUND)
 
         try:
-            cantidad = int(cantidad)
+            cantidad = Decimal(str(cantidad))
             if cantidad <= 0:
                 raise ValueError
-        except (TypeError, ValueError):
+        except (InvalidOperation, TypeError, ValueError):
             return Response({'error': 'Cantidad inválida'}, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():

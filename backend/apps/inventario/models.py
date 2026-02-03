@@ -141,21 +141,31 @@ class Producto(BaseModel):
     )
     
     # Inventario
-    stock = models.IntegerField(
-        default=0,
+    stock = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
         db_index=True,
         verbose_name='Stock actual'
     )
-    stock_minimo = models.IntegerField(
-        default=5,
+    stock_minimo = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('5.00'),
         verbose_name='Stock mínimo',
         help_text='Alerta cuando el stock llegue a este nivel'
     )
+    UNIDADES_MEDIDA = [
+        ('KG', 'Kilogramo'),
+        ('LT', 'Litro'),
+        ('MT', 'Metro'),
+    ]
     unidad_medida = models.CharField(
         max_length=20,
-        default='UND',
+        default='KG',
+        choices=UNIDADES_MEDIDA,
         verbose_name='Unidad de medida',
-        help_text='UND, PAR, KG, LT, etc.'
+        help_text='KG, LT, MT'
     )
     
     # IVA
@@ -236,14 +246,20 @@ class MovimientoInventario(BaseModel):
         db_index=True,
         verbose_name='Tipo de movimiento'
     )
-    cantidad = models.IntegerField(
+    cantidad = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
         verbose_name='Cantidad',
         help_text='Positivo para entradas, negativo para salidas'
     )
-    stock_anterior = models.IntegerField(
+    stock_anterior = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
         verbose_name='Stock anterior'
     )
-    stock_nuevo = models.IntegerField(
+    stock_nuevo = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
         verbose_name='Stock nuevo'
     )
     
