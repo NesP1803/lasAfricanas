@@ -317,6 +317,19 @@ class Venta(BaseModel):
         # Solo facturas pueden tener datos de DIAN
         if self.tipo_comprobante != 'FACTURA' and (self.factura_electronica_uuid or self.factura_electronica_cufe):
             raise ValidationError('Solo las facturas pueden tener datos de facturación electrónica')
+
+        # Las cotizaciones NO pueden tener descuentos
+        if self.tipo_comprobante == 'COTIZACION':
+            if self.descuento_porcentaje and self.descuento_porcentaje > 0:
+                raise ValidationError(
+                    'Las cotizaciones no pueden tener descuentos. '
+                    'Si el cliente desea un descuento, debe realizar la compra directamente como remisión o factura.'
+                )
+            if self.descuento_valor and self.descuento_valor > 0:
+                raise ValidationError(
+                    'Las cotizaciones no pueden tener descuentos. '
+                    'Si el cliente desea un descuento, debe realizar la compra directamente como remisión o factura.'
+                )
         
         # Validar descuento con permisos del vendedor
         if (

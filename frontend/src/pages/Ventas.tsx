@@ -493,6 +493,15 @@ export default function Ventas() {
     };
   }, [cartItems, descuentoAutorizado, descuentoGeneral]);
 
+  // Detectar si hay descuentos aplicados (para deshabilitar cotizaciones)
+  const tieneDescuentosAplicados = useMemo(() => {
+    const tieneDescuentoGeneral = parseNumber(descuentoGeneral) > 0;
+    const tieneDescuentoLineas = cartItems.some(
+      (item) => item.descuentoPorcentaje > 0
+    );
+    return tieneDescuentoGeneral || tieneDescuentoLineas;
+  }, [cartItems, descuentoGeneral]);
+
   const cargarPendientesCaja = useCallback(() => {
     setCargandoPendientesCaja(true);
     ventasApi
@@ -923,6 +932,28 @@ export default function Ventas() {
 
   const handleGenerarDocumento = async (tipo: DocumentoGenerado['tipo']) => {
     if (!validarVenta()) return;
+
+    // Las cotizaciones NO pueden tener descuentos
+    if (tipo === 'COTIZACION') {
+      const tieneDescuentoGeneral = parseNumber(descuentoGeneral) > 0;
+      const tieneDescuentoLineas = cartItems.some(
+        (item) => item.descuentoPorcentaje > 0
+      );
+
+      if (tieneDescuentoGeneral || tieneDescuentoLineas) {
+        setMensaje(
+          'Las cotizaciones no pueden tener descuentos. Si el cliente desea un descuento, ' +
+            'debe realizar la compra directamente como remisión o factura.'
+        );
+        showNotification({
+          type: 'error',
+          message:
+            'Las cotizaciones no permiten descuentos. Genere una remisión o factura si desea aplicar descuentos.',
+        });
+        return;
+      }
+    }
+
     try {
       const efectivoRecibidoNumero = roundCop(parseNumber(efectivoRecibido));
       const cambioCalculado = Math.max(
@@ -1225,7 +1256,12 @@ export default function Ventas() {
                   <button
                     type="button"
                     onClick={() => handleGenerarDocumento('COTIZACION')}
-                    disabled={ventaBloqueada}
+                    disabled={ventaBloqueada || tieneDescuentosAplicados}
+                    title={
+                      tieneDescuentosAplicados
+                        ? 'Las cotizaciones no permiten descuentos. Quite los descuentos o genere una remisión/factura.'
+                        : undefined
+                    }
                     className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-1.5 text-[11px] font-semibold uppercase text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
                   >
                     <span>Cotizar</span>
@@ -1267,7 +1303,12 @@ export default function Ventas() {
                   <button
                     type="button"
                     onClick={() => handleGenerarDocumento('COTIZACION')}
-                    disabled={ventaBloqueada}
+                    disabled={ventaBloqueada || tieneDescuentosAplicados}
+                    title={
+                      tieneDescuentosAplicados
+                        ? 'Las cotizaciones no permiten descuentos. Quite los descuentos o genere una remisión/factura.'
+                        : undefined
+                    }
                     className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-1.5 text-[11px] font-semibold uppercase text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
                   >
                     <span>Cotizar</span>
@@ -1285,6 +1326,11 @@ export default function Ventas() {
                 </>
               )}
             </div>
+            {tieneDescuentosAplicados && (
+              <p className="mt-1 text-xs text-amber-600">
+                Las cotizaciones no permiten descuentos. Si desea cotizar, quite los descuentos primero.
+              </p>
+            )}
           </div>
 
           <div className="space-y-2 lg:col-span-2">
