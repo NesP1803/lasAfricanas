@@ -85,7 +85,7 @@ export default function Caja() {
   const handleImprimir = () => {
     if (!documento) return;
     printComprobante({
-      formato,
+      formato: 'POS',
       tipo: documento.tipo_comprobante as 'FACTURA' | 'REMISION' | 'COTIZACION',
       numero: documento.numero_comprobante || `#${documento.id}`,
       fecha: documento.facturada_at || documento.fecha,

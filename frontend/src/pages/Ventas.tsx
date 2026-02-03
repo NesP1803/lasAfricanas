@@ -1718,7 +1718,7 @@ export default function Ventas() {
                   onClick={() => {
                     if (!documentoPreview) return;
                     printComprobante({
-                      formato: documentoPreview.formato,
+                      formato: 'POS',
                       tipo: documentoPreview.tipo,
                       numero: documentoPreview.numero,
                       fecha: documentoPreview.fecha,
