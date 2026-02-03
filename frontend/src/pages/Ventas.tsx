@@ -190,20 +190,6 @@ export default function Ventas() {
       .finally(() => setCargandoPendientes(false));
   }, [esCaja]);
 
-  useEffect(() => {
-    if (!esCaja) return;
-    setCargandoPendientes(true);
-    ventasApi
-      .getPendientesCaja()
-      .then((data) => {
-        const ordenadas = [...data].sort(
-          (a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime()
-        );
-        setPendientesCaja(ordenadas);
-      })
-      .catch(() => setPendientesCaja([]))
-      .finally(() => setCargandoPendientes(false));
-  }, [esCaja]);
 
   useEffect(() => {
     if (!mostrarPermiso) return;
@@ -1448,13 +1434,19 @@ export default function Ventas() {
                         {currencyFormatter.format(Number(venta.total))}
                       </td>
                       <td className="px-3 py-2 text-right">
-                        <button
-                          type="button"
-                          onClick={() => handleSeleccionarPendiente(venta.id)}
-                          className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-semibold uppercase text-slate-600 hover:bg-slate-50"
-                        >
-                          Ver detalle
-                        </button>
+                        {venta.estado === 'FACTURADA' ? (
+                          <span className="rounded-lg bg-emerald-100 px-3 py-1 text-xs font-semibold uppercase text-emerald-700">
+                            Facturada
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleSeleccionarPendiente(venta.id)}
+                            className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-semibold uppercase text-slate-600 hover:bg-slate-50"
+                          >
+                            Ver detalle
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
