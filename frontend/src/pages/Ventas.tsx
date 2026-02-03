@@ -6,6 +6,7 @@ import {
   FileText,
   MinusCircle,
   PlusCircle,
+  Printer,
   Search,
   ShieldCheck,
   Send,
@@ -29,6 +30,7 @@ import { useNotification } from '../contexts/NotificationContext';
 import ComprobanteTemplate, {
   type DocumentoDetalle,
 } from '../components/ComprobanteTemplate';
+import { printComprobante } from '../utils/printComprobante';
 import { descuentosApi, type SolicitudDescuento } from '../api/descuentos';
 import type { ConfiguracionEmpresa } from '../types';
 import type { ConfiguracionFacturacion } from '../types';
@@ -161,6 +163,40 @@ const buildCartItemsFromDetalles = (
       unidadMedida: 'N/A',
     };
   });
+
+const buildDocumentoPreviewFromVenta = (
+  venta: Venta,
+  formato: 'POS' | 'CARTA' = 'POS'
+): DocumentoPreview => {
+  const detallesPreview: DocumentoDetalle[] =
+    venta.detalles?.map((detalle) => ({
+      descripcion: detalle.producto_nombre ?? 'Producto',
+      codigo: detalle.producto_codigo ?? '',
+      cantidad: Number(detalle.cantidad),
+      precioUnitario: Number(detalle.precio_unitario),
+      descuento: Number(detalle.descuento_unitario),
+      ivaPorcentaje: Number(detalle.iva_porcentaje),
+      total: Number(detalle.total),
+    })) ?? [];
+
+  return {
+    tipo: venta.tipo_comprobante as DocumentoPreview['tipo'],
+    formato,
+    numero: venta.numero_comprobante || `#${venta.id}`,
+    fecha: venta.facturada_at || venta.fecha,
+    clienteNombre: venta.cliente_info?.nombre ?? 'Cliente general',
+    clienteDocumento: venta.cliente_info?.numero_documento ?? '',
+    medioPago: venta.medio_pago_display || venta.medio_pago,
+    estado: venta.estado_display || venta.estado,
+    detalles: detallesPreview,
+    subtotal: Number(venta.subtotal),
+    descuento: Number(venta.descuento_valor),
+    iva: Number(venta.iva),
+    total: Number(venta.total),
+    efectivoRecibido: Number(venta.efectivo_recibido ?? 0),
+    cambio: Number(venta.cambio ?? 0),
+  };
+};
 
 export default function Ventas() {
   const { user } = useAuth();
@@ -525,8 +561,15 @@ export default function Ventas() {
         ventaBorrador.id,
         buildVentaPayload(tipoComprobante, ventaBorrador.vendedor)
       );
-      await ventasApi.facturarEnCaja(ventaBorrador.id);
+      const facturada = await ventasApi.facturarEnCaja(ventaBorrador.id);
       resetVentaState();
+      setDocumentoGenerado({
+        tipo: facturada.tipo_comprobante as DocumentoGenerado['tipo'],
+        numero: facturada.numero_comprobante || `#${facturada.id}`,
+        cliente: facturada.cliente_info?.nombre ?? 'Cliente general',
+        total: currencyFormatter.format(Number(facturada.total)),
+      });
+      setDocumentoPreview(buildDocumentoPreviewFromVenta(facturada, 'POS'));
       setMensaje('Venta facturada correctamente.');
       cargarPendientesCaja();
     } catch (error) {
@@ -868,6 +911,7 @@ export default function Ventas() {
         cliente: clienteNombre,
         total: currencyFormatter.format(totals.totalAplicado),
       });
+      setDocumentoPreview(buildDocumentoPreviewFromVenta(venta, 'POS'));
       resetDescuentoState();
       setMensaje('Factura generada correctamente.');
     } catch (error) {
@@ -1668,6 +1712,36 @@ export default function Ventas() {
                   className="rounded border border-slate-300 px-4 py-2 text-sm text-slate-600"
                 >
                   Carta
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!documentoPreview) return;
+                    printComprobante({
+                      formato: documentoPreview.formato,
+                      tipo: documentoPreview.tipo,
+                      numero: documentoPreview.numero,
+                      fecha: documentoPreview.fecha,
+                      clienteNombre: documentoPreview.clienteNombre,
+                      clienteDocumento: documentoPreview.clienteDocumento,
+                      medioPago: documentoPreview.medioPago,
+                      estado: documentoPreview.estado,
+                      detalles: documentoPreview.detalles,
+                      subtotal: documentoPreview.subtotal,
+                      descuento: documentoPreview.descuento,
+                      iva: documentoPreview.iva,
+                      total: documentoPreview.total,
+                      efectivoRecibido: documentoPreview.efectivoRecibido,
+                      cambio: documentoPreview.cambio,
+                      notas: configuracion?.notas_factura,
+                      resolucion: configuracion?.resolucion,
+                      empresa,
+                    });
+                  }}
+                  className="flex items-center gap-2 rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
+                >
+                  <Printer size={16} />
+                  Imprimir
                 </button>
                 <button
                   type="button"
