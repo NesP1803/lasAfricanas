@@ -51,7 +51,6 @@ export const MODULE_DEFINITIONS: ModuleDefinition[] = [
     sections: [
       { key: "mercancia", label: "Mercancía" },
       { key: "stock_bajo", label: "Stock bajo" },
-      { key: "dar_de_baja", label: "Dar de baja" },
     ],
   },
   {

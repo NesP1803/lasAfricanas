@@ -257,8 +257,6 @@ export default function Layout() {
         const mappedTab =
           tab === "stock-bajo"
             ? "stock_bajo"
-            : tab === "dar-de-baja"
-            ? "dar_de_baja"
             : tab ?? undefined;
         return { moduleKey: "articulos", sectionKey: mappedTab };
       }
@@ -382,11 +380,6 @@ export default function Layout() {
             label: "Stock Bajo",
             path: "/articulos?tab=stock_bajo",
             key: "stock_bajo",
-          },
-          {
-            label: "Dar de Baja",
-            path: "/articulos?tab=dar_de_baja",
-            key: "dar_de_baja",
           },
         ];
         const filtered = isAdmin
