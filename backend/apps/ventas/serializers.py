@@ -112,6 +112,7 @@ class VentaListSerializer(serializers.ModelSerializer):
             'tipo_comprobante',
             'tipo_comprobante_display',
             'fecha',
+            'facturada_at',
             'enviada_a_caja_at',
             'cliente',
             'cliente_nombre',
