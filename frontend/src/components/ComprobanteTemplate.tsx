@@ -13,6 +13,7 @@ export type DocumentoDetalle = {
 type DocumentoTipo = 'FACTURA' | 'REMISION' | 'COTIZACION';
 
 type DocumentoTemplateProps = {
+  formato?: DocumentoFormato;
   tipo: DocumentoTipo;
   numero: string;
   fecha: string;
@@ -61,6 +62,7 @@ const getEmpresaInfo = (empresa?: ConfiguracionEmpresa | null) => ({
 });
 
 export default function ComprobanteTemplate({
+  formato = 'POS',
   tipo,
   numero,
   fecha,
@@ -96,8 +98,152 @@ export default function ComprobanteTemplate({
           total,
         },
       ];
+  if (formato === 'CARTA') {
+    const resumenIva = detallesMostrar.reduce((acc, detalle) => {
+      const base = detalle.cantidad * detalle.precioUnitario - detalle.descuento;
+      const ivaDetalle = base * (detalle.ivaPorcentaje / 100);
+      const totalDetalle = base + ivaDetalle;
+      const item = acc.get(detalle.ivaPorcentaje) || { base: 0, iva: 0, total: 0 };
+      acc.set(detalle.ivaPorcentaje, {
+        base: item.base + base,
+        iva: item.iva + ivaDetalle,
+        total: item.total + totalDetalle,
+      });
+      return acc;
+    }, new Map<number, { base: number; iva: number; total: number }>());
+    const resumenIvaArray = Array.from(resumenIva.entries()).map(([porcentaje, valores]) => ({
+      porcentaje,
+      ...valores,
+    }));
+
+    return (
+      <div className="mx-auto w-full max-w-3xl border border-slate-300 bg-white p-6 text-xs text-slate-800">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="space-y-1">
+            <p className="text-sm font-semibold uppercase">{infoEmpresa.nombre}</p>
+            <p>{infoEmpresa.nit}</p>
+            <p>{infoEmpresa.regimen}</p>
+            <p>{infoEmpresa.direccion}</p>
+            {infoEmpresa.telefono ? <p>Tel: {infoEmpresa.telefono}</p> : null}
+          </div>
+          <div className="text-right">
+            <p className="text-xs uppercase text-slate-500">{tituloDocumento}</p>
+            <p className="text-lg font-semibold">{numero}</p>
+            <p className="text-xs text-slate-500">{fechaFormateada}</p>
+          </div>
+        </div>
+
+        {resolucion ? (
+          <p className="mt-2 text-[10px] text-slate-500">{resolucion}</p>
+        ) : null}
+
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <div className="space-y-1">
+            <p className="text-[11px] uppercase text-slate-500">Facturado a</p>
+            <p className="text-sm font-semibold">{clienteNombre}</p>
+            <p className="text-xs">NIT/CC: {clienteDocumento}</p>
+          </div>
+          <div className="space-y-1 text-right">
+            <p className="text-[11px] uppercase text-slate-500">Medio pago</p>
+            <p className="text-sm font-semibold">{medioPago || 'N/D'}</p>
+            <p className="text-xs">Estado: {estado || 'N/D'}</p>
+          </div>
+        </div>
+
+        <div className="mt-4 border border-slate-200">
+          <div className="grid grid-cols-[2.5fr,0.7fr,1fr,1fr,1fr,0.7fr] gap-2 bg-slate-100 px-3 py-2 text-[11px] font-semibold uppercase text-slate-600">
+            <span>Descripción</span>
+            <span className="text-center">Cant.</span>
+            <span className="text-right">Valor U.</span>
+            <span className="text-right">Desc.</span>
+            <span className="text-right">Total</span>
+            <span className="text-right">IVA</span>
+          </div>
+          {detallesMostrar.map((detalle, index) => (
+            <div
+              key={`${detalle.descripcion}-${index}`}
+              className="grid grid-cols-[2.5fr,0.7fr,1fr,1fr,1fr,0.7fr] gap-2 border-t border-slate-200 px-3 py-2 text-[11px]"
+            >
+              <div>
+                <p className="font-semibold text-slate-700">{detalle.descripcion}</p>
+                {detalle.codigo ? (
+                  <p className="text-[10px] text-slate-500">Cod. {detalle.codigo}</p>
+                ) : null}
+              </div>
+              <span className="text-center">{detalle.cantidad}</span>
+              <span className="text-right">{currencyFormatter.format(detalle.precioUnitario)}</span>
+              <span className="text-right">{currencyFormatter.format(detalle.descuento)}</span>
+              <span className="text-right">{currencyFormatter.format(detalle.total)}</span>
+              <span className="text-right">{detalle.ivaPorcentaje}%</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 grid gap-4 md:grid-cols-[1.2fr,1fr]">
+          <div className="rounded border border-slate-200 p-3">
+            <p className="text-[11px] font-semibold uppercase text-slate-600">
+              Discriminación tarifas IVA
+            </p>
+            <div className="mt-2 grid grid-cols-[0.6fr,1fr,1fr,1fr] text-[11px] text-slate-600">
+              <span>IVA %</span>
+              <span className="text-right">Base</span>
+              <span className="text-right">IVA</span>
+              <span className="text-right">Total</span>
+            </div>
+            {resumenIvaArray.map((item) => (
+              <div
+                key={`iva-${item.porcentaje}`}
+                className="mt-1 grid grid-cols-[0.6fr,1fr,1fr,1fr] text-[11px]"
+              >
+                <span>{item.porcentaje}%</span>
+                <span className="text-right">{currencyFormatter.format(item.base)}</span>
+                <span className="text-right">{currencyFormatter.format(item.iva)}</span>
+                <span className="text-right">{currencyFormatter.format(item.total)}</span>
+              </div>
+            ))}
+          </div>
+          <div className="space-y-2 rounded border border-slate-200 p-3 text-[11px]">
+            <div className="flex justify-between">
+              <span className="text-slate-500">Subtotal</span>
+              <span className="font-semibold">{currencyFormatter.format(subtotal)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Impuestos</span>
+              <span className="font-semibold">{currencyFormatter.format(iva)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Descuento</span>
+              <span className="font-semibold">-{currencyFormatter.format(descuento)}</span>
+            </div>
+            <div className="flex justify-between text-sm font-semibold">
+              <span>Total a pagar</span>
+              <span>{currencyFormatter.format(total)}</span>
+            </div>
+            {efectivoRecibido !== undefined && cambio !== undefined ? (
+              <>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Recibido</span>
+                  <span className="font-semibold">
+                    {currencyFormatter.format(efectivoRecibido)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Cambio</span>
+                  <span className="font-semibold">{currencyFormatter.format(cambio)}</span>
+                </div>
+              </>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="mt-4 rounded border border-slate-200 bg-slate-50 p-3 text-[10px] text-slate-500">
+          {notas || 'Gracias por su compra. Presentar factura para garantías y devoluciones.'}
+        </div>
+      </div>
+    );
+  }
   return (
-    <div className="mx-auto w-full max-w-[340px] border border-slate-300 bg-white p-4 text-[10px] text-slate-800">
+    <div className="mx-auto w-full max-w-[80mm] border border-slate-300 bg-white p-4 text-[10px] text-slate-800">
       <div className="text-center">
         <p className="text-xs font-semibold uppercase">{infoEmpresa.nombre}</p>
         <p>{infoEmpresa.nit}</p>

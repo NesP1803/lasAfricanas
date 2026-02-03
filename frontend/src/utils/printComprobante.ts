@@ -104,25 +104,13 @@ export const printComprobante = ({
           },
         ];
 
-  const detalleRows = detallesMostrar
-    .map(
-      (detalle) => `
-        <tr>
-          <td>
-            <strong>${detalle.descripcion}</strong>
-            ${detalle.codigo ? `<div class="muted">Código: ${detalle.codigo}</div>` : ''}
-            <div class="muted">${detalle.cantidad} x ${currencyFormatter.format(detalle.precioUnitario)}</div>
-          </td>
-          <td class="right">${currencyFormatter.format(detalle.total)}</td>
-        </tr>
-      `
-    )
-    .join('');
-
   const estilos = `
     :root {
       --ticket-width: 80mm;
-      --ticket-padding: 6mm;
+      --ticket-padding: 10px;
+      --border-color: #cbd5e1;
+      --muted: #64748b;
+      --text: #0f172a;
     }
     * { box-sizing: border-box; }
     @page { size: var(--ticket-width) auto; margin: 0; }
@@ -133,23 +121,34 @@ export const printComprobante = ({
     }
     body {
       font-family: "Courier New", Courier, monospace;
-      padding: var(--ticket-padding);
-      color: #0f172a;
+      padding: 0;
+      color: var(--text);
       font-size: 10px;
-      line-height: 1.2;
+      line-height: 1.25;
       background: #fff;
     }
-    h1 { font-size: 11px; text-transform: uppercase; margin: 0; }
-    h2 { font-size: 10px; margin: 6px 0; text-transform: uppercase; }
-    p { margin: 2px 0; }
-    .box { border-top: 1px dashed #94a3b8; margin-top: 6px; padding-top: 6px; }
-    .row { display: flex; justify-content: space-between; margin-bottom: 3px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 9px; }
-    th, td { padding: 3px 0; border-bottom: 1px dashed #cbd5f5; vertical-align: top; }
-    th { text-align: left; text-transform: uppercase; font-size: 8px; color: #475569; }
-    .right { text-align: right; }
-    .muted { color: #64748b; font-size: 8px; }
-    .nota { margin-top: 6px; font-size: 8px; color: #64748b; }
+    .ticket {
+      width: var(--ticket-width);
+      margin: 0 auto;
+      border: 1px solid var(--border-color);
+      padding: var(--ticket-padding);
+      background: #fff;
+    }
+    .center { text-align: center; }
+    .title { font-size: 11px; text-transform: uppercase; margin: 6px 0 2px; }
+    .subtitle { font-size: 10px; font-weight: 600; margin: 0; }
+    .line { border-top: 1px dashed #94a3b8; margin: 6px 0; }
+    .row { display: flex; justify-content: space-between; margin: 2px 0; }
+    .label { color: var(--muted); font-size: 9px; }
+    .value { font-weight: 600; }
+    .detalle-title { display: flex; justify-content: space-between; font-weight: 600; margin-top: 6px; }
+    .detalle-item { margin-top: 4px; }
+    .detalle-desc { text-transform: uppercase; margin: 0 0 2px; }
+    .detalle-meta { display: flex; justify-content: space-between; font-size: 9px; color: var(--muted); }
+    .totals { margin-top: 6px; }
+    .totals .row { font-size: 10px; }
+    .totals .total { font-size: 11px; font-weight: 700; }
+    .nota { margin-top: 6px; font-size: 9px; color: var(--muted); }
   `;
 
   printWindow.document.write(`
@@ -161,54 +160,65 @@ export const printComprobante = ({
         <style>${estilos}</style>
       </head>
       <body>
-        <div>
-          <div>
-            <h1>${infoEmpresa.nombre}</h1>
+        <div class="ticket">
+          <div class="center">
+            <p class="subtitle">${infoEmpresa.nombre}</p>
             <p>${infoEmpresa.nit}</p>
             <p>${infoEmpresa.regimen}</p>
             <p>${infoEmpresa.direccion}</p>
             ${infoEmpresa.telefono ? `<p>Tel: ${infoEmpresa.telefono}</p>` : ''}
-            ${resolucion ? `<p class="muted">${resolucion}</p>` : ''}
+            ${resolucion ? `<p class="label">${resolucion}</p>` : ''}
           </div>
-        </div>
-        <h2>${tituloDocumento}</h2>
-        <p><strong>${numero}</strong></p>
-        <p>Fecha: ${fechaFormateada}</p>
-        <p>Cliente: ${clienteNombre}</p>
-        <p>NIT/CC: ${clienteDocumento}</p>
-        <div class="box">
-          <div class="row"><span>Medio de pago</span><span>${medioPago || 'N/D'}</span></div>
-          <div class="row"><span>Estado</span><span>${estado || 'N/D'}</span></div>
-        </div>
-        <h2>Detalle</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Descripción</th>
-              <th class="right">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${detalleRows}
-          </tbody>
-        </table>
-        <div class="box">
-          <div class="row"><span>Subtotal</span><span>${currencyFormatter.format(subtotal)}</span></div>
-          <div class="row"><span>Impuestos</span><span>${currencyFormatter.format(iva)}</span></div>
-          <div class="row"><span>Descuentos</span><span>-${currencyFormatter.format(descuento)}</span></div>
-          <div class="row"><strong>Total</strong><strong>${currencyFormatter.format(total)}</strong></div>
-          ${
-            efectivoRecibido !== undefined && cambio !== undefined
-              ? `
-                <div class="row"><span>Recibido</span><span>${currencyFormatter.format(
-                  efectivoRecibido
-                )}</span></div>
-                <div class="row"><span>Cambio</span><span>${currencyFormatter.format(cambio)}</span></div>
+          <div class="line"></div>
+          <div class="center">
+            <p class="title">${tituloDocumento}</p>
+            <p class="subtitle">${numero}</p>
+          </div>
+          <div class="line"></div>
+          <div class="row"><span class="label">Medio pago:</span><span class="value">${medioPago || 'N/D'}</span></div>
+          <div class="row"><span class="label">Estado:</span><span class="value">${estado || 'N/D'}</span></div>
+          <div class="row"><span class="label">Fecha/Hora:</span><span class="value">${fechaFormateada}</span></div>
+          <div class="row"><span class="label">Cliente:</span><span class="value">${clienteNombre}</span></div>
+          <div class="row"><span class="label">NIT/CC:</span><span class="value">${clienteDocumento}</span></div>
+          <div class="line"></div>
+          <div class="detalle-title">
+            <span>Descripción</span>
+            <span>Total</span>
+          </div>
+          ${detallesMostrar
+            .map(
+              (detalle) => `
+                <div class="detalle-item">
+                  <p class="detalle-desc">${detalle.descripcion}</p>
+                  ${detalle.codigo ? `<p class="label">Código: ${detalle.codigo}</p>` : ''}
+                  <div class="detalle-meta">
+                    <span>${detalle.cantidad} x ${currencyFormatter.format(detalle.precioUnitario)}</span>
+                    <span>${currencyFormatter.format(detalle.total)}</span>
+                  </div>
+                </div>
               `
-              : ''
-          }
+            )
+            .join('')}
+          <div class="line"></div>
+          <div class="totals">
+            <div class="row"><span>Subtotal</span><span>${currencyFormatter.format(subtotal)}</span></div>
+            <div class="row"><span>Impuestos</span><span>${currencyFormatter.format(iva)}</span></div>
+            <div class="row"><span>Descuentos</span><span>-${currencyFormatter.format(descuento)}</span></div>
+            <div class="row total"><span>Total a pagar</span><span>${currencyFormatter.format(total)}</span></div>
+            ${
+              efectivoRecibido !== undefined && cambio !== undefined
+                ? `
+                  <div class="row"><span>Recibido</span><span>${currencyFormatter.format(
+                    efectivoRecibido
+                  )}</span></div>
+                  <div class="row"><span>Cambio</span><span>${currencyFormatter.format(cambio)}</span></div>
+                `
+                : ''
+            }
+          </div>
+          <div class="line"></div>
+          <p class="nota">${notas || 'Gracias por su compra. Vuelva pronto.'}</p>
         </div>
-        <p class="nota">${notas || 'Gracias por su compra. Vuelva pronto.'}</p>
       </body>
     </html>
   `);
