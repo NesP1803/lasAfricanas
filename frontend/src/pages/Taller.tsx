@@ -24,13 +24,14 @@ import {
   normalizeModuleAccess,
 } from '../store/moduleAccess';
 
-const unidadesDecimales = new Set(['KG', 'LT', 'MT']);
+const unidadPermiteDecimales = (unidadMedida?: string) =>
+  Boolean(unidadMedida && unidadMedida !== 'N/A');
 
 const getCantidadStep = (unidadMedida?: string) =>
-  unidadesDecimales.has(unidadMedida ?? '') ? 0.01 : 1;
+  unidadPermiteDecimales(unidadMedida) ? 0.01 : 1;
 
 const getCantidadMin = (unidadMedida?: string) =>
-  unidadesDecimales.has(unidadMedida ?? '') ? 0.01 : 1;
+  unidadPermiteDecimales(unidadMedida) ? 0.01 : 1;
 
 const parseListado = <T,>(data: PaginatedResponse<T> | T[]) => {
   if (Array.isArray(data)) {

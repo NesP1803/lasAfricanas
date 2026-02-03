@@ -97,13 +97,14 @@ const parseNumber = (value: string) => {
 };
 
 const roundCop = (value: number) => Math.round(value);
-const unidadesDecimales = new Set(['KG', 'LT', 'MT']);
+const unidadPermiteDecimales = (unidadMedida?: string) =>
+  Boolean(unidadMedida && unidadMedida !== 'N/A');
 
 const getCantidadStep = (unidadMedida?: string) =>
-  unidadesDecimales.has(unidadMedida ?? '') ? 0.01 : 1;
+  unidadPermiteDecimales(unidadMedida) ? 0.01 : 1;
 
 const getCantidadMin = (unidadMedida?: string) =>
-  unidadesDecimales.has(unidadMedida ?? '') ? 0.01 : 1;
+  unidadPermiteDecimales(unidadMedida) ? 0.01 : 1;
 
 const normalizeCantidad = (cantidad: number, unidadMedida?: string) => {
   const min = getCantidadMin(unidadMedida);
@@ -111,7 +112,7 @@ const normalizeCantidad = (cantidad: number, unidadMedida?: string) => {
     return min;
   }
   const clamped = Math.max(min, cantidad);
-  if (unidadesDecimales.has(unidadMedida ?? '')) {
+  if (unidadPermiteDecimales(unidadMedida)) {
     return Number(clamped.toFixed(2));
   }
   return Math.round(clamped);
