@@ -46,10 +46,14 @@ def _validar_detalles_venta(venta):
         raise ValidationError('La venta no tiene detalles para facturar.')
 
     subtotal = sum((detalle.subtotal for detalle in detalles), Decimal('0.00'))
-    total = sum((detalle.total for detalle in detalles), Decimal('0.00'))
+    total_detalles = sum((detalle.total for detalle in detalles), Decimal('0.00'))
+    descuento_global = Decimal(venta.descuento_valor or 0)
+    total_esperado = total_detalles - descuento_global
+    if total_esperado < 0:
+        total_esperado = Decimal('0.00')
 
     normalized_subtotal = Decimal(subtotal).quantize(Decimal('0.01'))
-    normalized_total = Decimal(total).quantize(Decimal('0.01'))
+    normalized_total = Decimal(total_esperado).quantize(Decimal('0.01'))
 
     if normalized_subtotal != Decimal(venta.subtotal).quantize(Decimal('0.01')):
         raise ValidationError('El subtotal no coincide con los detalles.')

@@ -150,3 +150,45 @@ class CajaVentaFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         venta.refresh_from_db()
         self.assertEqual(venta.estado, 'FACTURADA')
+
+    def test_caja_factura_venta_con_descuento_global(self):
+        venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            cliente=self.cliente,
+            vendedor=self.vendedor,
+            subtotal=Decimal('80'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('6.40'),
+            iva=Decimal('15.20'),
+            total=Decimal('88.80'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('90'),
+            cambio=Decimal('1.20'),
+            estado='ENVIADA_A_CAJA',
+        )
+        DetalleVenta.objects.create(
+            venta=venta,
+            producto=self.producto,
+            cantidad=2,
+            precio_unitario=Decimal('30'),
+            descuento_unitario=Decimal('0'),
+            iva_porcentaje=Decimal('19'),
+            subtotal=Decimal('60'),
+            total=Decimal('71.40'),
+        )
+        DetalleVenta.objects.create(
+            venta=venta,
+            producto=self.producto,
+            cantidad=2,
+            precio_unitario=Decimal('10'),
+            descuento_unitario=Decimal('0'),
+            iva_porcentaje=Decimal('19'),
+            subtotal=Decimal('20'),
+            total=Decimal('23.80'),
+        )
+
+        self.client.force_authenticate(user=self.cajero)
+        response = self.client.post(f'/api/caja/{venta.id}/facturar/')
+        self.assertEqual(response.status_code, 200)
+        venta.refresh_from_db()
+        self.assertEqual(venta.estado, 'FACTURADA')
