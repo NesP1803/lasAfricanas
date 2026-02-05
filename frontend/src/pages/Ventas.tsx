@@ -151,7 +151,7 @@ const buildCartItemsFromDetalles = (
       nombre: detalle.producto_nombre ?? 'Producto',
       ivaPorcentaje: Number(detalle.iva_porcentaje || 0),
       precioUnitario,
-      stock: 0,
+      stock: Number(detalle.producto_stock ?? 0),
       cantidad,
       descuentoPorcentaje,
       unidadMedida: 'N/A',
@@ -866,9 +866,8 @@ export default function Ventas() {
     if (!venta) return;
     setEnviandoCaja(true);
     try {
-      const enviada = await ventasApi.enviarACaja(venta.id);
-      setVentaBorrador(enviada);
-      resetDescuentoState();
+      await ventasApi.enviarACaja(venta.id);
+      resetVentaState();
       setMensaje('Venta enviada a caja.');
       showNotification({
         type: 'success',
@@ -894,7 +893,7 @@ export default function Ventas() {
         ...buildVentaPayload('FACTURA'),
         facturar_directo: true,
       });
-      setVentaBorrador(venta);
+      resetVentaState();
       setDocumentoGenerado({
         tipo: 'FACTURA',
         numero: venta.numero_comprobante || `FAC-${venta.id}`,
@@ -902,7 +901,6 @@ export default function Ventas() {
         total: currencyFormatter.format(totals.totalAplicado),
       });
       setDocumentoPreview(buildDocumentoPreviewFromVenta(venta));
-      resetDescuentoState();
       setMensaje('Factura generada correctamente.');
     } catch (error) {
       setMensaje('No se pudo facturar. Revisa la conexión.');

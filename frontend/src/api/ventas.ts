@@ -26,6 +26,7 @@ export interface DetalleVenta {
   producto: number;
   producto_codigo?: string;
   producto_nombre?: string;
+  producto_stock?: string;
   cantidad: number;
   precio_unitario: string;
   descuento_unitario: string;

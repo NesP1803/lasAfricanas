@@ -593,18 +593,18 @@ class CajaViewSet(viewsets.GenericViewSet):
         if permission_response:
             return permission_response
 
-        with transaction.atomic():
-            venta = (
-                Venta.objects.select_for_update()
-                .select_related('cliente', 'vendedor')
-                .prefetch_related('detalles', 'detalles__producto')
-                .get(pk=pk)
-            )
-            try:
+        try:
+            with transaction.atomic():
+                venta = (
+                    Venta.objects.select_for_update()
+                    .select_related('cliente', 'vendedor')
+                    .prefetch_related('detalles', 'detalles__producto')
+                    .get(pk=pk)
+                )
                 self._validar_para_facturar(venta)
                 _facturar_venta(venta, request.user)
-            except ValidationError as error:
-                return Response({'error': error.detail}, status=status.HTTP_400_BAD_REQUEST)
+        except ValidationError as error:
+            return Response({'error': error.detail}, status=status.HTTP_400_BAD_REQUEST)
 
         serializer = VentaDetailSerializer(venta)
         return Response(serializer.data)

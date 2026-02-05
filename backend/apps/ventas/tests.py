@@ -316,3 +316,46 @@ class CajaVentaFlowTests(TestCase):
         self.assertIn(enviada.id, ids)
         self.assertNotIn(facturada.id, ids)
         self.assertNotIn(remision.id, ids)
+
+    def test_stock_insuficiente_no_cambia_estado_enviada_a_caja(self):
+        self.producto.stock = Decimal('1')
+        self.producto.save(update_fields=['stock'])
+
+        venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            cliente=self.cliente,
+            vendedor=self.vendedor,
+            subtotal=Decimal('400'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('76'),
+            total=Decimal('476'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('500'),
+            cambio=Decimal('24'),
+            estado='ENVIADA_A_CAJA',
+            enviada_a_caja_por=self.vendedor,
+            enviada_a_caja_at=timezone.now(),
+        )
+        DetalleVenta.objects.create(
+            venta=venta,
+            producto=self.producto,
+            cantidad=2,
+            precio_unitario=Decimal('200'),
+            descuento_unitario=Decimal('0'),
+            iva_porcentaje=Decimal('19'),
+            subtotal=Decimal('400'),
+            total=Decimal('476'),
+        )
+
+        self.client.force_authenticate(user=self.cajero)
+        response = self.client.post(f'/api/caja/{venta.id}/facturar/')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('Stock insuficiente', str(response.data.get('error')))
+
+        venta.refresh_from_db()
+        self.producto.refresh_from_db()
+        self.assertEqual(venta.estado, 'ENVIADA_A_CAJA')
+        self.assertIsNone(venta.facturada_at)
+        self.assertIsNone(venta.facturada_por)
+        self.assertEqual(self.producto.stock, Decimal('1'))
