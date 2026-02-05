@@ -702,7 +702,6 @@ export default function Ventas() {
     setDocumentoGenerado(null);
     setDocumentoPreview(null);
     setVentaBorrador(null);
-    setDetalleCaja(null);
     setClienteId(null);
     setClienteNombre('Cliente general');
     setClienteDocumento('');
