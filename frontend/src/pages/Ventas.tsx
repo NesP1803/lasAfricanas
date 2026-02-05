@@ -496,11 +496,11 @@ export default function Ventas() {
   const cargarPendientesCaja = useCallback(() => {
     setCargandoPendientesCaja(true);
     ventasApi
-      .getPendientesCaja()
+      .getPendientesCaja({ fecha: fechaCaja })
       .then((data) => setPendientesCaja(data))
       .catch(() => setPendientesCaja([]))
       .finally(() => setCargandoPendientesCaja(false));
-  }, []);
+  }, [fechaCaja]);
 
   useEffect(() => {
     if (!esCaja) {
@@ -509,13 +509,6 @@ export default function Ventas() {
     }
     cargarPendientesCaja();
   }, [cargarPendientesCaja, esCaja]);
-
-  const pendientesCajaHoy = useMemo(() => {
-    return pendientesCaja.filter((venta) => {
-      const fechaVenta = new Date(venta.fecha).toISOString().split('T')[0];
-      return fechaVenta === fechaCaja;
-    });
-  }, [fechaCaja, pendientesCaja]);
 
   const handleCargarPendienteCaja = async (ventaId: number) => {
     if (ventaBloqueada || !esCaja) return;
@@ -1406,14 +1399,14 @@ export default function Ventas() {
                     </td>
                   </tr>
                 )}
-                {!cargandoPendientesCaja && pendientesCajaHoy.length === 0 && (
+                {!cargandoPendientesCaja && pendientesCaja.length === 0 && (
                   <tr>
                     <td colSpan={5} className="px-3 py-6 text-center text-slate-500">
                       No hay ventas pendientes.
                     </td>
                   </tr>
                 )}
-                {pendientesCajaHoy.map((venta) => (
+                {pendientesCaja.map((venta) => (
                   <tr key={venta.id} className="border-b border-slate-100">
                     <td className="px-3 py-2 font-semibold text-slate-700">
                       {venta.numero_comprobante || `#${venta.id}`}
@@ -1422,7 +1415,7 @@ export default function Ventas() {
                       {venta.cliente_nombre}
                     </td>
                     <td className="px-3 py-2 text-slate-500">
-                      {new Date(venta.fecha).toLocaleTimeString('es-CO', {
+                      {new Date(venta.enviada_a_caja_at || venta.fecha).toLocaleTimeString('es-CO', {
                         hour: '2-digit',
                         minute: '2-digit',
                       })}
