@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { Dispatch, SetStateAction } from 'react';
+import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   RefreshCw,
@@ -39,7 +39,7 @@ type ListadoTab = {
   key: ActiveTab;
   label: string;
   description: string;
-  icon: JSX.Element;
+  icon: ReactNode;
 };
 
 const tabs: ListadoTab[] = [
