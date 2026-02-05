@@ -37,7 +37,7 @@ class MotoViewSet(viewsets.ModelViewSet):
 
 
 class OrdenTallerViewSet(viewsets.ModelViewSet):
-    queryset = OrdenTaller.objects.select_related('moto', 'mecanico', 'venta').prefetch_related('repuestos__producto')
+    queryset = OrdenTaller.objects.all()
     serializer_class = OrdenTallerSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
@@ -45,6 +45,20 @@ class OrdenTallerViewSet(viewsets.ModelViewSet):
     search_fields = ['moto__placa', 'moto__marca', 'mecanico__nombre']
     ordering_fields = ['created_at', 'estado']
     ordering = ['-created_at']
+
+    def get_queryset(self):
+        return OrdenTaller.objects.select_related(
+            # Evita N+1 para datos principales de la orden.
+            'moto',
+            'mecanico',
+            'venta',
+        ).prefetch_related(
+            # Evita N+1 en repuestos y acceso al producto por línea.
+            'repuestos__producto',
+            # Pre-carga relaciones comunes del producto usado en serialización/listados.
+            'repuestos__producto__categoria',
+            'repuestos__producto__proveedor',
+        )
 
     @action(detail=True, methods=['post'])
     def agregar_repuesto(self, request, pk=None):

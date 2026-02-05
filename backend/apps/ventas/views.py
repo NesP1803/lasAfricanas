@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
-from django.db.models import Sum, Count, Q
+from django.db.models import Sum, Count, Q, Prefetch
 from django.db import transaction
 from django.utils import timezone
 from datetime import datetime, time, timedelta
@@ -177,9 +177,18 @@ class VentaViewSet(viewsets.ModelViewSet):
         return inicio_dt, fin_dt
 
     def get_queryset(self):
+        detalles_queryset = DetalleVenta.objects.select_related(
+            # Evita N+1 al serializar cada detalle de venta.
+            'producto',
+            # Pre-carga relaciones frecuentes del producto en reportes/listados.
+            'producto__categoria',
+            'producto__proveedor',
+        )
         queryset = Venta.objects.select_related(
             'cliente', 'vendedor'
-        ).prefetch_related('detalles').all()
+        ).prefetch_related(
+            Prefetch('detalles', queryset=detalles_queryset)
+        ).all()
         fecha_inicio = self.request.query_params.get('fecha_inicio')
         fecha_fin = self.request.query_params.get('fecha_fin')
         estado = self.request.query_params.get('estado')
@@ -479,12 +488,21 @@ class CajaViewSet(viewsets.GenericViewSet):
     serializer_class = VentaDetailSerializer
 
     def get_queryset(self):
+        detalles_queryset = DetalleVenta.objects.select_related(
+            # Evita consultas por cada detalle y su producto.
+            'producto',
+            # Pre-carga datos asociados usados en listados/reportes de caja.
+            'producto__categoria',
+            'producto__proveedor',
+        )
         return Venta.objects.select_related(
             'cliente',
             'vendedor',
             'facturada_por',
             'enviada_a_caja_por',
-        ).prefetch_related('detalles', 'detalles__producto')
+        ).prefetch_related(
+            Prefetch('detalles', queryset=detalles_queryset)
+        )
 
     def _require_caja(self, request):
         if not _is_caja(request.user):
