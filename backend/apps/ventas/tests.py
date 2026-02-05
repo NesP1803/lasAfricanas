@@ -1,5 +1,6 @@
 from decimal import Decimal
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.inventario.models import Categoria, Producto, Proveedor
@@ -192,3 +193,169 @@ class CajaVentaFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         venta.refresh_from_db()
         self.assertEqual(venta.estado, 'FACTURADA')
+
+    def test_enviar_a_caja_valida_totales_en_backend(self):
+        venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            cliente=self.cliente,
+            vendedor=self.vendedor,
+            subtotal=Decimal('100'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('19'),
+            total=Decimal('119'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('119'),
+            cambio=Decimal('0'),
+            estado='BORRADOR',
+        )
+        DetalleVenta.objects.create(
+            venta=venta,
+            producto=self.producto,
+            cantidad=1,
+            precio_unitario=Decimal('200'),
+            descuento_unitario=Decimal('0'),
+            iva_porcentaje=Decimal('19'),
+            subtotal=Decimal('200'),
+            total=Decimal('238'),
+        )
+
+        self.client.force_authenticate(user=self.vendedor)
+        response = self.client.post(f'/api/ventas/{venta.id}/enviar-a-caja/')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('no coincide', str(response.data.get('error')))
+
+    def test_caja_pendientes_solo_incluye_ventas_enviadas_y_no_facturadas(self):
+        enviada = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            cliente=self.cliente,
+            vendedor=self.vendedor,
+            subtotal=Decimal('200'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('38'),
+            total=Decimal('238'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('238'),
+            cambio=Decimal('0'),
+            estado='ENVIADA_A_CAJA',
+            enviada_a_caja_por=self.vendedor,
+            enviada_a_caja_at=timezone.now(),
+        )
+        DetalleVenta.objects.create(
+            venta=enviada,
+            producto=self.producto,
+            cantidad=1,
+            precio_unitario=Decimal('200'),
+            descuento_unitario=Decimal('0'),
+            iva_porcentaje=Decimal('19'),
+            subtotal=Decimal('200'),
+            total=Decimal('238'),
+        )
+
+        facturada = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            cliente=self.cliente,
+            vendedor=self.vendedor,
+            subtotal=Decimal('200'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('38'),
+            total=Decimal('238'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('238'),
+            cambio=Decimal('0'),
+            estado='FACTURADA',
+            enviada_a_caja_por=self.vendedor,
+            enviada_a_caja_at=timezone.now(),
+            facturada_por=self.cajero,
+            facturada_at=timezone.now(),
+        )
+        DetalleVenta.objects.create(
+            venta=facturada,
+            producto=self.producto,
+            cantidad=1,
+            precio_unitario=Decimal('200'),
+            descuento_unitario=Decimal('0'),
+            iva_porcentaje=Decimal('19'),
+            subtotal=Decimal('200'),
+            total=Decimal('238'),
+        )
+
+        remision = Venta.objects.create(
+            tipo_comprobante='REMISION',
+            cliente=self.cliente,
+            vendedor=self.vendedor,
+            subtotal=Decimal('200'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('38'),
+            total=Decimal('238'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('238'),
+            cambio=Decimal('0'),
+            estado='ENVIADA_A_CAJA',
+            enviada_a_caja_por=self.vendedor,
+            enviada_a_caja_at=timezone.now(),
+        )
+        DetalleVenta.objects.create(
+            venta=remision,
+            producto=self.producto,
+            cantidad=1,
+            precio_unitario=Decimal('200'),
+            descuento_unitario=Decimal('0'),
+            iva_porcentaje=Decimal('19'),
+            subtotal=Decimal('200'),
+            total=Decimal('238'),
+        )
+
+        self.client.force_authenticate(user=self.cajero)
+        response = self.client.get('/api/caja/pendientes/')
+        self.assertEqual(response.status_code, 200)
+        ids = [item['id'] for item in response.data]
+        self.assertIn(enviada.id, ids)
+        self.assertNotIn(facturada.id, ids)
+        self.assertNotIn(remision.id, ids)
+
+    def test_stock_insuficiente_no_cambia_estado_enviada_a_caja(self):
+        self.producto.stock = Decimal('1')
+        self.producto.save(update_fields=['stock'])
+
+        venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            cliente=self.cliente,
+            vendedor=self.vendedor,
+            subtotal=Decimal('400'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('76'),
+            total=Decimal('476'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('500'),
+            cambio=Decimal('24'),
+            estado='ENVIADA_A_CAJA',
+            enviada_a_caja_por=self.vendedor,
+            enviada_a_caja_at=timezone.now(),
+        )
+        DetalleVenta.objects.create(
+            venta=venta,
+            producto=self.producto,
+            cantidad=2,
+            precio_unitario=Decimal('200'),
+            descuento_unitario=Decimal('0'),
+            iva_porcentaje=Decimal('19'),
+            subtotal=Decimal('400'),
+            total=Decimal('476'),
+        )
+
+        self.client.force_authenticate(user=self.cajero)
+        response = self.client.post(f'/api/caja/{venta.id}/facturar/')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('Stock insuficiente', str(response.data.get('error')))
+
+        venta.refresh_from_db()
+        self.producto.refresh_from_db()
+        self.assertEqual(venta.estado, 'ENVIADA_A_CAJA')
+        self.assertIsNone(venta.facturada_at)
+        self.assertIsNone(venta.facturada_por)
+        self.assertEqual(self.producto.stock, Decimal('1'))
