@@ -60,6 +60,80 @@ class OrdenTallerViewSet(viewsets.ModelViewSet):
             'repuestos__producto__proveedor',
         )
 
+    @staticmethod
+    def _facturar_orden_en_transaccion(orden, user, tipo_comprobante):
+        if orden.estado == 'FACTURADO':
+            raise ValueError('La orden ya está facturada')
+        if not orden.moto.cliente:
+            raise ValueError('La moto no tiene cliente asignado')
+
+        repuestos = list(orden.repuestos.select_related('producto').all())
+        if not repuestos:
+            raise ValueError('La orden no tiene repuestos asociados')
+
+        subtotal = Decimal('0')
+        iva_total = Decimal('0')
+        detalles = []
+
+        for repuesto in repuestos:
+            producto = repuesto.producto
+            subtotal_item = Decimal(repuesto.cantidad) * Decimal(repuesto.precio_unitario)
+            iva_porcentaje = Decimal(producto.iva_porcentaje)
+            iva_item = (subtotal_item * iva_porcentaje) / Decimal('100')
+            total_item = subtotal_item + iva_item
+
+            subtotal += subtotal_item
+            iva_total += iva_item
+
+            detalles.append({
+                'producto': producto,
+                'cantidad': repuesto.cantidad,
+                'precio_unitario': repuesto.precio_unitario,
+                'descuento_unitario': Decimal('0'),
+                'iva_porcentaje': iva_porcentaje,
+                'subtotal': subtotal_item,
+                'total': total_item,
+            })
+
+        total = subtotal + iva_total
+
+        venta = Venta.objects.create(
+            tipo_comprobante=tipo_comprobante,
+            cliente=orden.moto.cliente,
+            vendedor=user,
+            subtotal=subtotal,
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=iva_total,
+            total=total,
+            medio_pago='EFECTIVO',
+            efectivo_recibido=total,
+            cambio=Decimal('0'),
+            observaciones=f"Venta generada desde orden de taller {orden.id}",
+            estado='FACTURADA',
+            facturada_por=user,
+            facturada_at=timezone.now(),
+        )
+
+        for detalle in detalles:
+            DetalleVenta.objects.create(
+                venta=venta,
+                producto=detalle['producto'],
+                cantidad=detalle['cantidad'],
+                precio_unitario=detalle['precio_unitario'],
+                descuento_unitario=detalle['descuento_unitario'],
+                iva_porcentaje=detalle['iva_porcentaje'],
+                subtotal=detalle['subtotal'],
+                total=detalle['total'],
+            )
+
+        orden.estado = 'FACTURADO'
+        orden.fecha_entrega = timezone.now()
+        orden.venta = venta
+        orden.save(update_fields=['estado', 'fecha_entrega', 'venta', 'updated_at'])
+
+        return orden
+
     @action(detail=True, methods=['post'])
     def agregar_repuesto(self, request, pk=None):
         orden = self.get_object()
@@ -70,24 +144,24 @@ class OrdenTallerViewSet(viewsets.ModelViewSet):
             return Response({'error': 'Debe proporcionar el producto'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            producto = Producto.objects.get(pk=producto_id, is_active=True)
-        except Producto.DoesNotExist:
-            return Response({'error': 'Producto no encontrado'}, status=status.HTTP_404_NOT_FOUND)
-
-        try:
             cantidad = Decimal(str(cantidad))
             if cantidad <= 0:
                 raise ValueError
         except (InvalidOperation, TypeError, ValueError):
             return Response({'error': 'Cantidad inválida'}, status=status.HTTP_400_BAD_REQUEST)
 
-        if producto.unidad_medida == 'N/A' and cantidad != cantidad.quantize(Decimal('1')):
-            return Response(
-                {'error': 'Para unidad N/A solo se permiten enteros'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
         with transaction.atomic():
+            try:
+                producto = Producto.objects.select_for_update().get(pk=producto_id, is_active=True)
+            except Producto.DoesNotExist:
+                return Response({'error': 'Producto no encontrado'}, status=status.HTTP_404_NOT_FOUND)
+
+            if producto.unidad_medida == 'N/A' and cantidad != cantidad.quantize(Decimal('1')):
+                return Response(
+                    {'error': 'Para unidad N/A solo se permiten enteros'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
             repuesto, created = OrdenRepuesto.objects.get_or_create(
                 orden=orden,
                 producto=producto,
@@ -125,9 +199,6 @@ class OrdenTallerViewSet(viewsets.ModelViewSet):
                     observaciones="Salida por orden de taller"
                 )
 
-                producto.stock = stock_nuevo
-                producto.save(update_fields=['stock', 'updated_at'])
-
         serializer = OrdenTallerSerializer(orden)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -149,8 +220,13 @@ class OrdenTallerViewSet(viewsets.ModelViewSet):
             return Response({'error': 'Debe indicar repuesto_id o producto'}, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
+            productos_ids = [repuesto.producto_id for repuesto in repuestos if not repuesto.producto.es_servicio]
+            productos = {
+                producto.id: producto
+                for producto in Producto.objects.select_for_update().filter(id__in=productos_ids)
+            }
             for repuesto in repuestos:
-                producto = repuesto.producto
+                producto = productos.get(repuesto.producto_id) or repuesto.producto
                 if producto.es_servicio:
                     continue
                 stock_anterior = producto.stock
@@ -166,8 +242,6 @@ class OrdenTallerViewSet(viewsets.ModelViewSet):
                     referencia=f"Orden taller #{orden.id}",
                     observaciones="Devolución por retiro de repuesto"
                 )
-                producto.stock = stock_nuevo
-                producto.save(update_fields=['stock', 'updated_at'])
             repuestos.delete()
 
         serializer = OrdenTallerSerializer(orden)
@@ -175,79 +249,21 @@ class OrdenTallerViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def facturar(self, request, pk=None):
-        orden = self.get_object()
-        if orden.estado == 'FACTURADO':
-            return Response({'error': 'La orden ya está facturada'}, status=status.HTTP_400_BAD_REQUEST)
-
-        if not orden.moto.cliente:
-            return Response({'error': 'La moto no tiene cliente asignado'}, status=status.HTTP_400_BAD_REQUEST)
-
         tipo_comprobante = request.data.get('tipo_comprobante', 'REMISION')
         if tipo_comprobante not in ['REMISION', 'FACTURA']:
             return Response({'error': 'Tipo de comprobante inválido'}, status=status.HTTP_400_BAD_REQUEST)
 
-        repuestos = orden.repuestos.select_related('producto').all()
-        if not repuestos:
-            return Response({'error': 'La orden no tiene repuestos asociados'}, status=status.HTTP_400_BAD_REQUEST)
-
-        subtotal = Decimal('0')
-        iva_total = Decimal('0')
-        detalles = []
-
-        for repuesto in repuestos:
-            producto = repuesto.producto
-            subtotal_item = Decimal(repuesto.cantidad) * Decimal(repuesto.precio_unitario)
-            iva_porcentaje = Decimal(producto.iva_porcentaje)
-            iva_item = (subtotal_item * iva_porcentaje) / Decimal('100')
-            total_item = subtotal_item + iva_item
-
-            subtotal += subtotal_item
-            iva_total += iva_item
-
-            detalles.append({
-                'producto': producto,
-                'cantidad': repuesto.cantidad,
-                'precio_unitario': repuesto.precio_unitario,
-                'descuento_unitario': Decimal('0'),
-                'iva_porcentaje': iva_porcentaje,
-                'subtotal': subtotal_item,
-                'total': total_item,
-            })
-
-        total = subtotal + iva_total
-
         with transaction.atomic():
-            venta = Venta.objects.create(
-                tipo_comprobante=tipo_comprobante,
-                cliente=orden.moto.cliente,
-                vendedor=request.user,
-                subtotal=subtotal,
-                descuento_porcentaje=Decimal('0'),
-                descuento_valor=Decimal('0'),
-                iva=iva_total,
-                total=total,
-                medio_pago='EFECTIVO',
-                efectivo_recibido=total,
-                cambio=Decimal('0'),
-                observaciones=f"Venta generada desde orden de taller {orden.id}",
+            orden = (
+                OrdenTaller.objects.select_for_update()
+                .select_related('moto', 'moto__cliente')
+                .prefetch_related('repuestos', 'repuestos__producto')
+                .get(pk=pk)
             )
-
-            for detalle in detalles:
-                DetalleVenta.objects.create(
-                    venta=venta,
-                    producto=detalle['producto'],
-                    cantidad=detalle['cantidad'],
-                    precio_unitario=detalle['precio_unitario'],
-                    descuento_unitario=detalle['descuento_unitario'],
-                    iva_porcentaje=detalle['iva_porcentaje'],
-                    subtotal=detalle['subtotal'],
-                    total=detalle['total'],
-                )
-
-            orden.estado = 'FACTURADO'
-            orden.fecha_entrega = timezone.now()
-            orden.venta = venta
-            orden.save()
+            try:
+                orden = self._facturar_orden_en_transaccion(orden, request.user, tipo_comprobante)
+            except ValueError as error:
+                return Response({'error': str(error)}, status=status.HTTP_400_BAD_REQUEST)
 
         serializer = OrdenTallerSerializer(orden)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
