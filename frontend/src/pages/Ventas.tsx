@@ -133,19 +133,14 @@ const normalizeCantidad = (cantidad: number, unidadMedida?: string) => {
 };
 
 const buildCartItemsFromDetalles = (
-  detalles: DetalleVenta[],
-  descuentoGeneralPorcentaje: number
+  detalles: DetalleVenta[]
 ): CartItem[] =>
   detalles.map((detalle, index) => {
     const precioUnitario = Number(detalle.precio_unitario || 0);
-    const subtotalLinea = Number(detalle.subtotal || 0);
-    const descuentoUnitarioTotal = Number(detalle.descuento_unitario || 0);
-    const descuentoGeneralLinea =
-      subtotalLinea * (descuentoGeneralPorcentaje / 100);
-    const descuentoLinea = Math.max(
-      0,
-      descuentoUnitarioTotal - descuentoGeneralLinea
-    );
+    const cantidad = Number(detalle.cantidad || 0);
+    const subtotalLinea = precioUnitario * cantidad;
+    const descuentoLinea =
+      cantidad * Math.max(0, Number(detalle.descuento_unitario || 0));
     const descuentoPorcentaje =
       subtotalLinea > 0
         ? Math.min(100, (descuentoLinea / subtotalLinea) * 100)
@@ -157,7 +152,7 @@ const buildCartItemsFromDetalles = (
       ivaPorcentaje: Number(detalle.iva_porcentaje || 0),
       precioUnitario,
       stock: 0,
-      cantidad: Number(detalle.cantidad || 0),
+      cantidad,
       descuentoPorcentaje,
       unidadMedida: 'N/A',
     };
@@ -459,8 +454,9 @@ export default function Ventas() {
       const lineSubtotal = item.precioUnitario * item.cantidad;
       return acc + lineSubtotal * (item.descuentoPorcentaje / 100);
     }, 0);
+    const rawBaseImpuestos = Math.max(0, rawSubtotal - rawDescuentoLineas);
     const rawDescuentoGeneralValor =
-      rawSubtotal * (parseNumber(descuentoGeneral) / 100);
+      rawBaseImpuestos * (parseNumber(descuentoGeneral) / 100);
     const rawIva = cartItems.reduce((acc, item) => {
       const lineSubtotal = item.precioUnitario * item.cantidad;
       const lineDesc = lineSubtotal * (item.descuentoPorcentaje / 100);
@@ -532,10 +528,7 @@ export default function Ventas() {
       setClienteDocumento(venta.cliente_info?.numero_documento ?? '');
       setMedioPago(venta.medio_pago as typeof medioPago);
       setEfectivoRecibido(venta.efectivo_recibido ?? '0');
-      const descuentoGeneralVenta = Number(venta.descuento_porcentaje || 0);
-      setCartItems(
-        buildCartItemsFromDetalles(venta.detalles || [], descuentoGeneralVenta)
-      );
+      setCartItems(buildCartItemsFromDetalles(venta.detalles || []));
       setDescuentoGeneral(venta.descuento_porcentaje ?? '0');
       setDescuentoAutorizado(true);
       setDocumentoGenerado(null);
@@ -813,17 +806,17 @@ export default function Ventas() {
       detalles: cartItems.map((item) => {
         const subtotal = item.precioUnitario * item.cantidad;
         const descuentoLinea = subtotal * (item.descuentoPorcentaje / 100);
-        const descuentoGeneralLinea =
-          subtotal * (descuentoGeneralPorcentaje / 100);
         const base = subtotal - descuentoLinea;
         const iva = base * (item.ivaPorcentaje / 100);
+        const descuentoGeneralLinea =
+          descuentoAutorizado ? base * (descuentoGeneralPorcentaje / 100) : 0;
         const total = roundCop(base + iva - descuentoGeneralLinea);
-        const descuentoTotalLinea = descuentoLinea + descuentoGeneralLinea;
+        const descuentoUnitario = item.cantidad > 0 ? descuentoLinea / item.cantidad : 0;
         return {
           producto: item.id,
           cantidad: item.cantidad,
           precio_unitario: roundCop(item.precioUnitario).toFixed(2),
-          descuento_unitario: roundCop(descuentoTotalLinea).toFixed(2),
+          descuento_unitario: roundCop(descuentoUnitario).toFixed(2),
           iva_porcentaje: item.ivaPorcentaje.toFixed(2),
           subtotal: roundCop(subtotal).toFixed(2),
           total: total.toFixed(2),
@@ -1604,9 +1597,14 @@ export default function Ventas() {
               <div className="flex items-center justify-between">
                 <span className="text-slate-500">Descuentos</span>
                 <span className="text-base font-semibold text-rose-600">
-                  -{currencyFormatter.format(totals.descuentoTotalPrevio)}
+                  -{currencyFormatter.format(totals.descuentoTotalAplicado)}
                 </span>
               </div>
+              {!descuentoAutorizado && totals.descuentoTotalPrevio > totals.descuentoTotalAplicado && (
+                <p className="text-xs text-amber-600">
+                  Hay un descuento general pendiente de aprobación.
+                </p>
+              )}
             </div>
           </div>
 
