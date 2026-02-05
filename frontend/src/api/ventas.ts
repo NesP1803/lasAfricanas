@@ -4,6 +4,24 @@ export type { Cliente };
 
 const API_URL = '/api';
 
+
+const extractApiErrorMessage = (error: unknown, fallback: string): string => {
+  if (typeof error === 'string' && error.trim()) return error;
+  if (error && typeof error === 'object') {
+    const data = error as Record<string, unknown>;
+    const candidates = [data.error, data.detail, data.message];
+    for (const item of candidates) {
+      if (typeof item === 'string' && item.trim()) return item;
+      if (Array.isArray(item) && item.length > 0) {
+        const first = item[0];
+        if (typeof first === 'string' && first.trim()) return first;
+      }
+    }
+  }
+  return fallback;
+};
+
+
 export interface DetalleVenta {
   producto: number;
   producto_codigo?: string;
@@ -334,9 +352,12 @@ export const ventasApi = {
     return response.json();
   },
 
-  async getPendientesCaja(): Promise<VentaListItem[]> {
+  async getPendientesCaja(params?: { fecha?: string }): Promise<VentaListItem[]> {
     const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/caja/pendientes/`, {
+    const queryParams = new URLSearchParams();
+    if (params?.fecha) queryParams.append('fecha', params.fecha);
+    const query = queryParams.toString();
+    const response = await fetch(`${API_URL}/caja/pendientes/${query ? `?${query}` : ''}`, {
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
@@ -368,7 +389,7 @@ export const ventasApi = {
 
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.error || 'Error al facturar en caja');
+      throw new Error(extractApiErrorMessage(error, 'Error al facturar en caja'));
     }
     return response.json();
   },

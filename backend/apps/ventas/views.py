@@ -7,7 +7,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Sum, Count, Q, Prefetch
 from django.db import transaction
 from django.utils import timezone
-from datetime import datetime, time, timedelta
+from datetime import datetime, time
 from decimal import Decimal
 
 from .models import Cliente, Venta, DetalleVenta, SolicitudDescuento, VentaAnulada, RemisionAnulada
@@ -414,25 +414,42 @@ class VentaViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='enviar-a-caja')
     def enviar_a_caja(self, request, pk=None):
-        venta = self.get_object()
-
-        if venta.estado != 'BORRADOR':
-            return Response(
-                {'error': 'Solo se pueden enviar a caja ventas en borrador.'},
-                status=status.HTTP_400_BAD_REQUEST,
+        with transaction.atomic():
+            venta = (
+                Venta.objects.select_for_update()
+                .select_related('cliente', 'vendedor')
+                .prefetch_related('detalles', 'detalles__producto')
+                .get(pk=pk)
             )
 
-        venta.estado = 'ENVIADA_A_CAJA'
-        venta.enviada_a_caja_por = request.user
-        venta.enviada_a_caja_at = timezone.now()
-        venta.save(
-            update_fields=[
-                'estado',
-                'enviada_a_caja_por',
-                'enviada_a_caja_at',
-                'updated_at',
-            ]
-        )
+            if venta.estado != 'BORRADOR':
+                return Response(
+                    {'error': 'Solo se pueden enviar a caja ventas en borrador.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if venta.tipo_comprobante != 'FACTURA':
+                return Response(
+                    {'error': 'Solo las facturas se pueden enviar a caja.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            try:
+                _validar_detalles_venta(venta)
+            except ValidationError as error:
+                return Response({'error': error.detail}, status=status.HTTP_400_BAD_REQUEST)
+
+            venta.estado = 'ENVIADA_A_CAJA'
+            venta.enviada_a_caja_por = request.user
+            venta.enviada_a_caja_at = timezone.now()
+            venta.save(
+                update_fields=[
+                    'estado',
+                    'enviada_a_caja_por',
+                    'enviada_a_caja_at',
+                    'updated_at',
+                ]
+            )
 
         serializer = VentaDetailSerializer(venta)
         return Response(serializer.data)
@@ -530,6 +547,12 @@ class CajaViewSet(viewsets.GenericViewSet):
         if venta.estado != 'ENVIADA_A_CAJA':
             raise ValidationError('La venta no está enviada a caja.')
 
+        if venta.tipo_comprobante != 'FACTURA':
+            raise ValidationError('Solo las facturas enviadas a caja se pueden facturar en caja.')
+
+        if not venta.enviada_a_caja_at or not venta.enviada_a_caja_por_id:
+            raise ValidationError('La venta no tiene traza válida de envío a caja.')
+
         _validar_detalles_venta(venta)
 
     @action(detail=False, methods=['get'], url_path='pendientes')
@@ -538,21 +561,27 @@ class CajaViewSet(viewsets.GenericViewSet):
         if permission_response:
             return permission_response
 
-        hoy_inicio = timezone.localtime().replace(
-            hour=0,
-            minute=0,
-            second=0,
-            microsecond=0,
-        )
-        hoy_fin = hoy_inicio + timedelta(days=1)
         ventas = self.get_queryset().filter(
+            tipo_comprobante='FACTURA',
             estado='ENVIADA_A_CAJA',
             enviada_a_caja_at__isnull=False,
-            enviada_a_caja_at__gte=hoy_inicio,
-            enviada_a_caja_at__lt=hoy_fin,
-        ).order_by(
+            facturada_at__isnull=True,
+            facturada_por__isnull=True,
+        )
+
+        fecha = request.query_params.get('fecha')
+        if fecha:
+            try:
+                fecha_dt = datetime.strptime(fecha, '%Y-%m-%d').date()
+            except ValueError:
+                return Response(
+                    {'error': 'Formato de fecha inválido. Use YYYY-MM-DD.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            ventas = ventas.filter(enviada_a_caja_at__date=fecha_dt)
+
+        ventas = ventas.order_by(
             'enviada_a_caja_at',
-            'fecha',
             'id',
         )
         serializer = VentaListSerializer(ventas, many=True)
