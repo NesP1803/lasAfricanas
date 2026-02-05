@@ -186,7 +186,7 @@ class VentaCreateSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True
     )
-    
+
     class Meta:
         model = Venta
         fields = [
@@ -205,26 +205,114 @@ class VentaCreateSerializer(serializers.ModelSerializer):
             'observaciones',
             'detalles'
         ]
-    
+
+    @staticmethod
+    def _to_decimal(value, default='0'):
+        if value is None:
+            return Decimal(default)
+        return Decimal(str(value))
+
+    @staticmethod
+    def _q(value):
+        return Decimal(value).quantize(Decimal('0.01'))
+
+    def _calcular_detalle(self, detalle):
+        cantidad = self._to_decimal(detalle.get('cantidad'))
+        precio_unitario = self._to_decimal(detalle.get('precio_unitario'))
+        descuento_unitario = self._to_decimal(detalle.get('descuento_unitario', 0))
+        iva_porcentaje = self._to_decimal(detalle.get('iva_porcentaje', 0))
+
+        subtotal_bruto = cantidad * precio_unitario
+        descuento_linea = min(subtotal_bruto, cantidad * max(descuento_unitario, Decimal('0')))
+        subtotal_neto = subtotal_bruto - descuento_linea
+        iva_linea = (subtotal_neto * iva_porcentaje) / Decimal('100')
+        total_linea = subtotal_neto + iva_linea
+
+        detalle['subtotal'] = self._q(subtotal_neto)
+        detalle['total'] = self._q(total_linea)
+
+        return {
+            'subtotal_neto': self._q(subtotal_neto),
+            'iva_linea': self._q(iva_linea),
+        }
+
+    def _recalcular_totales(self, validated_data, detalles_data):
+        subtotal = Decimal('0.00')
+        iva = Decimal('0.00')
+
+        for detalle in detalles_data:
+            calculo = self._calcular_detalle(detalle)
+            subtotal += calculo['subtotal_neto']
+            iva += calculo['iva_linea']
+
+        descuento_porcentaje = self._to_decimal(validated_data.get('descuento_porcentaje', 0))
+        descuento_valor = self._to_decimal(validated_data.get('descuento_valor', 0))
+
+        if descuento_porcentaje < 0 or descuento_valor < 0:
+            raise serializers.ValidationError({'descuento_valor': 'El descuento no puede ser negativo.'})
+
+        descuento_porcentaje_valor = (subtotal * descuento_porcentaje) / Decimal('100')
+        descuento_total = descuento_valor if descuento_valor > 0 else descuento_porcentaje_valor
+        descuento_total = min(descuento_total, subtotal)
+
+        total = subtotal + iva - descuento_total
+
+        validated_data['subtotal'] = self._q(subtotal)
+        validated_data['iva'] = self._q(iva)
+        validated_data['descuento_valor'] = self._q(descuento_total)
+        validated_data['total'] = self._q(total)
+
+        efectivo_recibido = validated_data.get('efectivo_recibido')
+        if efectivo_recibido is not None:
+            cambio = self._to_decimal(efectivo_recibido) - validated_data['total']
+            validated_data['cambio'] = self._q(cambio if cambio > 0 else Decimal('0'))
+
     def create(self, validated_data):
-        """Crea la venta con sus detalles"""
+        """Crea la venta con sus detalles y totales calculados en backend"""
         detalles_data = validated_data.pop('detalles', [])
+        self._recalcular_totales(validated_data, detalles_data)
+
         venta = Venta.objects.create(**validated_data)
-        
+
         for detalle_data in detalles_data:
             DetalleVenta.objects.create(venta=venta, **detalle_data)
-        
+
         return venta
 
     def update(self, instance, validated_data):
         detalles_data = validated_data.pop('detalles', None)
+
+        validated_data.setdefault('descuento_porcentaje', instance.descuento_porcentaje)
+        validated_data.setdefault('descuento_valor', instance.descuento_valor)
+        if 'efectivo_recibido' not in validated_data:
+            validated_data['efectivo_recibido'] = instance.efectivo_recibido
+
+        if detalles_data is None:
+            detalles_data = [
+                {
+                    'producto': detalle.producto,
+                    'cantidad': detalle.cantidad,
+                    'precio_unitario': detalle.precio_unitario,
+                    'descuento_unitario': detalle.descuento_unitario,
+                    'iva_porcentaje': detalle.iva_porcentaje,
+                    'subtotal': detalle.subtotal,
+                    'total': detalle.total,
+                    'afecto_inventario': detalle.afecto_inventario,
+                }
+                for detalle in instance.detalles.all()
+            ]
+
+        self._recalcular_totales(validated_data, detalles_data)
+
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
-        if detalles_data is not None:
+
+        if self.initial_data.get('detalles') is not None:
             instance.detalles.all().delete()
             for detalle_data in detalles_data:
                 DetalleVenta.objects.create(venta=instance, **detalle_data)
+
         return instance
 
     def validate(self, attrs):
@@ -236,7 +324,7 @@ class VentaCreateSerializer(serializers.ModelSerializer):
                 )
 
         # Las cotizaciones NO pueden tener descuentos
-        tipo_comprobante = attrs.get('tipo_comprobante')
+        tipo_comprobante = attrs.get('tipo_comprobante') or getattr(self.instance, 'tipo_comprobante', None)
         if tipo_comprobante == 'COTIZACION':
             descuento_porcentaje = attrs.get('descuento_porcentaje', 0)
             descuento_valor = attrs.get('descuento_valor', 0)

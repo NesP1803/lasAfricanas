@@ -113,6 +113,13 @@ def _facturar_venta(venta, user):
     _registrar_salida_inventario(venta, user, detalles=detalles)
 
 
+def _validar_estado_para_anulacion(venta):
+    if venta.estado == 'ANULADA':
+        raise ValidationError('Esta venta ya está anulada.')
+    if venta.estado == 'FACTURADA' and venta.tipo_comprobante == 'FACTURA' and venta.facturada_at is None:
+        raise ValidationError('La venta está en un estado inconsistente y no se puede anular.')
+
+
 class ClienteViewSet(viewsets.ModelViewSet):
     """ViewSet para gestionar clientes"""
     queryset = Cliente.objects.all()
@@ -327,14 +334,6 @@ class VentaViewSet(viewsets.ModelViewSet):
             "devuelve_inventario": true
         }
         """
-        venta = self.get_object()
-        
-        if venta.estado == 'ANULADA':
-            return Response(
-                {'error': 'Esta venta ya está anulada'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
         motivo = request.data.get('motivo')
         descripcion = request.data.get('descripcion', '')
         devuelve_inventario = True
@@ -345,38 +344,55 @@ class VentaViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Crear registro de anulación
-        if venta.tipo_comprobante == 'REMISION':
-            RemisionAnulada.objects.create(
-                remision=venta,
-                motivo=motivo,
-                descripcion=descripcion,
-                anulado_por=request.user,
-                devuelve_inventario=devuelve_inventario
+        with transaction.atomic():
+            venta = (
+                Venta.objects.select_for_update()
+                .prefetch_related('detalles', 'detalles__producto')
+                .get(pk=pk)
             )
-        else:
-            VentaAnulada.objects.create(
-                venta=venta,
-                motivo=motivo,
-                descripcion=descripcion,
-                anulado_por=request.user,
-                devuelve_inventario=devuelve_inventario
-            )
-        
-        # Cambiar estado de la venta
-        venta.estado = 'ANULADA'
-        venta.save()
-        
-        # Si devuelve inventario, restaurar stock
-        if devuelve_inventario and venta.afecta_inventario:
-            from apps.inventario.models import MovimientoInventario
-            
-            for detalle in venta.detalles.all():
-                if detalle.afecto_inventario:
-                    producto = detalle.producto
+            try:
+                _validar_estado_para_anulacion(venta)
+            except ValidationError as error:
+                return Response({'error': error.detail}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Crear registro de anulación
+            if venta.tipo_comprobante == 'REMISION':
+                RemisionAnulada.objects.create(
+                    remision=venta,
+                    motivo=motivo,
+                    descripcion=descripcion,
+                    anulado_por=request.user,
+                    devuelve_inventario=devuelve_inventario
+                )
+            else:
+                VentaAnulada.objects.create(
+                    venta=venta,
+                    motivo=motivo,
+                    descripcion=descripcion,
+                    anulado_por=request.user,
+                    devuelve_inventario=devuelve_inventario
+                )
+
+            # Cambiar estado de la venta
+            venta.estado = 'ANULADA'
+            venta.save(update_fields=['estado', 'updated_at'])
+
+            # Si devuelve inventario, restaurar stock
+            if devuelve_inventario and venta.afecta_inventario:
+                from apps.inventario.models import MovimientoInventario, Producto
+
+                detalles = [detalle for detalle in venta.detalles.all() if detalle.afecto_inventario]
+                productos_ids = [detalle.producto_id for detalle in detalles]
+                productos = {
+                    producto.id: producto
+                    for producto in Producto.objects.select_for_update().filter(id__in=productos_ids)
+                }
+
+                for detalle in detalles:
+                    producto = productos.get(detalle.producto_id) or detalle.producto
                     stock_anterior = producto.stock
                     stock_nuevo = stock_anterior + detalle.cantidad
-                    
+
                     MovimientoInventario.objects.create(
                         producto=producto,
                         tipo='DEVOLUCION',
@@ -388,10 +404,7 @@ class VentaViewSet(viewsets.ModelViewSet):
                         referencia=f"Anulación {venta.numero_comprobante}",
                         observaciones=f"Devolución por anulación: {descripcion}"
                     )
-                    
-                    producto.stock = stock_nuevo
-                    producto.save()
-        
+
         serializer = VentaDetailSerializer(venta)
         return Response(serializer.data)
 
