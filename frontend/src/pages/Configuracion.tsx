@@ -110,7 +110,7 @@ export default function Configuracion() {
   const [logoRemoved, setLogoRemoved] = useState(false);
   const [facturacion, setFacturacion] =
     useState<ConfiguracionFacturacion>(defaultFacturacion);
-  const [plantillaActiva, setPlantillaActiva] =
+  const [plantillaActiva] =
     useState<PlantillaField>("plantilla_factura_carta");
   const editorRef = useRef<HTMLDivElement | null>(null);
   const [impuestos, setImpuestos] = useState<Impuesto[]>(defaultImpuestos);
@@ -222,24 +222,6 @@ export default function Configuracion() {
   const availableTabs = useMemo(
     () => tabs.map((tab) => tab.id as ConfigTab),
     [tabs]
-  );
-
-  const plantillaOptions = useMemo(
-    () => [
-      {
-        id: "plantilla_factura_tirilla",
-        label: "Factura de venta · POS",
-      },
-      {
-        id: "plantilla_remision_tirilla",
-        label: "Remisión · POS",
-      },
-      {
-        id: "plantilla_nota_credito_tirilla",
-        label: "Nota crédito · POS",
-      },
-    ],
-    []
   );
 
   useEffect(() => {
@@ -834,22 +816,6 @@ export default function Configuracion() {
     origenUsuario,
     userModalMode,
   ]);
-
-  const actualizarPlantilla = (value: string) => {
-    setFacturacion((prev) => ({
-      ...prev,
-      [plantillaActiva]: value,
-    }));
-  };
-
-  const aplicarFormato = (comando: string, valor?: string) => {
-    if (!editorRef.current) {
-      return;
-    }
-    editorRef.current.focus();
-    document.execCommand(comando, false, valor);
-    actualizarPlantilla(editorRef.current.innerHTML);
-  };
 
   return (
     <div className="space-y-6">

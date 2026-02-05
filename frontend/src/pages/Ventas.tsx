@@ -1007,11 +1007,12 @@ export default function Ventas() {
 
   const obtenerInfoProducto = (info: ProductoList | Producto | null) => {
     if (!info) return null;
-    const nombre = 'producto_nombre' in info ? info.producto_nombre : info.nombre;
-    const codigo = 'producto_codigo' in info ? info.producto_codigo : info.codigo;
-    const precio = 'producto_precio' in info ? info.producto_precio : info.precio_venta;
-    const stock = 'producto_stock' in info ? info.producto_stock : info.stock;
-    return { nombre, codigo, precio, stock };
+    return {
+      nombre: info.nombre,
+      codigo: info.codigo,
+      precio: info.precio_venta,
+      stock: info.stock,
+    };
   };
 
   return (

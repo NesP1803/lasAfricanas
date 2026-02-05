@@ -11,6 +11,7 @@ export type DocumentoDetalle = {
 };
 
 type DocumentoTipo = 'FACTURA' | 'REMISION' | 'COTIZACION';
+export type DocumentoFormato = 'POS' | 'CARTA';
 
 type DocumentoTemplateProps = {
   formato?: DocumentoFormato;

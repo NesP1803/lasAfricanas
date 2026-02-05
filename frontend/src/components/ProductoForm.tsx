@@ -175,8 +175,7 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
 
   const loadImpuestos = async () => {
     try {
-      const data = await configuracionAPI.obtenerImpuestos();
-      const impuestosList = Array.isArray(data) ? data : data?.results ?? [];
+      const impuestosList: Impuesto[] = await configuracionAPI.obtenerImpuestos();
       setImpuestos(impuestosList);
       if (impuestosList.length > 0) {
         const impuestoBase =
@@ -266,8 +265,8 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
         ...formData,
         categoria: Number(formData.categoria),
         proveedor: formData.proveedor ? Number(formData.proveedor) : null,
-        stock: Number(formData.stock),
-        stock_minimo: Number(formData.stock_minimo),
+        stock: formData.stock,
+        stock_minimo: formData.stock_minimo,
         precio_costo: formData.precio_venta || '0.01',
         precio_venta_minimo: formData.precio_venta_minimo || '0',
         iva_porcentaje: porcentajeIva,

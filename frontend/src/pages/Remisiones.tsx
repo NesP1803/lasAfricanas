@@ -69,7 +69,8 @@ const splitNumeroComprobante = (numeroComprobante: string) => {
 
 const mapVentaToRemisionItem = (venta: VentaListItem): RemisionItem => {
   const fechaBase = venta.facturada_at ?? venta.fecha;
-  const { prefijo, numero } = splitNumeroComprobante(venta.numero_comprobante);
+  const numeroComprobante = venta.numero_comprobante ?? '';
+  const { prefijo, numero } = splitNumeroComprobante(numeroComprobante);
   return {
     id: venta.id,
     prefijo,

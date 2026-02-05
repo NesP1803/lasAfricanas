@@ -75,7 +75,7 @@ export default function Notificaciones() {
     };
   }, [actualizarSolicitudes]);
 
-  const handleAjusteDescuento = (id: string, value: string) => {
+  const handleAjusteDescuento = (id: number, value: string) => {
     setAjustesDescuento((prev) => ({ ...prev, [id]: value }));
   };
 
