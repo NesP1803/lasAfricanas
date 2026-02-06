@@ -51,16 +51,19 @@ class UsuarioSerializer(serializers.ModelSerializer):
             'email': {'required': False, 'allow_blank': True},
         }
 
+    def _normalizar_modulos_permitidos(self, validated_data):
+        """
+        Garantiza que modulos_permitidos nunca llegue como None.
+
+        En la base de datos actual la columna es NOT NULL, por lo que
+        serializamos a objeto vacío cuando no se envía o se envía null.
+        """
+        if validated_data.get('modulos_permitidos') is None:
+            validated_data['modulos_permitidos'] = {}
+
     def create(self, validated_data):
         password = validated_data.pop('password', None)
-
-        # Si no se especifica modulos_permitidos, asignar valor por defecto
-        if 'modulos_permitidos' not in validated_data or validated_data.get('modulos_permitidos') is None:
-            tipo_usuario = validated_data.get('tipo_usuario', 'VENDEDOR')
-            # Para usuarios no-admin, asignar objeto vacío (solo tendrán acceso a Mi perfil)
-            # Para admin, null significa acceso completo
-            if tipo_usuario != 'ADMIN':
-                validated_data['modulos_permitidos'] = {}
+        self._normalizar_modulos_permitidos(validated_data)
 
         usuario = Usuario(**validated_data)
         if password:
@@ -72,6 +75,8 @@ class UsuarioSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         password = validated_data.pop('password', None)
+        self._normalizar_modulos_permitidos(validated_data)
+
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         if password:
