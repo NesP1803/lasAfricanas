@@ -35,6 +35,12 @@ class MotoViewSet(viewsets.ModelViewSet):
     ordering_fields = ['placa', 'marca', 'created_at']
     ordering = ['placa']
 
+    def destroy(self, request, *args, **kwargs):
+        """Realiza eliminación lógica para conservar relaciones de órdenes."""
+        instance = self.get_object()
+        instance.soft_delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 class OrdenTallerViewSet(viewsets.ModelViewSet):
     queryset = OrdenTaller.objects.all()
