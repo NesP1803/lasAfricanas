@@ -78,8 +78,16 @@ export const configuracionAPI = {
     return response.data;
   },
   obtenerImpuestos: async () => {
-    const response = await apiClient.get<Impuesto[]>('/impuestos/');
-    return response.data;
+    const response = await apiClient.get<Impuesto[] | PaginatedResponse<Impuesto>>(
+      '/impuestos/'
+    );
+    if (Array.isArray(response.data)) {
+      return response.data;
+    }
+    if (Array.isArray(response.data?.results)) {
+      return response.data.results;
+    }
+    return [];
   },
   crearImpuesto: async (data: Partial<Impuesto>) => {
     const response = await apiClient.post<Impuesto>('/impuestos/', data);
