@@ -3,7 +3,7 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from apps.inventario.models import Categoria, Producto, Proveedor
+from apps.inventario.models import Categoria, Producto, Proveedor, MovimientoInventario
 from apps.usuarios.models import Usuario
 from apps.ventas.models import Cliente, Venta, DetalleVenta
 
@@ -224,6 +224,113 @@ class CajaVentaFlowTests(TestCase):
         response = self.client.post(f'/api/ventas/{venta.id}/enviar-a-caja/')
         self.assertEqual(response.status_code, 400)
         self.assertIn('no coincide', str(response.data.get('error')))
+
+    def test_facturar_venta_origen_taller_no_descuenta_doble(self):
+        MovimientoInventario.objects.create(
+            producto=self.producto,
+            tipo='SALIDA',
+            cantidad=Decimal('-1'),
+            stock_anterior=Decimal('10'),
+            stock_nuevo=Decimal('9'),
+            costo_unitario=Decimal('100'),
+            usuario=self.vendedor,
+            referencia='Orden taller #1',
+            observaciones='Salida por orden de taller',
+        )
+        self.producto.refresh_from_db()
+        self.assertEqual(self.producto.stock, Decimal('9'))
+
+        venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            cliente=self.cliente,
+            vendedor=self.vendedor,
+            subtotal=Decimal('200'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('38'),
+            total=Decimal('238'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('238'),
+            cambio=Decimal('0'),
+            estado='ENVIADA_A_CAJA',
+            inventario_ya_afectado=True,
+            enviada_a_caja_por=self.vendedor,
+            enviada_a_caja_at=timezone.now(),
+        )
+        DetalleVenta.objects.create(
+            venta=venta,
+            producto=self.producto,
+            cantidad=1,
+            precio_unitario=Decimal('200'),
+            descuento_unitario=Decimal('0'),
+            iva_porcentaje=Decimal('19'),
+            subtotal=Decimal('200'),
+            total=Decimal('238'),
+        )
+
+        self.client.force_authenticate(user=self.cajero)
+        response = self.client.post(f'/api/caja/{venta.id}/facturar/')
+        self.assertEqual(response.status_code, 200)
+        venta.refresh_from_db()
+        self.producto.refresh_from_db()
+
+        self.assertEqual(venta.estado, 'FACTURADA')
+        self.assertEqual(self.producto.stock, Decimal('9'))
+        self.assertEqual(MovimientoInventario.objects.count(), 1)
+
+    def test_anular_venta_origen_taller_devuelve_stock_una_vez(self):
+        MovimientoInventario.objects.create(
+            producto=self.producto,
+            tipo='SALIDA',
+            cantidad=Decimal('-1'),
+            stock_anterior=Decimal('10'),
+            stock_nuevo=Decimal('9'),
+            costo_unitario=Decimal('100'),
+            usuario=self.vendedor,
+            referencia='Orden taller #2',
+            observaciones='Salida por orden de taller',
+        )
+        venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            cliente=self.cliente,
+            vendedor=self.vendedor,
+            subtotal=Decimal('200'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('38'),
+            total=Decimal('238'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('238'),
+            cambio=Decimal('0'),
+            estado='FACTURADA',
+            inventario_ya_afectado=True,
+        )
+        DetalleVenta.objects.create(
+            venta=venta,
+            producto=self.producto,
+            cantidad=1,
+            precio_unitario=Decimal('200'),
+            descuento_unitario=Decimal('0'),
+            iva_porcentaje=Decimal('19'),
+            subtotal=Decimal('200'),
+            total=Decimal('238'),
+        )
+
+        self.client.force_authenticate(user=self.vendedor)
+        response = self.client.post(
+            f'/api/ventas/{venta.id}/anular/',
+            {
+                'motivo': 'DEVOLUCION_TOTAL',
+                'descripcion': 'Anulación prueba',
+                'devuelve_inventario': True,
+            },
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.producto.refresh_from_db()
+
+        self.assertEqual(self.producto.stock, Decimal('10'))
+        self.assertEqual(MovimientoInventario.objects.filter(tipo='DEVOLUCION').count(), 1)
 
     def test_caja_pendientes_solo_incluye_ventas_enviadas_y_no_facturadas(self):
         enviada = Venta.objects.create(

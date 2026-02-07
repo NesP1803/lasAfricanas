@@ -242,6 +242,7 @@ export default function Ventas() {
     const state = location.state as { fromTaller?: TallerVentaPayload } | null;
     return state?.fromTaller ?? null;
   }, [location.state]);
+  const inventarioYaAfectado = Boolean(tallerPayload?.ordenId);
 
   useEffect(() => {
     configuracionAPI
@@ -795,6 +796,7 @@ export default function Ventas() {
       medio_pago: medioPago,
       efectivo_recibido: efectivoRecibidoNumero.toFixed(2),
       cambio: cambioCalculado.toFixed(2),
+      inventario_ya_afectado: inventarioYaAfectado,
       detalles: cartItems.map((item) => {
         const subtotal = item.precioUnitario * item.cantidad;
         const descuentoLinea = subtotal * (item.descuentoPorcentaje / 100);

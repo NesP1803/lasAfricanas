@@ -67,6 +67,8 @@ def _validar_detalles_venta(venta):
 def _registrar_salida_inventario(venta, user, detalles=None):
     if not venta.afecta_inventario:
         return
+    if venta.inventario_ya_afectado:
+        return
 
     from apps.inventario.models import MovimientoInventario, Producto
 
