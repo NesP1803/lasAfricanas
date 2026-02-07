@@ -255,6 +255,12 @@ class Venta(BaseModel):
         verbose_name='Remisión de origen',
         help_text='Si esta factura se generó desde una remisión'
     )
+
+    inventario_ya_afectado = models.BooleanField(
+        default=False,
+        verbose_name='Inventario ya afectado',
+        help_text='Indica si el inventario ya fue descontado por un flujo externo (p. ej. taller).'
+    )
     
     # Facturación electrónica (solo para FACTURA)
     factura_electronica_uuid = models.CharField(

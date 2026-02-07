@@ -119,6 +119,7 @@ class OrdenTallerViewSet(viewsets.ModelViewSet):
             estado='FACTURADA',
             facturada_por=user,
             facturada_at=timezone.now(),
+            inventario_ya_afectado=True,
         )
 
         for detalle in detalles:

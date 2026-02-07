@@ -205,6 +205,7 @@ class VentaCreateSerializer(serializers.ModelSerializer):
             'efectivo_recibido',
             'cambio',
             'observaciones',
+            'inventario_ya_afectado',
             'detalles'
         ]
 
