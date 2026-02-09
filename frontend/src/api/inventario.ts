@@ -25,6 +25,7 @@ export interface Producto {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  ultima_compra?: string | null;
 }
 
 export interface ProductoList {
@@ -40,6 +41,7 @@ export interface ProductoList {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  ultima_compra?: string | null;
 }
 
 export interface Categoria {

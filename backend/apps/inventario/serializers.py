@@ -77,7 +77,8 @@ class ProductoListSerializer(serializers.ModelSerializer):
             'stock_estado',
             'is_active',
             'created_at',
-            'updated_at'
+            'updated_at',
+            'ultima_compra'
         ]
     
     def get_stock_estado(self, obj):
@@ -123,7 +124,8 @@ class ProductoDetailSerializer(serializers.ModelSerializer):
             'valor_inventario',
             'is_active',
             'created_at',
-            'updated_at'
+            'updated_at',
+            'ultima_compra'
         ]
         read_only_fields = ['created_at', 'updated_at']
 
