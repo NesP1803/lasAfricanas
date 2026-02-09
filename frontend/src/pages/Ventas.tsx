@@ -110,28 +110,37 @@ const parseNumber = (value: string) => {
   return Number.isNaN(parsed) ? 0 : parsed;
 };
 
-const roundCop = (value: number) => {
+const SIGNIFICANT_DIGITS_COP = 3;
+const roundHalfEven = (value: number) => {
   if (!Number.isFinite(value)) {
     return 0;
   }
   const sign = value < 0 ? -1 : 1;
   const absValue = Math.abs(value);
   const base = Math.floor(absValue + Number.EPSILON);
-  const tenths = Math.floor(absValue * 10 + Number.EPSILON) % 10;
-  const hundredths = Math.floor(absValue * 100 + Number.EPSILON) % 10;
+  const fraction = absValue - base;
+  const epsilon = 1e-10;
 
-  if (tenths < 5) {
-    return sign * base;
-  }
-  if (tenths > 5) {
+  if (fraction > 0.5 + epsilon) {
     return sign * (base + 1);
   }
-
-  if (hundredths === 0 || hundredths % 2 === 0) {
+  if (fraction < 0.5 - epsilon) {
     return sign * base;
   }
 
-  return sign * (base + 1);
+  return sign * (base % 2 === 0 ? base : base + 1);
+};
+
+const roundCop = (value: number, significantDigits = SIGNIFICANT_DIGITS_COP) => {
+  if (!Number.isFinite(value) || value === 0) {
+    return 0;
+  }
+  const sign = value < 0 ? -1 : 1;
+  const absValue = Math.abs(value);
+  const exponent = Math.floor(Math.log10(absValue));
+  const scale = 10 ** (exponent - significantDigits + 1);
+  const scaled = absValue / scale;
+  return sign * roundHalfEven(scaled) * scale;
 };
 const unidadPermiteDecimales = (unidadMedida?: string) =>
   Boolean(unidadMedida && unidadMedida !== 'N/A');
@@ -158,7 +167,7 @@ const buildCartItemsFromDetalles = (
   detalles: DetalleVenta[]
 ): CartItem[] =>
   detalles.map((detalle, index) => {
-    const precioUnitario = Number(detalle.precio_unitario || 0);
+    const precioUnitario = roundCop(Number(detalle.precio_unitario || 0));
     const cantidad = Number(detalle.cantidad || 0);
     const subtotalLinea = precioUnitario * cantidad;
     const descuentoLinea =
@@ -186,10 +195,10 @@ const buildDocumentoPreviewFromVenta = (venta: Venta): DocumentoPreview => {
       descripcion: detalle.producto_nombre ?? 'Producto',
       codigo: detalle.producto_codigo ?? '',
       cantidad: Number(detalle.cantidad),
-      precioUnitario: Number(detalle.precio_unitario),
-      descuento: Number(detalle.descuento_unitario),
+      precioUnitario: roundCop(Number(detalle.precio_unitario)),
+      descuento: roundCop(Number(detalle.descuento_unitario)),
       ivaPorcentaje: Number(detalle.iva_porcentaje),
-      total: Number(detalle.total),
+      total: roundCop(Number(detalle.total)),
     })) ?? [];
 
   return {
@@ -201,12 +210,12 @@ const buildDocumentoPreviewFromVenta = (venta: Venta): DocumentoPreview => {
     medioPago: venta.medio_pago_display || venta.medio_pago,
     estado: venta.estado_display || venta.estado,
     detalles: detallesPreview,
-    subtotal: Number(venta.subtotal),
-    descuento: Number(venta.descuento_valor),
-    iva: Number(venta.iva),
-    total: Number(venta.total),
-    efectivoRecibido: Number(venta.efectivo_recibido ?? 0),
-    cambio: Number(venta.cambio ?? 0),
+    subtotal: roundCop(Number(venta.subtotal)),
+    descuento: roundCop(Number(venta.descuento_valor)),
+    iva: roundCop(Number(venta.iva)),
+    total: roundCop(Number(venta.total)),
+    efectivoRecibido: roundCop(Number(venta.efectivo_recibido ?? 0)),
+    cambio: roundCop(Number(venta.cambio ?? 0)),
   };
 };
 
@@ -433,7 +442,9 @@ export default function Ventas() {
           codigo: repuesto.codigo || producto?.codigo || '',
           nombre: repuesto.nombre || producto?.nombre || 'Producto',
           ivaPorcentaje: Number(repuesto.ivaPorcentaje || producto?.iva_porcentaje || 0),
-          precioUnitario: Number(repuesto.precioUnitario || producto?.precio_venta || 0),
+          precioUnitario: roundCop(
+            Number(repuesto.precioUnitario || producto?.precio_venta || 0)
+          ),
           stock: Number(producto?.stock ?? 0),
           cantidad: repuesto.cantidad,
           descuentoPorcentaje: 0,
@@ -639,7 +650,7 @@ export default function Ventas() {
           codigo: producto.codigo,
           nombre: producto.nombre,
           ivaPorcentaje: Number(producto.iva_porcentaje ?? 0),
-          precioUnitario: Number(producto.precio_venta),
+          precioUnitario: roundCop(Number(producto.precio_venta)),
           stock: Number(producto.stock),
           cantidad: 1,
           descuentoPorcentaje: 0,
@@ -1853,7 +1864,7 @@ export default function Ventas() {
                           {producto.nombre}
                         </td>
                         <td className="px-3 py-2 text-right text-slate-600">
-                          {currencyFormatter.format(Number(producto.precio_venta))}
+                          {currencyFormatter.format(roundCop(Number(producto.precio_venta)))}
                         </td>
                         <td className="px-3 py-2 text-right text-slate-600">
                           {producto.stock}
