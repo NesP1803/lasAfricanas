@@ -270,7 +270,7 @@ export default function Articulos() {
   };
 
   const formatUltimaCompra = (producto: ProductoList) => {
-    const lastDate = producto.updated_at ?? producto.created_at;
+    const lastDate = producto.ultima_compra ?? producto.created_at;
     if (!lastDate) return 'Sin registro';
     return dateFormatter.format(new Date(lastDate));
   };

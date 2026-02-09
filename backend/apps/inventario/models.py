@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 from django.core.validators import MinValueValidator
 from apps.core.models import BaseModel
 from decimal import Decimal
@@ -155,6 +156,11 @@ class Producto(BaseModel):
         verbose_name='Stock mínimo',
         help_text='Alerta cuando el stock llegue a este nivel'
     )
+    ultima_compra = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Última compra'
+    )
     UNIDADES_MEDIDA = [
         ('N/A', 'N/A'),
         ('KG', 'Kilogramo'),
@@ -206,6 +212,21 @@ class Producto(BaseModel):
     
     def __str__(self):
         return f"{self.codigo} - {self.nombre}"
+
+    def save(self, *args, **kwargs):
+        update_fields = kwargs.get('update_fields')
+        if self.pk:
+            previous = Producto.objects.filter(pk=self.pk).only('stock').first()
+            if previous and self.stock != previous.stock:
+                self.ultima_compra = timezone.now()
+                if update_fields is not None:
+                    update_fields = set(update_fields)
+                    update_fields.add('ultima_compra')
+                    kwargs['update_fields'] = list(update_fields)
+        else:
+            if self.ultima_compra is None:
+                self.ultima_compra = timezone.now()
+        super().save(*args, **kwargs)
     
     @property
     def stock_bajo(self):
