@@ -110,7 +110,29 @@ const parseNumber = (value: string) => {
   return Number.isNaN(parsed) ? 0 : parsed;
 };
 
-const roundCop = (value: number) => Math.round(value);
+const roundCop = (value: number) => {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  const sign = value < 0 ? -1 : 1;
+  const absValue = Math.abs(value);
+  const base = Math.floor(absValue + Number.EPSILON);
+  const tenths = Math.floor(absValue * 10 + Number.EPSILON) % 10;
+  const hundredths = Math.floor(absValue * 100 + Number.EPSILON) % 10;
+
+  if (tenths < 5) {
+    return sign * base;
+  }
+  if (tenths > 5) {
+    return sign * (base + 1);
+  }
+
+  if (hundredths === 0 || hundredths % 2 === 0) {
+    return sign * base;
+  }
+
+  return sign * (base + 1);
+};
 const unidadPermiteDecimales = (unidadMedida?: string) =>
   Boolean(unidadMedida && unidadMedida !== 'N/A');
 
