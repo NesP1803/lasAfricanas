@@ -110,7 +110,7 @@ const parseNumber = (value: string) => {
   return Number.isNaN(parsed) ? 0 : parsed;
 };
 
-const SIGNIFICANT_DIGITS_COP = 3;
+const SIGNIFICANT_DIGITS_COP = 2;
 const roundHalfEven = (value: number) => {
   if (!Number.isFinite(value)) {
     return 0;
