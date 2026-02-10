@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Migrate legacy staging tables (legacy_*) into Django app tables.
+Migrate staging tables (staging_*) into Django app tables.
 
 Cambios clave:
 - Cruce correcto FACTURAS/REMISIONES con DETALLES usando:  prefijo + nofactura  (ej: "FAC-5000")
@@ -681,51 +681,51 @@ def main() -> None:
     include_dupes = bool(args.include_duplicates)
 
     maestros_actions = [
-        ("legacy_dbo_empleados", import_mecanicos),
+        ("staging_dbo_empleados", import_mecanicos),
 
-        ("legacy_dbo_contactos", import_clientes),
-        ("legacy_migrarclientes", import_clientes),
+        ("staging_dbo_contactos", import_clientes),
+        ("staging_migrarclientes", import_clientes),
 
-        ("legacy_dbo_articulos", import_productos),
+        ("staging_dbo_articulos", import_productos),
 
-        ("legacy_dbo_motos_registradas", import_motos),
+        ("staging_dbo_motos_registradas", import_motos),
     ]
 
     documentos_actions = [
-        ("legacy_dbo_facturas", lambda t: import_ventas(t, "FACTURA")),
-        ("legacy_dbo_remisiones", lambda t: import_ventas(t, "REMISION")),
-        ("legacy_dbo_cotizaciones", lambda t: import_ventas(t, "COTIZACION")),
+        ("staging_dbo_facturas", lambda t: import_ventas(t, "FACTURA")),
+        ("staging_dbo_remisiones", lambda t: import_ventas(t, "REMISION")),
+        ("staging_dbo_cotizaciones", lambda t: import_ventas(t, "COTIZACION")),
     ]
 
     detalles_actions = [
-        ("legacy_dbo_detallesfactura", lambda t: import_detalles(t, "FACTURA")),
-        ("legacy_dbo_detallesremision", lambda t: import_detalles(t, "REMISION")),
+        ("staging_dbo_detallesfactura", lambda t: import_detalles(t, "FACTURA")),
+        ("staging_dbo_detallesremision", lambda t: import_detalles(t, "REMISION")),
     ]
 
     if include_dupes:
         maestros_actions += [
-            ("legacy_dbo_contactos1", import_clientes),
-            ("legacy_dbo_articulos1", import_productos),
+            ("staging_dbo_contactos1", import_clientes),
+            ("staging_dbo_articulos1", import_productos),
         ]
         documentos_actions += [
-            ("legacy_dbo_remisiones1", lambda t: import_ventas(t, "REMISION")),
+            ("staging_dbo_remisiones1", lambda t: import_ventas(t, "REMISION")),
         ]
         detalles_actions += [
-            ("legacy_dbo_detallesremision1", lambda t: import_detalles(t, "REMISION")),
+            ("staging_dbo_detallesremision1", lambda t: import_detalles(t, "REMISION")),
         ]
 
     steps = [
         (
             "catalogos",
             [
-                ("legacy_dbo_impuestos", import_impuestos),
-                ("legacy_dbo_ivas", lambda t: skip_table(t, "IVA se calcula desde ventas/detalles")),
-                ("legacy_dbo_ivas_r", lambda t: skip_table(t, "IVA se calcula desde ventas/detalles")),
-                ("legacy_dbo_categorias", import_categorias),
-                ("legacy_dbo_categorias_fac", import_categorias),
-                ("legacy_dbo_rem_categorias", import_categorias),
-                ("legacy_dbo_resumen_iva_fac", lambda t: skip_table(t, "Resumen IVA no se migra")),
-                ("legacy_dbo_rem_resumeniva", lambda t: skip_table(t, "Resumen IVA no se migra")),
+                ("staging_dbo_impuestos", import_impuestos),
+                ("staging_dbo_ivas", lambda t: skip_table(t, "IVA se calcula desde ventas/detalles")),
+                ("staging_dbo_ivas_r", lambda t: skip_table(t, "IVA se calcula desde ventas/detalles")),
+                ("staging_dbo_categorias", import_categorias),
+                ("staging_dbo_categorias_fac", import_categorias),
+                ("staging_dbo_rem_categorias", import_categorias),
+                ("staging_dbo_resumen_iva_fac", lambda t: skip_table(t, "Resumen IVA no se migra")),
+                ("staging_dbo_rem_resumeniva", lambda t: skip_table(t, "Resumen IVA no se migra")),
             ],
         ),
         ("maestros", maestros_actions),
@@ -734,9 +734,9 @@ def main() -> None:
         (
             "post_procesos",
             [
-                ("legacy_dbo_anulaciones_facturas", lambda t: import_anulaciones(t, "FACTURA")),
-                ("legacy_dbo_anulaciones_remisiones", lambda t: import_anulaciones(t, "REMISION")),
-                ("legacy_dbo_compras", import_compras),
+                ("staging_dbo_anulaciones_facturas", lambda t: import_anulaciones(t, "FACTURA")),
+                ("staging_dbo_anulaciones_remisiones", lambda t: import_anulaciones(t, "REMISION")),
+                ("staging_dbo_compras", import_compras),
             ],
         ),
     ]

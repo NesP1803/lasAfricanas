@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Import legacy XLSX files into staging tables (legacy_*)."""
+"""Import legacy XLSX files into temporary staging tables (staging_*)."""
 from __future__ import annotations
 
 import argparse
@@ -29,23 +29,22 @@ def normalize_identifier(name: str) -> str:
     return cleaned.lower() or "column"
 
 
-def build_unique_columns(headers: Iterable[str]) -> List[str]:
-    seen = {}
+def build_unique_columns(headers: Iterable[str]) -> tuple[List[str], List[int]]:
+    seen = set()
     unique = []
-    for idx, raw in enumerate(headers, start=1):
-        base = normalize_identifier(str(raw) if raw is not None else f"col_{idx}")
-        count = seen.get(base, 0)
-        if count:
-            col = f"{base}_{count + 1}"
-        else:
-            col = base
-        seen[base] = count + 1
-        unique.append(col)
-    return unique
+    indices = []
+    for idx, raw in enumerate(headers):
+        base = normalize_identifier(str(raw) if raw is not None else f"col_{idx + 1}")
+        if base in seen:
+            continue
+        seen.add(base)
+        unique.append(base)
+        indices.append(idx)
+    return unique, indices
 
 
 def table_name_for_file(path: Path) -> str:
-    return f"legacy_{normalize_identifier(path.stem)}"
+    return f"staging_{normalize_identifier(path.stem)}"
 
 
 def list_xlsx_files(data_dir: Path) -> List[Path]:
@@ -74,9 +73,9 @@ def ensure_table(table: str, columns: List[str]) -> None:
         columns_sql = ", ".join(f"{quote(col)} TEXT" for col in columns)
         with connection.cursor() as cursor:
             cursor.execute(
-                f"CREATE TABLE IF NOT EXISTS {quote(table)} ({columns_sql});"
+                f"CREATE TEMP TABLE IF NOT EXISTS {quote(table)} ({columns_sql});"
             )
-        LOGGER.info("Created staging table %s with %s columns", table, len(columns))
+        LOGGER.info("Created temp staging table %s with %s columns", table, len(columns))
         return
 
     missing = [col for col in columns if col not in existing]
@@ -127,11 +126,12 @@ def load_workbook_rows(path: Path) -> tuple[List[str], Iterable[List[object]]]:
         headers = next(rows)
     except StopIteration:
         return [], []
-    columns = build_unique_columns(headers)
+    columns, indices = build_unique_columns(headers)
 
     def row_iter() -> Iterable[List[object]]:
         for row in rows:
             normalized = ["" if value is None else str(value) for value in row]
+            normalized = [normalized[idx] if idx < len(normalized) else "" for idx in indices]
             if len(normalized) < len(columns):
                 normalized.extend([""] * (len(columns) - len(normalized)))
             yield normalized[: len(columns)]
