@@ -33,15 +33,21 @@ Producto = None
 Proveedor = None
 Venta = None
 VentaAnulada = None
+MovimientoInventario = None
 
 
 def setup_django() -> None:
-    global Categoria, Cliente, DetalleVenta, Impuesto, Mecanico, Moto, Producto, Proveedor, Venta, VentaAnulada
+    global Categoria, Cliente, DetalleVenta, Impuesto, Mecanico, Moto, MovimientoInventario, Producto, Proveedor, Venta, VentaAnulada
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
     django.setup()
 
     from apps.core.models import Impuesto as ImpuestoModel
-    from apps.inventario.models import Categoria as CategoriaModel, Producto as ProductoModel, Proveedor as ProveedorModel
+    from apps.inventario.models import (
+        Categoria as CategoriaModel,
+        MovimientoInventario as MovimientoInventarioModel,
+        Producto as ProductoModel,
+        Proveedor as ProveedorModel,
+    )
     from apps.taller.models import Moto as MotoModel, Mecanico as MecanicoModel
     from apps.ventas.models import (
         Cliente as ClienteModel,
@@ -56,6 +62,7 @@ def setup_django() -> None:
     Impuesto = ImpuestoModel
     Mecanico = MecanicoModel
     Moto = MotoModel
+    MovimientoInventario = MovimientoInventarioModel
     Producto = ProductoModel
     Proveedor = ProveedorModel
     Venta = VentaModel
@@ -201,15 +208,10 @@ def import_impuestos(table: str) -> int:
     created = 0
     for row in iter_table_rows(table):
         row_map = build_row_map(row)
-        nombre = value_from_row(row_map, ["impuesto", "nombre", "descripcion"]).strip()
+        nombre = value_from_row(row_map, ["impuesto", "nombre", "descripcion", "tipo"]).strip()
         if not nombre:
             continue
-        valor = value_from_row(row_map, ["valor", "codigo", "sigla"], default=nombre)
-        porcentaje = to_decimal(value_from_row(row_map, ["porcentaje", "iva", "tasa"], default="0"))
-        _, was_created = Impuesto.objects.get_or_create(
-            nombre=nombre,
-            defaults={"valor": valor, "porcentaje": porcentaje, "es_exento": porcentaje == 0},
-        )
+        _, was_created = Impuesto.objects.get_or_create(nombre=nombre)
         created += int(was_created)
     LOGGER.info("Impuestos importados desde %s: %s", table, created)
     return created
@@ -252,41 +254,8 @@ def import_clientes(table: str) -> int:
 
 
 def import_usuarios(table: str) -> int:
-    if not table_exists(table):
-        LOGGER.warning("Tabla %s no existe", table)
-        return 0
-    User = get_user_model()
-    created = 0
-    for row in iter_table_rows(table):
-        row_map = build_row_map(row)
-        username = value_from_row(row_map, ["usuario", "login", "username", "nombre"])
-        if not username:
-            continue
-        # Respetar admin existente
-        if username.lower() == "admin":
-            continue
-
-        email = value_from_row(row_map, ["email", "correo"])
-        first_name = value_from_row(row_map, ["nombres", "nombre"], default="")
-        last_name = value_from_row(row_map, ["apellidos", "apellido"], default="")
-        tipo = value_from_row(row_map, ["tipo", "rol", "cargo"], default="VENDEDOR")
-
-        user, was_created = User.objects.get_or_create(
-            username=username,
-            defaults={
-                "email": email,
-                "first_name": first_name,
-                "last_name": last_name,
-                "tipo_usuario": tipo if tipo else "VENDEDOR",
-            },
-        )
-        if was_created:
-            user.set_unusable_password()
-            user.save(update_fields=["password"])
-        created += int(was_created)
-
-    LOGGER.info("Usuarios importados desde %s: %s", table, created)
-    return created
+    LOGGER.info("Usuarios legacy omitidos por configuración actual: %s", table)
+    return 0
 
 
 def import_mecanicos(table: str) -> int:
@@ -367,7 +336,7 @@ def import_productos(table: str) -> int:
                 "precio_venta_minimo": precio_venta_minimo,
                 "stock": stock,
                 "stock_minimo": 5,
-                "unidad_medida": value_from_row(row_map, ["unidad", "unidad_medida", "um"], default="UND"),
+                "unidad_medida": value_from_row(row_map, ["unidad", "unidad_medida", "um"], default="N/A"),
                 "iva_porcentaje": iva,
                 "aplica_descuento": True,
                 "es_servicio": False,
@@ -638,6 +607,57 @@ def import_anulaciones(table: str, tipo_comprobante: str) -> int:
     return created
 
 
+def import_compras(table: str) -> int:
+    if not table_exists(table):
+        LOGGER.warning("Tabla %s no existe", table)
+        return 0
+
+    created = 0
+    admin_user = get_admin_user()
+
+    for row in iter_table_rows(table):
+        row_map = build_row_map(row)
+        producto = find_producto(row_map)
+        if not producto:
+            continue
+
+        cantidad = to_decimal(value_from_row(row_map, ["cantidad", "cant"], default="0"), Decimal("0"))
+        if cantidad <= 0:
+            continue
+
+        costo_unitario = to_decimal(
+            value_from_row(row_map, ["compra", "precio_compra", "costo", "valor"], default="0"),
+            Decimal("0"),
+        )
+        if costo_unitario == 0:
+            total = to_decimal(value_from_row(row_map, ["total"], default="0"), Decimal("0"))
+            if total > 0 and cantidad > 0:
+                costo_unitario = total / cantidad
+
+        referencia = value_from_row(row_map, ["factura", "documento", "referencia"], default="COMPRA")
+        observaciones = value_from_row(row_map, ["proveedor", "producto", "observaciones"], default="")
+
+        _, was_created = MovimientoInventario.objects.get_or_create(
+            producto=producto,
+            tipo="ENTRADA",
+            cantidad=cantidad,
+            stock_anterior=producto.stock,
+            stock_nuevo=producto.stock,
+            costo_unitario=costo_unitario if costo_unitario > 0 else producto.precio_costo,
+            usuario=admin_user,
+            referencia=referencia,
+            defaults={"observaciones": observaciones},
+        )
+        created += int(was_created)
+
+    LOGGER.info("Compras importadas desde %s: %s", table, created)
+    return created
+
+
+def skip_table(table: str, reason: str) -> int:
+    LOGGER.info("Tabla %s omitida (%s)", table, reason)
+    return 0
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -661,8 +681,6 @@ def main() -> None:
     include_dupes = bool(args.include_duplicates)
 
     maestros_actions = [
-        ("legacy_dbo_usuarios", import_usuarios),
-        ("legacy_dbo_vendedores", import_usuarios),
         ("legacy_dbo_empleados", import_mecanicos),
 
         ("legacy_dbo_contactos", import_clientes),
@@ -701,11 +719,13 @@ def main() -> None:
             "catalogos",
             [
                 ("legacy_dbo_impuestos", import_impuestos),
-                ("legacy_dbo_ivas", import_impuestos),
-                ("legacy_dbo_ivas_r", import_impuestos),
+                ("legacy_dbo_ivas", lambda t: skip_table(t, "IVA se calcula desde ventas/detalles")),
+                ("legacy_dbo_ivas_r", lambda t: skip_table(t, "IVA se calcula desde ventas/detalles")),
                 ("legacy_dbo_categorias", import_categorias),
                 ("legacy_dbo_categorias_fac", import_categorias),
                 ("legacy_dbo_rem_categorias", import_categorias),
+                ("legacy_dbo_resumen_iva_fac", lambda t: skip_table(t, "Resumen IVA no se migra")),
+                ("legacy_dbo_rem_resumeniva", lambda t: skip_table(t, "Resumen IVA no se migra")),
             ],
         ),
         ("maestros", maestros_actions),
@@ -716,6 +736,7 @@ def main() -> None:
             [
                 ("legacy_dbo_anulaciones_facturas", lambda t: import_anulaciones(t, "FACTURA")),
                 ("legacy_dbo_anulaciones_remisiones", lambda t: import_anulaciones(t, "REMISION")),
+                ("legacy_dbo_compras", import_compras),
             ],
         ),
     ]
