@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Migrate legacy staging tables (legacy_*) into Django app tables.
+Migrate staging tables (staging_*) into Django app tables.
 
 Cambios clave:
 - Cruce correcto FACTURAS/REMISIONES con DETALLES usando:  prefijo + nofactura  (ej: "FAC-5000")
@@ -33,15 +33,21 @@ Producto = None
 Proveedor = None
 Venta = None
 VentaAnulada = None
+MovimientoInventario = None
 
 
 def setup_django() -> None:
-    global Categoria, Cliente, DetalleVenta, Impuesto, Mecanico, Moto, Producto, Proveedor, Venta, VentaAnulada
+    global Categoria, Cliente, DetalleVenta, Impuesto, Mecanico, Moto, MovimientoInventario, Producto, Proveedor, Venta, VentaAnulada
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
     django.setup()
 
     from apps.core.models import Impuesto as ImpuestoModel
-    from apps.inventario.models import Categoria as CategoriaModel, Producto as ProductoModel, Proveedor as ProveedorModel
+    from apps.inventario.models import (
+        Categoria as CategoriaModel,
+        MovimientoInventario as MovimientoInventarioModel,
+        Producto as ProductoModel,
+        Proveedor as ProveedorModel,
+    )
     from apps.taller.models import Moto as MotoModel, Mecanico as MecanicoModel
     from apps.ventas.models import (
         Cliente as ClienteModel,
@@ -56,6 +62,7 @@ def setup_django() -> None:
     Impuesto = ImpuestoModel
     Mecanico = MecanicoModel
     Moto = MotoModel
+    MovimientoInventario = MovimientoInventarioModel
     Producto = ProductoModel
     Proveedor = ProveedorModel
     Venta = VentaModel
@@ -201,15 +208,10 @@ def import_impuestos(table: str) -> int:
     created = 0
     for row in iter_table_rows(table):
         row_map = build_row_map(row)
-        nombre = value_from_row(row_map, ["impuesto", "nombre", "descripcion"]).strip()
+        nombre = value_from_row(row_map, ["impuesto", "nombre", "descripcion", "tipo"]).strip()
         if not nombre:
             continue
-        valor = value_from_row(row_map, ["valor", "codigo", "sigla"], default=nombre)
-        porcentaje = to_decimal(value_from_row(row_map, ["porcentaje", "iva", "tasa"], default="0"))
-        _, was_created = Impuesto.objects.get_or_create(
-            nombre=nombre,
-            defaults={"valor": valor, "porcentaje": porcentaje, "es_exento": porcentaje == 0},
-        )
+        _, was_created = Impuesto.objects.get_or_create(nombre=nombre)
         created += int(was_created)
     LOGGER.info("Impuestos importados desde %s: %s", table, created)
     return created
@@ -252,41 +254,8 @@ def import_clientes(table: str) -> int:
 
 
 def import_usuarios(table: str) -> int:
-    if not table_exists(table):
-        LOGGER.warning("Tabla %s no existe", table)
-        return 0
-    User = get_user_model()
-    created = 0
-    for row in iter_table_rows(table):
-        row_map = build_row_map(row)
-        username = value_from_row(row_map, ["usuario", "login", "username", "nombre"])
-        if not username:
-            continue
-        # Respetar admin existente
-        if username.lower() == "admin":
-            continue
-
-        email = value_from_row(row_map, ["email", "correo"])
-        first_name = value_from_row(row_map, ["nombres", "nombre"], default="")
-        last_name = value_from_row(row_map, ["apellidos", "apellido"], default="")
-        tipo = value_from_row(row_map, ["tipo", "rol", "cargo"], default="VENDEDOR")
-
-        user, was_created = User.objects.get_or_create(
-            username=username,
-            defaults={
-                "email": email,
-                "first_name": first_name,
-                "last_name": last_name,
-                "tipo_usuario": tipo if tipo else "VENDEDOR",
-            },
-        )
-        if was_created:
-            user.set_unusable_password()
-            user.save(update_fields=["password"])
-        created += int(was_created)
-
-    LOGGER.info("Usuarios importados desde %s: %s", table, created)
-    return created
+    LOGGER.info("Usuarios legacy omitidos por configuración actual: %s", table)
+    return 0
 
 
 def import_mecanicos(table: str) -> int:
@@ -367,7 +336,7 @@ def import_productos(table: str) -> int:
                 "precio_venta_minimo": precio_venta_minimo,
                 "stock": stock,
                 "stock_minimo": 5,
-                "unidad_medida": value_from_row(row_map, ["unidad", "unidad_medida", "um"], default="UND"),
+                "unidad_medida": value_from_row(row_map, ["unidad", "unidad_medida", "um"], default="N/A"),
                 "iva_porcentaje": iva,
                 "aplica_descuento": True,
                 "es_servicio": False,
@@ -638,6 +607,57 @@ def import_anulaciones(table: str, tipo_comprobante: str) -> int:
     return created
 
 
+def import_compras(table: str) -> int:
+    if not table_exists(table):
+        LOGGER.warning("Tabla %s no existe", table)
+        return 0
+
+    created = 0
+    admin_user = get_admin_user()
+
+    for row in iter_table_rows(table):
+        row_map = build_row_map(row)
+        producto = find_producto(row_map)
+        if not producto:
+            continue
+
+        cantidad = to_decimal(value_from_row(row_map, ["cantidad", "cant"], default="0"), Decimal("0"))
+        if cantidad <= 0:
+            continue
+
+        costo_unitario = to_decimal(
+            value_from_row(row_map, ["compra", "precio_compra", "costo", "valor"], default="0"),
+            Decimal("0"),
+        )
+        if costo_unitario == 0:
+            total = to_decimal(value_from_row(row_map, ["total"], default="0"), Decimal("0"))
+            if total > 0 and cantidad > 0:
+                costo_unitario = total / cantidad
+
+        referencia = value_from_row(row_map, ["factura", "documento", "referencia"], default="COMPRA")
+        observaciones = value_from_row(row_map, ["proveedor", "producto", "observaciones"], default="")
+
+        _, was_created = MovimientoInventario.objects.get_or_create(
+            producto=producto,
+            tipo="ENTRADA",
+            cantidad=cantidad,
+            stock_anterior=producto.stock,
+            stock_nuevo=producto.stock,
+            costo_unitario=costo_unitario if costo_unitario > 0 else producto.precio_costo,
+            usuario=admin_user,
+            referencia=referencia,
+            defaults={"observaciones": observaciones},
+        )
+        created += int(was_created)
+
+    LOGGER.info("Compras importadas desde %s: %s", table, created)
+    return created
+
+
+def skip_table(table: str, reason: str) -> int:
+    LOGGER.info("Tabla %s omitida (%s)", table, reason)
+    return 0
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -661,51 +681,51 @@ def main() -> None:
     include_dupes = bool(args.include_duplicates)
 
     maestros_actions = [
-        ("legacy_dbo_usuarios", import_usuarios),
-        ("legacy_dbo_vendedores", import_usuarios),
-        ("legacy_dbo_empleados", import_mecanicos),
+        ("staging_dbo_empleados", import_mecanicos),
 
-        ("legacy_dbo_contactos", import_clientes),
-        ("legacy_migrarclientes", import_clientes),
+        ("staging_dbo_contactos", import_clientes),
+        ("staging_migrarclientes", import_clientes),
 
-        ("legacy_dbo_articulos", import_productos),
+        ("staging_dbo_articulos", import_productos),
 
-        ("legacy_dbo_motos_registradas", import_motos),
+        ("staging_dbo_motos_registradas", import_motos),
     ]
 
     documentos_actions = [
-        ("legacy_dbo_facturas", lambda t: import_ventas(t, "FACTURA")),
-        ("legacy_dbo_remisiones", lambda t: import_ventas(t, "REMISION")),
-        ("legacy_dbo_cotizaciones", lambda t: import_ventas(t, "COTIZACION")),
+        ("staging_dbo_facturas", lambda t: import_ventas(t, "FACTURA")),
+        ("staging_dbo_remisiones", lambda t: import_ventas(t, "REMISION")),
+        ("staging_dbo_cotizaciones", lambda t: import_ventas(t, "COTIZACION")),
     ]
 
     detalles_actions = [
-        ("legacy_dbo_detallesfactura", lambda t: import_detalles(t, "FACTURA")),
-        ("legacy_dbo_detallesremision", lambda t: import_detalles(t, "REMISION")),
+        ("staging_dbo_detallesfactura", lambda t: import_detalles(t, "FACTURA")),
+        ("staging_dbo_detallesremision", lambda t: import_detalles(t, "REMISION")),
     ]
 
     if include_dupes:
         maestros_actions += [
-            ("legacy_dbo_contactos1", import_clientes),
-            ("legacy_dbo_articulos1", import_productos),
+            ("staging_dbo_contactos1", import_clientes),
+            ("staging_dbo_articulos1", import_productos),
         ]
         documentos_actions += [
-            ("legacy_dbo_remisiones1", lambda t: import_ventas(t, "REMISION")),
+            ("staging_dbo_remisiones1", lambda t: import_ventas(t, "REMISION")),
         ]
         detalles_actions += [
-            ("legacy_dbo_detallesremision1", lambda t: import_detalles(t, "REMISION")),
+            ("staging_dbo_detallesremision1", lambda t: import_detalles(t, "REMISION")),
         ]
 
     steps = [
         (
             "catalogos",
             [
-                ("legacy_dbo_impuestos", import_impuestos),
-                ("legacy_dbo_ivas", import_impuestos),
-                ("legacy_dbo_ivas_r", import_impuestos),
-                ("legacy_dbo_categorias", import_categorias),
-                ("legacy_dbo_categorias_fac", import_categorias),
-                ("legacy_dbo_rem_categorias", import_categorias),
+                ("staging_dbo_impuestos", import_impuestos),
+                ("staging_dbo_ivas", lambda t: skip_table(t, "IVA se calcula desde ventas/detalles")),
+                ("staging_dbo_ivas_r", lambda t: skip_table(t, "IVA se calcula desde ventas/detalles")),
+                ("staging_dbo_categorias", import_categorias),
+                ("staging_dbo_categorias_fac", import_categorias),
+                ("staging_dbo_rem_categorias", import_categorias),
+                ("staging_dbo_resumen_iva_fac", lambda t: skip_table(t, "Resumen IVA no se migra")),
+                ("staging_dbo_rem_resumeniva", lambda t: skip_table(t, "Resumen IVA no se migra")),
             ],
         ),
         ("maestros", maestros_actions),
@@ -714,8 +734,9 @@ def main() -> None:
         (
             "post_procesos",
             [
-                ("legacy_dbo_anulaciones_facturas", lambda t: import_anulaciones(t, "FACTURA")),
-                ("legacy_dbo_anulaciones_remisiones", lambda t: import_anulaciones(t, "REMISION")),
+                ("staging_dbo_anulaciones_facturas", lambda t: import_anulaciones(t, "FACTURA")),
+                ("staging_dbo_anulaciones_remisiones", lambda t: import_anulaciones(t, "REMISION")),
+                ("staging_dbo_compras", import_compras),
             ],
         ),
     ]

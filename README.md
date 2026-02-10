@@ -251,3 +251,71 @@ python manage.py loaddata data/seed.json
 - `npm run build`
 - `npm run lint`
 - `npm run preview`
+
+## Migración de archivos del sistema anterior (XLSX)
+
+Esta sección explica cómo **activar y ejecutar** los scripts que importan los archivos del sistema anterior sin romper la estructura actual.
+
+### 1) Preparar entorno
+
+```bash
+cd backend
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+> En Windows usa `venv\Scripts\Activate.ps1` o `.venv\Scripts\Activate.ps1`.
+
+### 2) Copiar archivos XLSX
+
+Coloca todos los `.xlsx` exportados del sistema anterior en la carpeta:
+
+```bash
+data/
+```
+
+### 3) Cargar XLSX a staging temporal
+
+El script `backend/scripts/import_legacy_stage.py` crea tablas temporales `staging_*` (no `legacy_*`) y normaliza encabezados evitando columnas repetidas.
+
+**Prueba (sin guardar cambios):**
+
+```bash
+python scripts/import_legacy_stage.py --dry-run
+```
+
+**Ejecución real:**
+
+```bash
+python scripts/import_legacy_stage.py --commit
+```
+
+### 4) Migrar desde staging a tablas reales de la app
+
+El script `backend/scripts/migrate_legacy_to_app.py` toma datos `staging_*` y los inserta en tablas actuales (`ventas`, `detalles_venta`, `productos`, `clientes`, etc.) respetando los flujos vigentes.
+
+**Prueba (sin guardar cambios):**
+
+```bash
+python scripts/migrate_legacy_to_app.py --dry-run
+```
+
+**Ejecución real:**
+
+```bash
+python scripts/migrate_legacy_to_app.py --commit
+```
+
+### 5) Modo opcional para tablas duplicadas (*1)
+
+Si necesitas incluir tablas duplicadas del origen (por ejemplo `...1`):
+
+```bash
+python scripts/migrate_legacy_to_app.py --commit --include-duplicates
+```
+
+### 6) Notas importantes
+
+- No se crean tablas finales con prefijo `legacy_`.
+- Las compras se acoplan como `movimientos_inventario` tipo `ENTRADA`.
+- Los resúmenes de IVA legacy no se migran como tablas separadas; el IVA se deriva desde ventas y detalles.
