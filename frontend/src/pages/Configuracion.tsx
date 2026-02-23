@@ -171,6 +171,9 @@ export default function Configuracion() {
   const [mensajeImpuesto, setMensajeImpuesto] = useState("");
   const [mensajeUsuario, setMensajeUsuario] = useState("");
   const [mensajeNuevoUsuario, setMensajeNuevoUsuario] = useState("");
+  const [updatingCajaUserId, setUpdatingCajaUserId] = useState<number | null>(
+    null
+  );
 
   const [confirmarNuevaClave, setConfirmarNuevaClave] = useState("");
   const [mostrarNuevaClave, setMostrarNuevaClave] = useState(false);
@@ -778,6 +781,36 @@ export default function Configuracion() {
         message: "No se pudo guardar el usuario.",
         type: "error",
       });
+    }
+  };
+
+  const handleToggleCajaUsuario = async (
+    usuario: UsuarioAdmin,
+    esCajero: boolean
+  ) => {
+    setUpdatingCajaUserId(usuario.id);
+    setMensajeUsuario("");
+    try {
+      const data = await configuracionAPI.actualizarUsuario(usuario.id, {
+        es_cajero: esCajero,
+      });
+      setUsuarios((prev) =>
+        prev.map((item) => (item.id === data.id ? data : item))
+      );
+      setMensajeUsuario("Perfil de caja actualizado correctamente.");
+      showNotification({
+        message: "Perfil de caja actualizado correctamente.",
+        type: "success",
+      });
+    } catch (error) {
+      console.error("Error actualizando perfil de caja:", error);
+      setMensajeUsuario("No se pudo actualizar el perfil de caja.");
+      showNotification({
+        message: "No se pudo actualizar el perfil de caja.",
+        type: "error",
+      });
+    } finally {
+      setUpdatingCajaUserId(null);
     }
   };
 
@@ -1513,6 +1546,7 @@ export default function Configuracion() {
                   <th className="px-4 py-3">Usuario</th>
                   <th className="px-4 py-3">Rol</th>
                   <th className="px-4 py-3">Estado</th>
+                  <th className="px-4 py-3">Caja</th>
                   <th className="px-4 py-3">Acciones</th>
                 </tr>
               </thead>
@@ -1536,11 +1570,6 @@ export default function Configuracion() {
                             ? "Mecánico"
                             : "Bodeguero"}
                         </span>
-                        {usuario.es_cajero && (
-                          <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                            Caja
-                          </span>
-                        )}
                       </div>
                     </td>
                     <td className="px-4 py-3">
@@ -1562,6 +1591,19 @@ export default function Configuracion() {
                           }
                         />
                         {usuario.is_active ? "Activo" : "Inactivo"}
+                      </label>
+                    </td>
+                    <td className="px-4 py-3">
+                      <label className="inline-flex items-center gap-2 text-xs text-slate-600">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(usuario.es_cajero)}
+                          disabled={updatingCajaUserId === usuario.id}
+                          onChange={(event) =>
+                            handleToggleCajaUsuario(usuario, event.target.checked)
+                          }
+                        />
+                        {usuario.es_cajero ? "Activo" : "Inactivo"}
                       </label>
                     </td>
                     <td className="px-4 py-3">
@@ -1769,19 +1811,21 @@ export default function Configuracion() {
                     <option value="BODEGUERO">Bodeguero</option>
                   </select>
                 </label>
-                <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={nuevoUsuario.es_cajero}
-                    onChange={(event) =>
-                      setNuevoUsuario((prev) => ({
-                        ...prev,
-                        es_cajero: event.target.checked,
-                      }))
-                    }
-                  />
-                  Asignar perfil de caja
-                </label>
+                {userModalMode === "create" && (
+                  <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={nuevoUsuario.es_cajero}
+                      onChange={(event) =>
+                        setNuevoUsuario((prev) => ({
+                          ...prev,
+                          es_cajero: event.target.checked,
+                        }))
+                      }
+                    />
+                    Asignar perfil de caja
+                  </label>
+                )}
                 {userModalMode === "edit" ? (
                   <>
                     <label className="space-y-2 text-xs font-medium text-slate-700">
