@@ -651,6 +651,30 @@ export default function Configuracion() {
     }
   };
 
+  const withCajaAccess = (
+    baseAccess: ModuleAccessState,
+    esCajero: boolean
+  ): ModuleAccessState => {
+    const facturacionActual = baseAccess.facturacion ?? {
+      enabled: false,
+      sections: {},
+    };
+    const nextSections = {
+      ...facturacionActual.sections,
+      caja: esCajero,
+    };
+    const moduleEnabled = Object.values(nextSections).some(Boolean);
+
+    return {
+      ...baseAccess,
+      facturacion: {
+        ...facturacionActual,
+        enabled: moduleEnabled,
+        sections: nextSections,
+      },
+    };
+  };
+
   const resetNuevoUsuario = () => {
     setNuevoUsuario({
       username: "",
@@ -791,8 +815,13 @@ export default function Configuracion() {
     setUpdatingCajaUserId(usuario.id);
     setMensajeUsuario("");
     try {
+      const accessActualizado = withCajaAccess(
+        normalizeModuleAccess(usuario.modulos_permitidos ?? null),
+        esCajero
+      );
       const data = await configuracionAPI.actualizarUsuario(usuario.id, {
         es_cajero: esCajero,
+        modulos_permitidos: accessActualizado,
       });
       setUsuarios((prev) =>
         prev.map((item) => (item.id === data.id ? data : item))
