@@ -1,0 +1,53 @@
+from decimal import Decimal
+
+from apps.facturacion_electronica.selectors import (
+    get_municipality_id,
+    get_payment_method_code,
+    get_tribute_id,
+    get_unit_measure_id,
+)
+
+
+def _decimal_to_float(value: Decimal) -> float:
+    return float(value or Decimal('0'))
+
+
+def build_payload_from_venta(venta):
+    cliente = venta.cliente
+    customer = {
+        'identification': cliente.numero_documento,
+        'names': cliente.nombre,
+        'email': cliente.email or 'no-email@example.com',
+        'phone': cliente.telefono or '0000000000',
+        'municipality_id': get_municipality_id(cliente.ciudad or 'SIN_CIUDAD'),
+        'identification_document_id': 3 if cliente.tipo_documento == 'CC' else 6,
+        'tribute_id': get_tribute_id(cliente.tipo_documento),
+    }
+
+    items = []
+    for detalle in venta.detalles.select_related('producto').all():
+        producto = detalle.producto
+        items.append(
+            {
+                'code_reference': producto.codigo,
+                'name': producto.nombre,
+                'quantity': _decimal_to_float(detalle.cantidad),
+                'price': _decimal_to_float(detalle.precio_unitario),
+                'tax_rate': _decimal_to_float(detalle.iva_porcentaje),
+                'unit_measure_id': get_unit_measure_id(producto.unidad_medida),
+                'standard_code_id': 1,
+                'tribute_id': get_tribute_id('IVA'),
+                'is_excluded': _decimal_to_float(detalle.iva_porcentaje) == 0,
+            }
+        )
+
+    payload = {
+        'document': '01',
+        'numbering_range_id': 1,
+        'reference_code': venta.numero_comprobante,
+        'payment_method_code': get_payment_method_code(venta.medio_pago),
+        'customer': customer,
+        'items': items,
+    }
+
+    return payload
