@@ -14,7 +14,7 @@ class FactusAPIError(Exception):
 
 class FactusClient:
     def __init__(self):
-        self.base_url = config('FACTUS_BASE_URL', default='https://api-sandbox.factus.com.co')
+        self.base_url = config('FACTUS_API_URL', default='https://api-sandbox.factus.com.co')
         self.auth_path = config('FACTUS_AUTH_PATH', default='/oauth/token')
         self.invoice_path = config('FACTUS_INVOICE_PATH', default='/v1/bills/validate')
         self.client_id = config('FACTUS_CLIENT_ID', default='')
@@ -34,7 +34,12 @@ class FactusClient:
             }
         ).encode('utf-8')
         req = request.Request(auth_url, data=body, method='POST')
+
         req.add_header('Content-Type', 'application/x-www-form-urlencoded')
+        req.add_header('Accept', 'application/json')
+
+        # ESTA LÍNEA ES LA CLAVE
+        req.add_header('User-Agent', 'Mozilla/5.0')
 
         try:
             with request.urlopen(req, timeout=30) as response:
@@ -73,6 +78,8 @@ class FactusClient:
         req = request.Request(url, data=raw_payload, method='POST')
         req.add_header('Authorization', f'Bearer {token}')
         req.add_header('Content-Type', 'application/json')
+        req.add_header('Accept', 'application/json')
+        req.add_header('User-Agent', 'Mozilla/5.0')
 
         try:
             with request.urlopen(req, timeout=30) as response:
