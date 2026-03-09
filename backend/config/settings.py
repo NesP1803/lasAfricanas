@@ -188,3 +188,6 @@ SIMPLE_JWT = {
 
 # Custom User Model
 AUTH_USER_MODEL = 'usuarios.Usuario'
+
+# Facturación electrónica (Factus)
+FACTUS_NUMBERING_RANGE_FACTURA = 1
