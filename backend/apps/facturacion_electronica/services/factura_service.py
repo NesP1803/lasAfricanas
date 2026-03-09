@@ -3,6 +3,7 @@ from decimal import Decimal
 from django.conf import settings
 
 from apps.facturacion_electronica.selectors import (
+    get_identification_document_id,
     get_municipality_id,
     get_payment_method_code,
     get_tribute_id,
@@ -12,17 +13,6 @@ from apps.facturacion_electronica.selectors import (
 
 def _decimal_to_float(value: Decimal) -> float:
     return float(value or Decimal('0'))
-
-
-def get_identification_document_id(tipo_documento: str) -> int:
-    mapping = {
-        'CC': 3,
-        'NIT': 6,
-        'CE': 5,
-        'PAS': 7,
-        'TI': 4,
-    }
-    return mapping.get(tipo_documento, 3)
 
 
 def build_payload_from_venta(venta):
