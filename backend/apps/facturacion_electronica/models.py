@@ -2,6 +2,13 @@ from django.db import models
 from django.utils import timezone
 
 from apps.core.models import BaseModel
+from apps.facturacion_electronica.catalogos.models import (  # noqa: F401
+    DocumentoIdentificacionFactus,
+    MetodoPagoFactus,
+    MunicipioFactus,
+    TributoFactus,
+    UnidadMedidaFactus,
+)
 
 
 class FacturaElectronica(BaseModel):
