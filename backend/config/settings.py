@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     'apps.ventas',
     'apps.taller',
     'apps.facturacion_electronica',
+    'apps.facturacion',
 ]
 
 MIDDLEWARE = [
@@ -195,3 +196,6 @@ AUTH_USER_MODEL = 'usuarios.Usuario'
 
 # Facturación electrónica (Factus)
 FACTUS_NUMBERING_RANGE_FACTURA = 1
+
+FACTUS_BILLS_VALIDATE_PATH = config('FACTUS_BILLS_VALIDATE_PATH', default='/v1/bills/validate')
+FACTUS_BEARER_TOKEN = config('FACTUS_BEARER_TOKEN', default='')
