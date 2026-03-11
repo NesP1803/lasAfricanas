@@ -18,11 +18,12 @@ def map_factus_status(status: str | None) -> str:
     """Mapea estados de Factus a estados internos."""
     normalized = (status or '').strip().lower()
     mapping = {
-        'valid': 'ACEPTADA_DIAN',
-        'rejected': 'RECHAZADA_DIAN',
-        'pending': 'PENDIENTE',
+        'valid': 'ACEPTADA',
+        'rejected': 'RECHAZADA',
+        'pending': 'EN_PROCESO',
+        'error': 'ERROR',
     }
-    return mapping.get(normalized, 'PENDIENTE')
+    return mapping.get(normalized, 'ERROR')
 
 
 def _extract_bill_data(response_json: dict[str, Any]) -> dict[str, str]:
@@ -35,7 +36,8 @@ def _extract_bill_data(response_json: dict[str, Any]) -> dict[str, str]:
         'status': map_factus_status(str(status) if status is not None else None),
         'xml_url': str(bill.get('xml_url', '')).strip(),
         'pdf_url': str(bill.get('pdf_url', '')).strip(),
-        'qr': str(bill.get('qr', '')).strip(),
+        'codigo_error': str(response_json.get('error_code', '')).strip(),
+        'mensaje_error': str(response_json.get('error_message', '')).strip(),
     }
 
 
@@ -62,7 +64,8 @@ def sync_invoice_status(numero_factura: str) -> FacturaElectronica:
         factura.status = payload['status']
         factura.xml_url = payload['xml_url'] or factura.xml_url
         factura.pdf_url = payload['pdf_url'] or factura.pdf_url
-        factura.qr = payload['qr'] or factura.qr
+        factura.codigo_error = payload['codigo_error'] or None
+        factura.mensaje_error = payload['mensaje_error'] or None
         factura.response_json = response_json
         factura.save(
             update_fields=[
@@ -71,7 +74,8 @@ def sync_invoice_status(numero_factura: str) -> FacturaElectronica:
                 'status',
                 'xml_url',
                 'pdf_url',
-                'qr',
+                'codigo_error',
+                'mensaje_error',
                 'response_json',
                 'updated_at',
             ]

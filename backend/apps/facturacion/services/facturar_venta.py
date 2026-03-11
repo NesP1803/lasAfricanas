@@ -7,13 +7,29 @@ from typing import Any
 
 from django.db import transaction
 
+from apps.facturacion.exceptions import FacturaDuplicadaError
 from apps.facturacion.models import FacturaElectronica
 from apps.facturacion.services.download_invoice_files import download_pdf, download_xml
 from apps.facturacion.services.factus_client import FactusAPIError, FactusClient, FactusValidationError
 from apps.facturacion.services.factus_payload_builder import build_invoice_payload
+from apps.facturacion.services.generate_qr_dian import generate_qr_dian
 from apps.ventas.models import Venta
 
 logger = logging.getLogger(__name__)
+
+
+def map_factus_status(response_json: dict[str, Any]) -> str:
+    """Mapea estados de Factus a estados internos DIAN."""
+    data = response_json.get('data', response_json)
+    bill = data.get('bill', data)
+    status = str(bill.get('status', data.get('status', response_json.get('status', 'error')))).strip().lower()
+    mapping = {
+        'valid': 'ACEPTADA',
+        'rejected': 'RECHAZADA',
+        'pending': 'EN_PROCESO',
+        'error': 'ERROR',
+    }
+    return mapping.get(status, 'ERROR')
 
 
 def _extract_factus_data(response_json: dict[str, Any]) -> dict[str, str]:
@@ -25,8 +41,7 @@ def _extract_factus_data(response_json: dict[str, Any]) -> dict[str, str]:
         'number': str(bill.get('number', '')).strip(),
         'xml_url': str(bill.get('xml_url', '')).strip(),
         'pdf_url': str(bill.get('pdf_url', '')).strip(),
-        'qr': str(bill.get('qr', '')).strip(),
-        'status': str(bill.get('status', data.get('status', response_json.get('status', 'UNKNOWN')))).strip(),
+        'status': map_factus_status(response_json),
     }
 
 
@@ -46,11 +61,15 @@ def facturar_venta(venta_id: int) -> FacturaElectronica:
         return factura_existente
 
     payload = build_invoice_payload(venta)
+    reference_code = str(payload.get('reference_code', '')).strip()
+    if FacturaElectronica.objects.filter(reference_code=reference_code).exists():
+        raise FacturaDuplicadaError(f'Ya existe una factura electrónica con reference_code={reference_code}.')
+
     client = FactusClient()
     response_json = client.send_invoice(payload)
 
     fields = _extract_factus_data(response_json)
-    required_fields = ['cufe', 'uuid', 'number', 'xml_url', 'pdf_url', 'qr', 'status']
+    required_fields = ['cufe', 'uuid', 'number', 'xml_url', 'pdf_url']
     missing_fields = [field for field in required_fields if not fields[field]]
     if missing_fields:
         logger.error('Respuesta incompleta Factus venta=%s faltantes=%s', venta.id, missing_fields)
@@ -61,9 +80,16 @@ def facturar_venta(venta_id: int) -> FacturaElectronica:
             venta=venta,
             defaults={
                 **fields,
+                'reference_code': reference_code,
+                'codigo_error': response_json.get('error_code'),
+                'mensaje_error': response_json.get('error_message'),
                 'response_json': response_json,
             },
         )
+        if factura.cufe:
+            qr_file = generate_qr_dian(factura.number, factura.cufe)
+            factura.qr.save(qr_file.name, qr_file, save=False)
+            factura.save(update_fields=['qr', 'updated_at'])
 
     download_xml(factura)
     download_pdf(factura)
