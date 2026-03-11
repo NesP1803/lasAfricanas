@@ -5,7 +5,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from apps.facturacion.exceptions import FacturaNoValidaParaNotaCredito
+from apps.facturacion.exceptions import DocumentoSoporteInvalido, FacturaNoValidaParaNotaCredito
 from apps.facturacion.models import FacturaElectronica
 from apps.facturacion.serializers import FacturaEstadoSerializer
 from apps.facturacion.serializers.factura_pos_serializer import FacturaPOSSerializer
@@ -13,6 +13,7 @@ from apps.facturacion.services import (
     FacturaNoEncontrada,
     FactusConsultaError,
     FactusValidationError,
+    emitir_documento_soporte,
     emitir_nota_credito,
     sync_invoice_status,
 )
@@ -123,6 +124,25 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
                 'nota_credito': nota.number,
                 'cufe': nota.cufe,
                 'estado': nota.status,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+    @action(detail=False, methods=['post'], url_path='documento-soporte')
+    def documento_soporte(self, request):
+        try:
+            documento = emitir_documento_soporte(request.data)
+        except DocumentoSoporteInvalido as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except FactusValidationError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(
+            {
+                'numero': documento.number,
+                'cufe': documento.cufe,
+                'estado': documento.status,
             },
             status=status.HTTP_201_CREATED,
         )

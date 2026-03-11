@@ -33,6 +33,7 @@ class FactusClient:
         self.auth_path = config('FACTUS_AUTH_PATH', default='/oauth/token')
         self.invoice_path = config('FACTUS_INVOICE_PATH', default='/v1/bills/validate')
         self.credit_note_path = config('FACTUS_CREDIT_NOTE_PATH', default='/credit-notes/validate')
+        self.support_document_path = config('FACTUS_SUPPORT_DOCUMENT_PATH', default='/support-documents/validate')
         self.client_id = config('FACTUS_CLIENT_ID', default='')
         self.client_secret = config('FACTUS_CLIENT_SECRET', default='')
         self.username = config('FACTUS_USERNAME', default='')
@@ -124,6 +125,13 @@ class FactusClient:
         if not payload.get('items'):
             raise FactusValidationError('La nota crédito no contiene ítems para enviar a Factus.')
         return self.request('POST', self.credit_note_path, json=payload)
+
+    def send_support_document(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if not payload.get('supplier'):
+            raise FactusValidationError('El documento soporte debe incluir supplier para enviar a Factus.')
+        if not payload.get('items'):
+            raise FactusValidationError('El documento soporte no contiene ítems para enviar a Factus.')
+        return self.request('POST', self.support_document_path, json=payload)
 
     def get_invoice(self, number: str) -> dict[str, Any]:
         """Consulta una factura electrónica existente en Factus por número."""

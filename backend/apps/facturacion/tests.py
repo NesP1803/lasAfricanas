@@ -5,12 +5,15 @@ from decimal import Decimal
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from apps.facturacion.exceptions import DocumentoSoporteInvalido
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from apps.facturacion.models import FacturaElectronica
 from apps.facturacion.services.download_invoice_files import download_pdf, download_xml
+from apps.facturacion.services.support_document_payload_builder import build_support_document_payload
 from apps.facturacion.services.exceptions import DescargaFacturaError
 from apps.ventas.models import Cliente, Venta
 
@@ -170,3 +173,50 @@ class FacturaQRYPosEndpointsTests(TestCase):
         self.assertEqual(response.data['cliente'], 'Cliente POS')
         self.assertEqual(response.data['nit_cliente'], '789')
         self.assertEqual(response.data['cufe'], 'CUFE-3')
+
+
+class DocumentoSoporteBuilderTests(TestCase):
+    def test_valida_proveedor_documento_requerido(self):
+        with self.assertRaises(DocumentoSoporteInvalido):
+            build_support_document_payload(
+                {
+                    'proveedor_nombre': 'Juan Perez',
+                    'items': [{'descripcion': 'Servicio', 'cantidad': 1, 'precio': 10000}],
+                }
+            )
+
+    def test_valida_total_mayor_a_cero(self):
+        with self.assertRaises(DocumentoSoporteInvalido):
+            build_support_document_payload(
+                {
+                    'proveedor_nombre': 'Juan Perez',
+                    'proveedor_documento': '123',
+                    'proveedor_tipo_documento': 'CC',
+                    'items': [{'descripcion': 'Servicio', 'cantidad': 1, 'precio': 0}],
+                }
+            )
+
+
+class DocumentoSoporteEndpointTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(username='doc-soporte', password='1234')
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+
+    @patch('apps.facturacion.views.emitir_documento_soporte')
+    def test_endpoint_documento_soporte(self, mocked_emitir):
+        mocked_emitir.return_value = MagicMock(number='DS123', cufe='CUFE-DS-1', status='ACEPTADA')
+
+        payload = {
+            'proveedor_nombre': 'Juan Perez',
+            'proveedor_documento': '12345678',
+            'proveedor_tipo_documento': 'CC',
+            'items': [{'descripcion': 'Servicio técnico', 'cantidad': 1, 'precio': 100000}],
+        }
+        response = self.client.post('/api/facturacion/documento-soporte/', payload, format='json')
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data['numero'], 'DS123')
+        self.assertEqual(response.data['cufe'], 'CUFE-DS-1')
+        self.assertEqual(response.data['estado'], 'ACEPTADA')
