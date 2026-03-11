@@ -75,3 +75,28 @@ class NotaCreditoElectronica(models.Model):
 
     def __str__(self) -> str:
         return f'{self.number} ({self.status})'
+
+
+class DocumentoSoporteElectronico(models.Model):
+    """Representa un documento soporte electrónico emitido para compras a no obligados."""
+
+    number = models.CharField(max_length=50)
+    proveedor_nombre = models.CharField(max_length=200)
+    proveedor_documento = models.CharField(max_length=50)
+    proveedor_tipo_documento = models.CharField(max_length=20)
+    cufe = models.CharField(max_length=150, null=True, blank=True)
+    uuid = models.CharField(max_length=150, null=True, blank=True)
+    status = models.CharField(max_length=20, choices=FacturaElectronica.STATUS_CHOICES, db_index=True)
+    xml_url = models.URLField(null=True, blank=True)
+    pdf_url = models.URLField(null=True, blank=True)
+    response_json = models.JSONField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'facturacion_documentos_soporte_electronicos'
+        verbose_name = 'Documento Soporte Electrónico'
+        verbose_name_plural = 'Documentos Soporte Electrónicos'
+        ordering = ['-created_at']
+
+    def __str__(self) -> str:
+        return f'{self.number} ({self.status})'

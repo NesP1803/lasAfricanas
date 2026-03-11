@@ -7,3 +7,7 @@ class FacturaDuplicadaError(Exception):
 
 class FacturaNoValidaParaNotaCredito(Exception):
     """Se lanza cuando una factura no está en estado válido para nota crédito."""
+
+
+class DocumentoSoporteInvalido(Exception):
+    """Se lanza cuando los datos del documento soporte no cumplen validaciones mínimas."""
