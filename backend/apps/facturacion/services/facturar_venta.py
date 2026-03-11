@@ -8,6 +8,7 @@ from typing import Any
 from django.db import transaction
 
 from apps.facturacion.models import FacturaElectronica
+from apps.facturacion.services.download_invoice_files import download_pdf, download_xml
 from apps.facturacion.services.factus_client import FactusAPIError, FactusClient, FactusValidationError
 from apps.facturacion.services.factus_payload_builder import build_invoice_payload
 from apps.ventas.models import Venta
@@ -38,6 +39,10 @@ def facturar_venta(venta_id: int) -> FacturaElectronica:
 
     factura_existente = FacturaElectronica.objects.filter(venta=venta).first()
     if factura_existente:
+        if not factura_existente.xml_local_path:
+            download_xml(factura_existente)
+        if not factura_existente.pdf_local_path:
+            download_pdf(factura_existente)
         return factura_existente
 
     payload = build_invoice_payload(venta)
@@ -59,4 +64,7 @@ def facturar_venta(venta_id: int) -> FacturaElectronica:
                 'response_json': response_json,
             },
         )
+
+    download_xml(factura)
+    download_pdf(factura)
     return factura

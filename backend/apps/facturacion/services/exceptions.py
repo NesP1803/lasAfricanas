@@ -7,3 +7,7 @@ class FacturaNoEncontrada(Exception):
 
 class FactusConsultaError(Exception):
     """Error al consultar o sincronizar información de Factus."""
+
+
+class DescargaFacturaError(Exception):
+    """Error al descargar XML/PDF de una factura electrónica."""
