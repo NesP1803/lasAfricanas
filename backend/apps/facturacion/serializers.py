@@ -34,3 +34,26 @@ class FacturarVentaResponseSerializer(serializers.Serializer):
     numero = serializers.CharField()
     pdf_url = serializers.URLField()
     xml_url = serializers.URLField()
+
+
+class FacturaEstadoSerializer(serializers.ModelSerializer):
+    """Serializer de respuesta para consulta de estado DIAN sincronizado."""
+
+    estado_dian = serializers.CharField(source='status', read_only=True)
+    numero = serializers.CharField(source='number', read_only=True)
+
+    class Meta:
+        model = FacturaElectronica
+        fields = [
+            'number',
+            'numero',
+            'cufe',
+            'uuid',
+            'status',
+            'estado_dian',
+            'pdf_url',
+            'xml_url',
+            'qr',
+            'updated_at',
+        ]
+        read_only_fields = fields

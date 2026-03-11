@@ -117,3 +117,14 @@ class FactusClient:
         if not payload.get('items'):
             raise FactusValidationError('La factura no contiene ítems para enviar a Factus.')
         return self.request('POST', self.invoice_path, json=payload)
+
+    def get_invoice(self, number: str) -> dict[str, Any]:
+        """Consulta una factura electrónica existente en Factus por número."""
+        path = f'/v1/bills/show/{number}'
+        return self.request(
+            'GET',
+            path,
+            headers={
+                'Content-Type': 'application/json',
+            },
+        )

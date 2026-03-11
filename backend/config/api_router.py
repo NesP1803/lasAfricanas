@@ -27,6 +27,7 @@ from apps.core.views import (
 )
 from apps.usuarios.views import UsuarioViewSet
 from apps.taller.views import MecanicoViewSet, MotoViewSet, OrdenTallerViewSet
+from apps.facturacion.views import FacturaElectronicaViewSet
 
 
 # Crear router único
@@ -59,3 +60,6 @@ router.register(r'usuarios', UsuarioViewSet, basename='usuario')
 router.register(r'mecanicos', MecanicoViewSet, basename='mecanico')
 router.register(r'motos', MotoViewSet, basename='moto')
 router.register(r'ordenes-taller', OrdenTallerViewSet, basename='orden-taller')
+
+# Registrar Facturación Electrónica
+router.register(r'facturacion', FacturaElectronicaViewSet, basename='facturacion-electronica')
