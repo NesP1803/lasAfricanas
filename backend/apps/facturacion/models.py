@@ -15,12 +15,13 @@ class FacturaElectronica(models.Model):
     cufe = models.CharField(max_length=128, unique=True, db_index=True, verbose_name='CUFE')
     uuid = models.CharField(max_length=128, db_index=True, verbose_name='UUID')
     number = models.CharField(max_length=64, db_index=True, verbose_name='Número de factura')
+    status = models.CharField(max_length=64, db_index=True, verbose_name='Estado Factus/DIAN')
     xml_url = models.URLField(max_length=500, verbose_name='URL XML')
     pdf_url = models.URLField(max_length=500, verbose_name='URL PDF')
     qr = models.TextField(verbose_name='Código QR')
-    status = models.CharField(max_length=64, db_index=True, verbose_name='Estado Factus/DIAN')
     response_json = models.JSONField(verbose_name='Respuesta completa de Factus')
     created_at = models.DateTimeField(auto_now_add=True, db_index=True, verbose_name='Fecha de creación')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Fecha de actualización')
 
     class Meta:
         db_table = 'facturacion_facturas_electronicas'
