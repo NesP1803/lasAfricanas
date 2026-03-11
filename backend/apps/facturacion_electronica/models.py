@@ -15,7 +15,7 @@ class NotaCreditoElectronica(BaseModel):
     factura = models.ForeignKey(
         'facturacion.FacturaElectronica',
         on_delete=models.PROTECT,
-        related_name='notas_credito',
+        related_name='notas_credito_legacy',
         verbose_name='Factura electrónica',
     )
     reference_code = models.CharField(max_length=80, unique=True, db_index=True)

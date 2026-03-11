@@ -5,6 +5,8 @@ from .sync_invoice_status import map_factus_status, sync_invoice_status
 from .factus_client import FactusAPIError, FactusAuthError, FactusClient, FactusValidationError
 from .exceptions import DescargaFacturaError, FacturaNoEncontrada, FactusConsultaError
 from .factus_payload_builder import build_invoice_payload
+from .credit_note_payload_builder import build_credit_note_payload
+from .emitir_nota_credito import emitir_nota_credito
 from .download_invoice_files import download_pdf, download_xml
 
 __all__ = [
@@ -18,6 +20,8 @@ __all__ = [
     'download_xml',
     'download_pdf',
     'build_invoice_payload',
+    'build_credit_note_payload',
+    'emitir_nota_credito',
     'facturar_venta',
     'map_factus_status',
     'sync_invoice_status',
