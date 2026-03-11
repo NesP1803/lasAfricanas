@@ -42,7 +42,8 @@ class FacturaDownloadFilesTests(TestCase):
             cufe='CUFE-1',
             uuid='UUID-1',
             number='FV1234',
-            status='VALIDADA',
+            reference_code='FV1234',
+            status='ACEPTADA',
             xml_url='https://example.com/fv1234.xml',
             pdf_url='https://example.com/fv1234.pdf',
             qr='qr',
@@ -97,7 +98,8 @@ class FacturaFilesEndpointsTests(TestCase):
             cufe='CUFE-2',
             uuid='UUID-2',
             number='FV9999',
-            status='VALIDADA',
+            reference_code='FV9999',
+            status='ACEPTADA',
             xml_url='https://example.com/fv9999.xml',
             pdf_url='https://example.com/fv9999.pdf',
             xml_local_path='facturas/xml/FV9999.xml',
@@ -117,3 +119,54 @@ class FacturaFilesEndpointsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['numero'], 'FV9999')
         self.assertEqual(response.data['pdf'], 'facturas/pdf/FV9999.pdf')
+
+
+class FacturaQRYPosEndpointsTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(username='pos', password='1234')
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+
+        self.cliente = Cliente.objects.create(numero_documento='789', nombre='Cliente POS')
+        self.venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            numero_comprobante='FV5555',
+            cliente=self.cliente,
+            vendedor=self.user,
+            subtotal=Decimal('100'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('19'),
+            total=Decimal('119'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('119'),
+            cambio=Decimal('0'),
+            estado='FACTURADA',
+        )
+        self.factura = FacturaElectronica.objects.create(
+            venta=self.venta,
+            cufe='CUFE-3',
+            uuid='UUID-3',
+            number='FV5555',
+            reference_code='FV5555',
+            status='ACEPTADA',
+            xml_url='https://example.com/fv5555.xml',
+            pdf_url='https://example.com/fv5555.pdf',
+            qr='facturas/qr/FV5555.png',
+            response_json={'ok': True},
+        )
+
+    def test_qr_endpoint(self):
+        response = self.client.get('/api/facturacion/FV5555/qr/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['numero'], 'FV5555')
+        self.assertIn('/media/facturas/qr/FV5555.png', response.data['qr'])
+
+    def test_pos_endpoint(self):
+        response = self.client.get('/api/facturacion/FV5555/pos/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['numero'], 'FV5555')
+        self.assertEqual(response.data['cliente'], 'Cliente POS')
+        self.assertEqual(response.data['nit_cliente'], '789')
+        self.assertEqual(response.data['cufe'], 'CUFE-3')

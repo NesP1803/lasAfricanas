@@ -10,6 +10,7 @@ from django.utils import timezone
 from datetime import datetime, time
 from decimal import Decimal
 
+from apps.facturacion.exceptions import FacturaDuplicadaError
 from apps.facturacion.serializers import FacturarVentaResponseSerializer
 from apps.facturacion.services import FactusAPIError, FactusAuthError, FactusValidationError, facturar_venta
 
@@ -481,7 +482,7 @@ class VentaViewSet(viewsets.ModelViewSet):
 
         try:
             factura = facturar_venta(venta.id)
-        except (FactusValidationError, FactusAuthError, FactusAPIError) as exc:
+        except (FactusValidationError, FactusAuthError, FactusAPIError, FacturaDuplicadaError) as exc:
             return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         data = {

@@ -2,7 +2,7 @@
 
 from rest_framework import serializers
 
-from .models import FacturaElectronica
+from apps.facturacion.models import FacturaElectronica
 
 
 class FacturaElectronicaSerializer(serializers.ModelSerializer):
@@ -16,10 +16,13 @@ class FacturaElectronicaSerializer(serializers.ModelSerializer):
             'cufe',
             'uuid',
             'number',
+            'reference_code',
             'xml_url',
             'pdf_url',
             'qr',
             'status',
+            'codigo_error',
+            'mensaje_error',
             'response_json',
             'created_at',
         ]
@@ -47,10 +50,13 @@ class FacturaEstadoSerializer(serializers.ModelSerializer):
         fields = [
             'number',
             'numero',
+            'reference_code',
             'cufe',
             'uuid',
             'status',
             'estado_dian',
+            'codigo_error',
+            'mensaje_error',
             'pdf_url',
             'xml_url',
             'qr',

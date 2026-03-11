@@ -6,6 +6,13 @@ from django.db import models
 class FacturaElectronica(models.Model):
     """Representa la respuesta validada de DIAN para una venta enviada a Factus."""
 
+    STATUS_CHOICES = [
+        ('ACEPTADA', 'Aceptada DIAN'),
+        ('RECHAZADA', 'Rechazada DIAN'),
+        ('ERROR', 'Error de envío'),
+        ('EN_PROCESO', 'En proceso'),
+    ]
+
     venta = models.OneToOneField(
         'ventas.Venta',
         on_delete=models.PROTECT,
@@ -15,12 +22,15 @@ class FacturaElectronica(models.Model):
     cufe = models.CharField(max_length=128, unique=True, db_index=True, verbose_name='CUFE')
     uuid = models.CharField(max_length=128, db_index=True, verbose_name='UUID')
     number = models.CharField(max_length=64, db_index=True, verbose_name='Número de factura')
-    status = models.CharField(max_length=64, db_index=True, verbose_name='Estado Factus/DIAN')
+    reference_code = models.CharField(max_length=100, unique=True, verbose_name='Código de referencia')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, db_index=True, verbose_name='Estado DIAN')
     xml_url = models.URLField(max_length=500, verbose_name='URL XML')
     pdf_url = models.URLField(max_length=500, verbose_name='URL PDF')
     xml_local_path = models.CharField(max_length=500, blank=True, default='', verbose_name='Ruta local XML')
     pdf_local_path = models.CharField(max_length=500, blank=True, default='', verbose_name='Ruta local PDF')
-    qr = models.TextField(verbose_name='Código QR')
+    qr = models.ImageField(upload_to='facturas/qr/', null=True, blank=True, verbose_name='Código QR DIAN')
+    codigo_error = models.CharField(max_length=50, null=True, blank=True, verbose_name='Código de error DIAN')
+    mensaje_error = models.TextField(null=True, blank=True, verbose_name='Mensaje de error DIAN')
     response_json = models.JSONField(verbose_name='Respuesta completa de Factus')
     created_at = models.DateTimeField(auto_now_add=True, db_index=True, verbose_name='Fecha de creación')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Fecha de actualización')
