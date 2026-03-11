@@ -32,6 +32,7 @@ class FactusClient:
         self.base_url = config('FACTUS_API_URL', default='https://api-sandbox.factus.com.co').rstrip('/')
         self.auth_path = config('FACTUS_AUTH_PATH', default='/oauth/token')
         self.invoice_path = config('FACTUS_INVOICE_PATH', default='/v1/bills/validate')
+        self.credit_note_path = config('FACTUS_CREDIT_NOTE_PATH', default='/credit-notes/validate')
         self.client_id = config('FACTUS_CLIENT_ID', default='')
         self.client_secret = config('FACTUS_CLIENT_SECRET', default='')
         self.username = config('FACTUS_USERNAME', default='')
@@ -117,6 +118,12 @@ class FactusClient:
         if not payload.get('items'):
             raise FactusValidationError('La factura no contiene ítems para enviar a Factus.')
         return self.request('POST', self.invoice_path, json=payload)
+
+
+    def send_credit_note(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if not payload.get('items'):
+            raise FactusValidationError('La nota crédito no contiene ítems para enviar a Factus.')
+        return self.request('POST', self.credit_note_path, json=payload)
 
     def get_invoice(self, number: str) -> dict[str, Any]:
         """Consulta una factura electrónica existente en Factus por número."""

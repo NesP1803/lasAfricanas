@@ -5,10 +5,17 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from apps.facturacion.exceptions import FacturaNoValidaParaNotaCredito
 from apps.facturacion.models import FacturaElectronica
 from apps.facturacion.serializers import FacturaEstadoSerializer
 from apps.facturacion.serializers.factura_pos_serializer import FacturaPOSSerializer
-from apps.facturacion.services import FacturaNoEncontrada, FactusConsultaError, sync_invoice_status
+from apps.facturacion.services import (
+    FacturaNoEncontrada,
+    FactusConsultaError,
+    FactusValidationError,
+    emitir_nota_credito,
+    sync_invoice_status,
+)
 
 
 class FacturaElectronicaViewSet(viewsets.GenericViewSet):
@@ -90,3 +97,32 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
 
         serializer = FacturaPOSSerializer(factura)
         return Response(serializer.data)
+
+    @action(detail=True, methods=['post'], url_path='nota-credito')
+    def nota_credito(self, request, pk=None):
+        motivo = str(request.data.get('motivo', '')).strip()
+        items = request.data.get('items', [])
+        if not motivo:
+            return Response({'detail': 'El campo motivo es obligatorio.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not isinstance(items, list) or not items:
+            return Response({'detail': 'El campo items debe ser una lista con al menos un elemento.'}, status=400)
+
+        try:
+            nota = emitir_nota_credito(factura_id=int(pk), motivo=motivo, items=items)
+        except ValueError:
+            return Response({'detail': 'factura_id inválido.'}, status=status.HTTP_400_BAD_REQUEST)
+        except FacturaElectronica.DoesNotExist as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_404_NOT_FOUND)
+        except FacturaNoValidaParaNotaCredito as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except FactusValidationError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(
+            {
+                'nota_credito': nota.number,
+                'cufe': nota.cufe,
+                'estado': nota.status,
+            },
+            status=status.HTTP_201_CREATED,
+        )

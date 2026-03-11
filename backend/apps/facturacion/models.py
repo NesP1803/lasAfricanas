@@ -48,3 +48,30 @@ class FacturaElectronica(models.Model):
 
     def __str__(self) -> str:
         return f'{self.number} - {self.cufe}'
+
+
+class NotaCreditoElectronica(models.Model):
+    """Representa una nota crédito electrónica emitida en Factus para una factura existente."""
+
+    factura = models.ForeignKey(
+        FacturaElectronica,
+        on_delete=models.PROTECT,
+        related_name='notas_credito',
+    )
+    number = models.CharField(max_length=50)
+    uuid = models.CharField(max_length=100, null=True, blank=True)
+    cufe = models.CharField(max_length=150, null=True, blank=True)
+    status = models.CharField(max_length=20, choices=FacturaElectronica.STATUS_CHOICES, db_index=True)
+    xml_url = models.URLField(null=True, blank=True)
+    pdf_url = models.URLField(null=True, blank=True)
+    response_json = models.JSONField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'facturacion_notas_credito_electronicas'
+        verbose_name = 'Nota Crédito Electrónica'
+        verbose_name_plural = 'Notas Crédito Electrónicas'
+        ordering = ['-created_at']
+
+    def __str__(self) -> str:
+        return f'{self.number} ({self.status})'
