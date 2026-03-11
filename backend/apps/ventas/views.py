@@ -11,7 +11,7 @@ from datetime import datetime, time
 from decimal import Decimal
 
 from apps.facturacion.serializers import FacturarVentaResponseSerializer
-from apps.facturacion.services import FactusServiceError, send_invoice_to_factus
+from apps.facturacion.services import FactusAPIError, FactusAuthError, FactusValidationError, facturar_venta
 
 from .models import Cliente, Venta, DetalleVenta, SolicitudDescuento, VentaAnulada, RemisionAnulada
 from .serializers import (
@@ -129,42 +129,7 @@ def _validar_estado_para_anulacion(venta):
         raise ValidationError('La venta está en un estado inconsistente y no se puede anular.')
 
 
-def _build_factus_payload(venta: Venta, detalles: list[DetalleVenta]) -> dict:
-    """Construye el payload mínimo para enviar una factura al endpoint de Factus."""
-    return {
-        'number': venta.numero_comprobante,
-        'customer': {
-            'identification': venta.cliente.numero_documento,
-            'name': venta.cliente.nombre,
-            'email': venta.cliente.email or '',
-            'phone': venta.cliente.telefono or '',
-            'address': venta.cliente.direccion or '',
-            'city': venta.cliente.ciudad or '',
-        },
-        'payment': {
-            'method': venta.medio_pago,
-            'total': str(venta.total),
-        },
-        'items': [
-            {
-                'reference': detalle.producto.codigo,
-                'name': detalle.producto.nombre,
-                'quantity': float(detalle.cantidad),
-                'unit_price': float(detalle.precio_unitario),
-                'discount': float(detalle.descuento_unitario),
-                'tax_rate': float(detalle.iva_porcentaje),
-                'subtotal': float(detalle.subtotal),
-                'total': float(detalle.total),
-            }
-            for detalle in detalles
-        ],
-        'totals': {
-            'subtotal': float(venta.subtotal),
-            'discount': float(venta.descuento_valor),
-            'tax': float(venta.iva),
-            'total': float(venta.total),
-        },
-    }
+
 
 
 class ClienteViewSet(viewsets.ModelViewSet):
@@ -514,18 +479,9 @@ class VentaViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if hasattr(venta, 'factura_electronica_factus'):
-            return Response(
-                {'error': 'La venta ya cuenta con una factura electrónica registrada.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        detalles = list(venta.detalles.select_related('producto'))
-        payload = _build_factus_payload(venta, detalles)
-
         try:
-            factura = send_invoice_to_factus(venta=venta, payload=payload)
-        except FactusServiceError as exc:
+            factura = facturar_venta(venta.id)
+        except (FactusValidationError, FactusAuthError, FactusAPIError) as exc:
             return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         data = {

@@ -1,7 +1,7 @@
 from django.db import models
-from django.utils import timezone
 
 from apps.core.models import BaseModel
+from apps.facturacion.models import FacturaElectronica
 from apps.facturacion_electronica.catalogos.models import (  # noqa: F401
     DocumentoIdentificacionFactus,
     MetodoPagoFactus,
@@ -11,69 +11,15 @@ from apps.facturacion_electronica.catalogos.models import (  # noqa: F401
 )
 
 
-class FacturaElectronica(BaseModel):
-    class Estado(models.TextChoices):
-        PENDIENTE = 'PENDIENTE', 'Pendiente'
-        ENVIANDO = 'ENVIANDO', 'Enviando'
-        ACEPTADA_DIAN = 'ACEPTADA_DIAN', 'Aceptada por DIAN'
-        RECHAZADA_DIAN = 'RECHAZADA_DIAN', 'Rechazada por DIAN'
-        ERROR_API = 'ERROR_API', 'Error API'
-
-    venta = models.OneToOneField(
-        'ventas.Venta',
-        on_delete=models.PROTECT,
-        related_name='factura_electronica',
-        verbose_name='Venta',
-    )
-    reference_code = models.CharField(
-        max_length=80,
-        unique=True,
-        db_index=True,
-        verbose_name='Reference code',
-    )
-    numbering_range_id = models.PositiveIntegerField(verbose_name='Rango de numeración Factus')
-    estado = models.CharField(
-        max_length=20,
-        choices=Estado.choices,
-        default=Estado.PENDIENTE,
-        db_index=True,
-        verbose_name='Estado',
-    )
-    payload = models.JSONField(default=dict, blank=True, verbose_name='Payload enviado')
-    respuesta_api = models.JSONField(default=dict, blank=True, verbose_name='Respuesta Factus')
-    uuid_factus = models.CharField(max_length=100, blank=True, db_index=True, verbose_name='UUID Factus')
-    cufe = models.CharField(max_length=100, blank=True, db_index=True, verbose_name='CUFE')
-    intentos_envio = models.PositiveSmallIntegerField(default=0, verbose_name='Intentos de envío')
-    ultimo_intento_at = models.DateTimeField(null=True, blank=True, verbose_name='Último intento')
-    enviada_at = models.DateTimeField(null=True, blank=True, verbose_name='Enviada a Factus')
-    aceptada_at = models.DateTimeField(null=True, blank=True, verbose_name='Aceptada por DIAN')
-
-    class Meta:
-        db_table = 'facturas_electronicas'
-        verbose_name = 'Factura Electrónica'
-        verbose_name_plural = 'Facturas Electrónicas'
-        indexes = [
-            models.Index(fields=['estado', 'created_at']),
-            models.Index(fields=['ultimo_intento_at']),
-        ]
-
-    def marcar_intento(self):
-        self.intentos_envio += 1
-        self.ultimo_intento_at = timezone.now()
-
-    def __str__(self):
-        return f'{self.reference_code} ({self.estado})'
-
-
 class NotaCreditoElectronica(BaseModel):
     factura = models.ForeignKey(
-        FacturaElectronica,
+        'facturacion.FacturaElectronica',
         on_delete=models.PROTECT,
         related_name='notas_credito',
         verbose_name='Factura electrónica',
     )
     reference_code = models.CharField(max_length=80, unique=True, db_index=True)
-    estado = models.CharField(max_length=20, default=FacturaElectronica.Estado.PENDIENTE)
+    estado = models.CharField(max_length=20, default='PENDIENTE')
     payload = models.JSONField(default=dict, blank=True)
     respuesta_api = models.JSONField(default=dict, blank=True)
 
@@ -86,7 +32,7 @@ class NotaCreditoElectronica(BaseModel):
 class DocumentoSoporteElectronico(BaseModel):
     reference_code = models.CharField(max_length=80, unique=True, db_index=True)
     tercero_identificacion = models.CharField(max_length=50)
-    estado = models.CharField(max_length=20, default=FacturaElectronica.Estado.PENDIENTE)
+    estado = models.CharField(max_length=20, default='PENDIENTE')
     payload = models.JSONField(default=dict, blank=True)
     respuesta_api = models.JSONField(default=dict, blank=True)
 
@@ -111,9 +57,6 @@ class FactusToken(models.Model):
         verbose_name_plural = 'Tokens Factus'
         ordering = ['-created_at']
 
-    def __str__(self):
-        return f'{self.token_type} - {self.expires_at.isoformat()}'
-
 
 class HomologacionMunicipio(BaseModel):
     codigo_interno = models.CharField(max_length=100, unique=True, db_index=True)
@@ -122,8 +65,6 @@ class HomologacionMunicipio(BaseModel):
 
     class Meta:
         db_table = 'fe_homologacion_municipio'
-        verbose_name = 'Homologación Municipio'
-        verbose_name_plural = 'Homologaciones Municipio'
 
 
 class HomologacionTributo(BaseModel):
@@ -133,8 +74,6 @@ class HomologacionTributo(BaseModel):
 
     class Meta:
         db_table = 'fe_homologacion_tributo'
-        verbose_name = 'Homologación Tributo'
-        verbose_name_plural = 'Homologaciones Tributo'
 
 
 class HomologacionUnidadMedida(BaseModel):
@@ -144,8 +83,6 @@ class HomologacionUnidadMedida(BaseModel):
 
     class Meta:
         db_table = 'fe_homologacion_unidad_medida'
-        verbose_name = 'Homologación Unidad de Medida'
-        verbose_name_plural = 'Homologaciones Unidad de Medida'
 
 
 class HomologacionMedioPago(BaseModel):
@@ -155,5 +92,3 @@ class HomologacionMedioPago(BaseModel):
 
     class Meta:
         db_table = 'fe_homologacion_medio_pago'
-        verbose_name = 'Homologación Medio de Pago'
-        verbose_name_plural = 'Homologaciones Medio de Pago'
