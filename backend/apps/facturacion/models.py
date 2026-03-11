@@ -18,6 +18,8 @@ class FacturaElectronica(models.Model):
     status = models.CharField(max_length=64, db_index=True, verbose_name='Estado Factus/DIAN')
     xml_url = models.URLField(max_length=500, verbose_name='URL XML')
     pdf_url = models.URLField(max_length=500, verbose_name='URL PDF')
+    xml_local_path = models.CharField(max_length=500, blank=True, default='', verbose_name='Ruta local XML')
+    pdf_local_path = models.CharField(max_length=500, blank=True, default='', verbose_name='Ruta local PDF')
     qr = models.TextField(verbose_name='Código QR')
     response_json = models.JSONField(verbose_name='Respuesta completa de Factus')
     created_at = models.DateTimeField(auto_now_add=True, db_index=True, verbose_name='Fecha de creación')

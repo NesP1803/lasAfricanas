@@ -3,16 +3,20 @@
 from .facturar_venta import facturar_venta
 from .sync_invoice_status import map_factus_status, sync_invoice_status
 from .factus_client import FactusAPIError, FactusAuthError, FactusClient, FactusValidationError
-from .exceptions import FacturaNoEncontrada, FactusConsultaError
+from .exceptions import DescargaFacturaError, FacturaNoEncontrada, FactusConsultaError
 from .factus_payload_builder import build_invoice_payload
+from .download_invoice_files import download_pdf, download_xml
 
 __all__ = [
     'FactusClient',
     'FactusAuthError',
     'FactusAPIError',
     'FactusValidationError',
+    'DescargaFacturaError',
     'FacturaNoEncontrada',
     'FactusConsultaError',
+    'download_xml',
+    'download_pdf',
     'build_invoice_payload',
     'facturar_venta',
     'map_factus_status',
