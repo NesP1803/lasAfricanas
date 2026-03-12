@@ -5,8 +5,12 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from apps.facturacion.exceptions import DocumentoSoporteInvalido, FacturaNoValidaParaNotaCredito
-from apps.facturacion.models import FacturaElectronica
+from apps.facturacion.exceptions import (
+    DocumentoSoporteInvalido,
+    DocumentoSoporteNoValido,
+    FacturaNoValidaParaNotaCredito,
+)
+from apps.facturacion.models import DocumentoSoporteElectronico, FacturaElectronica
 from apps.facturacion.serializers import FacturaEstadoSerializer
 from apps.facturacion.serializers.factura_pos_serializer import FacturaPOSSerializer
 from apps.facturacion.services import (
@@ -14,6 +18,7 @@ from apps.facturacion.services import (
     FactusConsultaError,
     FactusValidationError,
     emitir_documento_soporte,
+    emitir_nota_ajuste_documento_soporte,
     emitir_nota_credito,
     sync_invoice_status,
 )
@@ -128,6 +133,36 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
             status=status.HTTP_201_CREATED,
         )
 
+
+
+    @action(detail=False, methods=['post'], url_path=r'documento-soporte/(?P<documento_soporte_id>[^/.]+)/nota-ajuste')
+    def nota_ajuste_documento_soporte(self, request, documento_soporte_id=None):
+        motivo = str(request.data.get('motivo', '')).strip()
+        items = request.data.get('items', [])
+        if not motivo:
+            return Response({'detail': 'El campo motivo es obligatorio.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not isinstance(items, list) or not items:
+            return Response({'detail': 'El campo items debe ser una lista con al menos un elemento.'}, status=400)
+
+        try:
+            nota_ajuste = emitir_nota_ajuste_documento_soporte(documento_soporte_id=int(documento_soporte_id), motivo=motivo, items=items)
+        except ValueError:
+            return Response({'detail': 'documento_soporte_id inválido.'}, status=status.HTTP_400_BAD_REQUEST)
+        except DocumentoSoporteElectronico.DoesNotExist as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_404_NOT_FOUND)
+        except DocumentoSoporteNoValido as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except FactusValidationError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(
+            {
+                'nota_ajuste': nota_ajuste.number,
+                'cufe': nota_ajuste.cufe,
+                'estado': nota_ajuste.status,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
     @action(detail=False, methods=['post'], url_path='documento-soporte')
     def documento_soporte(self, request):

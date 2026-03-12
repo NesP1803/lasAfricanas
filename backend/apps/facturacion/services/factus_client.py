@@ -34,6 +34,10 @@ class FactusClient:
         self.invoice_path = config('FACTUS_INVOICE_PATH', default='/v1/bills/validate')
         self.credit_note_path = config('FACTUS_CREDIT_NOTE_PATH', default='/credit-notes/validate')
         self.support_document_path = config('FACTUS_SUPPORT_DOCUMENT_PATH', default='/support-documents/validate')
+        self.support_document_adjustment_path = config(
+            'FACTUS_SUPPORT_DOCUMENT_ADJUSTMENT_PATH',
+            default='/support-document-adjustment-notes/validate',
+        )
         self.client_id = config('FACTUS_CLIENT_ID', default='')
         self.client_secret = config('FACTUS_CLIENT_SECRET', default='')
         self.username = config('FACTUS_USERNAME', default='')
@@ -132,6 +136,20 @@ class FactusClient:
         if not payload.get('items'):
             raise FactusValidationError('El documento soporte no contiene ítems para enviar a Factus.')
         return self.request('POST', self.support_document_path, json=payload)
+
+
+    def send_support_document_adjustment(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if not payload.get('reference_support_document_number'):
+            raise FactusValidationError(
+                'La nota de ajuste debe incluir reference_support_document_number para enviar a Factus.'
+            )
+        if not payload.get('reference_support_document_cufe'):
+            raise FactusValidationError(
+                'La nota de ajuste debe incluir reference_support_document_cufe para enviar a Factus.'
+            )
+        if not payload.get('items'):
+            raise FactusValidationError('La nota de ajuste no contiene ítems para enviar a Factus.')
+        return self.request('POST', self.support_document_adjustment_path, json=payload)
 
     def get_invoice(self, number: str) -> dict[str, Any]:
         """Consulta una factura electrónica existente en Factus por número."""
