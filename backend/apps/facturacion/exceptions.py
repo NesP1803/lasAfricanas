@@ -11,3 +11,7 @@ class FacturaNoValidaParaNotaCredito(Exception):
 
 class DocumentoSoporteInvalido(Exception):
     """Se lanza cuando los datos del documento soporte no cumplen validaciones mínimas."""
+
+
+class DocumentoSoporteNoValido(Exception):
+    """Se lanza cuando un documento soporte no está en estado válido para nota de ajuste."""
