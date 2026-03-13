@@ -291,6 +291,10 @@ export default function Layout() {
         return { moduleKey: "facturacion", sectionKey: "listados" };
       }
 
+      if (pathname.startsWith("/notas-credito")) {
+        return { moduleKey: "facturacion", sectionKey: "listados" };
+      }
+
       return null;
     };
 
@@ -441,6 +445,7 @@ export default function Layout() {
               { label: "Facturas", path: "/facturacion/facturas" },
               { label: "Remisiones", path: "/facturacion/remisiones" },
               { label: "Facturación electrónica", path: "/facturacion-electronica" },
+              { label: "Notas crédito", path: "/notas-credito" },
             ],
           });
         }

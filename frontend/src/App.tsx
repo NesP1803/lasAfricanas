@@ -17,6 +17,8 @@ import Remisiones from './pages/Remisiones';
 import Caja from './pages/Caja';
 import { NotificationProvider } from './contexts/NotificationContext';
 import FacturasElectronicasPage from './modules/facturacionElectronica/pages/FacturasElectronicasPage';
+import NotasCreditoPage from './modules/notasCredito/pages/NotasCreditoPage';
+import CrearNotaCreditoPage from './modules/notasCredito/pages/CrearNotaCreditoPage';
 
 function App() {
   return (
@@ -38,6 +40,8 @@ function App() {
               <Route path="ventas/detalles-cuentas" element={<DetallesCuentas />} />
               <Route path="facturacion/facturas" element={<Facturas />} />
               <Route path="facturacion-electronica" element={<FacturasElectronicasPage />} />
+              <Route path="notas-credito" element={<NotasCreditoPage />} />
+              <Route path="notas-credito/crear" element={<CrearNotaCreditoPage />} />
               <Route path="facturacion/remisiones" element={<Remisiones />} />
               <Route path="facturacion/caja" element={<Caja />} />
             </Route>
