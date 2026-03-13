@@ -19,6 +19,8 @@ import { NotificationProvider } from './contexts/NotificationContext';
 import FacturasElectronicasPage from './modules/facturacionElectronica/pages/FacturasElectronicasPage';
 import NotasCreditoPage from './modules/notasCredito/pages/NotasCreditoPage';
 import CrearNotaCreditoPage from './modules/notasCredito/pages/CrearNotaCreditoPage';
+import DocumentosSoportePage from './modules/documentosSoporte/pages/DocumentosSoportePage';
+import CrearDocumentoSoportePage from './modules/documentosSoporte/pages/CrearDocumentoSoportePage';
 
 function App() {
   return (
@@ -42,6 +44,8 @@ function App() {
               <Route path="facturacion-electronica" element={<FacturasElectronicasPage />} />
               <Route path="notas-credito" element={<NotasCreditoPage />} />
               <Route path="notas-credito/crear" element={<CrearNotaCreditoPage />} />
+              <Route path="documentos-soporte" element={<DocumentosSoportePage />} />
+              <Route path="documentos-soporte/crear" element={<CrearDocumentoSoportePage />} />
               <Route path="facturacion/remisiones" element={<Remisiones />} />
               <Route path="facturacion/caja" element={<Caja />} />
             </Route>
