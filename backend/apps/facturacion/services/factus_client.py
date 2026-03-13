@@ -38,6 +38,7 @@ class FactusClient:
             'FACTUS_SUPPORT_DOCUMENT_ADJUSTMENT_PATH',
             default='/support-document-adjustment-notes/validate',
         )
+        self.numbering_ranges_path = config('FACTUS_NUMBERING_RANGES_PATH', default='/numbering-ranges')
         self.client_id = config('FACTUS_CLIENT_ID', default='')
         self.client_secret = config('FACTUS_CLIENT_SECRET', default='')
         self.username = config('FACTUS_USERNAME', default='')
@@ -150,6 +151,11 @@ class FactusClient:
         if not payload.get('items'):
             raise FactusValidationError('La nota de ajuste no contiene ítems para enviar a Factus.')
         return self.request('POST', self.support_document_adjustment_path, json=payload)
+
+
+    def get_numbering_ranges(self) -> dict[str, Any]:
+        """Consulta los rangos de numeración autorizados en Factus."""
+        return self.request('GET', self.numbering_ranges_path)
 
     def get_invoice(self, number: str) -> dict[str, Any]:
         """Consulta una factura electrónica existente en Factus por número."""

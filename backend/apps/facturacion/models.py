@@ -127,3 +127,45 @@ class NotaAjusteDocumentoSoporte(models.Model):
 
     def __str__(self) -> str:
         return f'{self.number} ({self.status})'
+
+
+class RangoNumeracionDIAN(models.Model):
+    """Rangos de numeración autorizados por DIAN sincronizados desde Factus."""
+
+    prefijo = models.CharField(max_length=20)
+    desde = models.IntegerField()
+    hasta = models.IntegerField()
+    resolucion = models.CharField(max_length=100)
+    consecutivo_actual = models.IntegerField()
+    fecha_autorizacion = models.DateField(null=True)
+    fecha_expiracion = models.DateField(null=True)
+    activo = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'facturacion_rangos_numeracion_dian'
+        verbose_name = 'Rango de Numeración DIAN'
+        verbose_name_plural = 'Rangos de Numeración DIAN'
+        ordering = ['-created_at']
+
+    def __str__(self) -> str:
+        return f'{self.prefijo}: {self.desde}-{self.hasta}'
+
+
+class ConfiguracionDIAN(models.Model):
+    """Configuración DIAN editable desde el sistema."""
+
+    nit_empresa = models.CharField(max_length=20)
+    software_id = models.CharField(max_length=200)
+    software_pin = models.CharField(max_length=200)
+    prefijo_facturacion = models.CharField(max_length=20)
+    rango_facturacion = models.ForeignKey(RangoNumeracionDIAN, on_delete=models.PROTECT)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'facturacion_configuracion_dian'
+        verbose_name = 'Configuración DIAN'
+        verbose_name_plural = 'Configuración DIAN'
+
+    def __str__(self) -> str:
+        return f'Configuración DIAN {self.nit_empresa}'

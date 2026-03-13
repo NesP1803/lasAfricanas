@@ -12,6 +12,8 @@ from .emitir_documento_soporte import emitir_documento_soporte
 from .support_document_adjustment_payload_builder import build_adjustment_payload
 from .emitir_nota_ajuste_documento_soporte import emitir_nota_ajuste_documento_soporte
 from .download_invoice_files import download_pdf, download_xml
+from .sync_numbering_ranges import sync_numbering_ranges
+from .consecutivo_service import get_next_invoice_number
 
 __all__ = [
     'FactusClient',
@@ -33,4 +35,6 @@ __all__ = [
     'facturar_venta',
     'map_factus_status',
     'sync_invoice_status',
+    'sync_numbering_ranges',
+    'get_next_invoice_number',
 ]

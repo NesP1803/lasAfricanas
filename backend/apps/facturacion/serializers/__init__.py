@@ -63,3 +63,5 @@ class FacturaEstadoSerializer(serializers.ModelSerializer):
             'updated_at',
         ]
         read_only_fields = fields
+
+from .configuracion_dian_serializer import ConfiguracionDIANSerializer
