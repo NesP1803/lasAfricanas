@@ -9,6 +9,7 @@ from django.db import transaction
 
 from apps.facturacion.exceptions import FacturaDuplicadaError
 from apps.facturacion.models import FacturaElectronica
+from apps.facturacion.services.consecutivo_service import get_next_invoice_number
 from apps.facturacion.services.download_invoice_files import download_pdf, download_xml
 from apps.facturacion.services.factus_client import FactusAPIError, FactusClient, FactusValidationError
 from apps.facturacion.services.factus_payload_builder import build_invoice_payload
@@ -61,7 +62,12 @@ def facturar_venta(venta_id: int) -> FacturaElectronica:
         return factura_existente
 
     payload = build_invoice_payload(venta)
-    reference_code = str(payload.get('reference_code', '')).strip()
+    numero = get_next_invoice_number()
+    venta.numero_comprobante = numero
+    venta.save(update_fields=['numero_comprobante', 'updated_at'])
+    payload['number'] = numero
+    payload['reference_code'] = numero
+    reference_code = numero
     if FacturaElectronica.objects.filter(reference_code=reference_code).exists():
         raise FacturaDuplicadaError(f'Ya existe una factura electrónica con reference_code={reference_code}.')
 

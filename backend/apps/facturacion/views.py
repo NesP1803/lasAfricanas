@@ -10,8 +10,8 @@ from apps.facturacion.exceptions import (
     DocumentoSoporteNoValido,
     FacturaNoValidaParaNotaCredito,
 )
-from apps.facturacion.models import DocumentoSoporteElectronico, FacturaElectronica
-from apps.facturacion.serializers import FacturaEstadoSerializer
+from apps.facturacion.models import ConfiguracionDIAN, DocumentoSoporteElectronico, FacturaElectronica
+from apps.facturacion.serializers import ConfiguracionDIANSerializer, FacturaEstadoSerializer
 from apps.facturacion.serializers.factura_pos_serializer import FacturaPOSSerializer
 from apps.facturacion.services import (
     FacturaNoEncontrada,
@@ -181,3 +181,30 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
             },
             status=status.HTTP_201_CREATED,
         )
+
+
+class ConfiguracionDIANViewSet(viewsets.GenericViewSet):
+    """Endpoint para consultar y actualizar configuración DIAN del sistema."""
+
+    permission_classes = [IsAuthenticated]
+    serializer_class = ConfiguracionDIANSerializer
+
+    def list(self, request):
+        configuracion = ConfiguracionDIAN.objects.order_by('-created_at').first()
+        if configuracion is None:
+            return Response({}, status=status.HTTP_200_OK)
+        serializer = self.get_serializer(configuracion)
+        return Response(serializer.data)
+
+    def create(self, request):
+        configuracion = ConfiguracionDIAN.objects.order_by('-created_at').first()
+        if configuracion is None:
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+        serializer = self.get_serializer(configuracion, data=request.data, partial=False)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)

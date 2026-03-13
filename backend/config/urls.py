@@ -21,6 +21,10 @@ from django.conf.urls.static import static
 from rest_framework_simplejwt.views import TokenRefreshView
 from apps.usuarios.serializers import CustomTokenObtainPairView
 from .api_router import router
+from apps.facturacion.views import ConfiguracionDIANViewSet
+
+
+configuracion_dian_list = ConfiguracionDIANViewSet.as_view({'get': 'list', 'post': 'create'})
 
 urlpatterns = [
     # Admin de Django
@@ -32,6 +36,7 @@ urlpatterns = [
     
     # API completa
     path('api/', include(router.urls)),
+    path('api/configuracion/dian/', configuracion_dian_list, name='configuracion-dian'),
     
     # Autenticación de DRF (para browsable API)
     path('api-auth/', include('rest_framework.urls')),
