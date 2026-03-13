@@ -287,6 +287,9 @@ export default function Layout() {
         return { moduleKey: "facturacion", sectionKey: "listados" };
       }
 
+      if (pathname.startsWith("/facturacion-electronica")) {
+        return { moduleKey: "facturacion", sectionKey: "listados" };
+      }
 
       return null;
     };
@@ -437,6 +440,7 @@ export default function Layout() {
             items: [
               { label: "Facturas", path: "/facturacion/facturas" },
               { label: "Remisiones", path: "/facturacion/remisiones" },
+              { label: "Facturación electrónica", path: "/facturacion-electronica" },
             ],
           });
         }

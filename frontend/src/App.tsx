@@ -16,6 +16,7 @@ import Facturas from './pages/Facturas';
 import Remisiones from './pages/Remisiones';
 import Caja from './pages/Caja';
 import { NotificationProvider } from './contexts/NotificationContext';
+import FacturasElectronicasPage from './modules/facturacionElectronica/pages/FacturasElectronicasPage';
 
 function App() {
   return (
@@ -36,6 +37,7 @@ function App() {
               <Route path="ventas/cuentas-dia" element={<CuentasDia />} />
               <Route path="ventas/detalles-cuentas" element={<DetallesCuentas />} />
               <Route path="facturacion/facturas" element={<Facturas />} />
+              <Route path="facturacion-electronica" element={<FacturasElectronicasPage />} />
               <Route path="facturacion/remisiones" element={<Remisiones />} />
               <Route path="facturacion/caja" element={<Caja />} />
             </Route>
