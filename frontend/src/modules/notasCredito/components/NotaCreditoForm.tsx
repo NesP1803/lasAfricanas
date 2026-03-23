@@ -7,18 +7,24 @@ interface NotaCreditoFormProps {
 }
 
 export default function NotaCreditoForm({ onSubmit, loading }: NotaCreditoFormProps) {
-  const [facturaAsociada, setFacturaAsociada] = useState('');
+  const [facturaId, setFacturaId] = useState('');
   const [motivo, setMotivo] = useState('');
-  const [itemsAjustar, setItemsAjustar] = useState('');
-  const [valorAjuste, setValorAjuste] = useState('');
+  const [descripcionItem, setDescripcionItem] = useState('');
+  const [cantidad, setCantidad] = useState('1');
+  const [precio, setPrecio] = useState('');
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     await onSubmit({
-      factura_asociada: facturaAsociada.trim(),
+      factura_id: Number(facturaId),
       motivo: motivo.trim(),
-      items_ajustar: itemsAjustar.trim(),
-      valor_ajuste: Number(valorAjuste),
+      items: [
+        {
+          descripcion: descripcionItem.trim(),
+          cantidad: Number(cantidad),
+          precio: Number(precio),
+        },
+      ],
     });
   };
 
@@ -28,21 +34,23 @@ export default function NotaCreditoForm({ onSubmit, loading }: NotaCreditoFormPr
         <label className="flex flex-col gap-1 text-sm text-slate-700">
           Factura asociada
           <input
-            value={facturaAsociada}
-            onChange={(event) => setFacturaAsociada(event.target.value)}
+            type="number"
+            min="1"
+            value={facturaId}
+            onChange={(event) => setFacturaId(event.target.value)}
             className="rounded-md border border-slate-300 px-3 py-2 outline-none ring-blue-200 focus:ring"
             required
           />
         </label>
 
         <label className="flex flex-col gap-1 text-sm text-slate-700">
-          Valor ajuste
+          Cantidad
           <input
             type="number"
-            min="0"
+            min="0.01"
             step="0.01"
-            value={valorAjuste}
-            onChange={(event) => setValorAjuste(event.target.value)}
+            value={cantidad}
+            onChange={(event) => setCantidad(event.target.value)}
             className="rounded-md border border-slate-300 px-3 py-2 outline-none ring-blue-200 focus:ring"
             required
           />
@@ -59,11 +67,24 @@ export default function NotaCreditoForm({ onSubmit, loading }: NotaCreditoFormPr
         </label>
 
         <label className="flex flex-col gap-1 text-sm text-slate-700 md:col-span-2">
-          Items a ajustar
-          <textarea
-            value={itemsAjustar}
-            onChange={(event) => setItemsAjustar(event.target.value)}
-            className="min-h-24 rounded-md border border-slate-300 px-3 py-2 outline-none ring-blue-200 focus:ring"
+          Descripción del ítem
+          <input
+            value={descripcionItem}
+            onChange={(event) => setDescripcionItem(event.target.value)}
+            className="rounded-md border border-slate-300 px-3 py-2 outline-none ring-blue-200 focus:ring"
+            required
+          />
+        </label>
+
+        <label className="flex flex-col gap-1 text-sm text-slate-700">
+          Precio
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={precio}
+            onChange={(event) => setPrecio(event.target.value)}
+            className="rounded-md border border-slate-300 px-3 py-2 outline-none ring-blue-200 focus:ring"
             required
           />
         </label>

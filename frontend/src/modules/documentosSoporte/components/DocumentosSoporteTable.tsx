@@ -38,6 +38,9 @@ function EstadoDianBadge({ estado }: { estado: EstadoDian }) {
   );
 }
 
+const resolveEstadoDocumento = (documento: DocumentoSoporte): EstadoDian =>
+  documento.estado ?? documento.estado_dian ?? 'ERROR';
+
 export default function DocumentosSoporteTable({ documentos, loading }: DocumentosSoporteTableProps) {
   const [rowLoading, setRowLoading] = useState<Record<string, string | null>>({});
   const { showNotification } = useNotification();
@@ -96,7 +99,7 @@ export default function DocumentosSoporteTable({ documentos, loading }: Document
                   <td className="px-4 py-3 text-slate-600">{formatFecha(documento.fecha)}</td>
                   <td className="px-4 py-3 text-slate-700">{currencyFormatter.format(documento.total)}</td>
                   <td className="px-4 py-3">
-                    <EstadoDianBadge estado={documento.estado_dian} />
+                    <EstadoDianBadge estado={resolveEstadoDocumento(documento)} />
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-2">

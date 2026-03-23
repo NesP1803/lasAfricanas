@@ -4,6 +4,7 @@ import logging
 
 from django.conf import settings
 from django.core.mail import send_mail
+from django.http import HttpResponse
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -14,20 +15,48 @@ from apps.facturacion.exceptions import (
     DocumentoSoporteNoValido,
     FacturaNoValidaParaNotaCredito,
 )
-from apps.facturacion.models import ConfiguracionDIAN, DocumentoSoporteElectronico, FacturaElectronica
-from apps.facturacion.serializers import ConfiguracionDIANSerializer, FacturaEstadoSerializer
+from apps.facturacion.models import (
+    ConfiguracionDIAN,
+    DocumentoSoporteElectronico,
+    FacturaElectronica,
+    NotaCreditoElectronica,
+)
+from apps.facturacion.serializers import (
+    ConfiguracionDIANSerializer,
+    DocumentoSoporteCreateSerializer,
+    DocumentoSoporteListSerializer,
+    FacturaEstadoSerializer,
+    NotaCreditoCreateSerializer,
+    NotaCreditoListSerializer,
+)
 from apps.facturacion.serializers.factura_pos_serializer import FacturaPOSSerializer
 from apps.facturacion.services import (
+    DescargaFacturaError,
+    DownloadResourceError,
     FacturaNoEncontrada,
     FactusConsultaError,
     FactusValidationError,
+    download_pdf,
+    download_remote_file,
+    download_xml,
     emitir_documento_soporte,
     emitir_nota_ajuste_documento_soporte,
     emitir_nota_credito,
+    read_local_media_file,
     sync_invoice_status,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _is_legacy_download_response(request) -> bool:
+    return str(request.query_params.get('legacy', '')).strip() in {'1', 'true', 'TRUE'}
+
+
+def _build_file_response(content: bytes, filename: str, content_type: str) -> HttpResponse:
+    response = HttpResponse(content, content_type=content_type)
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
 
 
 class FacturaElectronicaViewSet(viewsets.GenericViewSet):
@@ -73,12 +102,31 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
                 {'detail': f'No existe factura electrónica para número {number}.'},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        if not factura.xml_local_path:
+        if _is_legacy_download_response(request):
+            if not factura.xml_local_path:
+                return Response(
+                    {'detail': f'La factura {number} no tiene XML descargado localmente.'},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            return Response({'numero': factura.number, 'xml': factura.xml_local_path})
+
+        try:
+            if factura.xml_local_path:
+                content = read_local_media_file(factura.xml_local_path)
+            else:
+                if not factura.xml_url:
+                    return Response(
+                        {'detail': f'La factura {number} no tiene URL XML disponible.'},
+                        status=status.HTTP_409_CONFLICT,
+                    )
+                local_path = download_xml(factura)
+                content = read_local_media_file(local_path)
+        except (DescargaFacturaError, DownloadResourceError) as exc:
             return Response(
-                {'detail': f'La factura {number} no tiene XML descargado localmente.'},
-                status=status.HTTP_409_CONFLICT,
+                {'detail': str(exc)},
+                status=status.HTTP_502_BAD_GATEWAY,
             )
-        return Response({'numero': factura.number, 'xml': factura.xml_local_path})
+        return _build_file_response(content, f'factura-{factura.number}.xml', 'application/xml')
 
     @action(detail=False, methods=['get'], url_path=r'(?P<number>[^/.]+)/pdf')
     def pdf(self, request, number=None):
@@ -88,12 +136,31 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
                 {'detail': f'No existe factura electrónica para número {number}.'},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        if not factura.pdf_local_path:
+        if _is_legacy_download_response(request):
+            if not factura.pdf_local_path:
+                return Response(
+                    {'detail': f'La factura {number} no tiene PDF descargado localmente.'},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            return Response({'numero': factura.number, 'pdf': factura.pdf_local_path})
+
+        try:
+            if factura.pdf_local_path:
+                content = read_local_media_file(factura.pdf_local_path)
+            else:
+                if not factura.pdf_url:
+                    return Response(
+                        {'detail': f'La factura {number} no tiene URL PDF disponible.'},
+                        status=status.HTTP_409_CONFLICT,
+                    )
+                local_path = download_pdf(factura)
+                content = read_local_media_file(local_path)
+        except (DescargaFacturaError, DownloadResourceError) as exc:
             return Response(
-                {'detail': f'La factura {number} no tiene PDF descargado localmente.'},
-                status=status.HTTP_409_CONFLICT,
+                {'detail': str(exc)},
+                status=status.HTTP_502_BAD_GATEWAY,
             )
-        return Response({'numero': factura.number, 'pdf': factura.pdf_local_path})
+        return _build_file_response(content, f'factura-{factura.number}.pdf', 'application/pdf')
 
     @action(detail=False, methods=['get'], url_path=r'(?P<number>[^/.]+)/qr')
     def qr(self, request, number=None):
@@ -276,3 +343,158 @@ class ConfiguracionDIANViewSet(viewsets.GenericViewSet):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class NotasCreditoViewSet(viewsets.GenericViewSet):
+    """Recursos REST para notas crédito electrónicas."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return NotaCreditoCreateSerializer
+        return NotaCreditoListSerializer
+
+    def list(self, request):
+        queryset = NotaCreditoElectronica.objects.select_related('factura').order_by('-created_at')
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+    def create(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        payload = serializer.validated_data
+
+        try:
+            nota = emitir_nota_credito(
+                factura_id=payload['factura_id'],
+                motivo=payload['motivo'],
+                items=payload['items'],
+            )
+        except FacturaElectronica.DoesNotExist as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_404_NOT_FOUND)
+        except FacturaNoValidaParaNotaCredito as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except FactusValidationError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        output = NotaCreditoListSerializer(nota)
+        return Response(output.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['get'], url_path=r'(?P<number>[^/.]+)/xml')
+    def xml(self, request, number=None):
+        nota = NotaCreditoElectronica.objects.filter(number=number).first()
+        if nota is None:
+            return Response(
+                {'detail': f'No existe nota crédito electrónica para número {number}.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        xml = str(nota.xml_url or '').strip()
+        if not xml:
+            return Response(
+                {'detail': f'La nota crédito {number} no tiene XML disponible.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+        if _is_legacy_download_response(request):
+            return Response({'numero': nota.number, 'xml': xml})
+        try:
+            content = download_remote_file(xml)
+        except DownloadResourceError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        return _build_file_response(content, f'nota-credito-{nota.number}.xml', 'application/xml')
+
+    @action(detail=False, methods=['get'], url_path=r'(?P<number>[^/.]+)/pdf')
+    def pdf(self, request, number=None):
+        nota = NotaCreditoElectronica.objects.filter(number=number).first()
+        if nota is None:
+            return Response(
+                {'detail': f'No existe nota crédito electrónica para número {number}.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        pdf = str(nota.pdf_url or '').strip()
+        if not pdf:
+            return Response(
+                {'detail': f'La nota crédito {number} no tiene PDF disponible.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+        if _is_legacy_download_response(request):
+            return Response({'numero': nota.number, 'pdf': pdf})
+        try:
+            content = download_remote_file(pdf)
+        except DownloadResourceError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        return _build_file_response(content, f'nota-credito-{nota.number}.pdf', 'application/pdf')
+
+
+class DocumentosSoporteViewSet(viewsets.GenericViewSet):
+    """Recursos REST para documentos soporte electrónicos."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return DocumentoSoporteCreateSerializer
+        return DocumentoSoporteListSerializer
+
+    def list(self, request):
+        queryset = DocumentoSoporteElectronico.objects.order_by('-created_at')
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+    def create(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            documento = emitir_documento_soporte(serializer.validated_data)
+        except DocumentoSoporteInvalido as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except FactusValidationError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        output = DocumentoSoporteListSerializer(documento)
+        return Response(output.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['get'], url_path=r'(?P<number>[^/.]+)/xml')
+    def xml(self, request, number=None):
+        documento = DocumentoSoporteElectronico.objects.filter(number=number).first()
+        if documento is None:
+            return Response(
+                {'detail': f'No existe documento soporte electrónico para número {number}.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        xml = str(documento.xml_url or '').strip()
+        if not xml:
+            return Response(
+                {'detail': f'El documento soporte {number} no tiene XML disponible.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+        if _is_legacy_download_response(request):
+            return Response({'numero': documento.number, 'xml': xml})
+        try:
+            content = download_remote_file(xml)
+        except DownloadResourceError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        return _build_file_response(content, f'documento-soporte-{documento.number}.xml', 'application/xml')
+
+    @action(detail=False, methods=['get'], url_path=r'(?P<number>[^/.]+)/pdf')
+    def pdf(self, request, number=None):
+        documento = DocumentoSoporteElectronico.objects.filter(number=number).first()
+        if documento is None:
+            return Response(
+                {'detail': f'No existe documento soporte electrónico para número {number}.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        pdf = str(documento.pdf_url or '').strip()
+        if not pdf:
+            return Response(
+                {'detail': f'El documento soporte {number} no tiene PDF disponible.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+        if _is_legacy_download_response(request):
+            return Response({'numero': documento.number, 'pdf': pdf})
+        try:
+            content = download_remote_file(pdf)
+        except DownloadResourceError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        return _build_file_response(content, f'documento-soporte-{documento.number}.pdf', 'application/pdf')

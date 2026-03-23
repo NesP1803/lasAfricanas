@@ -3,18 +3,27 @@ import apiClient from '../../../api/client';
 export type EstadoDian = 'ACEPTADA' | 'RECHAZADA' | 'EN_PROCESO' | 'ERROR' | string;
 
 export interface NotaCredito {
+  id: number;
   numero: string;
   factura_asociada: string;
   fecha: string;
   motivo: string;
+  estado?: EstadoDian;
   estado_dian: EstadoDian;
+  cufe?: string;
+  uuid?: string;
+  xml_url?: string;
+  pdf_url?: string;
 }
 
 export interface CrearNotaCreditoPayload {
-  factura_asociada: string;
+  factura_id: number;
   motivo: string;
-  items_ajustar: string;
-  valor_ajuste: number;
+  items: Array<{
+    descripcion: string;
+    cantidad: number;
+    precio: number;
+  }>;
 }
 
 const crearArchivoDescargable = (blob: Blob, fileName: string) => {

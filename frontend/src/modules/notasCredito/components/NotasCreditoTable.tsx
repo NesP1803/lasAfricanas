@@ -31,6 +31,8 @@ function EstadoDianBadge({ estado }: { estado: EstadoDian }) {
   );
 }
 
+const resolveEstadoNota = (nota: NotaCredito): EstadoDian => nota.estado ?? nota.estado_dian ?? 'ERROR';
+
 export default function NotasCreditoTable({ notasCredito, loading }: NotasCreditoTableProps) {
   const [rowLoading, setRowLoading] = useState<Record<string, string | null>>({});
   const { showNotification } = useNotification();
@@ -87,7 +89,7 @@ export default function NotasCreditoTable({ notasCredito, loading }: NotasCredit
                   <td className="px-4 py-3 text-slate-600">{formatFecha(nota.fecha)}</td>
                   <td className="px-4 py-3 text-slate-700">{nota.motivo}</td>
                   <td className="px-4 py-3">
-                    <EstadoDianBadge estado={nota.estado_dian} />
+                    <EstadoDianBadge estado={resolveEstadoNota(nota)} />
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-2">

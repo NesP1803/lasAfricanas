@@ -1,6 +1,11 @@
 import { useState } from 'react';
 import EstadoDIANBadge from './EstadoDIANBadge';
-import { facturacionApi, type EstadoDian, type FacturaElectronica } from '../services/facturacionApi';
+import {
+  facturacionApi,
+  resolveEstadoFactura,
+  type EstadoDian,
+  type FacturaElectronica,
+} from '../services/facturacionApi';
 import { useNotification } from '../../../contexts/NotificationContext';
 
 interface FacturasTableProps {
@@ -34,7 +39,7 @@ export default function FacturasTable({ facturas, loading }: FacturasTableProps)
     setActionLoading(numero, 'estado');
     try {
       const data = await facturacionApi.getEstadoFactura(numero);
-      setEstados((prev) => ({ ...prev, [numero]: data.estado }));
+      setEstados((prev) => ({ ...prev, [numero]: resolveEstadoFactura(data) }));
       showNotification({ message: `Estado DIAN consultado para factura ${numero}.`, type: 'info' });
     } catch {
       showNotification({ message: 'No fue posible consultar el estado DIAN.', type: 'error' });
@@ -100,7 +105,7 @@ export default function FacturasTable({ facturas, loading }: FacturasTableProps)
           ) : (
             facturas.map((factura) => {
               const loadingAction = rowLoading[factura.numero];
-              const estadoActual = estados[factura.numero] ?? factura.estado_dian;
+              const estadoActual = estados[factura.numero] ?? resolveEstadoFactura(factura);
               return (
                 <tr key={factura.numero} className="hover:bg-slate-50">
                   <td className="px-4 py-3 font-semibold text-slate-800">{factura.numero}</td>

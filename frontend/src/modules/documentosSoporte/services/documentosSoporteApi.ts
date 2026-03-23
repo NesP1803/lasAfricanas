@@ -3,22 +3,30 @@ import apiClient from '../../../api/client';
 export type EstadoDian = 'ACEPTADA' | 'RECHAZADA' | 'EN_PROCESO' | 'ERROR' | string;
 
 export interface DocumentoSoporte {
+  id: number;
   numero: string;
   proveedor_nombre: string;
   proveedor_documento: string;
+  proveedor_tipo_documento: string;
   fecha: string;
   total: number;
+  estado?: EstadoDian;
   estado_dian: EstadoDian;
+  cufe?: string;
+  uuid?: string;
+  xml_url?: string;
+  pdf_url?: string;
 }
 
 export interface CrearDocumentoSoportePayload {
   proveedor_nombre: string;
   proveedor_documento: string;
-  tipo_documento_proveedor: string;
-  descripcion: string;
-  cantidad: number;
-  valor_unitario: number;
-  metodo_pago: string;
+  proveedor_tipo_documento: string;
+  items: Array<{
+    descripcion: string;
+    cantidad: number;
+    precio: number;
+  }>;
 }
 
 const crearArchivoDescargable = (blob: Blob, fileName: string) => {

@@ -13,18 +13,20 @@ export default function DocumentoSoporteForm({ onSubmit, loading }: DocumentoSop
   const [descripcion, setDescripcion] = useState('');
   const [cantidad, setCantidad] = useState('1');
   const [valorUnitario, setValorUnitario] = useState('');
-  const [metodoPago, setMetodoPago] = useState('CONTADO');
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     await onSubmit({
       proveedor_nombre: proveedorNombre.trim(),
       proveedor_documento: proveedorDocumento.trim(),
-      tipo_documento_proveedor: tipoDocumentoProveedor,
-      descripcion: descripcion.trim(),
-      cantidad: Number(cantidad),
-      valor_unitario: Number(valorUnitario),
-      metodo_pago: metodoPago,
+      proveedor_tipo_documento: tipoDocumentoProveedor,
+      items: [
+        {
+          descripcion: descripcion.trim(),
+          cantidad: Number(cantidad),
+          precio: Number(valorUnitario),
+        },
+      ],
     });
   };
 
@@ -63,20 +65,6 @@ export default function DocumentoSoporteForm({ onSubmit, loading }: DocumentoSop
             <option value="CE">CE</option>
             <option value="NIT">NIT</option>
             <option value="PASAPORTE">Pasaporte</option>
-          </select>
-        </label>
-
-        <label className="flex flex-col gap-1 text-sm text-slate-700">
-          Método de pago
-          <select
-            value={metodoPago}
-            onChange={(event) => setMetodoPago(event.target.value)}
-            className="rounded-md border border-slate-300 px-3 py-2 outline-none ring-blue-200 focus:ring"
-            required
-          >
-            <option value="CONTADO">Contado</option>
-            <option value="CREDITO">Crédito</option>
-            <option value="TRANSFERENCIA">Transferencia</option>
           </select>
         </label>
 
