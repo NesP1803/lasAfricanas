@@ -3,13 +3,19 @@ import apiClient from '../../../api/client';
 export type EstadoDian = 'ACEPTADA' | 'RECHAZADA' | 'EN_PROCESO' | 'ERROR' | string;
 
 export interface FacturaElectronica {
+  venta_id?: number;
   numero: string;
+  reference_code?: string;
+  cufe?: string;
+  uuid?: string;
   cliente: string;
   fecha: string;
   total: number;
   estado?: EstadoDian;
   estado_dian: EstadoDian;
   status?: EstadoDian;
+  xml_url?: string;
+  pdf_url?: string;
 }
 
 interface EstadoFacturaResponse {

@@ -9,10 +9,11 @@ from django.db import transaction
 from django.utils import timezone
 from datetime import datetime, time
 from decimal import Decimal
+import logging
 
 from apps.facturacion.exceptions import FacturaDuplicadaError
 from apps.facturacion.models import FacturaElectronica
-from apps.facturacion.serializers import FacturaElectronicaSerializer, FacturarVentaResponseSerializer
+from apps.facturacion.serializers import FacturaElectronicaSerializer
 from apps.facturacion.services import FactusAPIError, FactusAuthError, FactusValidationError, facturar_venta
 
 from .models import Cliente, Venta, DetalleVenta, SolicitudDescuento, VentaAnulada, RemisionAnulada
@@ -24,6 +25,8 @@ from .serializers import (
     VentaAnuladaSerializer,
     SolicitudDescuentoSerializer,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _is_admin(user):
@@ -530,18 +533,39 @@ class VentaViewSet(viewsets.ModelViewSet):
         try:
             factura = facturar_venta(venta.id, triggered_by=request.user)
         except (FactusValidationError, FactusAuthError, FactusAPIError, FacturaDuplicadaError) as exc:
-            return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {
+                    'ok': False,
+                    'message': str(exc),
+                    'venta_id': venta.id,
+                    'numero_factura': None,
+                    'estado_local': venta.estado,
+                    'estado_electronico': 'ERROR',
+                    'cufe': '',
+                    'uuid': '',
+                    'reference_code': '',
+                    'pos_ticket': None,
+                    'factus_sent': False,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         data = {
+            'ok': True,
             'message': 'Factura electrónica generada correctamente',
+            'venta_id': venta.id,
+            'numero_factura': factura.number,
+            'estado_local': venta.estado,
+            'estado_electronico': factura.status,
             'cufe': factura.cufe,
-            'numero': factura.number,
+            'uuid': factura.uuid,
+            'reference_code': factura.reference_code,
+            'pos_ticket': _build_pos_ticket_payload(venta, factura),
+            'factus_sent': True,
             'pdf_url': factura.pdf_url,
             'xml_url': factura.xml_url,
         }
-        serializer = FacturarVentaResponseSerializer(data=data)
-        serializer.is_valid(raise_exception=True)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(data, status=status.HTTP_201_CREATED)
     
     @action(detail=False, methods=['get'])
     def estadisticas(self, request):
@@ -678,8 +702,16 @@ class CajaViewSet(viewsets.GenericViewSet):
 
     @action(detail=True, methods=['post'])
     def facturar(self, request, pk=None):
+        logger.info(
+            'caja.facturar.inicio venta_id=%s user_id=%s username=%s ruta=/api/caja/%s/facturar/',
+            pk,
+            getattr(request.user, 'id', None),
+            getattr(request.user, 'username', None),
+            pk,
+        )
         permission_response = self._require_caja(request)
         if permission_response:
+            logger.warning('caja.facturar.no_autorizado venta_id=%s user_id=%s', pk, getattr(request.user, 'id', None))
             return permission_response
 
         try:
@@ -690,39 +722,74 @@ class CajaViewSet(viewsets.GenericViewSet):
                     .prefetch_related('detalles', 'detalles__producto')
                     .get(pk=pk)
                 )
+                logger.info('caja.facturar.validando venta_id=%s estado=%s tipo=%s', venta.id, venta.estado, venta.tipo_comprobante)
                 self._validar_para_facturar(venta)
+                logger.info('caja.facturar.validacion_ok venta_id=%s', venta.id)
                 _facturar_venta(venta, request.user)
+                logger.info('caja.facturar.estado_local_ok venta_id=%s estado=%s', venta.id, venta.estado)
+                logger.info('caja.facturar.enviando_factus venta_id=%s', venta.id)
                 factura = facturar_venta(venta.id, triggered_by=request.user)
+                logger.info(
+                    'caja.facturar.factus_ok venta_id=%s numero=%s status=%s cufe=%s',
+                    venta.id,
+                    factura.number,
+                    factura.status,
+                    factura.cufe,
+                )
         except ValidationError as error:
+            logger.warning('caja.facturar.validacion_error venta_id=%s error=%s', pk, error.detail)
             return Response({'error': error.detail}, status=status.HTTP_400_BAD_REQUEST)
         except FacturaDuplicadaError as error:
             factura = FacturaElectronica.objects.filter(venta_id=pk).first()
             if factura is None:
+                logger.error('caja.facturar.duplicada_sin_registro venta_id=%s error=%s', pk, str(error))
                 return Response({'error': str(error)}, status=status.HTTP_409_CONFLICT)
+            logger.warning('caja.facturar.duplicada_reutilizada venta_id=%s factura=%s', pk, factura.number)
         except (FactusValidationError, FactusAuthError, FactusAPIError) as error:
+            logger.exception('caja.facturar.factus_error venta_id=%s', pk)
             return Response(
                 {
                     'ok': False,
                     'message': str(error),
+                    'venta_id': int(pk) if pk else None,
+                    'numero_factura': None,
+                    'estado_local': 'ENVIADA_A_CAJA',
+                    'estado_electronico': 'ERROR',
+                    'cufe': '',
+                    'uuid': '',
+                    'reference_code': '',
+                    'pos_ticket': None,
+                    'factus_sent': False,
                     'status': 'ERROR',
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         serializer = VentaDetailSerializer(venta)
+        logger.info(
+            'caja.facturar.fin_ok venta_id=%s numero=%s estado_local=%s estado_electronico=%s',
+            venta.id,
+            factura.number,
+            venta.estado,
+            factura.status,
+        )
         return Response(
             {
                 'ok': True,
                 'message': 'Factura electrónica emitida correctamente en Factus.',
+                'venta_id': venta.id,
                 'venta': serializer.data,
                 'factura_electronica': FacturaElectronicaSerializer(factura).data,
                 'numero_factura': factura.number,
+                'estado_local': venta.estado,
+                'estado_electronico': factura.status,
                 'status': factura.status,
                 'cufe': factura.cufe,
                 'uuid': factura.uuid,
                 'reference_code': factura.reference_code,
                 'send_email': bool(factura.response_json.get('request', {}).get('send_email', False)),
                 'pos_ticket': _build_pos_ticket_payload(venta, factura),
+                'factus_sent': True,
                 'errores': [],
             }
         )

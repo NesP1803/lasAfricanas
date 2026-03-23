@@ -124,15 +124,19 @@ export interface PosTicketData {
 export interface FacturarCajaResponse {
   ok: boolean;
   message: string;
+  venta_id?: number;
   venta: Venta;
   factura_electronica: FacturaElectronicaResultado;
   numero_factura: string;
+  estado_local?: string;
+  estado_electronico?: string;
   status: string;
   cufe?: string;
   uuid?: string;
   reference_code?: string;
   send_email?: boolean;
   pos_ticket?: PosTicketData;
+  factus_sent?: boolean;
   errores?: string[];
 }
 
@@ -453,11 +457,30 @@ export const ventasApi = {
     return {
       ok: true,
       message: 'Venta facturada correctamente.',
+      venta_id: data.id,
       venta: data,
       factura_electronica: {} as FacturaElectronicaResultado,
       numero_factura: data.numero_comprobante || `#${data.id}`,
+      estado_local: data.estado || 'FACTURADA',
       status: data.estado || 'FACTURADA',
+      factus_sent: false,
     };
+  },
+
+  async facturarVentaElectronica(ventaId: number): Promise<FacturarCajaResponse> {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/ventas/${ventaId}/facturar/`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(extractApiErrorMessage(data, 'Error al emitir factura electrónica'));
+    }
+    return data;
   },
 
   async convertirAFactura(remisionId: number): Promise<Venta> {

@@ -53,9 +53,12 @@ export default function Caja() {
     try {
       const respuesta = await ventasApi.facturarEnCaja(ventaId);
       const facturada = respuesta.venta;
+      if (!respuesta.factus_sent) {
+        throw new Error(respuesta.message || 'La venta no fue emitida electrónicamente en Factus.');
+      }
       showNotification({
         type: 'success',
-        message: respuesta.message || `Venta ${facturada.numero_comprobante ?? facturada.id} facturada.`,
+        message: `${respuesta.message} Nº ${respuesta.numero_factura} · ${respuesta.estado_electronico || respuesta.status} · CUFE ${respuesta.cufe || 'N/D'} · Ref ${respuesta.reference_code || 'N/D'}`,
       });
       setDocumento(facturada);
       setFacturaElectronica(respuesta.factura_electronica ?? null);
