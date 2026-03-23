@@ -42,6 +42,7 @@ class FacturarVentaResponseSerializer(serializers.Serializer):
 class FacturaEstadoSerializer(serializers.ModelSerializer):
     """Serializer de respuesta para consulta de estado DIAN sincronizado."""
 
+    estado = serializers.CharField(source='status', read_only=True)
     estado_dian = serializers.CharField(source='status', read_only=True)
     numero = serializers.CharField(source='number', read_only=True)
 
@@ -54,6 +55,7 @@ class FacturaEstadoSerializer(serializers.ModelSerializer):
             'cufe',
             'uuid',
             'status',
+            'estado',
             'estado_dian',
             'codigo_error',
             'mensaje_error',
@@ -64,4 +66,18 @@ class FacturaEstadoSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
+
 from .configuracion_dian_serializer import ConfiguracionDIANSerializer
+from .documento_soporte_serializer import DocumentoSoporteCreateSerializer, DocumentoSoporteListSerializer
+from .nota_credito_serializer import NotaCreditoCreateSerializer, NotaCreditoListSerializer
+
+__all__ = [
+    'FacturaElectronicaSerializer',
+    'FacturarVentaResponseSerializer',
+    'FacturaEstadoSerializer',
+    'ConfiguracionDIANSerializer',
+    'NotaCreditoCreateSerializer',
+    'NotaCreditoListSerializer',
+    'DocumentoSoporteCreateSerializer',
+    'DocumentoSoporteListSerializer',
+]
