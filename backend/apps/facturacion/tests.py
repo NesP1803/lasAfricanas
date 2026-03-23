@@ -13,7 +13,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
-from apps.facturacion.models import FacturaElectronica
+from apps.facturacion.models import DocumentoSoporteElectronico, FacturaElectronica, NotaCreditoElectronica
 from apps.facturacion.services.download_invoice_files import download_pdf, download_xml
 from apps.facturacion.services.support_document_payload_builder import build_support_document_payload
 from apps.facturacion.services.exceptions import DescargaFacturaError
@@ -78,6 +78,9 @@ class FacturaDownloadFilesTests(TestCase):
 
 class FacturaFilesEndpointsTests(TestCase):
     def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmpdir.cleanup)
+
         User = get_user_model()
         self.user = User.objects.create_user(username='cajero', password='1234')
         self.client = APIClient()
@@ -112,18 +115,31 @@ class FacturaFilesEndpointsTests(TestCase):
             qr='qr',
             response_json={'ok': True},
         )
+        (Path(self.tmpdir.name) / 'facturas/xml').mkdir(parents=True, exist_ok=True)
+        (Path(self.tmpdir.name) / 'facturas/pdf').mkdir(parents=True, exist_ok=True)
+        (Path(self.tmpdir.name) / 'facturas/xml/FV9999.xml').write_bytes(b'<xml>factura</xml>')
+        (Path(self.tmpdir.name) / 'facturas/pdf/FV9999.pdf').write_bytes(b'%PDF-factura')
 
     def test_xml_endpoint(self):
-        response = self.client.get('/api/facturacion/FV9999/xml/')
+        with override_settings(MEDIA_ROOT=self.tmpdir.name):
+            response = self.client.get('/api/facturacion/FV9999/xml/')
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['numero'], 'FV9999')
-        self.assertEqual(response.data['xml'], 'facturas/xml/FV9999.xml')
+        self.assertEqual(response['Content-Type'], 'application/xml')
+        self.assertIn('attachment; filename="factura-FV9999.xml"', response['Content-Disposition'])
+        self.assertEqual(response.content, b'<xml>factura</xml>')
 
     def test_pdf_endpoint(self):
-        response = self.client.get('/api/facturacion/FV9999/pdf/')
+        with override_settings(MEDIA_ROOT=self.tmpdir.name):
+            response = self.client.get('/api/facturacion/FV9999/pdf/')
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['numero'], 'FV9999')
-        self.assertEqual(response.data['pdf'], 'facturas/pdf/FV9999.pdf')
+        self.assertEqual(response['Content-Type'], 'application/pdf')
+        self.assertIn('attachment; filename="factura-FV9999.pdf"', response['Content-Disposition'])
+        self.assertEqual(response.content, b'%PDF-factura')
+
+    def test_xml_endpoint_legacy(self):
+        response = self.client.get('/api/facturacion/FV9999/xml/?legacy=1')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['xml'], 'facturas/xml/FV9999.xml')
 
     def test_list_endpoint(self):
         response = self.client.get('/api/facturacion/')
@@ -311,3 +327,182 @@ class SyncInvoiceStatusCommandTests(TestCase):
 
         called_numbers = [call.args[0] for call in mocked_sync.call_args_list]
         self.assertCountEqual(called_numbers, ['FV-SYNC-1', 'FV-SYNC-2'])
+
+
+class NotasCreditoResourceEndpointsTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(username='nota-api', password='1234')
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+
+        self.cliente = Cliente.objects.create(numero_documento='NC-CLIENTE', nombre='Cliente NC')
+        self.venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            cliente=self.cliente,
+            vendedor=self.user,
+            subtotal=Decimal('100'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('19'),
+            total=Decimal('119'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('119'),
+            cambio=Decimal('0'),
+            estado='FACTURADA',
+        )
+        self.factura = FacturaElectronica.objects.create(
+            venta=self.venta,
+            cufe='CUFE-NC',
+            uuid='UUID-NC',
+            number='FV-NC',
+            reference_code='FV-NC',
+            status='ACEPTADA',
+            xml_url='https://example.com/fv-nc.xml',
+            pdf_url='https://example.com/fv-nc.pdf',
+            response_json={'ok': True},
+        )
+        self.nota = NotaCreditoElectronica.objects.create(
+            factura=self.factura,
+            number='NC-001',
+            uuid='UUID-NC-1',
+            cufe='CUFE-NC-1',
+            status='ACEPTADA',
+            xml_url='https://example.com/nc-001.xml',
+            pdf_url='https://example.com/nc-001.pdf',
+            response_json={'credit_note_reason': 'Ajuste'},
+        )
+
+    def test_list_endpoint(self):
+        response = self.client.get('/api/notas-credito/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]['numero'], 'NC-001')
+        self.assertEqual(response.data[0]['estado'], 'ACEPTADA')
+
+    @patch('apps.facturacion.views.emitir_nota_credito')
+    def test_create_endpoint(self, mocked_emitir):
+        mocked_emitir.return_value = self.nota
+        payload = {
+            'factura_id': self.factura.id,
+            'motivo': 'Devolución',
+            'items': [{'descripcion': 'Item', 'cantidad': 1, 'precio': 1000}],
+        }
+        response = self.client.post('/api/notas-credito/', payload, format='json')
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data['numero'], 'NC-001')
+
+    @patch('apps.facturacion.views.download_remote_file', return_value=b'<xml>nc</xml>')
+    def test_xml_endpoint(self, mocked_download):
+        response = self.client.get('/api/notas-credito/NC-001/xml/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/xml')
+        self.assertEqual(response.content, b'<xml>nc</xml>')
+        mocked_download.assert_called_once()
+
+    @patch('apps.facturacion.views.download_remote_file', return_value=b'%PDF-nc')
+    def test_pdf_endpoint(self, mocked_download):
+        response = self.client.get('/api/notas-credito/NC-001/pdf/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/pdf')
+        self.assertEqual(response.content, b'%PDF-nc')
+        mocked_download.assert_called_once()
+
+
+class DocumentosSoporteResourceEndpointsTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(username='doc-api', password='1234')
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+
+        self.documento = DocumentoSoporteElectronico.objects.create(
+            number='DS-001',
+            proveedor_nombre='Proveedor Test',
+            proveedor_documento='900123',
+            proveedor_tipo_documento='NIT',
+            cufe='CUFE-DS-1',
+            uuid='UUID-DS-1',
+            status='ACEPTADA',
+            xml_url='https://example.com/ds-001.xml',
+            pdf_url='https://example.com/ds-001.pdf',
+            response_json={'totals': {'total': 50000}},
+        )
+
+    def test_list_endpoint(self):
+        response = self.client.get('/api/documentos-soporte/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]['numero'], 'DS-001')
+        self.assertEqual(response.data[0]['estado'], 'ACEPTADA')
+
+    @patch('apps.facturacion.views.emitir_documento_soporte')
+    def test_create_endpoint(self, mocked_emitir):
+        mocked_emitir.return_value = self.documento
+        payload = {
+            'proveedor_nombre': 'Proveedor Nuevo',
+            'proveedor_documento': '123',
+            'proveedor_tipo_documento': 'CC',
+            'items': [{'descripcion': 'Servicio', 'cantidad': 1, 'precio': 50000}],
+        }
+        response = self.client.post('/api/documentos-soporte/', payload, format='json')
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data['numero'], 'DS-001')
+
+    @patch('apps.facturacion.views.download_remote_file', return_value=b'<xml>ds</xml>')
+    def test_xml_endpoint(self, mocked_download):
+        response = self.client.get('/api/documentos-soporte/DS-001/xml/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/xml')
+        self.assertEqual(response.content, b'<xml>ds</xml>')
+        mocked_download.assert_called_once()
+
+    @patch('apps.facturacion.views.download_remote_file', return_value=b'%PDF-ds')
+    def test_pdf_endpoint(self, mocked_download):
+        response = self.client.get('/api/documentos-soporte/DS-001/pdf/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/pdf')
+        self.assertEqual(response.content, b'%PDF-ds')
+        mocked_download.assert_called_once()
+
+
+class FacturaEstadoContratoTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(username='estado-api', password='1234')
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+        self.cliente = Cliente.objects.create(numero_documento='EST-1', nombre='Cliente Estado')
+        self.venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            cliente=self.cliente,
+            vendedor=self.user,
+            subtotal=Decimal('100'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('19'),
+            total=Decimal('119'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('119'),
+            cambio=Decimal('0'),
+            estado='FACTURADA',
+        )
+        self.factura = FacturaElectronica.objects.create(
+            venta=self.venta,
+            cufe='CUFE-EST',
+            uuid='UUID-EST',
+            number='FV-EST',
+            reference_code='FV-EST',
+            status='ACEPTADA',
+            xml_url='https://example.com/fv-est.xml',
+            pdf_url='https://example.com/fv-est.pdf',
+            response_json={'ok': True},
+        )
+
+    @patch('apps.facturacion.views.sync_invoice_status')
+    def test_estado_endpoint_incluye_campo_canonico(self, mocked_sync):
+        mocked_sync.return_value = self.factura
+        response = self.client.get('/api/facturacion/FV-EST/estado/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['estado'], 'ACEPTADA')
+        self.assertEqual(response.data['estado_dian'], 'ACEPTADA')
