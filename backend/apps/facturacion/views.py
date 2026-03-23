@@ -72,11 +72,18 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
         )
         data = [
             {
+                'venta_id': factura.venta_id,
                 'numero': factura.number,
+                'reference_code': factura.reference_code,
+                'cufe': factura.cufe,
+                'uuid': factura.uuid,
                 'cliente': factura.venta.cliente.nombre,
                 'fecha': factura.venta.fecha,
                 'total': factura.venta.total,
                 'estado_dian': factura.status,
+                'status': factura.status,
+                'xml_url': factura.xml_url,
+                'pdf_url': factura.pdf_url,
             }
             for factura in facturas
         ]
