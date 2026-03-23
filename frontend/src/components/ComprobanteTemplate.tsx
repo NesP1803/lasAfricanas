@@ -32,6 +32,8 @@ type DocumentoTemplateProps = {
   notas?: string;
   resolucion?: string;
   empresa?: ConfiguracionEmpresa | null;
+  cufe?: string;
+  qrUrl?: string;
 };
 
 const currencyFormatter = new Intl.NumberFormat('es-CO', {
@@ -81,6 +83,8 @@ export default function ComprobanteTemplate({
   notas,
   resolucion,
   empresa,
+  cufe,
+  qrUrl,
 }: DocumentoTemplateProps) {
   const infoEmpresa = getEmpresaInfo(empresa);
   const fechaFormateada = formatFechaHora(fecha);
@@ -238,6 +242,8 @@ export default function ComprobanteTemplate({
         </div>
 
         <div className="mt-4 rounded border border-slate-200 bg-slate-50 p-3 text-[10px] text-slate-500">
+          {cufe ? <p className="mb-1 break-all text-slate-700">CUFE: {cufe}</p> : null}
+          {qrUrl ? <p className="mb-1 break-all">Verificación: {qrUrl}</p> : null}
           {notas || 'Gracias por su compra. Presentar factura para garantías y devoluciones.'}
         </div>
       </div>
@@ -330,6 +336,19 @@ export default function ComprobanteTemplate({
           </>
         ) : null}
       </div>
+
+      {cufe ? (
+        <div className="mt-2 border-t border-dashed border-slate-400 pt-2 text-[9px]">
+          <p className="font-semibold">CUFE:</p>
+          <p className="break-all">{cufe}</p>
+        </div>
+      ) : null}
+      {qrUrl ? (
+        <div className="mt-2 text-[9px]">
+          <p className="font-semibold">Verificación:</p>
+          <p className="break-all">{qrUrl}</p>
+        </div>
+      ) : null}
 
       <div className="mt-2 border-t border-dashed border-slate-400 pt-2 text-[9px] text-slate-500">
         {notas || 'Gracias por su compra. Vuelva pronto.'}

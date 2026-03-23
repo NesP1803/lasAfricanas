@@ -14,6 +14,7 @@ from apps.facturacion.services.download_invoice_files import download_pdf, downl
 from apps.facturacion.services.factus_client import FactusAPIError, FactusClient, FactusValidationError
 from apps.facturacion.services.factus_payload_builder import build_invoice_payload
 from apps.facturacion.services.generate_qr_dian import generate_qr_dian
+from apps.usuarios.models import Usuario
 from apps.ventas.models import Venta
 
 logger = logging.getLogger(__name__)
@@ -42,11 +43,14 @@ def _extract_factus_data(response_json: dict[str, Any]) -> dict[str, str]:
         'number': str(bill.get('number', '')).strip(),
         'xml_url': str(bill.get('xml_url', '')).strip(),
         'pdf_url': str(bill.get('pdf_url', '')).strip(),
+        'qr': str(bill.get('qr', data.get('qr', ''))).strip(),
+        'qr_url': str(bill.get('qr_url', data.get('qr_url', ''))).strip(),
+        'zip_key': str(bill.get('zip_key', data.get('zip_key', ''))).strip(),
         'status': map_factus_status(response_json),
     }
 
 
-def facturar_venta(venta_id: int) -> FacturaElectronica:
+def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> FacturaElectronica:
     venta = Venta.objects.select_related('cliente').prefetch_related('detalles__producto').get(pk=venta_id)
     if venta.tipo_comprobante != 'FACTURA':
         raise FactusValidationError('Solo se puede facturar electrónicamente comprobantes de tipo FACTURA.')
@@ -89,9 +93,18 @@ def facturar_venta(venta_id: int) -> FacturaElectronica:
                 'reference_code': reference_code,
                 'codigo_error': response_json.get('error_code'),
                 'mensaje_error': response_json.get('error_message'),
-                'response_json': response_json,
+                'response_json': {
+                    'request': payload,
+                    'response': response_json,
+                    'venta_id': venta.id,
+                    'triggered_by_user_id': triggered_by.id if triggered_by else None,
+                },
             },
         )
+        venta.factura_electronica_uuid = fields['uuid']
+        venta.factura_electronica_cufe = fields['cufe']
+        venta.fecha_envio_dian = factura.created_at
+        venta.save(update_fields=['factura_electronica_uuid', 'factura_electronica_cufe', 'fecha_envio_dian', 'updated_at'])
         if factura.cufe:
             qr_file = generate_qr_dian(factura.number, factura.cufe)
             factura.qr.save(qr_file.name, qr_file, save=False)

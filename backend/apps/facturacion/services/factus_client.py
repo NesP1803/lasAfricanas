@@ -31,6 +31,7 @@ class FactusClient:
     def __init__(self) -> None:
         self.base_url = config('FACTUS_API_URL', default='https://api-sandbox.factus.com.co').rstrip('/')
         self.auth_path = config('FACTUS_AUTH_PATH', default='/oauth/token')
+        self.refresh_path = config('FACTUS_REFRESH_PATH', default='/oauth/token')
         self.invoice_path = config('FACTUS_INVOICE_PATH', default='/v1/bills/validate')
         self.credit_note_path = config('FACTUS_CREDIT_NOTE_PATH', default='/credit-notes/validate')
         self.support_document_path = config('FACTUS_SUPPORT_DOCUMENT_PATH', default='/support-documents/validate')
@@ -51,6 +52,14 @@ class FactusClient:
             'client_secret': self.client_secret,
             'username': self.username,
             'password': self.password,
+        }
+
+    def _refresh_payload(self, refresh_token: str) -> dict[str, str]:
+        return {
+            'grant_type': 'refresh_token',
+            'client_id': self.client_id,
+            'client_secret': self.client_secret,
+            'refresh_token': refresh_token,
         }
 
     def authenticate(self) -> FactusToken:
@@ -77,25 +86,85 @@ class FactusClient:
             raise FactusAuthError('Factus no devolvió access_token válido.')
 
         expires_in = int(payload.get('expires_in', 0) or 0)
+        refresh_expires_in = int(payload.get('refresh_expires_in', 0) or 0)
+        refresh_token = str(payload.get('refresh_token', '') or '')
         token = FactusToken.objects.create(
             access_token=access_token,
+            refresh_token=refresh_token,
             token_type=payload.get('token_type', 'Bearer'),
             expires_in=expires_in,
+            refresh_expires_in=refresh_expires_in,
             expires_at=timezone.now() + timedelta(seconds=max(expires_in - 60, 0)),
+            refresh_expires_at=(
+                timezone.now() + timedelta(seconds=max(refresh_expires_in - 60, 0))
+                if refresh_expires_in > 0
+                else None
+            ),
             scope=payload.get('scope', ''),
             is_active=True,
         )
         FactusToken.objects.exclude(pk=token.pk).update(is_active=False)
         return token
 
+    def refresh(self, token: FactusToken) -> FactusToken:
+        refresh_token = str(token.refresh_token or '').strip()
+        if not refresh_token:
+            return self.authenticate()
+        if token.refresh_expires_at and token.refresh_expires_at <= timezone.now():
+            return self.authenticate()
+
+        refresh_url = f'{self.base_url}{self.refresh_path}'
+        try:
+            response = requests.post(
+                refresh_url,
+                data=self._refresh_payload(refresh_token),
+                headers={'Accept': 'application/json'},
+                timeout=30,
+            )
+            response.raise_for_status()
+            payload = response.json()
+        except requests.RequestException as exc:
+            logger.warning('Refresh token Factus falló, se intentará authenticate().')
+            return self.authenticate()
+        except ValueError:
+            logger.warning('Refresh token Factus devolvió JSON inválido, se intentará authenticate().')
+            return self.authenticate()
+
+        access_token = payload.get('access_token')
+        if not access_token:
+            logger.warning('Refresh token Factus sin access_token, se intentará authenticate().')
+            return self.authenticate()
+
+        expires_in = int(payload.get('expires_in', 0) or 0)
+        refresh_expires_in = int(payload.get('refresh_expires_in', 0) or 0)
+        new_token = FactusToken.objects.create(
+            access_token=access_token,
+            refresh_token=str(payload.get('refresh_token', refresh_token) or refresh_token),
+            token_type=payload.get('token_type', 'Bearer'),
+            expires_in=expires_in,
+            refresh_expires_in=refresh_expires_in,
+            expires_at=timezone.now() + timedelta(seconds=max(expires_in - 60, 0)),
+            refresh_expires_at=(
+                timezone.now() + timedelta(seconds=max(refresh_expires_in - 60, 0))
+                if refresh_expires_in > 0
+                else None
+            ),
+            scope=payload.get('scope', ''),
+            is_active=True,
+        )
+        FactusToken.objects.exclude(pk=new_token.pk).update(is_active=False)
+        return new_token
+
     def get_valid_token(self) -> str:
         token = (
-            FactusToken.objects.filter(is_active=True, expires_at__gt=timezone.now())
+            FactusToken.objects.filter(is_active=True)
             .order_by('-created_at')
             .first()
         )
         if token is None:
             token = self.authenticate()
+        elif token.expires_at <= timezone.now():
+            token = self.refresh(token)
         return token.access_token
 
     def request(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
