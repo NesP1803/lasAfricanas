@@ -4,6 +4,7 @@ import logging
 
 from django.conf import settings
 from django.core.mail import send_mail
+from django.http import HttpResponse
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -30,23 +31,32 @@ from apps.facturacion.serializers import (
 )
 from apps.facturacion.serializers.factura_pos_serializer import FacturaPOSSerializer
 from apps.facturacion.services import (
+    DescargaFacturaError,
+    DownloadResourceError,
     FacturaNoEncontrada,
     FactusConsultaError,
     FactusValidationError,
+    download_pdf,
+    download_remote_file,
+    download_xml,
     emitir_documento_soporte,
     emitir_nota_ajuste_documento_soporte,
     emitir_nota_credito,
+    read_local_media_file,
     sync_invoice_status,
 )
 
 logger = logging.getLogger(__name__)
 
 
-def _resolve_download_url(value: str | None) -> str:
-    resolved = str(value or '').strip()
-    if resolved.startswith('http://') or resolved.startswith('https://'):
-        return resolved
-    return ''
+def _is_legacy_download_response(request) -> bool:
+    return str(request.query_params.get('legacy', '')).strip() in {'1', 'true', 'TRUE'}
+
+
+def _build_file_response(content: bytes, filename: str, content_type: str) -> HttpResponse:
+    response = HttpResponse(content, content_type=content_type)
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
 
 
 class FacturaElectronicaViewSet(viewsets.GenericViewSet):
@@ -92,12 +102,31 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
                 {'detail': f'No existe factura electrónica para número {number}.'},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        if not factura.xml_local_path:
+        if _is_legacy_download_response(request):
+            if not factura.xml_local_path:
+                return Response(
+                    {'detail': f'La factura {number} no tiene XML descargado localmente.'},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            return Response({'numero': factura.number, 'xml': factura.xml_local_path})
+
+        try:
+            if factura.xml_local_path:
+                content = read_local_media_file(factura.xml_local_path)
+            else:
+                if not factura.xml_url:
+                    return Response(
+                        {'detail': f'La factura {number} no tiene URL XML disponible.'},
+                        status=status.HTTP_409_CONFLICT,
+                    )
+                local_path = download_xml(factura)
+                content = read_local_media_file(local_path)
+        except (DescargaFacturaError, DownloadResourceError) as exc:
             return Response(
-                {'detail': f'La factura {number} no tiene XML descargado localmente.'},
-                status=status.HTTP_409_CONFLICT,
+                {'detail': str(exc)},
+                status=status.HTTP_502_BAD_GATEWAY,
             )
-        return Response({'numero': factura.number, 'xml': factura.xml_local_path})
+        return _build_file_response(content, f'factura-{factura.number}.xml', 'application/xml')
 
     @action(detail=False, methods=['get'], url_path=r'(?P<number>[^/.]+)/pdf')
     def pdf(self, request, number=None):
@@ -107,12 +136,31 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
                 {'detail': f'No existe factura electrónica para número {number}.'},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        if not factura.pdf_local_path:
+        if _is_legacy_download_response(request):
+            if not factura.pdf_local_path:
+                return Response(
+                    {'detail': f'La factura {number} no tiene PDF descargado localmente.'},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            return Response({'numero': factura.number, 'pdf': factura.pdf_local_path})
+
+        try:
+            if factura.pdf_local_path:
+                content = read_local_media_file(factura.pdf_local_path)
+            else:
+                if not factura.pdf_url:
+                    return Response(
+                        {'detail': f'La factura {number} no tiene URL PDF disponible.'},
+                        status=status.HTTP_409_CONFLICT,
+                    )
+                local_path = download_pdf(factura)
+                content = read_local_media_file(local_path)
+        except (DescargaFacturaError, DownloadResourceError) as exc:
             return Response(
-                {'detail': f'La factura {number} no tiene PDF descargado localmente.'},
-                status=status.HTTP_409_CONFLICT,
+                {'detail': str(exc)},
+                status=status.HTTP_502_BAD_GATEWAY,
             )
-        return Response({'numero': factura.number, 'pdf': factura.pdf_local_path})
+        return _build_file_response(content, f'factura-{factura.number}.pdf', 'application/pdf')
 
     @action(detail=False, methods=['get'], url_path=r'(?P<number>[^/.]+)/qr')
     def qr(self, request, number=None):
@@ -341,13 +389,19 @@ class NotasCreditoViewSet(viewsets.GenericViewSet):
                 {'detail': f'No existe nota crédito electrónica para número {number}.'},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        xml = _resolve_download_url(nota.xml_url)
+        xml = str(nota.xml_url or '').strip()
         if not xml:
             return Response(
                 {'detail': f'La nota crédito {number} no tiene XML disponible.'},
                 status=status.HTTP_409_CONFLICT,
             )
-        return Response({'numero': nota.number, 'xml': xml})
+        if _is_legacy_download_response(request):
+            return Response({'numero': nota.number, 'xml': xml})
+        try:
+            content = download_remote_file(xml)
+        except DownloadResourceError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        return _build_file_response(content, f'nota-credito-{nota.number}.xml', 'application/xml')
 
     @action(detail=False, methods=['get'], url_path=r'(?P<number>[^/.]+)/pdf')
     def pdf(self, request, number=None):
@@ -357,13 +411,19 @@ class NotasCreditoViewSet(viewsets.GenericViewSet):
                 {'detail': f'No existe nota crédito electrónica para número {number}.'},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        pdf = _resolve_download_url(nota.pdf_url)
+        pdf = str(nota.pdf_url or '').strip()
         if not pdf:
             return Response(
                 {'detail': f'La nota crédito {number} no tiene PDF disponible.'},
                 status=status.HTTP_409_CONFLICT,
             )
-        return Response({'numero': nota.number, 'pdf': pdf})
+        if _is_legacy_download_response(request):
+            return Response({'numero': nota.number, 'pdf': pdf})
+        try:
+            content = download_remote_file(pdf)
+        except DownloadResourceError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        return _build_file_response(content, f'nota-credito-{nota.number}.pdf', 'application/pdf')
 
 
 class DocumentosSoporteViewSet(viewsets.GenericViewSet):
@@ -403,13 +463,19 @@ class DocumentosSoporteViewSet(viewsets.GenericViewSet):
                 {'detail': f'No existe documento soporte electrónico para número {number}.'},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        xml = _resolve_download_url(documento.xml_url)
+        xml = str(documento.xml_url or '').strip()
         if not xml:
             return Response(
                 {'detail': f'El documento soporte {number} no tiene XML disponible.'},
                 status=status.HTTP_409_CONFLICT,
             )
-        return Response({'numero': documento.number, 'xml': xml})
+        if _is_legacy_download_response(request):
+            return Response({'numero': documento.number, 'xml': xml})
+        try:
+            content = download_remote_file(xml)
+        except DownloadResourceError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        return _build_file_response(content, f'documento-soporte-{documento.number}.xml', 'application/xml')
 
     @action(detail=False, methods=['get'], url_path=r'(?P<number>[^/.]+)/pdf')
     def pdf(self, request, number=None):
@@ -419,10 +485,16 @@ class DocumentosSoporteViewSet(viewsets.GenericViewSet):
                 {'detail': f'No existe documento soporte electrónico para número {number}.'},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        pdf = _resolve_download_url(documento.pdf_url)
+        pdf = str(documento.pdf_url or '').strip()
         if not pdf:
             return Response(
                 {'detail': f'El documento soporte {number} no tiene PDF disponible.'},
                 status=status.HTTP_409_CONFLICT,
             )
-        return Response({'numero': documento.number, 'pdf': pdf})
+        if _is_legacy_download_response(request):
+            return Response({'numero': documento.number, 'pdf': pdf})
+        try:
+            content = download_remote_file(pdf)
+        except DownloadResourceError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        return _build_file_response(content, f'documento-soporte-{documento.number}.pdf', 'application/pdf')

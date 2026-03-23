@@ -14,6 +14,7 @@ from .emitir_nota_ajuste_documento_soporte import emitir_nota_ajuste_documento_s
 from .download_invoice_files import download_pdf, download_xml
 from .sync_numbering_ranges import sync_numbering_ranges
 from .consecutivo_service import get_next_invoice_number
+from .download_resource_files import DownloadResourceError, download_remote_file, read_local_media_file
 
 __all__ = [
     'FactusClient',
@@ -37,4 +38,7 @@ __all__ = [
     'sync_invoice_status',
     'sync_numbering_ranges',
     'get_next_invoice_number',
+    'DownloadResourceError',
+    'download_remote_file',
+    'read_local_media_file',
 ]
