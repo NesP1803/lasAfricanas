@@ -3,10 +3,12 @@ from __future__ import annotations
 import tempfile
 from decimal import Decimal
 from pathlib import Path
+from io import StringIO
 from unittest.mock import MagicMock, patch
 
 from apps.facturacion.exceptions import DocumentoSoporteInvalido
 
+from django.core.management import call_command
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
@@ -123,6 +125,28 @@ class FacturaFilesEndpointsTests(TestCase):
         self.assertEqual(response.data['numero'], 'FV9999')
         self.assertEqual(response.data['pdf'], 'facturas/pdf/FV9999.pdf')
 
+    def test_list_endpoint(self):
+        response = self.client.get('/api/facturacion/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]['numero'], 'FV9999')
+        self.assertEqual(response.data[0]['cliente'], 'Cliente Endpoint')
+        self.assertEqual(response.data[0]['estado_dian'], 'ACEPTADA')
+
+    @patch('apps.facturacion.views.send_mail')
+    def test_enviar_correo_endpoint(self, mocked_send_mail):
+        self.venta.cliente.email = 'cliente@example.com'
+        self.venta.cliente.save(update_fields=['email'])
+
+        response = self.client.post('/api/facturacion/FV9999/enviar-correo/')
+        self.assertEqual(response.status_code, 200)
+        mocked_send_mail.assert_called_once()
+
+    def test_enviar_correo_endpoint_sin_email(self):
+        response = self.client.post('/api/facturacion/FV9999/enviar-correo/')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('no tiene correo configurado', response.data['detail'])
+
 
 class FacturaQRYPosEndpointsTests(TestCase):
     def setUp(self):
@@ -220,3 +244,70 @@ class DocumentoSoporteEndpointTests(TestCase):
         self.assertEqual(response.data['numero'], 'DS123')
         self.assertEqual(response.data['cufe'], 'CUFE-DS-1')
         self.assertEqual(response.data['estado'], 'ACEPTADA')
+
+
+class SyncInvoiceStatusCommandTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(username='sync-status', password='1234')
+        self.cliente = Cliente.objects.create(numero_documento='111', nombre='Cliente Sync')
+        self.venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            cliente=self.cliente,
+            vendedor=self.user,
+            subtotal=Decimal('100'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('19'),
+            total=Decimal('119'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('119'),
+            cambio=Decimal('0'),
+            estado='FACTURADA',
+        )
+
+    @patch('apps.facturacion.management.commands.sync_invoice_status.sync_invoice_status')
+    def test_sync_invoice_status_incluye_en_proceso_y_pendiente(self, mocked_sync):
+        factura_en_proceso = FacturaElectronica.objects.create(
+            venta=self.venta,
+            cufe='CUFE-SYNC-1',
+            uuid='UUID-SYNC-1',
+            number='FV-SYNC-1',
+            reference_code='FV-SYNC-1',
+            status='EN_PROCESO',
+            xml_url='https://example.com/fv-sync-1.xml',
+            pdf_url='https://example.com/fv-sync-1.pdf',
+            response_json={'ok': True},
+        )
+        venta_2 = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            cliente=self.cliente,
+            vendedor=self.user,
+            subtotal=Decimal('100'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('19'),
+            total=Decimal('119'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('119'),
+            cambio=Decimal('0'),
+            estado='FACTURADA',
+        )
+        factura_pendiente = FacturaElectronica.objects.create(
+            venta=venta_2,
+            cufe='CUFE-SYNC-2',
+            uuid='UUID-SYNC-2',
+            number='FV-SYNC-2',
+            reference_code='FV-SYNC-2',
+            status='PENDIENTE',
+            xml_url='https://example.com/fv-sync-2.xml',
+            pdf_url='https://example.com/fv-sync-2.pdf',
+            response_json={'ok': True},
+        )
+        mocked_sync.side_effect = [factura_en_proceso, factura_pendiente]
+
+        stdout = StringIO()
+        call_command('sync_invoice_status', stdout=stdout)
+
+        called_numbers = [call.args[0] for call in mocked_sync.call_args_list]
+        self.assertCountEqual(called_numbers, ['FV-SYNC-1', 'FV-SYNC-2'])

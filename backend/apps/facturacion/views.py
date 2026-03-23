@@ -1,5 +1,9 @@
 """Endpoints de consulta para facturación electrónica."""
 
+import logging
+
+from django.conf import settings
+from django.core.mail import send_mail
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -23,12 +27,31 @@ from apps.facturacion.services import (
     sync_invoice_status,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class FacturaElectronicaViewSet(viewsets.GenericViewSet):
     """ViewSet para consultar y sincronizar estado DIAN de facturas electrónicas."""
 
     permission_classes = [IsAuthenticated]
     serializer_class = FacturaEstadoSerializer
+
+    def list(self, request):
+        facturas = (
+            FacturaElectronica.objects.select_related('venta__cliente')
+            .order_by('-created_at')
+        )
+        data = [
+            {
+                'numero': factura.number,
+                'cliente': factura.venta.cliente.nombre,
+                'fecha': factura.venta.fecha,
+                'total': factura.venta.total,
+                'estado_dian': factura.status,
+            }
+            for factura in facturas
+        ]
+        return Response(data)
 
     @action(detail=False, methods=['get'], url_path=r'(?P<number>[^/.]+)/estado')
     def estado(self, request, number=None):
@@ -86,6 +109,51 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
                 status=status.HTTP_409_CONFLICT,
             )
         return Response({'numero': factura.number, 'qr': factura.qr.url})
+
+    @action(detail=False, methods=['post'], url_path=r'(?P<number>[^/.]+)/enviar-correo')
+    def enviar_correo(self, request, number=None):
+        factura = FacturaElectronica.objects.select_related('venta__cliente').filter(number=number).first()
+        if factura is None:
+            return Response(
+                {'detail': f'No existe factura electrónica para número {number}.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        email_destino = factura.venta.cliente.email.strip()
+        if not email_destino:
+            return Response(
+                {'detail': f'El cliente asociado a la factura {number} no tiene correo configurado.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        subject = f'Factura electrónica {factura.number}'
+        message = (
+            f'Hola {factura.venta.cliente.nombre},\n\n'
+            f'Compartimos la información de tu factura electrónica {factura.number}.\n'
+            f'Estado DIAN: {factura.status}\n'
+            f'CUFE: {factura.cufe}\n\n'
+            f'PDF: {factura.pdf_url}\n'
+            f'XML: {factura.xml_url}\n\n'
+            'Gracias por tu compra.'
+        )
+        from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', 'no-reply@lasafricanas.local')
+
+        try:
+            send_mail(
+                subject=subject,
+                message=message,
+                from_email=from_email,
+                recipient_list=[email_destino],
+                fail_silently=False,
+            )
+        except Exception:  # pragma: no cover - manejado por tests vía mock de excepciones
+            logger.exception('Error enviando correo de factura número=%s', number)
+            return Response(
+                {'detail': 'No fue posible enviar la factura por correo en este momento.'},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        return Response({'detail': f'Factura {factura.number} enviada a {email_destino}.'})
 
     @action(detail=False, methods=['get'], url_path=r'(?P<number>[^/.]+)/pos')
     def pos(self, request, number=None):
