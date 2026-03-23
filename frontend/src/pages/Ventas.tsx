@@ -587,7 +587,8 @@ export default function Ventas() {
         ventaBorrador.id,
         buildVentaPayload(tipoComprobante, ventaBorrador.vendedor)
       );
-      const facturada = await ventasApi.facturarEnCaja(ventaBorrador.id);
+      const respuestaFacturacion = await ventasApi.facturarEnCaja(ventaBorrador.id);
+      const facturada = respuestaFacturacion.venta;
       resetVentaState();
       setDocumentoGenerado({
         tipo: facturada.tipo_comprobante as DocumentoGenerado['tipo'],
@@ -596,7 +597,7 @@ export default function Ventas() {
         total: currencyFormatter.format(Number(facturada.total)),
       });
       setDocumentoPreview(buildDocumentoPreviewFromVenta(facturada));
-      setMensaje('Venta facturada correctamente.');
+      setMensaje(respuestaFacturacion.message || 'Venta facturada correctamente.');
       cargarPendientesCaja();
     } catch (error) {
       const message =

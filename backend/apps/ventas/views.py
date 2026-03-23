@@ -11,7 +11,8 @@ from datetime import datetime, time
 from decimal import Decimal
 
 from apps.facturacion.exceptions import FacturaDuplicadaError
-from apps.facturacion.serializers import FacturarVentaResponseSerializer
+from apps.facturacion.models import FacturaElectronica
+from apps.facturacion.serializers import FacturaElectronicaSerializer, FacturarVentaResponseSerializer
 from apps.facturacion.services import FactusAPIError, FactusAuthError, FactusValidationError, facturar_venta
 
 from .models import Cliente, Venta, DetalleVenta, SolicitudDescuento, VentaAnulada, RemisionAnulada
@@ -121,6 +122,52 @@ def _facturar_venta(venta, user):
     venta.save()
 
     _registrar_salida_inventario(venta, user, detalles=detalles)
+
+
+def _build_pos_ticket_payload(venta, factura):
+    detalles = []
+    for detalle in venta.detalles.select_related('producto').all():
+        detalles.append(
+            {
+                'descripcion': detalle.producto.nombre,
+                'codigo': detalle.producto.codigo,
+                'cantidad': float(detalle.cantidad),
+                'precio_unitario': float(detalle.precio_unitario),
+                'descuento': float(detalle.descuento_unitario),
+                'iva_porcentaje': float(detalle.iva_porcentaje),
+                'total': float(detalle.total),
+            }
+        )
+    return {
+        'empresa': {
+            'nombre': 'MOTOREPUESTOS LAS AFRICANAS',
+        },
+        'venta_id': venta.id,
+        'numero_factura': factura.number,
+        'fecha_hora': venta.facturada_at.isoformat() if venta.facturada_at else venta.fecha.isoformat(),
+        'cliente': {
+            'nombre': venta.cliente.nombre,
+            'documento': venta.cliente.numero_documento,
+        },
+        'vendedor_caja': request_user_label(venta.facturada_por),
+        'medio_pago': venta.get_medio_pago_display(),
+        'subtotal': float(venta.subtotal),
+        'impuestos': float(venta.iva),
+        'descuento': float(venta.descuento_valor),
+        'total': float(venta.total),
+        'cufe': factura.cufe,
+        'uuid': factura.uuid,
+        'qr_url': factura.qr.url if factura.qr else '',
+        'xml_url': factura.xml_url,
+        'items': detalles,
+    }
+
+
+def request_user_label(user):
+    if not user:
+        return ''
+    full_name = user.get_full_name().strip()
+    return full_name or user.username
 
 
 def _validar_estado_para_anulacion(venta):
@@ -481,7 +528,7 @@ class VentaViewSet(viewsets.ModelViewSet):
             )
 
         try:
-            factura = facturar_venta(venta.id)
+            factura = facturar_venta(venta.id, triggered_by=request.user)
         except (FactusValidationError, FactusAuthError, FactusAPIError, FacturaDuplicadaError) as exc:
             return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -645,11 +692,40 @@ class CajaViewSet(viewsets.GenericViewSet):
                 )
                 self._validar_para_facturar(venta)
                 _facturar_venta(venta, request.user)
+                factura = facturar_venta(venta.id, triggered_by=request.user)
         except ValidationError as error:
             return Response({'error': error.detail}, status=status.HTTP_400_BAD_REQUEST)
+        except FacturaDuplicadaError as error:
+            factura = FacturaElectronica.objects.filter(venta_id=pk).first()
+            if factura is None:
+                return Response({'error': str(error)}, status=status.HTTP_409_CONFLICT)
+        except (FactusValidationError, FactusAuthError, FactusAPIError) as error:
+            return Response(
+                {
+                    'ok': False,
+                    'message': str(error),
+                    'status': 'ERROR',
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         serializer = VentaDetailSerializer(venta)
-        return Response(serializer.data)
+        return Response(
+            {
+                'ok': True,
+                'message': 'Factura electrónica emitida correctamente en Factus.',
+                'venta': serializer.data,
+                'factura_electronica': FacturaElectronicaSerializer(factura).data,
+                'numero_factura': factura.number,
+                'status': factura.status,
+                'cufe': factura.cufe,
+                'uuid': factura.uuid,
+                'reference_code': factura.reference_code,
+                'send_email': bool(factura.response_json.get('request', {}).get('send_email', False)),
+                'pos_ticket': _build_pos_ticket_payload(venta, factura),
+                'errores': [],
+            }
+        )
 
 
 class SolicitudDescuentoViewSet(viewsets.ModelViewSet):
