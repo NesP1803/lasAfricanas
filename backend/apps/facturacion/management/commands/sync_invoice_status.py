@@ -8,7 +8,10 @@ class Command(BaseCommand):
     help = 'Sincroniza estado DIAN de facturas pendientes contra Factus.'
 
     def handle(self, *args, **options):
-        pendientes = FacturaElectronica.objects.filter(status='PENDIENTE').values_list('number', flat=True)
+        pendientes = FacturaElectronica.objects.filter(status__in=['EN_PROCESO', 'PENDIENTE']).values_list(
+            'number',
+            flat=True,
+        )
         total = 0
         ok = 0
         failed = 0
