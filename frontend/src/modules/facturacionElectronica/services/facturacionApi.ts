@@ -7,7 +7,15 @@ export interface FacturaElectronica {
   cliente: string;
   fecha: string;
   total: number;
+  estado?: EstadoDian;
   estado_dian: EstadoDian;
+  status?: EstadoDian;
+}
+
+interface EstadoFacturaResponse {
+  estado?: EstadoDian;
+  estado_dian?: EstadoDian;
+  status?: EstadoDian;
 }
 
 const crearArchivoDescargable = (blob: Blob, fileName: string) => {
@@ -29,7 +37,7 @@ export const facturacionApi = {
   },
 
   async getEstadoFactura(numero: string) {
-    const response = await apiClient.get<{ estado: EstadoDian }>(`/facturacion/${encodeURIComponent(numero)}/estado/`);
+    const response = await apiClient.get<EstadoFacturaResponse>(`/facturacion/${encodeURIComponent(numero)}/estado/`);
     return response.data;
   },
 
@@ -51,4 +59,9 @@ export const facturacionApi = {
     const response = await apiClient.post(`/facturacion/${encodeURIComponent(numero)}/enviar-correo/`);
     return response.data;
   },
+};
+
+export const resolveEstadoFactura = (data?: EstadoFacturaResponse | FacturaElectronica): EstadoDian => {
+  if (!data) return 'ERROR';
+  return data.estado ?? data.estado_dian ?? data.status ?? 'ERROR';
 };
