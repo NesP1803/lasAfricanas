@@ -94,6 +94,38 @@ export interface FacturaElectronicaResultado {
   response_json: Record<string, unknown>;
 }
 
+export interface FacturaLista {
+  id: number;
+  number: string;
+  numero_visible: string;
+  prefix: string;
+  status: string;
+  estado: string;
+  cufe: string;
+  uuid: string;
+  qr_url?: string;
+  reference_code: string;
+  xml_url: string;
+  pdf_url: string;
+  xml_local_path?: string;
+  pdf_local_path?: string;
+  cliente: {
+    nombre: string;
+    documento: string;
+    email?: string;
+    telefono?: string;
+    direccion?: string;
+  };
+  totales: {
+    subtotal: number;
+    impuestos: number;
+    descuento: number;
+    total: number;
+    efectivo_recibido: number;
+    cambio: number;
+  };
+}
+
 export interface PosTicketData {
   numero_factura: string;
   fecha_hora: string;
@@ -127,6 +159,7 @@ export interface FacturarCajaResponse {
   venta_id?: number;
   venta: Venta;
   factura_electronica: FacturaElectronicaResultado;
+  factura_lista?: FacturaLista;
   numero_factura: string;
   estado_local?: string;
   estado_electronico?: string;
@@ -480,7 +513,28 @@ export const ventasApi = {
     if (!response.ok) {
       throw new Error(extractApiErrorMessage(data, 'Error al emitir factura electrónica'));
     }
-    return data;
+    if (data?.venta && data?.factura_electronica) {
+      return data;
+    }
+    return {
+      ok: true,
+      message: data?.message || 'Factura electrónica emitida.',
+      venta_id: data?.venta_id || ventaId,
+      venta: data?.venta ?? ({} as Venta),
+      factura_electronica: data?.factura_electronica ?? ({} as FacturaElectronicaResultado),
+      factura_lista: data?.factura_lista,
+      numero_factura: data?.numero_factura || '',
+      estado_local: data?.estado_local,
+      estado_electronico: data?.estado_electronico,
+      status: data?.status || data?.estado_electronico || 'ERROR',
+      cufe: data?.cufe,
+      uuid: data?.uuid,
+      reference_code: data?.reference_code,
+      send_email: data?.send_email,
+      pos_ticket: data?.pos_ticket,
+      factus_sent: data?.factus_sent,
+      errores: data?.errores,
+    };
   },
 
   async convertirAFactura(remisionId: number): Promise<Venta> {
