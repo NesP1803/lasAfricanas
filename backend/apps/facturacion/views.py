@@ -85,6 +85,7 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
         )
         data = [
             {
+                'id': factura.id,
                 'venta_id': factura.venta_id,
                 'numero': factura.number,
                 'reference_code': factura.reference_code,
@@ -93,8 +94,35 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
                 'cliente': factura.venta.cliente.nombre,
                 'fecha': factura.venta.fecha,
                 'total': factura.venta.total,
+                'estado': (
+                    'EMITIDA_CON_OBSERVACIONES'
+                    if factura.status == 'ACEPTADA' and factura.codigo_error == 'OBSERVACIONES_FACTUS'
+                    else factura.status
+                ),
                 'estado_dian': factura.status,
                 'status': factura.status,
+                'codigo_error': factura.codigo_error,
+                'observaciones': factura.mensaje_error,
+                'bill_errors': (
+                    factura.response_json.get('bill_errors', [])
+                    if isinstance(factura.response_json, dict)
+                    else []
+                ),
+                'public_url': (
+                    factura.response_json.get('final_fields', {}).get('public_url', '')
+                    if isinstance(factura.response_json, dict)
+                    else ''
+                ),
+                'qr_factus': (
+                    factura.response_json.get('final_fields', {}).get('qr', '')
+                    if isinstance(factura.response_json, dict)
+                    else ''
+                ),
+                'qr_image': (
+                    factura.response_json.get('final_fields', {}).get('qr_image', '')
+                    if isinstance(factura.response_json, dict)
+                    else ''
+                ),
                 'xml_url': factura.xml_url,
                 'pdf_url': factura.pdf_url,
             }

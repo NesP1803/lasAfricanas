@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Printer, X } from 'lucide-react';
 import { configuracionAPI } from '../api/configuracion';
-import { ventasApi, type FacturaElectronicaResultado, type Venta, type VentaListItem } from '../api/ventas';
+import { ventasApi, type FacturaElectronicaResultado, type FacturaLista, type Venta, type VentaListItem } from '../api/ventas';
 import ComprobanteTemplate from '../components/ComprobanteTemplate';
 import { useNotification } from '../contexts/NotificationContext';
 import type { ConfiguracionEmpresa, ConfiguracionFacturacion } from '../types';
@@ -21,6 +21,7 @@ export default function Caja() {
   const [facturandoId, setFacturandoId] = useState<number | null>(null);
   const [documento, setDocumento] = useState<Venta | null>(null);
   const [facturaElectronica, setFacturaElectronica] = useState<FacturaElectronicaResultado | null>(null);
+  const [facturaLista, setFacturaLista] = useState<FacturaLista | null>(null);
   const [empresa, setEmpresa] = useState<ConfiguracionEmpresa | null>(null);
   const [facturacion, setFacturacion] = useState<ConfiguracionFacturacion | null>(null);
 
@@ -62,6 +63,7 @@ export default function Caja() {
       });
       setDocumento(facturada);
       setFacturaElectronica(respuesta.factura_electronica ?? null);
+      setFacturaLista(respuesta.factura_lista ?? null);
       cargarPendientes();
     } catch (error) {
       showNotification({
@@ -112,11 +114,10 @@ export default function Caja() {
       notas: facturacion?.notas_factura,
       resolucion: facturacion?.resolucion,
       empresa,
-      cufe: facturaElectronica?.cufe,
-      qrUrl: facturaElectronica?.response_json?.response &&
-        typeof facturaElectronica.response_json.response === 'object'
-          ? String((facturaElectronica.response_json.response as Record<string, unknown>).qr_url ?? '')
-          : undefined,
+      cufe: facturaLista?.cufe || facturaElectronica?.cufe,
+      qrUrl: facturaLista?.qr_url || '',
+      qrImageUrl: facturaLista?.qr_image || '',
+      referenceCode: facturaLista?.reference_code || facturaElectronica?.reference_code,
     });
   };
 
@@ -223,11 +224,10 @@ export default function Caja() {
                   clienteDocumento={documento.cliente_info?.numero_documento ?? ''}
                   medioPago={documento.medio_pago_display ?? documento.medio_pago}
                   estado={documento.estado_display ?? documento.estado}
-                  cufe={facturaElectronica?.cufe}
-                  qrUrl={facturaElectronica?.response_json?.response &&
-                    typeof facturaElectronica.response_json.response === 'object'
-                      ? String((facturaElectronica.response_json.response as Record<string, unknown>).qr_url ?? '')
-                      : undefined}
+                  cufe={facturaLista?.cufe || facturaElectronica?.cufe}
+                  qrUrl={facturaLista?.qr_url || ''}
+                  qrImageUrl={facturaLista?.qr_image || ''}
+                  referenceCode={facturaLista?.reference_code || facturaElectronica?.reference_code}
                   detalles={detallesDocumento}
                   subtotal={Number(documento.subtotal)}
                   descuento={Number(documento.descuento_valor)}

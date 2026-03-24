@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from pathlib import Path
+import logging
 
-import requests
 from django.conf import settings
 
 from apps.facturacion.models import FacturaElectronica
 from apps.facturacion.services.exceptions import DescargaFacturaError
+from apps.facturacion.services.factus_client import FactusAPIError, FactusClient
+
+logger = logging.getLogger(__name__)
 
 
 def _download_invoice_file(factura: FacturaElectronica, url: str, folder: str, extension: str, field: str) -> str:
@@ -19,15 +22,22 @@ def _download_invoice_file(factura: FacturaElectronica, url: str, folder: str, e
     full_path = Path(settings.MEDIA_ROOT) / relative_path
     full_path.parent.mkdir(parents=True, exist_ok=True)
 
+    client = FactusClient()
     try:
-        response = requests.get(url, timeout=45)
-        response.raise_for_status()
-    except requests.RequestException as exc:
+        content, refreshed = client.download_resource(url)
+        logger.info(
+            'factura_descarga.ok number=%s endpoint=%s refreshed=%s',
+            factura.number,
+            url,
+            refreshed,
+        )
+    except FactusAPIError as exc:
+        logger.warning('factura_descarga.error number=%s endpoint=%s', factura.number, url, exc_info=True)
         raise DescargaFacturaError(
             f'No fue posible descargar el archivo {extension.upper()} de la factura {factura.number}.'
         ) from exc
 
-    full_path.write_bytes(response.content)
+    full_path.write_bytes(content)
     setattr(factura, field, str(relative_path))
     factura.save(update_fields=[field, 'updated_at'])
     return str(relative_path)
