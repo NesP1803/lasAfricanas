@@ -82,6 +82,64 @@ export interface Venta {
   detalles: DetalleVenta[];
 }
 
+export interface FacturaElectronicaResultado {
+  id: number;
+  cufe: string;
+  uuid: string;
+  number: string;
+  reference_code: string;
+  status: string;
+  xml_url: string;
+  pdf_url: string;
+  response_json: Record<string, unknown>;
+}
+
+export interface PosTicketData {
+  numero_factura: string;
+  fecha_hora: string;
+  cliente: {
+    nombre: string;
+    documento: string;
+  };
+  vendedor_caja: string;
+  items: Array<{
+    descripcion: string;
+    codigo?: string;
+    cantidad: number;
+    precio_unitario: number;
+    descuento: number;
+    iva_porcentaje: number;
+    total: number;
+  }>;
+  subtotal: number;
+  impuestos: number;
+  descuento: number;
+  total: number;
+  cufe?: string;
+  uuid?: string;
+  qr_url?: string;
+  xml_url?: string;
+}
+
+export interface FacturarCajaResponse {
+  ok: boolean;
+  message: string;
+  venta_id?: number;
+  venta: Venta;
+  factura_electronica: FacturaElectronicaResultado;
+  numero_factura: string;
+  estado_local?: string;
+  estado_electronico?: string;
+  status: string;
+  cufe?: string;
+  uuid?: string;
+  reference_code?: string;
+  send_email?: boolean;
+  pos_ticket?: PosTicketData;
+  factus_sent?: boolean;
+  errores?: string[];
+}
+
 export interface VentaListItem {
   id: number;
   numero_comprobante: string | null;
@@ -378,7 +436,7 @@ export const ventasApi = {
     return [];
   },
 
-  async facturarEnCaja(ventaId: number): Promise<Venta> {
+  async facturarEnCaja(ventaId: number): Promise<FacturarCajaResponse> {
     const token = localStorage.getItem('token');
     const response = await fetch(`${API_URL}/caja/${ventaId}/facturar/`, {
       method: 'POST',
@@ -392,7 +450,37 @@ export const ventasApi = {
       const error = await response.json();
       throw new Error(extractApiErrorMessage(error, 'Error al facturar en caja'));
     }
-    return response.json();
+    const data = await response.json();
+    if (data?.venta && data?.factura_electronica) {
+      return data;
+    }
+    return {
+      ok: true,
+      message: 'Venta facturada correctamente.',
+      venta_id: data.id,
+      venta: data,
+      factura_electronica: {} as FacturaElectronicaResultado,
+      numero_factura: data.numero_comprobante || `#${data.id}`,
+      estado_local: data.estado || 'FACTURADA',
+      status: data.estado || 'FACTURADA',
+      factus_sent: false,
+    };
+  },
+
+  async facturarVentaElectronica(ventaId: number): Promise<FacturarCajaResponse> {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/ventas/${ventaId}/facturar/`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(extractApiErrorMessage(data, 'Error al emitir factura electrónica'));
+    }
+    return data;
   },
 
   async convertirAFactura(remisionId: number): Promise<Venta> {

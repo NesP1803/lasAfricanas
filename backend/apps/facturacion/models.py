@@ -132,6 +132,40 @@ class NotaAjusteDocumentoSoporte(models.Model):
 class RangoNumeracionDIAN(models.Model):
     """Rangos de numeración autorizados por DIAN sincronizados desde Factus."""
 
+    ENVIRONMENT_CHOICES = [
+        ('SANDBOX', 'Sandbox'),
+        ('PRODUCTION', 'Producción'),
+    ]
+    DOCUMENT_CODE_CHOICES = [
+        ('FACTURA_VENTA', 'Factura de venta'),
+    ]
+
+    factus_range_id = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        db_index=True,
+        verbose_name='ID de rango en Factus',
+    )
+    environment = models.CharField(
+        max_length=20,
+        choices=ENVIRONMENT_CHOICES,
+        default='SANDBOX',
+        db_index=True,
+        verbose_name='Entorno',
+    )
+    document_code = models.CharField(
+        max_length=30,
+        choices=DOCUMENT_CODE_CHOICES,
+        default='FACTURA_VENTA',
+        db_index=True,
+        verbose_name='Tipo de documento',
+    )
+    is_active_remote = models.BooleanField(default=True, db_index=True, verbose_name='Activo remoto en Factus')
+    is_selected_local = models.BooleanField(
+        default=False,
+        db_index=True,
+        verbose_name='Seleccionado localmente para facturar',
+    )
     prefijo = models.CharField(max_length=20)
     desde = models.IntegerField()
     hasta = models.IntegerField()
@@ -147,6 +181,10 @@ class RangoNumeracionDIAN(models.Model):
         verbose_name = 'Rango de Numeración DIAN'
         verbose_name_plural = 'Rangos de Numeración DIAN'
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['environment', 'document_code', 'is_active_remote']),
+            models.Index(fields=['environment', 'document_code', 'is_selected_local']),
+        ]
 
     def __str__(self) -> str:
         return f'{self.prefijo}: {self.desde}-{self.hasta}'
