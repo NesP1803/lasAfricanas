@@ -69,11 +69,15 @@ def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> Factur
 
     payload = build_invoice_payload(venta)
     logger.info(
-        'facturar_venta.payload venta_id=%s items=%s customer=%s numbering_range_id=%s send_email=%s',
+        'facturar_venta.payload venta_id=%s items=%s customer=%s numbering_range_id=%s '
+        'customer_tribute_id=%s first_discount_rate=%s first_is_excluded=%s send_email=%s',
         venta.id,
         len(payload.get('items', [])),
         payload.get('customer', {}).get('identification'),
         payload.get('numbering_range_id'),
+        payload.get('customer', {}).get('tribute_id'),
+        (payload.get('items', [{}])[0].get('discount_rate') if payload.get('items') else None),
+        (payload.get('items', [{}])[0].get('is_excluded') if payload.get('items') else None),
         payload.get('send_email'),
     )
     sequence = get_next_invoice_sequence()

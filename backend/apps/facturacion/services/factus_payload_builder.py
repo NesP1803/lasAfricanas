@@ -14,6 +14,7 @@ from apps.facturacion.services.factus_catalog_lookup import (
     get_tribute_id,
     get_unit_measure_id,
 )
+from apps.facturacion_electronica.catalogos.models import TributoFactus
 from apps.ventas.models import Venta
 
 
@@ -21,9 +22,31 @@ def _to_float(value: Decimal) -> float:
     return float(value or Decimal('0'))
 
 
+def _resolve_customer_tribute_id(tipo_documento: str) -> int:
+    """Resuelve tribute_id de cliente según catálogo/homologación disponible."""
+    doc = str(tipo_documento or '').strip().upper()
+    preferred_codes = ['R-99-PN', 'R-99', 'NO_CAUSA']
+    if doc == 'NIT':
+        preferred_codes = ['IVA', '01']
+
+    for code in preferred_codes:
+        tribute_id = get_tribute_id(code, default=0)
+        if tribute_id:
+            return int(tribute_id)
+
+    fallback = (
+        TributoFactus.objects.filter(is_active=True)
+        .order_by('factus_id')
+        .values_list('factus_id', flat=True)
+        .first()
+    )
+    return int(fallback or 1)
+
+
 def build_invoice_payload(venta: Venta) -> dict:
     cliente = venta.cliente
     rango = resolve_numbering_range(document_code='FACTURA_VENTA')
+    customer_tribute_id = _resolve_customer_tribute_id(cliente.tipo_documento)
     items = []
     for detalle in venta.detalles.select_related('producto').all():
         producto = detalle.producto
@@ -37,7 +60,8 @@ def build_invoice_payload(venta: Venta) -> dict:
                 'unit_measure_id': get_unit_measure_id(producto.unidad_medida),
                 'standard_code_id': 1,
                 'tribute_id': get_tribute_id('IVA'),
-                'is_excluded': _to_float(detalle.iva_porcentaje) == 0,
+                'discount_rate': 0,
+                'is_excluded': 1 if _to_float(detalle.iva_porcentaje) == 0 else 0,
             }
         )
 
@@ -58,7 +82,7 @@ def build_invoice_payload(venta: Venta) -> dict:
             'address': cliente.direccion or 'NO REGISTRADA',
             'municipality_id': get_municipality_id(cliente.ciudad or 'SIN_CIUDAD'),
             'identification_document_id': get_document_type_id(cliente.tipo_documento),
-            'tribute_id': get_tribute_id('IVA'),
+            'tribute_id': customer_tribute_id,
         },
         'items': items,
     }
