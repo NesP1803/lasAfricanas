@@ -25,6 +25,9 @@ from apps.facturacion.views import ConfiguracionDIANViewSet
 
 
 configuracion_dian_list = ConfiguracionDIANViewSet.as_view({'get': 'list', 'post': 'create'})
+configuracion_dian_rangos = ConfiguracionDIANViewSet.as_view({'get': 'rangos'})
+configuracion_dian_rangos_sync = ConfiguracionDIANViewSet.as_view({'post': 'sync_ranges'})
+configuracion_dian_rangos_select = ConfiguracionDIANViewSet.as_view({'post': 'select_range'})
 
 urlpatterns = [
     # Admin de Django
@@ -37,6 +40,9 @@ urlpatterns = [
     # API completa
     path('api/', include(router.urls)),
     path('api/configuracion/dian/', configuracion_dian_list, name='configuracion-dian'),
+    path('api/configuracion/dian/rangos/', configuracion_dian_rangos, name='configuracion-dian-rangos'),
+    path('api/configuracion/dian/rangos/sync/', configuracion_dian_rangos_sync, name='configuracion-dian-rangos-sync'),
+    path('api/configuracion/dian/rangos/select/', configuracion_dian_rangos_select, name='configuracion-dian-rangos-select'),
     
     # Autenticación de DRF (para browsable API)
     path('api-auth/', include('rest_framework.urls')),

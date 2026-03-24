@@ -459,6 +459,57 @@ class NumberingRangeResolutionTests(TestCase):
         self.assertIn('No hay rangos sincronizados', str(exc.exception))
 
 
+class ConfiguracionDianRangosEndpointsTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.admin = User.objects.create_user(
+            username='admin-rangos',
+            password='1234',
+            tipo_usuario='ADMIN',
+            is_staff=True,
+        )
+        self.vendedor = User.objects.create_user(
+            username='vendedor-rangos',
+            password='1234',
+            tipo_usuario='VENDEDOR',
+        )
+        self.rango = RangoNumeracionDIAN.objects.create(
+            factus_range_id=8,
+            environment='SANDBOX',
+            document_code='FACTURA_VENTA',
+            is_active_remote=True,
+            is_selected_local=False,
+            prefijo='SETP',
+            desde=1,
+            hasta=999999,
+            resolucion='18760000001',
+            consecutivo_actual=1,
+            activo=True,
+        )
+
+    def test_select_rango_requiere_admin(self):
+        client = APIClient()
+        client.force_authenticate(self.vendedor)
+        response = client.post('/api/configuracion/dian/rangos/select/', {'range_id': self.rango.id}, format='json')
+        self.assertEqual(response.status_code, 403)
+
+    def test_admin_puede_seleccionar_rango(self):
+        client = APIClient()
+        client.force_authenticate(self.admin)
+        response = client.post('/api/configuracion/dian/rangos/select/', {'range_id': self.rango.id}, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.rango.refresh_from_db()
+        self.assertTrue(self.rango.is_selected_local)
+
+    @patch('apps.facturacion.views.sync_numbering_ranges')
+    def test_sync_rangos_requiere_admin(self, mocked_sync):
+        mocked_sync.return_value = [self.rango]
+        client = APIClient()
+        client.force_authenticate(self.vendedor)
+        response = client.post('/api/configuracion/dian/rangos/sync/', {}, format='json')
+        self.assertEqual(response.status_code, 403)
+
+
 class DocumentosSoporteResourceEndpointsTests(TestCase):
     def setUp(self):
         User = get_user_model()
