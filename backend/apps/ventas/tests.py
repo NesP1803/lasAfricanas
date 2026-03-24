@@ -1,4 +1,5 @@
 from decimal import Decimal
+from unittest.mock import patch, MagicMock
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -84,6 +85,8 @@ class CajaVentaFlowTests(TestCase):
             efectivo_recibido=Decimal('238'),
             cambio=Decimal('0'),
             estado='ENVIADA_A_CAJA',
+            enviada_a_caja_por=self.vendedor,
+            enviada_a_caja_at=timezone.now(),
         )
         DetalleVenta.objects.create(
             venta=venta,
@@ -114,6 +117,8 @@ class CajaVentaFlowTests(TestCase):
             efectivo_recibido=Decimal('238'),
             cambio=Decimal('0'),
             estado='ENVIADA_A_CAJA',
+            enviada_a_caja_por=self.vendedor,
+            enviada_a_caja_at=timezone.now(),
         )
         DetalleVenta.objects.create(
             venta=venta,
@@ -131,7 +136,90 @@ class CajaVentaFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         venta.refresh_from_db()
         self.assertEqual(venta.estado, 'FACTURADA')
-        self.assertIsNotNone(venta.numero_comprobante)
+        self.assertTrue(response.data.get('factus_sent'))
+
+    @patch('apps.ventas.views.facturar_venta')
+    def test_caja_facturar_dispara_servicio_factus(self, mocked_facturar_venta):
+        mocked_factura = MagicMock()
+        mocked_factura.number = 'SETP-1001'
+        mocked_factura.status = 'ACEPTADA'
+        mocked_factura.cufe = 'CUFE-TEST'
+        mocked_factura.uuid = 'UUID-TEST'
+        mocked_factura.reference_code = 'SETP-1001'
+        mocked_factura.response_json = {'request': {'send_email': False}}
+        mocked_facturar_venta.return_value = mocked_factura
+
+        venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            cliente=self.cliente,
+            vendedor=self.vendedor,
+            subtotal=Decimal('200'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('38'),
+            total=Decimal('238'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('238'),
+            cambio=Decimal('0'),
+            estado='ENVIADA_A_CAJA',
+            enviada_a_caja_por=self.vendedor,
+            enviada_a_caja_at=timezone.now(),
+        )
+        DetalleVenta.objects.create(
+            venta=venta,
+            producto=self.producto,
+            cantidad=1,
+            precio_unitario=Decimal('200'),
+            descuento_unitario=Decimal('0'),
+            iva_porcentaje=Decimal('19'),
+            subtotal=Decimal('200'),
+            total=Decimal('238'),
+        )
+
+        self.client.force_authenticate(user=self.cajero)
+        response = self.client.post(f'/api/caja/{venta.id}/facturar/')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data['factus_sent'])
+        self.assertEqual(response.data['numero_factura'], 'SETP-1001')
+        mocked_facturar_venta.assert_called_once_with(venta.id, triggered_by=self.cajero)
+
+    @patch('apps.ventas.views.facturar_venta')
+    def test_caja_facturar_error_factus_no_reporta_exito(self, mocked_facturar_venta):
+        from apps.facturacion.services import FactusAPIError
+
+        mocked_facturar_venta.side_effect = FactusAPIError('Factus caído')
+        venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            cliente=self.cliente,
+            vendedor=self.vendedor,
+            subtotal=Decimal('200'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('38'),
+            total=Decimal('238'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('238'),
+            cambio=Decimal('0'),
+            estado='ENVIADA_A_CAJA',
+            enviada_a_caja_por=self.vendedor,
+            enviada_a_caja_at=timezone.now(),
+        )
+        DetalleVenta.objects.create(
+            venta=venta,
+            producto=self.producto,
+            cantidad=1,
+            precio_unitario=Decimal('200'),
+            descuento_unitario=Decimal('0'),
+            iva_porcentaje=Decimal('19'),
+            subtotal=Decimal('200'),
+            total=Decimal('238'),
+        )
+
+        self.client.force_authenticate(user=self.cajero)
+        response = self.client.post(f'/api/caja/{venta.id}/facturar/')
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(response.data['factus_sent'])
+        self.assertEqual(response.data['estado_electronico'], 'ERROR')
 
     def test_estados_cambian_correctamente(self):
         self.client.force_authenticate(user=self.vendedor)
@@ -166,6 +254,8 @@ class CajaVentaFlowTests(TestCase):
             efectivo_recibido=Decimal('90'),
             cambio=Decimal('1.20'),
             estado='ENVIADA_A_CAJA',
+            enviada_a_caja_por=self.vendedor,
+            enviada_a_caja_at=timezone.now(),
         )
         DetalleVenta.objects.create(
             venta=venta,
@@ -253,9 +343,9 @@ class CajaVentaFlowTests(TestCase):
             efectivo_recibido=Decimal('238'),
             cambio=Decimal('0'),
             estado='ENVIADA_A_CAJA',
-            inventario_ya_afectado=True,
             enviada_a_caja_por=self.vendedor,
             enviada_a_caja_at=timezone.now(),
+            inventario_ya_afectado=True,
         )
         DetalleVenta.objects.create(
             venta=venta,

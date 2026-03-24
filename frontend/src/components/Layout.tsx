@@ -448,7 +448,6 @@ export default function Layout() {
             items: [
               { label: "Facturas", path: "/facturacion/facturas" },
               { label: "Remisiones", path: "/facturacion/remisiones" },
-              { label: "Facturación electrónica", path: "/facturacion-electronica" },
               { label: "Notas crédito", path: "/notas-credito" },
               { label: "Documentos soporte", path: "/documentos-soporte" },
             ],

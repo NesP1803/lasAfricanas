@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
+from django.conf import settings
+
 from apps.facturacion.models import RangoNumeracionDIAN
 from apps.facturacion.services.factus_client import FactusClient
 
@@ -20,13 +22,22 @@ def _as_date(value: Any) -> date | None:
 
 def sync_numbering_ranges() -> list[RangoNumeracionDIAN]:
     """Sincroniza rangos de numeración desde Factus y retorna los rangos procesados."""
+    environment = (
+        'PRODUCTION'
+        if str(getattr(settings, 'FACTUS_ENV', 'sandbox')).strip().lower() in {'prod', 'production'}
+        else 'SANDBOX'
+    )
     payload = FactusClient().get_numbering_ranges()
     ranges = payload.get('data', payload)
     if isinstance(ranges, dict):
         ranges = ranges.get('numbering_ranges', [])
 
     synced: list[RangoNumeracionDIAN] = []
+    synced_ids: list[int] = []
     for raw_range in ranges:
+        factus_range_id = raw_range.get('id') or raw_range.get('numbering_range_id')
+        if factus_range_id is None:
+            continue
         prefijo = str(raw_range.get('prefix', raw_range.get('prefijo', ''))).strip()
         if not prefijo:
             continue
@@ -37,7 +48,9 @@ def sync_numbering_ranges() -> list[RangoNumeracionDIAN]:
         consecutivo_actual = int(raw_range.get('current', raw_range.get('consecutivo_actual', desde)) or desde)
 
         rango, _ = RangoNumeracionDIAN.objects.update_or_create(
-            prefijo=prefijo,
+            factus_range_id=factus_range_id,
+            environment=environment,
+            document_code='FACTURA_VENTA',
             defaults={
                 'desde': desde,
                 'hasta': hasta,
@@ -45,9 +58,18 @@ def sync_numbering_ranges() -> list[RangoNumeracionDIAN]:
                 'consecutivo_actual': consecutivo_actual,
                 'fecha_autorizacion': _as_date(raw_range.get('valid_from', raw_range.get('fecha_autorizacion'))),
                 'fecha_expiracion': _as_date(raw_range.get('valid_to', raw_range.get('fecha_expiracion'))),
+                'prefijo': prefijo,
                 'activo': bool(raw_range.get('is_active', raw_range.get('activo', True))),
+                'is_active_remote': bool(raw_range.get('is_active', raw_range.get('activo', True))),
             },
         )
         synced.append(rango)
+        if rango.factus_range_id is not None:
+            synced_ids.append(int(rango.factus_range_id))
+
+    RangoNumeracionDIAN.objects.filter(
+        environment=environment,
+        document_code='FACTURA_VENTA',
+    ).exclude(factus_range_id__in=synced_ids).update(is_active_remote=False)
 
     return synced
