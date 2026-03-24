@@ -34,6 +34,7 @@ type DocumentoTemplateProps = {
   empresa?: ConfiguracionEmpresa | null;
   cufe?: string;
   qrUrl?: string;
+  referenceCode?: string;
 };
 
 const currencyFormatter = new Intl.NumberFormat('es-CO', {
@@ -85,6 +86,7 @@ export default function ComprobanteTemplate({
   empresa,
   cufe,
   qrUrl,
+  referenceCode,
 }: DocumentoTemplateProps) {
   const infoEmpresa = getEmpresaInfo(empresa);
   const fechaFormateada = formatFechaHora(fecha);
@@ -252,6 +254,9 @@ export default function ComprobanteTemplate({
   return (
     <div className="mx-auto w-full max-w-[80mm] border border-slate-300 bg-white p-4 text-[10px] text-slate-800">
       <div className="text-center">
+        {empresa?.logo ? (
+          <img src={empresa.logo} alt="Logo empresa" className="mx-auto mb-1 h-10 object-contain" />
+        ) : null}
         <p className="text-xs font-semibold uppercase">{infoEmpresa.nombre}</p>
         <p>{infoEmpresa.nit}</p>
         <p>{infoEmpresa.regimen}</p>
@@ -263,6 +268,7 @@ export default function ComprobanteTemplate({
       <div className="mt-3 border-t border-dashed border-slate-400 pt-2 text-center">
         <p className="text-[11px] font-semibold uppercase">{tituloDocumento}</p>
         <p className="text-xs font-semibold">{numero}</p>
+        {referenceCode ? <p className="text-[9px] text-slate-500">Doc: {referenceCode}</p> : null}
       </div>
 
       <div className="mt-2 space-y-1 text-[10px]">
@@ -348,10 +354,14 @@ export default function ComprobanteTemplate({
           <p className="font-semibold">Verificación:</p>
           <p className="break-all">{qrUrl}</p>
         </div>
-      ) : null}
+      ) : (
+        <div className="mt-2 border border-dashed border-slate-400 p-2 text-center text-[9px] text-slate-500">
+          Espacio reservado para QR DIAN
+        </div>
+      )}
 
       <div className="mt-2 border-t border-dashed border-slate-400 pt-2 text-[9px] text-slate-500">
-        {notas || 'Gracias por su compra. Vuelva pronto.'}
+        {notas || 'Documento generado electrónicamente. Gracias por su compra.'}
       </div>
     </div>
   );

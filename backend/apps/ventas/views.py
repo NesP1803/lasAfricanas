@@ -154,6 +154,8 @@ def _build_pos_ticket_payload(venta, factura):
         },
         'vendedor_caja': request_user_label(venta.facturada_por),
         'medio_pago': venta.get_medio_pago_display(),
+        'estado_documento': factura.status,
+        'reference_code': factura.reference_code,
         'subtotal': float(venta.subtotal),
         'impuestos': float(venta.iva),
         'descuento': float(venta.descuento_valor),
@@ -163,6 +165,40 @@ def _build_pos_ticket_payload(venta, factura):
         'qr_url': factura.qr.url if factura.qr else '',
         'xml_url': factura.xml_url,
         'items': detalles,
+    }
+
+
+def _build_factura_ready_payload(venta, factura):
+    return {
+        'id': factura.id,
+        'number': factura.number,
+        'numero_visible': factura.number,
+        'prefix': ''.join(filter(str.isalpha, factura.number or '')),
+        'status': factura.status,
+        'estado': factura.status,
+        'cufe': factura.cufe,
+        'uuid': factura.uuid,
+        'qr_url': factura.qr.url if factura.qr else '',
+        'reference_code': factura.reference_code,
+        'xml_url': factura.xml_url,
+        'pdf_url': factura.pdf_url,
+        'xml_local_path': factura.xml_local_path,
+        'pdf_local_path': factura.pdf_local_path,
+        'cliente': {
+            'nombre': venta.cliente.nombre,
+            'documento': venta.cliente.numero_documento,
+            'email': venta.cliente.email,
+            'telefono': venta.cliente.telefono,
+            'direccion': venta.cliente.direccion,
+        },
+        'totales': {
+            'subtotal': float(venta.subtotal),
+            'impuestos': float(venta.iva),
+            'descuento': float(venta.descuento_valor),
+            'total': float(venta.total),
+            'efectivo_recibido': float(venta.efectivo_recibido),
+            'cambio': float(venta.cambio),
+        },
     }
 
 
@@ -554,9 +590,13 @@ class VentaViewSet(viewsets.ModelViewSet):
             'ok': True,
             'message': 'Factura electrónica generada correctamente',
             'venta_id': venta.id,
+            'venta': VentaDetailSerializer(venta).data,
+            'factura_electronica': FacturaElectronicaSerializer(factura).data,
+            'factura_lista': _build_factura_ready_payload(venta, factura),
             'numero_factura': factura.number,
             'estado_local': venta.estado,
             'estado_electronico': factura.status,
+            'status': factura.status,
             'cufe': factura.cufe,
             'uuid': factura.uuid,
             'reference_code': factura.reference_code,
@@ -780,6 +820,7 @@ class CajaViewSet(viewsets.GenericViewSet):
                 'venta_id': venta.id,
                 'venta': serializer.data,
                 'factura_electronica': FacturaElectronicaSerializer(factura).data,
+                'factura_lista': _build_factura_ready_payload(venta, factura),
                 'numero_factura': factura.number,
                 'estado_local': venta.estado,
                 'estado_electronico': factura.status,
