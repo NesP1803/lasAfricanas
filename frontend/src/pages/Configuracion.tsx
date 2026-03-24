@@ -103,9 +103,9 @@ const defaultFacturacion: ConfiguracionFacturacion = {
 };
 
 const defaultImpuestos: Impuesto[] = [
-  { id: -1, nombre: "IVA 0%", porcentaje: 0, factus_tribute_id: 21 },
-  { id: -2, nombre: "IVA 19%", porcentaje: 19, factus_tribute_id: 18 },
-  { id: -3, nombre: "Exento", porcentaje: 0, factus_tribute_id: 21 },
+  { id: -1, nombre: "IVA 0%", porcentaje: 0 },
+  { id: -2, nombre: "IVA 19%", porcentaje: 19 },
+  { id: -3, nombre: "Exento", porcentaje: 0 },
 ];
 
 const AUDITORIA_PAGE_SIZE = 50;
@@ -1288,7 +1288,10 @@ export default function Configuracion() {
                     Impuesto
                   </th>
                   <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                    Factus tribute_id
+                    Porcentaje
+                  </th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                    Homologación
                   </th>
                   <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">
                     Acciones
@@ -1311,27 +1314,20 @@ export default function Configuracion() {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-center whitespace-nowrap">
-                        <input
-                          type="number"
-                          min={1}
-                          value={impuesto.factus_tribute_id ?? ""}
-                          onChange={(event) =>
-                            setImpuestos((prev) =>
-                              prev.map((item) =>
-                                item.id === impuesto.id
-                                  ? {
-                                      ...item,
-                                      factus_tribute_id: event.target.value
-                                        ? Number(event.target.value)
-                                        : null,
-                                    }
-                                  : item
-                              )
-                            )
-                          }
-                          className="w-24 rounded border border-slate-200 px-2 py-1 text-sm text-center disabled:bg-slate-100"
-                          disabled={esFijo}
-                        />
+                        <span className="text-sm text-slate-700">
+                          {Number(impuesto.porcentaje ?? 0).toFixed(2)}%
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center whitespace-nowrap">
+                        {impuesto.factus_tribute_id ? (
+                          <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">
+                            Homologado
+                          </span>
+                        ) : (
+                          <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
+                            Pendiente
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-center whitespace-nowrap">
                         {!esFijo && (

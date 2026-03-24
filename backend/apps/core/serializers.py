@@ -2,6 +2,7 @@ import re
 from decimal import Decimal
 from rest_framework import serializers
 
+from apps.facturacion.services.factus_catalog_lookup import get_tribute_id
 from .models import (
     ConfiguracionEmpresa,
     ConfiguracionFacturacion,
@@ -26,6 +27,11 @@ class ConfiguracionFacturacionSerializer(serializers.ModelSerializer):
 
 
 class ImpuestoSerializer(serializers.ModelSerializer):
+    def _resolve_factus_tribute_id(self, nombre: str, porcentaje: Decimal) -> int:
+        if self._normalize_nombre(nombre).lower() == 'exento' or Decimal(porcentaje) == Decimal('0'):
+            return int(get_tribute_id('ZZ', default=21))
+        return int(get_tribute_id('IVA', default=18))
+
     def _normalize_nombre(self, nombre: str) -> str:
         raw = (nombre or '').strip()
         if not raw:
@@ -64,9 +70,22 @@ class ImpuestoSerializer(serializers.ModelSerializer):
             attrs['porcentaje'] = self._extract_porcentaje(nombre)
         return attrs
 
+    def create(self, validated_data):
+        nombre = validated_data.get('nombre', '')
+        porcentaje = Decimal(validated_data.get('porcentaje', Decimal('0')))
+        validated_data['factus_tribute_id'] = self._resolve_factus_tribute_id(nombre, porcentaje)
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        nombre = validated_data.get('nombre', instance.nombre)
+        porcentaje = Decimal(validated_data.get('porcentaje', instance.porcentaje))
+        validated_data['factus_tribute_id'] = self._resolve_factus_tribute_id(nombre, porcentaje)
+        return super().update(instance, validated_data)
+
     class Meta:
         model = Impuesto
         fields = '__all__'
+        read_only_fields = ['factus_tribute_id']
 
 
 class AuditoriaSerializer(serializers.ModelSerializer):
