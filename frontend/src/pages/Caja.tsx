@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Printer, X } from 'lucide-react';
 import { configuracionAPI } from '../api/configuracion';
-import { ventasApi, type Venta, type VentaListItem } from '../api/ventas';
+import { ventasApi, type FacturaElectronicaResultado, type Venta, type VentaListItem } from '../api/ventas';
 import ComprobanteTemplate from '../components/ComprobanteTemplate';
 import { useNotification } from '../contexts/NotificationContext';
 import type { ConfiguracionEmpresa, ConfiguracionFacturacion } from '../types';
@@ -20,6 +20,7 @@ export default function Caja() {
   const [cargando, setCargando] = useState(false);
   const [facturandoId, setFacturandoId] = useState<number | null>(null);
   const [documento, setDocumento] = useState<Venta | null>(null);
+  const [facturaElectronica, setFacturaElectronica] = useState<FacturaElectronicaResultado | null>(null);
   const [empresa, setEmpresa] = useState<ConfiguracionEmpresa | null>(null);
   const [facturacion, setFacturacion] = useState<ConfiguracionFacturacion | null>(null);
 
@@ -50,12 +51,17 @@ export default function Caja() {
   const handleFacturar = async (ventaId: number) => {
     setFacturandoId(ventaId);
     try {
-      const facturada = await ventasApi.facturarEnCaja(ventaId);
+      const respuesta = await ventasApi.facturarEnCaja(ventaId);
+      const facturada = respuesta.venta;
+      if (!respuesta.factus_sent) {
+        throw new Error(respuesta.message || 'La venta no fue emitida electrónicamente en Factus.');
+      }
       showNotification({
         type: 'success',
-        message: `Venta ${facturada.numero_comprobante ?? facturada.id} facturada.`,
+        message: `${respuesta.message} Nº ${respuesta.numero_factura} · ${respuesta.estado_electronico || respuesta.status} · CUFE ${respuesta.cufe || 'N/D'} · Ref ${respuesta.reference_code || 'N/D'}`,
       });
       setDocumento(facturada);
+      setFacturaElectronica(respuesta.factura_electronica ?? null);
       cargarPendientes();
     } catch (error) {
       showNotification({
@@ -106,6 +112,11 @@ export default function Caja() {
       notas: facturacion?.notas_factura,
       resolucion: facturacion?.resolucion,
       empresa,
+      cufe: facturaElectronica?.cufe,
+      qrUrl: facturaElectronica?.response_json?.response &&
+        typeof facturaElectronica.response_json.response === 'object'
+          ? String((facturaElectronica.response_json.response as Record<string, unknown>).qr_url ?? '')
+          : undefined,
     });
   };
 
@@ -212,6 +223,11 @@ export default function Caja() {
                   clienteDocumento={documento.cliente_info?.numero_documento ?? ''}
                   medioPago={documento.medio_pago_display ?? documento.medio_pago}
                   estado={documento.estado_display ?? documento.estado}
+                  cufe={facturaElectronica?.cufe}
+                  qrUrl={facturaElectronica?.response_json?.response &&
+                    typeof facturaElectronica.response_json.response === 'object'
+                      ? String((facturaElectronica.response_json.response as Record<string, unknown>).qr_url ?? '')
+                      : undefined}
                   detalles={detallesDocumento}
                   subtotal={Number(documento.subtotal)}
                   descuento={Number(documento.descuento_valor)}

@@ -6,6 +6,7 @@ from decimal import Decimal
 
 from django.conf import settings
 
+from apps.facturacion.services.consecutivo_service import resolve_numbering_range
 from apps.facturacion.services.factus_catalog_lookup import (
     get_document_type_id,
     get_municipality_id,
@@ -22,6 +23,7 @@ def _to_float(value: Decimal) -> float:
 
 def build_invoice_payload(venta: Venta) -> dict:
     cliente = venta.cliente
+    rango = resolve_numbering_range(document_code='FACTURA_VENTA')
     items = []
     for detalle in venta.detalles.select_related('producto').all():
         producto = detalle.producto
@@ -41,14 +43,19 @@ def build_invoice_payload(venta: Venta) -> dict:
 
     return {
         'document': '01',
-        'numbering_range_id': settings.FACTUS_NUMBERING_RANGE_FACTURA,
+        'numbering_range_id': int(rango.factus_range_id or settings.FACTUS_NUMBERING_RANGE_FACTURA),
         'reference_code': venta.numero_comprobante,
+        'observation': venta.observaciones or '',
+        'payment_form': '1',
         'payment_method_code': get_payment_method_code(venta.medio_pago),
+        'operation_type': settings.FACTUS_OPERATION_TYPE,
+        'send_email': settings.FACTUS_SEND_EMAIL_DEFAULT,
         'customer': {
             'identification': cliente.numero_documento,
             'names': cliente.nombre,
             'email': cliente.email or 'no-email@example.com',
             'phone': cliente.telefono or '0000000000',
+            'address': cliente.direccion or 'NO REGISTRADA',
             'municipality_id': get_municipality_id(cliente.ciudad or 'SIN_CIUDAD'),
             'identification_document_id': get_document_type_id(cliente.tipo_documento),
             'tribute_id': get_tribute_id('IVA'),
