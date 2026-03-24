@@ -116,6 +116,7 @@ export default function Caja() {
       empresa,
       cufe: facturaLista?.cufe || facturaElectronica?.cufe,
       qrUrl: facturaLista?.qr_url || '',
+      qrImageUrl: facturaLista?.qr_image || '',
       referenceCode: facturaLista?.reference_code || facturaElectronica?.reference_code,
     });
   };
@@ -225,6 +226,7 @@ export default function Caja() {
                   estado={documento.estado_display ?? documento.estado}
                   cufe={facturaLista?.cufe || facturaElectronica?.cufe}
                   qrUrl={facturaLista?.qr_url || ''}
+                  qrImageUrl={facturaLista?.qr_image || ''}
                   referenceCode={facturaLista?.reference_code || facturaElectronica?.reference_code}
                   detalles={detallesDocumento}
                   subtotal={Number(documento.subtotal)}

@@ -34,6 +34,7 @@ type DocumentoTemplateProps = {
   empresa?: ConfiguracionEmpresa | null;
   cufe?: string;
   qrUrl?: string;
+  qrImageUrl?: string;
   referenceCode?: string;
 };
 
@@ -86,6 +87,7 @@ export default function ComprobanteTemplate({
   empresa,
   cufe,
   qrUrl,
+  qrImageUrl,
   referenceCode,
 }: DocumentoTemplateProps) {
   const infoEmpresa = getEmpresaInfo(empresa);
@@ -349,7 +351,11 @@ export default function ComprobanteTemplate({
           <p className="break-all">{cufe}</p>
         </div>
       ) : null}
-      {qrUrl ? (
+      {qrImageUrl ? (
+        <div className="mt-2 text-center">
+          <img src={qrImageUrl} alt="QR factura electrónica" className="mx-auto h-24 w-24 object-contain" />
+        </div>
+      ) : qrUrl ? (
         <div className="mt-2 text-[9px]">
           <p className="font-semibold">Verificación:</p>
           <p className="break-all">{qrUrl}</p>

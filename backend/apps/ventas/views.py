@@ -169,6 +169,8 @@ def _build_pos_ticket_payload(venta, factura):
 
 
 def _build_factura_ready_payload(venta, factura):
+    final_fields = factura.response_json.get('final_fields', {}) if isinstance(factura.response_json, dict) else {}
+    bill_errors = factura.response_json.get('bill_errors', []) if isinstance(factura.response_json, dict) else []
     return {
         'id': factura.id,
         'number': factura.number,
@@ -179,6 +181,11 @@ def _build_factura_ready_payload(venta, factura):
         'cufe': factura.cufe,
         'uuid': factura.uuid,
         'qr_url': factura.qr.url if factura.qr else '',
+        'qr_image': final_fields.get('qr_image', ''),
+        'factus_qr': final_fields.get('qr', ''),
+        'public_url': final_fields.get('public_url', ''),
+        'bill_errors': bill_errors if isinstance(bill_errors, list) else [],
+        'observaciones': factura.mensaje_error or '',
         'reference_code': factura.reference_code,
         'xml_url': factura.xml_url,
         'pdf_url': factura.pdf_url,

@@ -522,6 +522,21 @@ export default function Facturas() {
                             <div>
                               <p className="truncate">CUFE: {factura.electronica.cufe ?? 'N/D'}</p>
                               <p className="truncate">Ref: {factura.electronica.numero}</p>
+                              {factura.electronica.observaciones ? (
+                                <p className="truncate text-amber-700">
+                                  Obs: {factura.electronica.observaciones}
+                                </p>
+                              ) : null}
+                              {factura.electronica.public_url ? (
+                                <a
+                                  href={factura.electronica.public_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="truncate text-blue-600 underline"
+                                >
+                                  Ver en DIAN/Factus
+                                </a>
+                              ) : null}
                             </div>
                           ) : (
                             'Sin emisión FE'
@@ -664,6 +679,10 @@ export default function Facturas() {
                   notas={facturacion?.notas_factura}
                   resolucion={facturacion?.resolucion}
                   empresa={empresa}
+                  cufe={documento.factura.electronica?.cufe}
+                  qrUrl={documento.factura.electronica?.public_url || documento.factura.electronica?.qr_factus}
+                  qrImageUrl={documento.factura.electronica?.qr_image}
+                  referenceCode={documento.factura.electronica?.reference_code}
                 />
               </div>
               <div className="flex items-center justify-end gap-3">
@@ -719,6 +738,12 @@ export default function Facturas() {
                       notas: facturacion?.notas_factura,
                       resolucion: facturacion?.resolucion,
                       empresa,
+                      cufe: documento.factura.electronica?.cufe,
+                      qrUrl:
+                        documento.factura.electronica?.public_url ||
+                        documento.factura.electronica?.qr_factus,
+                      qrImageUrl: documento.factura.electronica?.qr_image,
+                      referenceCode: documento.factura.electronica?.reference_code,
                     });
                   }}
                   className="flex items-center gap-2 rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white"

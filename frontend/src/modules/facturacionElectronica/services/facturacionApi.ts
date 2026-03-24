@@ -3,6 +3,7 @@ import apiClient from '../../../api/client';
 export type EstadoDian = 'ACEPTADA' | 'RECHAZADA' | 'EN_PROCESO' | 'ERROR' | string;
 
 export interface FacturaElectronica {
+  id?: number;
   venta_id?: number;
   numero: string;
   reference_code?: string;
@@ -14,6 +15,12 @@ export interface FacturaElectronica {
   estado?: EstadoDian;
   estado_dian: EstadoDian;
   status?: EstadoDian;
+  codigo_error?: string;
+  observaciones?: string;
+  bill_errors?: string[];
+  public_url?: string;
+  qr_factus?: string;
+  qr_image?: string;
   xml_url?: string;
   pdf_url?: string;
 }
@@ -69,5 +76,8 @@ export const facturacionApi = {
 
 export const resolveEstadoFactura = (data?: EstadoFacturaResponse | FacturaElectronica): EstadoDian => {
   if (!data) return 'ERROR';
+  if ((data as FacturaElectronica).codigo_error === 'OBSERVACIONES_FACTUS') {
+    return 'EMITIDA_CON_OBSERVACIONES';
+  }
   return data.estado ?? data.estado_dian ?? data.status ?? 'ERROR';
 };

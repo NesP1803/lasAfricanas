@@ -104,6 +104,11 @@ export interface FacturaLista {
   cufe: string;
   uuid: string;
   qr_url?: string;
+  qr_image?: string;
+  factus_qr?: string;
+  public_url?: string;
+  bill_errors?: string[];
+  observaciones?: string;
   reference_code: string;
   xml_url: string;
   pdf_url: string;

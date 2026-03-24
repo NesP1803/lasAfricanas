@@ -34,6 +34,7 @@ type PrintComprobanteParams = {
   empresa?: ConfiguracionEmpresa | null;
   cufe?: string;
   qrUrl?: string;
+  qrImageUrl?: string;
   referenceCode?: string;
 };
 
@@ -89,6 +90,7 @@ export const printComprobante = ({
   empresa,
   cufe,
   qrUrl,
+  qrImageUrl,
   referenceCode,
 }: PrintComprobanteParams) => {
   const printWindow = window.open('', '_blank', 'width=860,height=720');
@@ -186,6 +188,8 @@ export const printComprobante = ({
     .totals .total { font-size: 11px; font-weight: 700; }
     .nota { margin-top: 6px; font-size: 9px; color: var(--muted); }
     .qr-placeholder { margin-top: 6px; border: 1px dashed #94a3b8; padding: 6px; text-align: center; font-size: 9px; color: #64748b; }
+    .qr-image { margin-top: 6px; text-align: center; }
+    .qr-image img { width: 96px; height: 96px; object-fit: contain; }
   `
       : `
     body { font-family: Arial, sans-serif; padding: 32px; color: #0f172a; font-size: 12px; }
@@ -285,7 +289,11 @@ export const printComprobante = ({
                   }
                 </div>
                 <div class="line"></div>
-                ${qrUrl ? `<p class="nota">Verificación: ${qrUrl}</p>` : '<div class="qr-placeholder">Espacio reservado para QR DIAN</div>'}
+                ${
+                  qrImageUrl
+                    ? `<div class="qr-image"><img src="${qrImageUrl}" alt="QR factura electrónica" /></div>`
+                    : (qrUrl ? `<p class="nota">Verificación: ${qrUrl}</p>` : '<div class="qr-placeholder">Espacio reservado para QR DIAN</div>')
+                }
                 <p class="nota">${notas || 'Documento generado electrónicamente. Gracias por su compra.'}</p>
               </div>
             `
