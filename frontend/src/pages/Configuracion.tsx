@@ -194,6 +194,7 @@ export default function Configuracion() {
   const [syncingRangos, setSyncingRangos] = useState(false);
   const [savingRango, setSavingRango] = useState(false);
   const [mensajeImpuesto, setMensajeImpuesto] = useState("");
+  const [savingImpuestoId, setSavingImpuestoId] = useState<number | null>(null);
   const [mensajeUsuario, setMensajeUsuario] = useState("");
   const [mensajeNuevoUsuario, setMensajeNuevoUsuario] = useState("");
   const [updatingCajaUserId, setUpdatingCajaUserId] = useState<number | null>(
@@ -580,6 +581,7 @@ export default function Configuracion() {
     try {
       const nuevo = await configuracionAPI.crearImpuesto({
         nombre: nuevoImpuesto.nombre,
+        factus_tribute_id: nuevoImpuesto.factus_tribute_id ?? null,
       });
       setImpuestos((prev) => [...prev, nuevo]);
       setNuevoImpuesto({ nombre: "" });
@@ -615,6 +617,25 @@ export default function Configuracion() {
         message: "No se pudo quitar el impuesto.",
         type: "error",
       });
+    }
+  };
+
+  const handleGuardarHomologacionImpuesto = async (impuesto: Impuesto) => {
+    if (impuesto.id <= 0) return;
+    setSavingImpuestoId(impuesto.id);
+    try {
+      const updated = await configuracionAPI.actualizarImpuesto(impuesto.id, {
+        factus_tribute_id: impuesto.factus_tribute_id ?? null,
+      });
+      setImpuestos((prev) =>
+        prev.map((item) => (item.id === updated.id ? updated : item))
+      );
+      setMensajeImpuesto("Homologación Factus guardada.");
+    } catch (error) {
+      console.error("Error guardando homologación:", error);
+      setMensajeImpuesto("No se pudo guardar la homologación Factus.");
+    } finally {
+      setSavingImpuestoId(null);
     }
   };
 
@@ -1310,14 +1331,24 @@ export default function Configuracion() {
                       </td>
                       <td className="px-4 py-3 text-center whitespace-nowrap">
                         {!esFijo && (
-                          <button
-                            type="button"
-                            onClick={() => handleEliminarImpuesto(impuesto)}
-                            className="inline-flex items-center justify-center rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors"
-                            title="Eliminar impuesto"
-                          >
-                            <Trash2 size={16} />
-                          </button>
+                          <div className="inline-flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleGuardarHomologacionImpuesto(impuesto)}
+                              className="rounded-lg border border-blue-200 px-2 py-1 text-xs text-blue-700 hover:bg-blue-50"
+                              disabled={savingImpuestoId === impuesto.id}
+                            >
+                              Guardar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleEliminarImpuesto(impuesto)}
+                              className="inline-flex items-center justify-center rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                              title="Eliminar impuesto"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
                         )}
                         {esFijo && (
                           <span className="text-xs text-slate-400">Fijo</span>
@@ -1354,6 +1385,21 @@ export default function Configuracion() {
                 />
               </div>
               <div className="flex items-end">
+                <input
+                  type="number"
+                  min={1}
+                  value={nuevoImpuesto.factus_tribute_id ?? ""}
+                  onChange={(event) =>
+                    setNuevoImpuesto((prev) => ({
+                      ...prev,
+                      factus_tribute_id: event.target.value
+                        ? Number(event.target.value)
+                        : null,
+                    }))
+                  }
+                  placeholder="Tributo Factus (ej 18/21)"
+                  className="mr-2 w-52 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
                 <button
                   type="button"
                   onClick={handleAgregarImpuesto}

@@ -44,7 +44,7 @@ class FactusClient:
             'FACTUS_SUPPORT_DOCUMENT_ADJUSTMENT_PATH',
             default='/support-document-adjustment-notes/validate',
         )
-        self.numbering_ranges_path = config('FACTUS_NUMBERING_RANGES_PATH', default='/numbering-ranges')
+        self.numbering_ranges_path = config('FACTUS_NUMBERING_RANGES_PATH', default='/v1/numbering-ranges')
         self.client_id = config('FACTUS_CLIENT_ID', default='')
         self.client_secret = config('FACTUS_CLIENT_SECRET', default='')
         self.username = config('FACTUS_USERNAME', default='')
