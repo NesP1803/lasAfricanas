@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -16,7 +16,6 @@ import Facturas from './pages/Facturas';
 import Remisiones from './pages/Remisiones';
 import Caja from './pages/Caja';
 import { NotificationProvider } from './contexts/NotificationContext';
-import FacturasElectronicasPage from './modules/facturacionElectronica/pages/FacturasElectronicasPage';
 import NotasCreditoPage from './modules/notasCredito/pages/NotasCreditoPage';
 import CrearNotaCreditoPage from './modules/notasCredito/pages/CrearNotaCreditoPage';
 import DocumentosSoportePage from './modules/documentosSoporte/pages/DocumentosSoportePage';
@@ -41,7 +40,7 @@ function App() {
               <Route path="ventas/cuentas-dia" element={<CuentasDia />} />
               <Route path="ventas/detalles-cuentas" element={<DetallesCuentas />} />
               <Route path="facturacion/facturas" element={<Facturas />} />
-              <Route path="facturacion-electronica" element={<FacturasElectronicasPage />} />
+              <Route path="facturacion-electronica" element={<Navigate to="/facturacion/facturas" replace />} />
               <Route path="notas-credito" element={<NotasCreditoPage />} />
               <Route path="notas-credito/crear" element={<CrearNotaCreditoPage />} />
               <Route path="documentos-soporte" element={<DocumentosSoportePage />} />

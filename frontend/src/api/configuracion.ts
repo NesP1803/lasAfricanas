@@ -77,6 +77,42 @@ export const configuracionAPI = {
     );
     return response.data;
   },
+  obtenerRangosFactus: async () => {
+    const response = await apiClient.get<{
+      environment: 'SANDBOX' | 'PRODUCTION';
+      document_code: string;
+      selected_range_id: number | null;
+      ranges: Array<{
+        id: number;
+        factus_range_id: number;
+        environment: 'SANDBOX' | 'PRODUCTION';
+        document_code: string;
+        document_name: string;
+        prefix: string;
+        from_number: number;
+        to_number: number;
+        current: number;
+        resolution_number: string;
+        technical_key: string;
+        is_active_remote: boolean;
+        is_selected_local: boolean;
+      }>;
+    }>('/configuracion/dian/rangos/');
+    return response.data;
+  },
+  sincronizarRangosFactus: async () => {
+    const response = await apiClient.post<{ message: string; count: number }>(
+      '/configuracion/dian/rangos/sync/'
+    );
+    return response.data;
+  },
+  seleccionarRangoFactus: async (rangeId: number) => {
+    const response = await apiClient.post<{ message: string; range_id: number }>(
+      '/configuracion/dian/rangos/select/',
+      { range_id: rangeId }
+    );
+    return response.data;
+  },
   obtenerImpuestos: async () => {
     const response = await apiClient.get<Impuesto[] | PaginatedResponse<Impuesto>>(
       '/impuestos/'
@@ -91,6 +127,10 @@ export const configuracionAPI = {
   },
   crearImpuesto: async (data: Partial<Impuesto>) => {
     const response = await apiClient.post<Impuesto>('/impuestos/', data);
+    return response.data;
+  },
+  actualizarImpuesto: async (id: number, data: Partial<Impuesto>) => {
+    const response = await apiClient.patch<Impuesto>(`/impuestos/${id}/`, data);
     return response.data;
   },
   eliminarImpuesto: async (id: number) => {

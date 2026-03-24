@@ -587,7 +587,8 @@ export default function Ventas() {
         ventaBorrador.id,
         buildVentaPayload(tipoComprobante, ventaBorrador.vendedor)
       );
-      const facturada = await ventasApi.facturarEnCaja(ventaBorrador.id);
+      const respuestaFacturacion = await ventasApi.facturarEnCaja(ventaBorrador.id);
+      const facturada = respuestaFacturacion.venta;
       resetVentaState();
       setDocumentoGenerado({
         tipo: facturada.tipo_comprobante as DocumentoGenerado['tipo'],
@@ -596,7 +597,7 @@ export default function Ventas() {
         total: currencyFormatter.format(Number(facturada.total)),
       });
       setDocumentoPreview(buildDocumentoPreviewFromVenta(facturada));
-      setMensaje('Venta facturada correctamente.');
+      setMensaje(respuestaFacturacion.message || 'Venta facturada correctamente.');
       cargarPendientesCaja();
     } catch (error) {
       const message =
@@ -929,17 +930,33 @@ export default function Ventas() {
         ...buildVentaPayload('FACTURA'),
         facturar_directo: true,
       });
+      const emision = await ventasApi.facturarVentaElectronica(venta.id);
       resetVentaState();
       setDocumentoGenerado({
         tipo: 'FACTURA',
-        numero: venta.numero_comprobante || `FAC-${venta.id}`,
+        numero: emision.numero_factura || venta.numero_comprobante || `FAC-${venta.id}`,
         cliente: clienteNombre,
         total: currencyFormatter.format(totals.totalAplicadoRedondeado),
       });
       setDocumentoPreview(buildDocumentoPreviewFromVenta(venta));
-      setMensaje('Factura generada correctamente.');
+      setMensaje(
+        emision.factus_sent
+          ? `Factura electrónica emitida: ${emision.numero_factura} (${emision.estado_electronico || emision.status})`
+          : 'Factura local generada, pero sin confirmación de envío electrónico.'
+      );
+      showNotification({
+        type: emision.factus_sent ? 'success' : 'error',
+        message: emision.factus_sent
+          ? `Emitida en Factus. CUFE: ${emision.cufe || 'N/D'} Ref: ${emision.reference_code || 'N/D'}`
+          : emision.message || 'No se pudo confirmar emisión electrónica.',
+      });
     } catch (error) {
-      setMensaje('No se pudo facturar. Revisa la conexión.');
+      const message = error instanceof Error ? error.message : 'No se pudo facturar. Revisa la conexión.';
+      setMensaje(message);
+      showNotification({
+        type: 'error',
+        message,
+      });
     } finally {
       setGuardandoBorrador(false);
     }
