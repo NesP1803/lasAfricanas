@@ -94,7 +94,7 @@ class ImpuestoViewSet(viewsets.ModelViewSet):
     def _ensure_default_impuestos(self):
         defaults = [
             {'nombre': 'IVA 0%', 'porcentaje': 0, 'factus_tribute_id': 21},
-            {'nombre': 'IVA 19%', 'porcentaje': 19, 'factus_tribute_id': 18},
+            {'nombre': 'IVA 19%', 'porcentaje': 19, 'factus_tribute_id': 1},
             {'nombre': 'Exento', 'porcentaje': 0, 'factus_tribute_id': 21},
         ]
         for item in defaults:
@@ -106,7 +106,9 @@ class ImpuestoViewSet(viewsets.ModelViewSet):
             if impuesto.porcentaje != item['porcentaje']:
                 impuesto.porcentaje = item['porcentaje']
                 changed = True
-            if not impuesto.factus_tribute_id:
+            if not impuesto.factus_tribute_id or (
+                item['nombre'] == 'IVA 19%' and impuesto.factus_tribute_id != item['factus_tribute_id']
+            ):
                 impuesto.factus_tribute_id = item['factus_tribute_id']
                 changed = True
             if changed:

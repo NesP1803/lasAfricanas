@@ -30,7 +30,7 @@ class ImpuestoSerializer(serializers.ModelSerializer):
     def _resolve_factus_tribute_id(self, nombre: str, porcentaje: Decimal) -> int:
         if self._normalize_nombre(nombre).lower() == 'exento' or Decimal(porcentaje) == Decimal('0'):
             return int(get_tribute_id('ZZ', default=21))
-        return int(get_tribute_id('IVA', default=18))
+        return int(get_tribute_id('01', default=1))
 
     def _normalize_nombre(self, nombre: str) -> str:
         raw = (nombre or '').strip()
