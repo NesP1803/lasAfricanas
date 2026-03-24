@@ -22,6 +22,11 @@ class FactusAuthError(Exception):
 class FactusAPIError(Exception):
     """Error de comunicación o respuesta de la API de Factus."""
 
+    def __init__(self, message: str, *, status_code: int | None = None, provider_detail: str = '') -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.provider_detail = provider_detail
+
 
 class FactusValidationError(Exception):
     """Error de validación de datos para emitir una factura."""
@@ -182,6 +187,30 @@ class FactusClient:
                 response = requests.request(method=method, url=url, headers=headers, timeout=45, **kwargs)
             response.raise_for_status()
             return response.json()
+        except requests.HTTPError as exc:
+            response = exc.response
+            status_code = getattr(response, 'status_code', None)
+            provider_detail = ''
+            if response is not None:
+                try:
+                    parsed = response.json()
+                    provider_detail = str(parsed)
+                except ValueError:
+                    provider_detail = (response.text or '').strip()
+            provider_detail = provider_detail[:500]
+            logger.warning(
+                'Factus rechazó request endpoint=%s method=%s status_code=%s body=%s',
+                path,
+                method,
+                status_code,
+                provider_detail,
+            )
+            detail_suffix = f' Detalle: {provider_detail}' if provider_detail else ''
+            raise FactusAPIError(
+                f'Factus rechazó la factura.{detail_suffix}',
+                status_code=status_code,
+                provider_detail=provider_detail,
+            ) from exc
         except requests.RequestException as exc:
             logger.exception('Error invocando Factus endpoint=%s method=%s', path, method)
             raise FactusAPIError('No fue posible comunicarse con Factus.') from exc

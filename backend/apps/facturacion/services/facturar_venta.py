@@ -92,7 +92,11 @@ def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> Factur
         raise FacturaDuplicadaError(f'Ya existe una factura electrónica con reference_code={reference_code}.')
 
     client = FactusClient()
-    response_json = client.send_invoice(payload)
+    try:
+        response_json = client.send_invoice(payload)
+    except FactusAPIError:
+        logger.warning('facturar_venta.factus_rechazo venta_id=%s numero=%s', venta.id, numero)
+        raise
     logger.info('facturar_venta.factus_response venta_id=%s keys=%s', venta.id, sorted(response_json.keys()))
 
     fields = _extract_factus_data(response_json)
