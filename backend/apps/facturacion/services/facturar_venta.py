@@ -11,6 +11,7 @@ from apps.facturacion.exceptions import FacturaDuplicadaError
 from apps.facturacion.models import FacturaElectronica
 from apps.facturacion.services.consecutivo_service import get_next_invoice_sequence
 from apps.facturacion.services.download_invoice_files import download_pdf, download_xml
+from apps.facturacion.services.exceptions import DescargaFacturaError
 from apps.facturacion.services.factus_client import FactusAPIError, FactusClient, FactusValidationError
 from apps.facturacion.services.factus_payload_builder import build_invoice_payload
 from apps.facturacion.services.generate_qr_dian import generate_qr_dian
@@ -37,17 +38,34 @@ def map_factus_status(response_json: dict[str, Any]) -> str:
 def _extract_factus_data(response_json: dict[str, Any]) -> dict[str, str]:
     data = response_json.get('data', response_json)
     bill = data.get('bill', data)
+    document = bill.get('document', {}) if isinstance(bill.get('document', {}), dict) else {}
+    file_data = bill.get('files', {}) if isinstance(bill.get('files', {}), dict) else {}
     return {
-        'cufe': str(bill.get('cufe', '')).strip(),
-        'uuid': str(bill.get('uuid', '')).strip(),
-        'number': str(bill.get('number', '')).strip(),
-        'xml_url': str(bill.get('xml_url', '')).strip(),
-        'pdf_url': str(bill.get('pdf_url', '')).strip(),
+        'cufe': str(bill.get('cufe') or document.get('cufe') or data.get('cufe', '')).strip(),
+        'uuid': str(bill.get('uuid') or document.get('uuid') or data.get('uuid', '')).strip(),
+        'number': str(bill.get('number') or document.get('number') or data.get('number', '')).strip(),
+        'reference_code': str(
+            bill.get('reference_code') or document.get('reference_code') or data.get('reference_code', '')
+        ).strip(),
+        'xml_url': str(
+            bill.get('xml_url') or file_data.get('xml_url') or document.get('xml_url') or data.get('xml_url', '')
+        ).strip(),
+        'pdf_url': str(
+            bill.get('pdf_url') or file_data.get('pdf_url') or document.get('pdf_url') or data.get('pdf_url', '')
+        ).strip(),
         'qr': str(bill.get('qr', data.get('qr', ''))).strip(),
         'qr_url': str(bill.get('qr_url', data.get('qr_url', ''))).strip(),
         'zip_key': str(bill.get('zip_key', data.get('zip_key', ''))).strip(),
         'status': map_factus_status(response_json),
     }
+
+
+def _merge_factus_fields(base: dict[str, str], extra: dict[str, str]) -> dict[str, str]:
+    merged = dict(base)
+    for key, value in extra.items():
+        if value and not merged.get(key):
+            merged[key] = value
+    return merged
 
 
 def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> FacturaElectronica:
@@ -104,10 +122,54 @@ def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> Factur
     logger.info('facturar_venta.factus_response venta_id=%s keys=%s', venta.id, sorted(response_json.keys()))
 
     fields = _extract_factus_data(response_json)
+    fields['number'] = fields.get('number') or numero
+    fields['reference_code'] = fields.get('reference_code') or reference_code
+
+    missing_before = [field for field in ['cufe', 'uuid', 'xml_url', 'pdf_url'] if not fields.get(field)]
+    response_show_json: dict[str, Any] | None = None
+    response_download_json: dict[str, Any] | None = None
+    if missing_before:
+        logger.info(
+            'facturar_venta.factus_complemento_inicio venta_id=%s numero=%s faltantes=%s',
+            venta.id,
+            fields['number'],
+            missing_before,
+        )
+        response_show_json = client.get_invoice(fields['number'])
+        logger.info(
+            'facturar_venta.factus_show_response venta_id=%s numero=%s keys=%s',
+            venta.id,
+            fields['number'],
+            sorted(response_show_json.keys()),
+        )
+        fields = _merge_factus_fields(fields, _extract_factus_data(response_show_json))
+        missing_after_show = [field for field in ['cufe', 'uuid', 'xml_url', 'pdf_url'] if not fields.get(field)]
+        if missing_after_show:
+            try:
+                response_download_json = client.get_invoice_downloads(fields['number'])
+                logger.info(
+                    'facturar_venta.factus_download_response venta_id=%s numero=%s keys=%s',
+                    venta.id,
+                    fields['number'],
+                    sorted(response_download_json.keys()),
+                )
+                fields = _merge_factus_fields(fields, _extract_factus_data(response_download_json))
+            except FactusAPIError:
+                logger.warning(
+                    'facturar_venta.factus_download_error venta_id=%s numero=%s',
+                    venta.id,
+                    fields['number'],
+                    exc_info=True,
+                )
     required_fields = ['cufe', 'uuid', 'number', 'xml_url', 'pdf_url']
     missing_fields = [field for field in required_fields if not fields[field]]
     if missing_fields:
-        logger.error('Respuesta incompleta Factus venta=%s faltantes=%s', venta.id, missing_fields)
+        logger.error(
+            'facturar_venta.respuesta_incompleta venta_id=%s numero=%s faltantes=%s',
+            venta.id,
+            fields.get('number') or numero,
+            missing_fields,
+        )
         raise FactusAPIError('La respuesta de Factus no contiene todos los datos requeridos.')
 
     with transaction.atomic():
@@ -115,12 +177,15 @@ def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> Factur
             venta=venta,
             defaults={
                 **fields,
-                'reference_code': reference_code,
+                'reference_code': fields.get('reference_code') or reference_code,
                 'codigo_error': response_json.get('error_code'),
                 'mensaje_error': response_json.get('error_message'),
                 'response_json': {
                     'request': payload,
                     'response': response_json,
+                    'response_show': response_show_json,
+                    'response_download': response_download_json,
+                    'final_fields': fields,
                     'venta_id': venta.id,
                     'triggered_by_user_id': triggered_by.id if triggered_by else None,
                 },
@@ -142,7 +207,13 @@ def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> Factur
             factura.qr.save(qr_file.name, qr_file, save=False)
             factura.save(update_fields=['qr', 'updated_at'])
 
-    download_xml(factura)
-    download_pdf(factura)
+    try:
+        download_xml(factura)
+    except DescargaFacturaError:
+        logger.warning('facturar_venta.xml_descarga_error venta_id=%s factura=%s', venta.id, factura.number, exc_info=True)
+    try:
+        download_pdf(factura)
+    except DescargaFacturaError:
+        logger.warning('facturar_venta.pdf_descarga_error venta_id=%s factura=%s', venta.id, factura.number, exc_info=True)
     logger.info('facturar_venta.fin_ok venta_id=%s factura=%s', venta.id, factura.number)
     return factura
