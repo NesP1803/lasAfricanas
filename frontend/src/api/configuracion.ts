@@ -129,6 +129,10 @@ export const configuracionAPI = {
     const response = await apiClient.post<Impuesto>('/impuestos/', data);
     return response.data;
   },
+  actualizarImpuesto: async (id: number, data: Partial<Impuesto>) => {
+    const response = await apiClient.patch<Impuesto>(`/impuestos/${id}/`, data);
+    return response.data;
+  },
   eliminarImpuesto: async (id: number) => {
     await apiClient.delete(`/impuestos/${id}/`);
   },
