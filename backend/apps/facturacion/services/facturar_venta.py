@@ -125,7 +125,7 @@ def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> Factur
     fields['number'] = fields.get('number') or numero
     fields['reference_code'] = fields.get('reference_code') or reference_code
 
-    missing_before = [field for field in ['cufe', 'uuid', 'xml_url', 'pdf_url'] if not fields.get(field)]
+    missing_before = [field for field in ['uuid', 'xml_url', 'pdf_url'] if not fields.get(field)]
     response_show_json: dict[str, Any] | None = None
     response_download_json: dict[str, Any] | None = None
     if missing_before:
@@ -143,7 +143,7 @@ def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> Factur
             sorted(response_show_json.keys()),
         )
         fields = _merge_factus_fields(fields, _extract_factus_data(response_show_json))
-        missing_after_show = [field for field in ['cufe', 'uuid', 'xml_url', 'pdf_url'] if not fields.get(field)]
+        missing_after_show = [field for field in ['uuid', 'xml_url', 'pdf_url'] if not fields.get(field)]
         if missing_after_show:
             try:
                 response_download_json = client.get_invoice_downloads(fields['number'])
@@ -161,7 +161,17 @@ def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> Factur
                     fields['number'],
                     exc_info=True,
                 )
-    required_fields = ['cufe', 'uuid', 'number', 'xml_url', 'pdf_url']
+
+    # Factus puede no devolver uuid/xml/pdf en validate; se completa con show/download
+    # y, como último recurso, se genera URL directa de descarga para no abortar el flujo.
+    if not fields.get('uuid'):
+        fields['uuid'] = fields.get('cufe') or fields.get('reference_code') or fields['number']
+    if not fields.get('xml_url'):
+        fields['xml_url'] = f'{client.base_url}/v1/bills/download-xml/{fields["number"]}'
+    if not fields.get('pdf_url'):
+        fields['pdf_url'] = f'{client.base_url}/v1/bills/download-pdf/{fields["number"]}'
+
+    required_fields = ['cufe', 'number', 'uuid', 'xml_url', 'pdf_url']
     missing_fields = [field for field in required_fields if not fields[field]]
     if missing_fields:
         logger.error(
