@@ -265,3 +265,14 @@ class FactusClient:
                 'Content-Type': 'application/json',
             },
         )
+
+    def get_invoice_downloads(self, number: str) -> dict[str, Any]:
+        """Consulta enlaces de descarga XML/PDF de una factura en Factus."""
+        path = f'/v1/bills/download-pdf/{number}'
+        return self.request(
+            'GET',
+            path,
+            headers={
+                'Content-Type': 'application/json',
+            },
+        )
