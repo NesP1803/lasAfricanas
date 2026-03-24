@@ -68,6 +68,17 @@ def _merge_factus_fields(base: dict[str, str], extra: dict[str, str]) -> dict[st
     return merged
 
 
+PERSISTABLE_FACTURA_FIELDS = {
+    'cufe',
+    'uuid',
+    'number',
+    'reference_code',
+    'xml_url',
+    'pdf_url',
+    'status',
+}
+
+
 def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> FacturaElectronica:
     logger.info('facturar_venta.inicio venta_id=%s user_id=%s', venta_id, getattr(triggered_by, 'id', None))
     venta = Venta.objects.select_related('cliente').prefetch_related('detalles__producto').get(pk=venta_id)
@@ -182,12 +193,14 @@ def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> Factur
         )
         raise FactusAPIError('La respuesta de Factus no contiene todos los datos requeridos.')
 
+    persistable_fields = {k: v for k, v in fields.items() if k in PERSISTABLE_FACTURA_FIELDS}
+
     with transaction.atomic():
         factura, _ = FacturaElectronica.objects.update_or_create(
             venta=venta,
             defaults={
-                **fields,
-                'reference_code': fields.get('reference_code') or reference_code,
+                **persistable_fields,
+                'reference_code': persistable_fields.get('reference_code') or reference_code,
                 'codigo_error': response_json.get('error_code'),
                 'mensaje_error': response_json.get('error_message'),
                 'response_json': {
@@ -196,6 +209,7 @@ def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> Factur
                     'response_show': response_show_json,
                     'response_download': response_download_json,
                     'final_fields': fields,
+                    'persisted_fields': persistable_fields,
                     'venta_id': venta.id,
                     'triggered_by_user_id': triggered_by.id if triggered_by else None,
                 },

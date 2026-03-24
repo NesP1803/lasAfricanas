@@ -585,6 +585,21 @@ class VentaViewSet(viewsets.ModelViewSet):
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        except Exception as exc:
+            logger.exception('ventas.facturar.error_no_controlado venta_id=%s', venta.id)
+            return Response(
+                {
+                    'ok': False,
+                    'message': f'Error interno al facturar: {exc}',
+                    'venta_id': venta.id,
+                    'numero_factura': None,
+                    'estado_local': venta.estado,
+                    'estado_electronico': 'ERROR',
+                    'status': 'ERROR',
+                    'factus_sent': False,
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
         data = {
             'ok': True,
@@ -803,6 +818,21 @@ class CajaViewSet(viewsets.GenericViewSet):
                     'status': 'ERROR',
                 },
                 status=status.HTTP_400_BAD_REQUEST,
+            )
+        except Exception as error:
+            logger.exception('caja.facturar.error_no_controlado venta_id=%s', pk)
+            return Response(
+                {
+                    'ok': False,
+                    'message': f'Error interno al facturar: {error}',
+                    'venta_id': int(pk) if pk else None,
+                    'numero_factura': None,
+                    'estado_local': 'ENVIADA_A_CAJA',
+                    'estado_electronico': 'ERROR',
+                    'status': 'ERROR',
+                    'factus_sent': False,
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
         serializer = VentaDetailSerializer(venta)
