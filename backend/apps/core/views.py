@@ -92,9 +92,25 @@ class ImpuestoViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def _ensure_default_impuestos(self):
-        defaults = ['IVA 0%', 'IVA 19%', 'Exento']
-        for nombre in defaults:
-            Impuesto.objects.get_or_create(nombre=nombre)
+        defaults = [
+            {'nombre': 'IVA 0%', 'porcentaje': 0, 'factus_tribute_id': 21},
+            {'nombre': 'IVA 19%', 'porcentaje': 19, 'factus_tribute_id': 18},
+            {'nombre': 'Exento', 'porcentaje': 0, 'factus_tribute_id': 21},
+        ]
+        for item in defaults:
+            impuesto, _ = Impuesto.objects.get_or_create(
+                nombre=item['nombre'],
+                defaults=item,
+            )
+            changed = False
+            if impuesto.porcentaje != item['porcentaje']:
+                impuesto.porcentaje = item['porcentaje']
+                changed = True
+            if not impuesto.factus_tribute_id:
+                impuesto.factus_tribute_id = item['factus_tribute_id']
+                changed = True
+            if changed:
+                impuesto.save(update_fields=['porcentaje', 'factus_tribute_id', 'updated_at'])
 
     def list(self, request, *args, **kwargs):
         self._ensure_default_impuestos()

@@ -166,6 +166,8 @@ export interface ConfiguracionFacturacion {
 export interface Impuesto {
   id: number;
   nombre: string;
+  porcentaje?: string | number;
+  factus_tribute_id?: number | null;
   is_active?: boolean;
 }
 

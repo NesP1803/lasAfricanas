@@ -114,6 +114,8 @@ class ConfiguracionFacturacion(models.Model):
 
 class Impuesto(BaseModel):
     nombre = models.CharField(max_length=50)
+    porcentaje = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    factus_tribute_id = models.PositiveIntegerField(null=True, blank=True, db_index=True)
 
     class Meta:
         verbose_name = 'Impuesto'

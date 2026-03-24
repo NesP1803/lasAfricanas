@@ -1,4 +1,5 @@
 import re
+from decimal import Decimal
 from rest_framework import serializers
 
 from .models import (
@@ -47,6 +48,21 @@ class ImpuestoSerializer(serializers.ModelSerializer):
 
     def validate_nombre(self, value):
         return self._normalize_nombre(value)
+
+    def _extract_porcentaje(self, nombre: str) -> Decimal:
+        lower = (nombre or '').lower()
+        if 'exento' in lower:
+            return Decimal('0')
+        match = re.search(r'(\d+(?:\.\d+)?)', nombre or '')
+        if not match:
+            return Decimal('0')
+        return Decimal(match.group(1))
+
+    def validate(self, attrs):
+        nombre = attrs.get('nombre')
+        if nombre is not None and 'porcentaje' not in attrs:
+            attrs['porcentaje'] = self._extract_porcentaje(nombre)
+        return attrs
 
     class Meta:
         model = Impuesto
