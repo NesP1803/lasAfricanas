@@ -202,6 +202,12 @@ def _build_factura_ready_payload(venta, factura):
     }
 
 
+def _estado_electronico_ui(factura):
+    if factura.status == 'ACEPTADA' and factura.codigo_error == 'OBSERVACIONES_FACTUS':
+        return 'EMITIDA_CON_OBSERVACIONES'
+    return factura.status
+
+
 def request_user_label(user):
     if not user:
         return ''
@@ -610,7 +616,7 @@ class VentaViewSet(viewsets.ModelViewSet):
             'factura_lista': _build_factura_ready_payload(venta, factura),
             'numero_factura': factura.number,
             'estado_local': venta.estado,
-            'estado_electronico': factura.status,
+            'estado_electronico': _estado_electronico_ui(factura),
             'status': factura.status,
             'cufe': factura.cufe,
             'uuid': factura.uuid,
@@ -853,7 +859,7 @@ class CajaViewSet(viewsets.GenericViewSet):
                 'factura_lista': _build_factura_ready_payload(venta, factura),
                 'numero_factura': factura.number,
                 'estado_local': venta.estado,
-                'estado_electronico': factura.status,
+                'estado_electronico': _estado_electronico_ui(factura),
                 'status': factura.status,
                 'cufe': factura.cufe,
                 'uuid': factura.uuid,

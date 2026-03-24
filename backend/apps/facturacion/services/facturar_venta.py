@@ -26,13 +26,40 @@ def map_factus_status(response_json: dict[str, Any]) -> str:
     data = response_json.get('data', response_json)
     bill = data.get('bill', data)
     status = str(bill.get('status', data.get('status', response_json.get('status', 'error')))).strip().lower()
-    mapping = {
-        'valid': 'ACEPTADA',
-        'rejected': 'RECHAZADA',
-        'pending': 'EN_PROCESO',
-        'error': 'ERROR',
-    }
-    return mapping.get(status, 'ERROR')
+    number = str(bill.get('number') or data.get('number', '')).strip()
+    cufe = str(bill.get('cufe') or data.get('cufe', '')).strip()
+    has_emission_identity = bool(number and cufe)
+    if status == 'rejected':
+        return 'RECHAZADA'
+    if status == 'valid':
+        return 'ACEPTADA'
+    if has_emission_identity:
+        # Factus puede reportar observaciones en bill.errors y aun así la factura existir.
+        return 'ACEPTADA'
+    if status == 'pending':
+        return 'EN_PROCESO'
+    return 'ERROR'
+
+
+def _extract_bill_errors(response_json: dict[str, Any]) -> list[str]:
+    data = response_json.get('data', response_json)
+    bill = data.get('bill', data)
+    errors = bill.get('errors', data.get('errors', []))
+    if isinstance(errors, str):
+        return [errors]
+    if not isinstance(errors, list):
+        return []
+    normalized: list[str] = []
+    for item in errors:
+        if isinstance(item, str) and item.strip():
+            normalized.append(item.strip())
+        elif isinstance(item, dict):
+            code = str(item.get('code', '')).strip()
+            message = str(item.get('message', '')).strip()
+            text = ' - '.join(part for part in [code, message] if part)
+            if text:
+                normalized.append(text)
+    return normalized
 
 
 def _extract_factus_data(response_json: dict[str, Any]) -> dict[str, str]:
@@ -54,7 +81,9 @@ def _extract_factus_data(response_json: dict[str, Any]) -> dict[str, str]:
             bill.get('pdf_url') or file_data.get('pdf_url') or document.get('pdf_url') or data.get('pdf_url', '')
         ).strip(),
         'qr': str(bill.get('qr', data.get('qr', ''))).strip(),
+        'qr_image': str(bill.get('qr_image', data.get('qr_image', ''))).strip(),
         'qr_url': str(bill.get('qr_url', data.get('qr_url', ''))).strip(),
+        'public_url': str(bill.get('public_url', data.get('public_url', ''))).strip(),
         'zip_key': str(bill.get('zip_key', data.get('zip_key', ''))).strip(),
         'status': map_factus_status(response_json),
     }
@@ -135,6 +164,7 @@ def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> Factur
     fields = _extract_factus_data(response_json)
     fields['number'] = fields.get('number') or numero
     fields['reference_code'] = fields.get('reference_code') or reference_code
+    bill_errors = _extract_bill_errors(response_json)
 
     missing_before = [field for field in ['uuid', 'xml_url', 'pdf_url'] if not fields.get(field)]
     response_show_json: dict[str, Any] | None = None
@@ -154,6 +184,8 @@ def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> Factur
             sorted(response_show_json.keys()),
         )
         fields = _merge_factus_fields(fields, _extract_factus_data(response_show_json))
+        if not bill_errors:
+            bill_errors = _extract_bill_errors(response_show_json)
         missing_after_show = [field for field in ['uuid', 'xml_url', 'pdf_url'] if not fields.get(field)]
         if missing_after_show:
             try:
@@ -165,6 +197,8 @@ def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> Factur
                     sorted(response_download_json.keys()),
                 )
                 fields = _merge_factus_fields(fields, _extract_factus_data(response_download_json))
+                if not bill_errors:
+                    bill_errors = _extract_bill_errors(response_download_json)
             except FactusAPIError:
                 logger.warning(
                     'facturar_venta.factus_download_error venta_id=%s numero=%s',
@@ -201,8 +235,16 @@ def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> Factur
             defaults={
                 **persistable_fields,
                 'reference_code': persistable_fields.get('reference_code') or reference_code,
-                'codigo_error': response_json.get('error_code'),
-                'mensaje_error': response_json.get('error_message'),
+                'codigo_error': (
+                    'OBSERVACIONES_FACTUS'
+                    if bill_errors and persistable_fields.get('status') == 'ACEPTADA'
+                    else response_json.get('error_code')
+                ),
+                'mensaje_error': (
+                    '; '.join(bill_errors)
+                    if bill_errors
+                    else response_json.get('error_message')
+                ),
                 'response_json': {
                     'request': payload,
                     'response': response_json,
@@ -210,6 +252,7 @@ def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> Factur
                     'response_download': response_download_json,
                     'final_fields': fields,
                     'persisted_fields': persistable_fields,
+                    'bill_errors': bill_errors,
                     'venta_id': venta.id,
                     'triggered_by_user_id': triggered_by.id if triggered_by else None,
                 },
