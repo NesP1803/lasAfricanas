@@ -20,6 +20,7 @@ from apps.facturacion.models import (
     DocumentoSoporteElectronico,
     FacturaElectronica,
     NotaCreditoElectronica,
+    RangoNumeracionDIAN,
 )
 from apps.facturacion.serializers import (
     ConfiguracionDIANSerializer,
@@ -43,10 +44,22 @@ from apps.facturacion.services import (
     emitir_nota_ajuste_documento_soporte,
     emitir_nota_credito,
     read_local_media_file,
+    sync_numbering_ranges,
     sync_invoice_status,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _is_admin(user) -> bool:
+    return bool(
+        user
+        and (
+            user.is_superuser
+            or user.is_staff
+            or getattr(user, 'tipo_usuario', None) == 'ADMIN'
+        )
+    )
 
 
 def _is_legacy_download_response(request) -> bool:
@@ -72,11 +85,18 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
         )
         data = [
             {
+                'venta_id': factura.venta_id,
                 'numero': factura.number,
+                'reference_code': factura.reference_code,
+                'cufe': factura.cufe,
+                'uuid': factura.uuid,
                 'cliente': factura.venta.cliente.nombre,
                 'fecha': factura.venta.fecha,
                 'total': factura.venta.total,
                 'estado_dian': factura.status,
+                'status': factura.status,
+                'xml_url': factura.xml_url,
+                'pdf_url': factura.pdf_url,
             }
             for factura in facturas
         ]
@@ -331,17 +351,112 @@ class ConfiguracionDIANViewSet(viewsets.GenericViewSet):
         serializer = self.get_serializer(configuracion)
         return Response(serializer.data)
 
+    @action(detail=False, methods=['get'], url_path='rangos')
+    def rangos(self, request):
+        environment = (
+            'PRODUCTION'
+            if str(getattr(settings, 'FACTUS_ENV', 'sandbox')).strip().lower() in {'prod', 'production'}
+            else 'SANDBOX'
+        )
+        rangos = RangoNumeracionDIAN.objects.filter(
+            environment=environment,
+            document_code='FACTURA_VENTA',
+        ).order_by('prefijo', 'factus_range_id')
+        data = [
+            {
+                'id': rango.id,
+                'factus_range_id': rango.factus_range_id,
+                'environment': rango.environment,
+                'document_code': rango.document_code,
+                'document_name': 'Factura de venta',
+                'prefix': rango.prefijo,
+                'from_number': rango.desde,
+                'to_number': rango.hasta,
+                'current': rango.consecutivo_actual,
+                'resolution_number': rango.resolucion,
+                'technical_key': '',
+                'is_active_remote': rango.is_active_remote,
+                'is_selected_local': rango.is_selected_local,
+            }
+            for rango in rangos
+        ]
+        return Response(
+            {
+                'environment': environment,
+                'document_code': 'FACTURA_VENTA',
+                'selected_range_id': next((r['id'] for r in data if r['is_selected_local']), None),
+                'ranges': data,
+            }
+        )
+
+    @action(detail=False, methods=['post'], url_path='rangos/sync')
+    def sync_ranges(self, request):
+        if not _is_admin(request.user):
+            return Response({'detail': 'No autorizado.'}, status=status.HTTP_403_FORBIDDEN)
+        synced = sync_numbering_ranges()
+        return Response({'message': 'Rangos sincronizados correctamente.', 'count': len(synced)})
+
+    @action(detail=False, methods=['post'], url_path='rangos/select')
+    def select_range(self, request):
+        if not _is_admin(request.user):
+            return Response({'detail': 'No autorizado.'}, status=status.HTTP_403_FORBIDDEN)
+
+        rango_id = request.data.get('range_id')
+        if not rango_id:
+            return Response({'detail': 'Debe enviar range_id.'}, status=status.HTTP_400_BAD_REQUEST)
+        environment = (
+            'PRODUCTION'
+            if str(getattr(settings, 'FACTUS_ENV', 'sandbox')).strip().lower() in {'prod', 'production'}
+            else 'SANDBOX'
+        )
+        rango = RangoNumeracionDIAN.objects.filter(
+            id=rango_id,
+            environment=environment,
+            document_code='FACTURA_VENTA',
+        ).first()
+        if rango is None:
+            return Response({'detail': 'El rango no existe para el entorno actual.'}, status=status.HTTP_404_NOT_FOUND)
+
+        RangoNumeracionDIAN.objects.filter(environment=environment, document_code='FACTURA_VENTA').update(
+            is_selected_local=False
+        )
+        rango.is_selected_local = True
+        rango.save(update_fields=['is_selected_local'])
+        return Response({'message': 'Rango activo actualizado correctamente.', 'range_id': rango.id})
+
     def create(self, request):
+        if not _is_admin(request.user):
+            return Response({'detail': 'No autorizado.'}, status=status.HTTP_403_FORBIDDEN)
         configuracion = ConfiguracionDIAN.objects.order_by('-created_at').first()
         if configuracion is None:
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
             serializer.save()
+            rango_id = serializer.validated_data.get('rango_facturacion').id
+            environment = (
+                'PRODUCTION'
+                if str(getattr(settings, 'FACTUS_ENV', 'sandbox')).strip().lower() in {'prod', 'production'}
+                else 'SANDBOX'
+            )
+            RangoNumeracionDIAN.objects.filter(environment=environment, document_code='FACTURA_VENTA').update(
+                is_selected_local=False
+            )
+            RangoNumeracionDIAN.objects.filter(pk=rango_id).update(is_selected_local=True)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
 
         serializer = self.get_serializer(configuracion, data=request.data, partial=False)
         serializer.is_valid(raise_exception=True)
         serializer.save()
+        rango_id = serializer.validated_data.get('rango_facturacion').id
+        environment = (
+            'PRODUCTION'
+            if str(getattr(settings, 'FACTUS_ENV', 'sandbox')).strip().lower() in {'prod', 'production'}
+            else 'SANDBOX'
+        )
+        RangoNumeracionDIAN.objects.filter(environment=environment, document_code='FACTURA_VENTA').update(
+            is_selected_local=False
+        )
+        RangoNumeracionDIAN.objects.filter(pk=rango_id).update(is_selected_local=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 

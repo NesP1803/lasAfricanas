@@ -32,6 +32,8 @@ type PrintComprobanteParams = {
   notas?: string;
   resolucion?: string;
   empresa?: ConfiguracionEmpresa | null;
+  cufe?: string;
+  qrUrl?: string;
 };
 
 const currencyFormatter = new Intl.NumberFormat('es-CO', {
@@ -84,6 +86,8 @@ export const printComprobante = ({
   notas,
   resolucion,
   empresa,
+  cufe,
+  qrUrl,
 }: PrintComprobanteParams) => {
   const printWindow = window.open('', '_blank', 'width=860,height=720');
   if (!printWindow) {
@@ -239,6 +243,7 @@ export const printComprobante = ({
                 <div class="row"><span class="label">Fecha/Hora:</span><span class="value">${fechaFormateada}</span></div>
                 <div class="row"><span class="label">Cliente:</span><span class="value">${clienteNombre}</span></div>
                 <div class="row"><span class="label">NIT/CC:</span><span class="value">${clienteDocumento}</span></div>
+                ${cufe ? `<div class="row"><span class="label">CUFE:</span><span class="value">${cufe}</span></div>` : ''}
                 <div class="line"></div>
                 <div class="detalle-title">
                   <span>Descripción</span>
@@ -276,6 +281,7 @@ export const printComprobante = ({
                   }
                 </div>
                 <div class="line"></div>
+                ${qrUrl ? `<p class="nota">Verificación: ${qrUrl}</p>` : ''}
                 <p class="nota">${notas || 'Gracias por su compra. Vuelva pronto.'}</p>
               </div>
             `
@@ -306,6 +312,7 @@ export const printComprobante = ({
                     <p class="label">Medio pago</p>
                     <p class="section-title">${medioPago || 'N/D'}</p>
                     <p>Estado: ${estado || 'N/D'}</p>
+                    ${cufe ? `<p class="label">CUFE</p><p>${cufe}</p>` : ''}
                   </div>
                 </div>
                 <table class="table">
@@ -378,7 +385,7 @@ export const printComprobante = ({
                     }
                   </div>
                 </div>
-                <div class="nota">${notas || 'Gracias por su compra. Vuelva pronto.'}</div>
+                <div class="nota">${qrUrl ? `Verificación: ${qrUrl}<br/>` : ''}${notas || 'Gracias por su compra. Vuelva pronto.'}</div>
               </div>
             `
         }
