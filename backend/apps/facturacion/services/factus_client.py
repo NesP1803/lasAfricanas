@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import timedelta
+from urllib.parse import urlparse
 from typing import Any
 
 import requests
@@ -218,6 +219,46 @@ class FactusClient:
             logger.exception('JSON inválido de Factus endpoint=%s method=%s', path, method)
             raise FactusAPIError('Factus devolvió una respuesta inválida.') from exc
 
+    def download_resource(self, url_or_path: str) -> tuple[bytes, bool]:
+        """Descarga recurso binario autenticado con token Factus.
+
+        Retorna: (contenido, token_refrescado_por_401)
+        """
+        parsed = urlparse(url_or_path)
+        path = f'{parsed.path}?{parsed.query}' if parsed.query else parsed.path
+        if parsed.scheme and parsed.netloc:
+            url = url_or_path
+        else:
+            url = f'{self.base_url}{path}'
+
+        token = self.get_valid_token()
+        headers = {
+            'Authorization': f'Bearer {token}',
+            'Accept': '*/*',
+        }
+        refreshed = False
+        try:
+            response = requests.get(url, headers=headers, timeout=45)
+            if response.status_code == 401:
+                refreshed = True
+                token = self.authenticate().access_token
+                headers['Authorization'] = f'Bearer {token}'
+                response = requests.get(url, headers=headers, timeout=45)
+            response.raise_for_status()
+            return response.content, refreshed
+        except requests.HTTPError as exc:
+            status_code = getattr(exc.response, 'status_code', None)
+            body = (exc.response.text or '')[:500] if exc.response is not None else ''
+            logger.warning('Factus rechazó descarga endpoint=%s status=%s body=%s', path, status_code, body)
+            raise FactusAPIError(
+                'Factus rechazó la descarga.',
+                status_code=status_code,
+                provider_detail=body,
+            ) from exc
+        except requests.RequestException as exc:
+            logger.exception('Error descargando recurso Factus endpoint=%s', path)
+            raise FactusAPIError('No fue posible descargar el recurso en Factus.') from exc
+
     def send_invoice(self, payload: dict[str, Any]) -> dict[str, Any]:
         if not payload.get('items'):
             raise FactusValidationError('La factura no contiene ítems para enviar a Factus.')
@@ -258,6 +299,17 @@ class FactusClient:
     def get_invoice(self, number: str) -> dict[str, Any]:
         """Consulta una factura electrónica existente en Factus por número."""
         path = f'/v1/bills/show/{number}'
+        return self.request(
+            'GET',
+            path,
+            headers={
+                'Content-Type': 'application/json',
+            },
+        )
+
+    def get_invoice_downloads(self, number: str) -> dict[str, Any]:
+        """Consulta enlaces de descarga XML/PDF de una factura en Factus."""
+        path = f'/v1/bills/download-pdf/{number}'
         return self.request(
             'GET',
             path,
