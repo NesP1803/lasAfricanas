@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import date
 from typing import Any
 
@@ -9,6 +10,8 @@ from django.conf import settings
 
 from apps.facturacion.models import RangoNumeracionDIAN
 from apps.facturacion.services.factus_client import FactusClient
+
+logger = logging.getLogger(__name__)
 
 
 def _as_date(value: Any) -> date | None:
@@ -28,9 +31,23 @@ def sync_numbering_ranges() -> list[RangoNumeracionDIAN]:
         else 'SANDBOX'
     )
     payload = FactusClient().get_numbering_ranges()
-    ranges = payload.get('data', payload)
-    if isinstance(ranges, dict):
-        ranges = ranges.get('numbering_ranges', [])
+    ranges: list[dict[str, Any]] = []
+    if isinstance(payload, list):
+        ranges = payload
+    elif isinstance(payload, dict):
+        data = payload.get('data', payload)
+        if isinstance(data, list):
+            ranges = data
+        elif isinstance(data, dict):
+            nested = data.get('data')
+            if isinstance(nested, list):
+                ranges = nested
+            elif isinstance(nested, dict):
+                ranges = nested.get('numbering_ranges', [])
+            else:
+                ranges = data.get('numbering_ranges', [])
+        else:
+            ranges = []
 
     synced: list[RangoNumeracionDIAN] = []
     synced_ids: list[int] = []
@@ -71,5 +88,12 @@ def sync_numbering_ranges() -> list[RangoNumeracionDIAN]:
         environment=environment,
         document_code='FACTURA_VENTA',
     ).exclude(factus_range_id__in=synced_ids).update(is_active_remote=False)
+
+    logger.info(
+        'Sincronización Factus rangos: recibidos=%s persistidos=%s entorno=%s',
+        len(ranges),
+        len(synced),
+        environment,
+    )
 
     return synced
