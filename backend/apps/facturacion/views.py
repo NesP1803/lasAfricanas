@@ -20,6 +20,7 @@ from apps.facturacion.models import (
     DocumentoSoporteElectronico,
     FacturaElectronica,
     NotaCreditoElectronica,
+    RangoNumeracionDIAN,
 )
 from apps.facturacion.serializers import (
     ConfiguracionDIANSerializer,
@@ -344,11 +345,31 @@ class ConfiguracionDIANViewSet(viewsets.GenericViewSet):
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
             serializer.save()
+            rango_id = serializer.validated_data.get('rango_facturacion').id
+            environment = (
+                'PRODUCTION'
+                if str(getattr(settings, 'FACTUS_ENV', 'sandbox')).strip().lower() in {'prod', 'production'}
+                else 'SANDBOX'
+            )
+            RangoNumeracionDIAN.objects.filter(environment=environment, document_code='FACTURA_VENTA').update(
+                is_selected_local=False
+            )
+            RangoNumeracionDIAN.objects.filter(pk=rango_id).update(is_selected_local=True)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
 
         serializer = self.get_serializer(configuracion, data=request.data, partial=False)
         serializer.is_valid(raise_exception=True)
         serializer.save()
+        rango_id = serializer.validated_data.get('rango_facturacion').id
+        environment = (
+            'PRODUCTION'
+            if str(getattr(settings, 'FACTUS_ENV', 'sandbox')).strip().lower() in {'prod', 'production'}
+            else 'SANDBOX'
+        )
+        RangoNumeracionDIAN.objects.filter(environment=environment, document_code='FACTURA_VENTA').update(
+            is_selected_local=False
+        )
+        RangoNumeracionDIAN.objects.filter(pk=rango_id).update(is_selected_local=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 

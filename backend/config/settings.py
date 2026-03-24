@@ -195,6 +195,7 @@ SIMPLE_JWT = {
 AUTH_USER_MODEL = 'usuarios.Usuario'
 
 # Facturación electrónica (Factus)
+FACTUS_ENV = config('FACTUS_ENV', default='sandbox')
 FACTUS_NUMBERING_RANGE_FACTURA = config('FACTUS_NUMBERING_RANGE_FACTURA', default=1, cast=int)
 FACTUS_SEND_EMAIL_DEFAULT = config('FACTUS_SEND_EMAIL_DEFAULT', default=False, cast=bool)
 FACTUS_OPERATION_TYPE = config('FACTUS_OPERATION_TYPE', default=10, cast=int)

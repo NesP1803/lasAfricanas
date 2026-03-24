@@ -9,7 +9,7 @@ from django.db import transaction
 
 from apps.facturacion.exceptions import FacturaDuplicadaError
 from apps.facturacion.models import FacturaElectronica
-from apps.facturacion.services.consecutivo_service import get_next_invoice_number
+from apps.facturacion.services.consecutivo_service import get_next_invoice_sequence
 from apps.facturacion.services.download_invoice_files import download_pdf, download_xml
 from apps.facturacion.services.factus_client import FactusAPIError, FactusClient, FactusValidationError
 from apps.facturacion.services.factus_payload_builder import build_invoice_payload
@@ -76,9 +76,15 @@ def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> Factur
         payload.get('numbering_range_id'),
         payload.get('send_email'),
     )
-    numero = get_next_invoice_number()
+    sequence = get_next_invoice_sequence()
+    if not sequence.numbering_range_id:
+        raise FactusValidationError(
+            'Debe sincronizar/configurar el rango antes de facturar. Falta factus_range_id del rango seleccionado.'
+        )
+    numero = sequence.number
     venta.numero_comprobante = numero
     venta.save(update_fields=['numero_comprobante', 'updated_at'])
+    payload['numbering_range_id'] = sequence.numbering_range_id
     payload['number'] = numero
     payload['reference_code'] = numero
     reference_code = numero

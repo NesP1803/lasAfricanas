@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import tempfile
+import os
 from decimal import Decimal
 from pathlib import Path
 from io import StringIO
@@ -15,9 +16,12 @@ from rest_framework.test import APIClient
 
 from apps.facturacion.models import DocumentoSoporteElectronico, FacturaElectronica, NotaCreditoElectronica
 from apps.facturacion.services.download_invoice_files import download_pdf, download_xml
+from apps.facturacion.services.consecutivo_service import resolve_numbering_range
 from apps.facturacion.services.support_document_payload_builder import build_support_document_payload
 from apps.facturacion.services.exceptions import DescargaFacturaError
+from apps.facturacion.services.factus_client import FactusValidationError
 from apps.ventas.models import Cliente, Venta
+from apps.facturacion.models import RangoNumeracionDIAN
 
 
 class FacturaDownloadFilesTests(TestCase):
@@ -407,6 +411,52 @@ class NotasCreditoResourceEndpointsTests(TestCase):
         self.assertEqual(response['Content-Type'], 'application/pdf')
         self.assertEqual(response.content, b'%PDF-nc')
         mocked_download.assert_called_once()
+
+
+class NumberingRangeResolutionTests(TestCase):
+    def setUp(self):
+        os.environ['FACTUS_ENV'] = 'sandbox'
+
+    def test_fallback_cuando_hay_un_solo_rango_activo(self):
+        rango = RangoNumeracionDIAN.objects.create(
+            factus_range_id=8,
+            environment='SANDBOX',
+            document_code='FACTURA_VENTA',
+            is_active_remote=True,
+            is_selected_local=False,
+            prefijo='SETP',
+            desde=1,
+            hasta=999999,
+            resolucion='18760000001',
+            consecutivo_actual=1,
+            activo=True,
+        )
+        resolved = resolve_numbering_range(document_code='FACTURA_VENTA')
+        self.assertEqual(resolved.id, rango.id)
+
+    def test_error_cuando_hay_varios_activos_sin_seleccion(self):
+        for idx in [8, 9]:
+            RangoNumeracionDIAN.objects.create(
+                factus_range_id=idx,
+                environment='SANDBOX',
+                document_code='FACTURA_VENTA',
+                is_active_remote=True,
+                is_selected_local=False,
+                prefijo=f'SETP{idx}',
+                desde=1,
+                hasta=999999,
+                resolucion='18760000001',
+                consecutivo_actual=1,
+                activo=True,
+            )
+        with self.assertRaises(FactusValidationError) as exc:
+            resolve_numbering_range(document_code='FACTURA_VENTA')
+        self.assertIn('múltiples rangos activos', str(exc.exception))
+
+    def test_error_cuando_no_hay_rangos_sincronizados(self):
+        with self.assertRaises(FactusValidationError) as exc:
+            resolve_numbering_range(document_code='FACTURA_VENTA')
+        self.assertIn('No hay rangos sincronizados', str(exc.exception))
 
 
 class DocumentosSoporteResourceEndpointsTests(TestCase):
