@@ -219,34 +219,51 @@ class VentaCreateSerializer(serializers.ModelSerializer):
     def _q(value):
         return Decimal(value).quantize(Decimal('0.01'))
 
+    @staticmethod
+    def _detalle_es_exento(detalle, iva_porcentaje):
+        producto = detalle.get('producto')
+        if producto is not None and getattr(producto, 'iva_exento', False):
+            return True
+        return iva_porcentaje <= Decimal('0')
+
     def _calcular_detalle(self, detalle):
         cantidad = self._to_decimal(detalle.get('cantidad'))
         precio_unitario = self._to_decimal(detalle.get('precio_unitario'))
         descuento_unitario = self._to_decimal(detalle.get('descuento_unitario', 0))
         iva_porcentaje = self._to_decimal(detalle.get('iva_porcentaje', 0))
 
-        subtotal_bruto = cantidad * precio_unitario
-        descuento_linea = min(subtotal_bruto, cantidad * max(descuento_unitario, Decimal('0')))
-        subtotal_neto = subtotal_bruto - descuento_linea
-        iva_linea = (subtotal_neto * iva_porcentaje) / Decimal('100')
-        total_linea = subtotal_neto + iva_linea
+        total_bruto_linea = cantidad * precio_unitario
+        descuento_linea = min(total_bruto_linea, cantidad * max(descuento_unitario, Decimal('0')))
+        total_neto_linea = total_bruto_linea - descuento_linea
+        total_neto_linea_q = self._q(total_neto_linea)
 
-        detalle['subtotal'] = self._q(subtotal_neto)
-        detalle['total'] = self._q(total_linea)
+        if self._detalle_es_exento(detalle, iva_porcentaje):
+            base_linea_q = total_neto_linea_q
+            iva_linea_q = Decimal('0.00')
+        else:
+            divisor_iva = Decimal('1') + (iva_porcentaje / Decimal('100'))
+            base_linea_q = self._q(total_neto_linea_q / divisor_iva)
+            iva_linea_q = self._q(total_neto_linea_q - base_linea_q)
+
+        detalle['subtotal'] = base_linea_q
+        detalle['total'] = total_neto_linea_q
 
         return {
-            'subtotal_neto': self._q(subtotal_neto),
-            'iva_linea': self._q(iva_linea),
+            'base_linea': base_linea_q,
+            'iva_linea': iva_linea_q,
+            'total_linea': total_neto_linea_q,
         }
 
     def _recalcular_totales(self, validated_data, detalles_data):
         subtotal = Decimal('0.00')
         iva = Decimal('0.00')
+        total_detalles = Decimal('0.00')
 
         for detalle in detalles_data:
             calculo = self._calcular_detalle(detalle)
-            subtotal += calculo['subtotal_neto']
+            subtotal += calculo['base_linea']
             iva += calculo['iva_linea']
+            total_detalles += calculo['total_linea']
 
         descuento_porcentaje = self._to_decimal(validated_data.get('descuento_porcentaje', 0))
         descuento_valor = self._to_decimal(validated_data.get('descuento_valor', 0))
@@ -254,11 +271,11 @@ class VentaCreateSerializer(serializers.ModelSerializer):
         if descuento_porcentaje < 0 or descuento_valor < 0:
             raise serializers.ValidationError({'descuento_valor': 'El descuento no puede ser negativo.'})
 
-        descuento_porcentaje_valor = (subtotal * descuento_porcentaje) / Decimal('100')
+        descuento_porcentaje_valor = (total_detalles * descuento_porcentaje) / Decimal('100')
         descuento_total = descuento_valor if descuento_valor > 0 else descuento_porcentaje_valor
-        descuento_total = min(descuento_total, subtotal)
+        descuento_total = min(descuento_total, total_detalles)
 
-        total = subtotal + iva - descuento_total
+        total = total_detalles - descuento_total
 
         validated_data['subtotal'] = self._q(subtotal)
         validated_data['iva'] = self._q(iva)

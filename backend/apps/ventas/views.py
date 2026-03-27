@@ -61,10 +61,14 @@ def _validar_detalles_venta(venta):
         total_esperado = Decimal('0.00')
 
     normalized_subtotal = Decimal(subtotal).quantize(Decimal('0.01'))
+    normalized_iva = Decimal(total_detalles - subtotal).quantize(Decimal('0.01'))
     normalized_total = Decimal(total_esperado).quantize(Decimal('0.01'))
 
     if normalized_subtotal != Decimal(venta.subtotal).quantize(Decimal('0.01')):
         raise ValidationError('El subtotal no coincide con los detalles.')
+
+    if normalized_iva != Decimal(venta.iva).quantize(Decimal('0.01')):
+        raise ValidationError('El IVA no coincide con los detalles.')
 
     if normalized_total != Decimal(venta.total).quantize(Decimal('0.01')):
         raise ValidationError('El total no coincide con los detalles.')

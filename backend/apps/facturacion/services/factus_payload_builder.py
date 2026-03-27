@@ -24,6 +24,12 @@ def _to_float(value: Decimal) -> float:
     return float(value or Decimal('0'))
 
 
+def _to_decimal(value, default: str = '0') -> Decimal:
+    if value is None:
+        return Decimal(default)
+    return Decimal(str(value))
+
+
 def _resolve_customer_tribute_id(tipo_documento: str) -> int:
     """Resuelve tribute_id de cliente según catálogo/homologación disponible."""
     doc = str(tipo_documento or '').strip().upper()
@@ -62,6 +68,24 @@ def _resolve_item_tribute_id(iva_porcentaje: Decimal) -> int:
     return int(impuesto.factus_tribute_id)
 
 
+def _resolve_excluded_item_tribute_id() -> int:
+    return int(get_tribute_id('NO_CAUSA', default=1))
+
+
+def _is_excluded_item(detalle) -> bool:
+    producto = detalle.producto
+    iva_porcentaje = _to_decimal(detalle.iva_porcentaje)
+    return bool(getattr(producto, 'iva_exento', False) or iva_porcentaje <= Decimal('0'))
+
+
+def _resolve_item_base_unit_price(detalle) -> Decimal:
+    cantidad = _to_decimal(detalle.cantidad)
+    if cantidad <= Decimal('0'):
+        raise FactusValidationError('La cantidad del item debe ser mayor a cero para facturación electrónica.')
+    subtotal_base = _to_decimal(detalle.subtotal)
+    return subtotal_base / cantidad
+
+
 def build_invoice_payload(venta: Venta) -> dict:
     cliente = venta.cliente
     rango = resolve_numbering_range(document_code='FACTURA_VENTA')
@@ -69,18 +93,25 @@ def build_invoice_payload(venta: Venta) -> dict:
     items = []
     for detalle in venta.detalles.select_related('producto').all():
         producto = detalle.producto
+        is_excluded = _is_excluded_item(detalle)
+        tax_rate = Decimal('0.00') if is_excluded else _to_decimal(detalle.iva_porcentaje)
+        tribute_id = (
+            _resolve_excluded_item_tribute_id()
+            if is_excluded
+            else _resolve_item_tribute_id(tax_rate)
+        )
         items.append(
             {
                 'code_reference': producto.codigo,
                 'name': producto.nombre,
                 'quantity': _to_float(detalle.cantidad),
-                'price': _to_float(detalle.precio_unitario),
-                'tax_rate': _to_float(detalle.iva_porcentaje),
+                'price': _to_float(_resolve_item_base_unit_price(detalle)),
+                'tax_rate': _to_float(tax_rate),
                 'unit_measure_id': get_unit_measure_id(producto.unidad_medida),
                 'standard_code_id': 1,
-                'tribute_id': _resolve_item_tribute_id(detalle.iva_porcentaje),
+                'tribute_id': tribute_id,
                 'discount_rate': 0,
-                'is_excluded': 1 if _to_float(detalle.iva_porcentaje) == 0 else 0,
+                'is_excluded': 1 if is_excluded else 0,
             }
         )
 
