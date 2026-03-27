@@ -556,3 +556,190 @@ class CajaVentaFlowTests(TestCase):
         self.assertIsNone(venta.facturada_at)
         self.assertIsNone(venta.facturada_por)
         self.assertEqual(self.producto.stock, Decimal('1'))
+
+
+class VentaIVAIncluidoTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.vendedor = Usuario.objects.create_user(
+            username='vendedor_iva',
+            password='pass1234',
+            tipo_usuario='VENDEDOR',
+        )
+        self.client.force_authenticate(user=self.vendedor)
+
+        self.categoria = Categoria.objects.create(nombre='IVA incluido')
+        self.proveedor = Proveedor.objects.create(nombre='Proveedor IVA')
+        self.producto_gravado = Producto.objects.create(
+            codigo='IVA-001',
+            nombre='Producto gravado',
+            categoria=self.categoria,
+            proveedor=self.proveedor,
+            precio_costo=Decimal('1000.00'),
+            precio_venta=Decimal('3000.00'),
+            precio_venta_minimo=Decimal('2500.00'),
+            stock=Decimal('50.00'),
+            stock_minimo=Decimal('1.00'),
+            iva_porcentaje=Decimal('19.00'),
+            iva_exento=False,
+        )
+        self.producto_exento = Producto.objects.create(
+            codigo='IVA-EX-001',
+            nombre='Producto exento',
+            categoria=self.categoria,
+            proveedor=self.proveedor,
+            precio_costo=Decimal('1000.00'),
+            precio_venta=Decimal('3000.00'),
+            precio_venta_minimo=Decimal('2500.00'),
+            stock=Decimal('50.00'),
+            stock_minimo=Decimal('1.00'),
+            iva_porcentaje=Decimal('0.00'),
+            iva_exento=True,
+        )
+        self.cliente = Cliente.objects.create(
+            tipo_documento='CC',
+            numero_documento='900001',
+            nombre='Cliente IVA',
+        )
+
+    def _payload_base(self, detalles):
+        return {
+            'tipo_comprobante': 'FACTURA',
+            'cliente': self.cliente.id,
+            'vendedor': self.vendedor.id,
+            'subtotal': '0.00',
+            'descuento_porcentaje': '0',
+            'descuento_valor': '0',
+            'iva': '0.00',
+            'total': '0.00',
+            'medio_pago': 'EFECTIVO',
+            'efectivo_recibido': '10000.00',
+            'cambio': '0',
+            'detalles': detalles,
+        }
+
+    def test_creacion_venta_iva_incluido(self):
+        payload = self._payload_base([
+            {
+                'producto': self.producto_gravado.id,
+                'cantidad': '1',
+                'precio_unitario': '3000.00',
+                'descuento_unitario': '0.00',
+                'iva_porcentaje': '19.00',
+            }
+        ])
+        response = self.client.post('/api/ventas/', payload, format='json')
+        self.assertEqual(response.status_code, 201, response.data)
+
+        venta = Venta.objects.get(id=response.data['id'])
+        detalle = venta.detalles.get()
+
+        self.assertEqual(detalle.total, Decimal('3000.00'))
+        self.assertEqual(detalle.subtotal, Decimal('2521.01'))
+        self.assertEqual(venta.subtotal, Decimal('2521.01'))
+        self.assertEqual(venta.iva, Decimal('478.99'))
+        self.assertEqual(venta.total, Decimal('3000.00'))
+
+    def test_actualizacion_venta_iva_incluido(self):
+        create_payload = self._payload_base([
+            {
+                'producto': self.producto_gravado.id,
+                'cantidad': '1',
+                'precio_unitario': '3000.00',
+                'descuento_unitario': '0.00',
+                'iva_porcentaje': '19.00',
+            }
+        ])
+        create_response = self.client.post('/api/ventas/', create_payload, format='json')
+        self.assertEqual(create_response.status_code, 201, create_response.data)
+
+        update_payload = {
+            'detalles': [
+                {
+                    'producto': self.producto_gravado.id,
+                    'cantidad': '2',
+                    'precio_unitario': '3000.00',
+                    'descuento_unitario': '0.00',
+                    'iva_porcentaje': '19.00',
+                }
+            ]
+        }
+        response = self.client.patch(
+            f"/api/ventas/{create_response.data['id']}/",
+            update_payload,
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+
+        venta = Venta.objects.get(id=create_response.data['id'])
+        detalle = venta.detalles.get()
+        self.assertEqual(detalle.total, Decimal('6000.00'))
+        self.assertEqual(detalle.subtotal, Decimal('5042.02'))
+        self.assertEqual(venta.subtotal, Decimal('5042.02'))
+        self.assertEqual(venta.iva, Decimal('957.98'))
+        self.assertEqual(venta.total, Decimal('6000.00'))
+
+    def test_descuento_por_linea_iva_incluido(self):
+        payload = self._payload_base([
+            {
+                'producto': self.producto_gravado.id,
+                'cantidad': '2',
+                'precio_unitario': '3000.00',
+                'descuento_unitario': '500.00',
+                'iva_porcentaje': '19.00',
+            }
+        ])
+        response = self.client.post('/api/ventas/', payload, format='json')
+        self.assertEqual(response.status_code, 201, response.data)
+
+        venta = Venta.objects.get(id=response.data['id'])
+        detalle = venta.detalles.get()
+
+        self.assertEqual(detalle.total, Decimal('5000.00'))
+        self.assertEqual(detalle.subtotal, Decimal('4201.68'))
+        self.assertEqual(venta.subtotal, Decimal('4201.68'))
+        self.assertEqual(venta.iva, Decimal('798.32'))
+        self.assertEqual(venta.total, Decimal('5000.00'))
+
+    def test_producto_exento(self):
+        payload = self._payload_base([
+            {
+                'producto': self.producto_exento.id,
+                'cantidad': '1',
+                'precio_unitario': '3000.00',
+                'descuento_unitario': '0.00',
+                'iva_porcentaje': '0.00',
+            }
+        ])
+        response = self.client.post('/api/ventas/', payload, format='json')
+        self.assertEqual(response.status_code, 201, response.data)
+
+        venta = Venta.objects.get(id=response.data['id'])
+        detalle = venta.detalles.get()
+
+        self.assertEqual(detalle.total, Decimal('3000.00'))
+        self.assertEqual(detalle.subtotal, Decimal('3000.00'))
+        self.assertEqual(venta.subtotal, Decimal('3000.00'))
+        self.assertEqual(venta.iva, Decimal('0.00'))
+        self.assertEqual(venta.total, Decimal('3000.00'))
+
+    def test_borrador_enviar_a_caja_consistente(self):
+        payload = self._payload_base([
+            {
+                'producto': self.producto_gravado.id,
+                'cantidad': '1',
+                'precio_unitario': '3000.00',
+                'descuento_unitario': '0.00',
+                'iva_porcentaje': '19.00',
+            }
+        ])
+        create_response = self.client.post('/api/ventas/', payload, format='json')
+        self.assertEqual(create_response.status_code, 201, create_response.data)
+
+        venta_id = create_response.data['id']
+        response = self.client.post(f'/api/ventas/{venta_id}/enviar-a-caja/')
+        self.assertEqual(response.status_code, 200, response.data)
+
+        venta = Venta.objects.get(id=venta_id)
+        self.assertEqual(venta.estado, 'ENVIADA_A_CAJA')
+        self.assertEqual(venta.subtotal + venta.iva - venta.descuento_valor, venta.total)
