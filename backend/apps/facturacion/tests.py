@@ -17,10 +17,13 @@ from rest_framework.test import APIClient
 from apps.facturacion.models import DocumentoSoporteElectronico, FacturaElectronica, NotaCreditoElectronica
 from apps.facturacion.services.download_invoice_files import download_pdf, download_xml
 from apps.facturacion.services.consecutivo_service import resolve_numbering_range
+from apps.facturacion.services.factus_payload_builder import build_invoice_payload
 from apps.facturacion.services.support_document_payload_builder import build_support_document_payload
 from apps.facturacion.services.exceptions import DescargaFacturaError
 from apps.facturacion.services.factus_client import FactusValidationError
-from apps.ventas.models import Cliente, Venta
+from apps.core.models import Impuesto
+from apps.inventario.models import Categoria, Producto, Proveedor
+from apps.ventas.models import Cliente, DetalleVenta, Venta
 from apps.facturacion.models import RangoNumeracionDIAN
 
 
@@ -607,3 +610,148 @@ class FacturaEstadoContratoTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['estado'], 'ACEPTADA')
         self.assertEqual(response.data['estado_dian'], 'ACEPTADA')
+
+
+class FactusInvoicePayloadIVAIncluidoTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(username='payload-iva', password='1234')
+        self.cliente = Cliente.objects.create(
+            numero_documento='123456789',
+            nombre='Cliente Payload',
+            tipo_documento='CC',
+        )
+        self.categoria = Categoria.objects.create(nombre='Factus Payload')
+        self.proveedor = Proveedor.objects.create(nombre='Proveedor Payload')
+        self.producto_gravado = Producto.objects.create(
+            codigo='FP-001',
+            nombre='Producto gravado',
+            categoria=self.categoria,
+            proveedor=self.proveedor,
+            precio_costo=Decimal('1000.00'),
+            precio_venta=Decimal('3000.00'),
+            precio_venta_minimo=Decimal('2500.00'),
+            stock=Decimal('20.00'),
+            stock_minimo=Decimal('1.00'),
+            iva_porcentaje=Decimal('19.00'),
+            iva_exento=False,
+        )
+        self.producto_exento = Producto.objects.create(
+            codigo='FP-EX-001',
+            nombre='Producto exento',
+            categoria=self.categoria,
+            proveedor=self.proveedor,
+            precio_costo=Decimal('1000.00'),
+            precio_venta=Decimal('3000.00'),
+            precio_venta_minimo=Decimal('2500.00'),
+            stock=Decimal('20.00'),
+            stock_minimo=Decimal('1.00'),
+            iva_porcentaje=Decimal('19.00'),
+            iva_exento=True,
+        )
+        Impuesto.objects.create(
+            nombre='IVA 19',
+            porcentaje=Decimal('19.00'),
+            factus_tribute_id=1,
+            is_active=True,
+        )
+
+    @patch('apps.facturacion.services.factus_payload_builder.get_tribute_id', return_value=1)
+    @patch('apps.facturacion.services.factus_payload_builder.get_document_type_id', return_value=3)
+    @patch('apps.facturacion.services.factus_payload_builder.get_municipality_id', return_value=149)
+    @patch('apps.facturacion.services.factus_payload_builder.get_payment_method_code', return_value='10')
+    @patch('apps.facturacion.services.factus_payload_builder.get_unit_measure_id', return_value=70)
+    @patch('apps.facturacion.services.factus_payload_builder.resolve_numbering_range')
+    def test_payload_gravado_no_duplica_iva_con_precio_final(
+        self,
+        mocked_range,
+        _mocked_um,
+        _mocked_payment,
+        _mocked_municipality,
+        _mocked_doc_type,
+        _mocked_tribute,
+    ):
+        mocked_range.return_value = MagicMock(factus_range_id=99)
+        venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            numero_comprobante='FAC-900001',
+            cliente=self.cliente,
+            vendedor=self.user,
+            subtotal=Decimal('2521.01'),
+            descuento_porcentaje=Decimal('0.00'),
+            descuento_valor=Decimal('0.00'),
+            iva=Decimal('478.99'),
+            total=Decimal('3000.00'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('3000.00'),
+            cambio=Decimal('0.00'),
+            estado='FACTURADA',
+        )
+        DetalleVenta.objects.create(
+            venta=venta,
+            producto=self.producto_gravado,
+            cantidad=Decimal('1.00'),
+            precio_unitario=Decimal('3000.00'),
+            descuento_unitario=Decimal('0.00'),
+            iva_porcentaje=Decimal('19.00'),
+            subtotal=Decimal('2521.01'),
+            total=Decimal('3000.00'),
+        )
+
+        payload = build_invoice_payload(venta)
+        item = payload['items'][0]
+        self.assertEqual(item['price'], 2521.01)
+        self.assertEqual(item['tax_rate'], 19.0)
+        self.assertEqual(item['is_excluded'], 0)
+        self.assertEqual(item['quantity'], 1.0)
+        self.assertEqual(round(item['price'] * item['quantity'], 2), 2521.01)
+        self.assertEqual(round((item['price'] * item['quantity']) * (item['tax_rate'] / 100), 2), 478.99)
+        self.assertEqual(round((item['price'] * item['quantity']) * (1 + item['tax_rate'] / 100), 2), 3000.0)
+
+    @patch('apps.facturacion.services.factus_payload_builder.get_tribute_id', return_value=1)
+    @patch('apps.facturacion.services.factus_payload_builder.get_document_type_id', return_value=3)
+    @patch('apps.facturacion.services.factus_payload_builder.get_municipality_id', return_value=149)
+    @patch('apps.facturacion.services.factus_payload_builder.get_payment_method_code', return_value='10')
+    @patch('apps.facturacion.services.factus_payload_builder.get_unit_measure_id', return_value=70)
+    @patch('apps.facturacion.services.factus_payload_builder.resolve_numbering_range')
+    def test_payload_exento_por_bandera_producto_envia_tax_rate_cero(
+        self,
+        mocked_range,
+        _mocked_um,
+        _mocked_payment,
+        _mocked_municipality,
+        _mocked_doc_type,
+        _mocked_tribute,
+    ):
+        mocked_range.return_value = MagicMock(factus_range_id=99)
+        venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            numero_comprobante='FAC-900002',
+            cliente=self.cliente,
+            vendedor=self.user,
+            subtotal=Decimal('3000.00'),
+            descuento_porcentaje=Decimal('0.00'),
+            descuento_valor=Decimal('0.00'),
+            iva=Decimal('0.00'),
+            total=Decimal('3000.00'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('3000.00'),
+            cambio=Decimal('0.00'),
+            estado='FACTURADA',
+        )
+        DetalleVenta.objects.create(
+            venta=venta,
+            producto=self.producto_exento,
+            cantidad=Decimal('1.00'),
+            precio_unitario=Decimal('3000.00'),
+            descuento_unitario=Decimal('0.00'),
+            iva_porcentaje=Decimal('19.00'),
+            subtotal=Decimal('3000.00'),
+            total=Decimal('3000.00'),
+        )
+
+        payload = build_invoice_payload(venta)
+        item = payload['items'][0]
+        self.assertEqual(item['price'], 3000.0)
+        self.assertEqual(item['tax_rate'], 0.0)
+        self.assertEqual(item['is_excluded'], 1)
