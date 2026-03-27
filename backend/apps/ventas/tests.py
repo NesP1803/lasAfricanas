@@ -583,6 +583,19 @@ class VentaIVAIncluidoTests(TestCase):
             iva_porcentaje=Decimal('19.00'),
             iva_exento=False,
         )
+        self.producto_legacy_0365 = Producto.objects.create(
+            codigo='0365',
+            nombre='ORING 08 (MEDIANO)',
+            categoria=self.categoria,
+            proveedor=self.proveedor,
+            precio_costo=Decimal('300.00'),
+            precio_venta=Decimal('600.00'),
+            precio_venta_minimo=Decimal('500.00'),
+            stock=Decimal('93.00'),
+            stock_minimo=Decimal('1.00'),
+            iva_porcentaje=Decimal('19.00'),
+            iva_exento=False,
+        )
         self.producto_exento = Producto.objects.create(
             codigo='IVA-EX-001',
             nombre='Producto exento',
@@ -743,3 +756,46 @@ class VentaIVAIncluidoTests(TestCase):
         venta = Venta.objects.get(id=venta_id)
         self.assertEqual(venta.estado, 'ENVIADA_A_CAJA')
         self.assertEqual(venta.subtotal + venta.iva - venta.descuento_valor, venta.total)
+
+    def test_producto_legacy_0365_cantidad_1(self):
+        payload = self._payload_base([
+            {
+                'producto': self.producto_legacy_0365.id,
+                'cantidad': '1',
+                'precio_unitario': '600.00',
+                'descuento_unitario': '0.00',
+                'iva_porcentaje': '19.00',
+            }
+        ])
+        response = self.client.post('/api/ventas/', payload, format='json')
+        self.assertEqual(response.status_code, 201, response.data)
+
+        venta = Venta.objects.get(id=response.data['id'])
+        detalle = venta.detalles.get()
+        self.assertEqual(detalle.total, Decimal('600.00'))
+        self.assertEqual(detalle.subtotal, Decimal('504.20'))
+        self.assertEqual(venta.subtotal, Decimal('504.20'))
+        self.assertEqual(venta.iva, Decimal('95.80'))
+        self.assertEqual(venta.total, Decimal('600.00'))
+        self.assertEqual(venta.subtotal + venta.iva - venta.descuento_valor, venta.total)
+
+    def test_producto_legacy_0365_cantidad_2(self):
+        payload = self._payload_base([
+            {
+                'producto': self.producto_legacy_0365.id,
+                'cantidad': '2',
+                'precio_unitario': '600.00',
+                'descuento_unitario': '0.00',
+                'iva_porcentaje': '19.00',
+            }
+        ])
+        response = self.client.post('/api/ventas/', payload, format='json')
+        self.assertEqual(response.status_code, 201, response.data)
+
+        venta = Venta.objects.get(id=response.data['id'])
+        detalle = venta.detalles.get()
+        self.assertEqual(detalle.total, Decimal('1200.00'))
+        self.assertEqual(detalle.subtotal, Decimal('1008.40'))
+        self.assertEqual(venta.subtotal, Decimal('1008.40'))
+        self.assertEqual(venta.iva, Decimal('191.60'))
+        self.assertEqual(venta.total, Decimal('1200.00'))

@@ -755,3 +755,54 @@ class FactusInvoicePayloadIVAIncluidoTests(TestCase):
         self.assertEqual(item['price'], 3000.0)
         self.assertEqual(item['tax_rate'], 0.0)
         self.assertEqual(item['is_excluded'], 1)
+
+    @patch('apps.facturacion.services.factus_payload_builder.get_tribute_id', return_value=1)
+    @patch('apps.facturacion.services.factus_payload_builder.get_document_type_id', return_value=3)
+    @patch('apps.facturacion.services.factus_payload_builder.get_municipality_id', return_value=149)
+    @patch('apps.facturacion.services.factus_payload_builder.get_payment_method_code', return_value='10')
+    @patch('apps.facturacion.services.factus_payload_builder.get_unit_measure_id', return_value=70)
+    @patch('apps.facturacion.services.factus_payload_builder.resolve_numbering_range')
+    def test_payload_producto_0365_precio_final_600(
+        self,
+        mocked_range,
+        _mocked_um,
+        _mocked_payment,
+        _mocked_municipality,
+        _mocked_doc_type,
+        _mocked_tribute,
+    ):
+        mocked_range.return_value = MagicMock(factus_range_id=99)
+        venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            numero_comprobante='FAC-900003',
+            cliente=self.cliente,
+            vendedor=self.user,
+            subtotal=Decimal('504.20'),
+            descuento_porcentaje=Decimal('0.00'),
+            descuento_valor=Decimal('0.00'),
+            iva=Decimal('95.80'),
+            total=Decimal('600.00'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('600.00'),
+            cambio=Decimal('0.00'),
+            estado='FACTURADA',
+        )
+        DetalleVenta.objects.create(
+            venta=venta,
+            producto=self.producto_gravado,
+            cantidad=Decimal('1.00'),
+            precio_unitario=Decimal('600.00'),
+            descuento_unitario=Decimal('0.00'),
+            iva_porcentaje=Decimal('19.00'),
+            subtotal=Decimal('504.20'),
+            total=Decimal('600.00'),
+        )
+
+        payload = build_invoice_payload(venta)
+        item = payload['items'][0]
+        self.assertEqual(item['price'], 504.2)
+        self.assertEqual(item['tax_rate'], 19.0)
+        self.assertEqual(item['is_excluded'], 0)
+        self.assertEqual(round(item['price'] * item['quantity'], 2), 504.2)
+        self.assertEqual(round((item['price'] * item['quantity']) * (item['tax_rate'] / 100), 2), 95.8)
+        self.assertEqual(round((item['price'] * item['quantity']) * (1 + item['tax_rate'] / 100), 2), 600.0)

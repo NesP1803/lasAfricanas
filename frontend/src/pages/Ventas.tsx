@@ -40,6 +40,7 @@ type CartItem = {
   codigo: string;
   nombre: string;
   ivaPorcentaje: number;
+  ivaExento: boolean;
   precioUnitario: number;
   stock: number;
   cantidad: number;
@@ -163,11 +164,48 @@ const normalizeCantidad = (cantidad: number, unidadMedida?: string) => {
   return Math.round(clamped);
 };
 
+const roundMoney = (value: number) => {
+  if (!Number.isFinite(value)) return 0;
+  return Number(value.toFixed(2));
+};
+
+const isItemExento = (item: Pick<CartItem, 'ivaExento' | 'ivaPorcentaje'>) =>
+  item.ivaExento || item.ivaPorcentaje <= 0;
+
+const calcularLineaDesdePrecioFinal = (
+  item: Pick<CartItem, 'precioUnitario' | 'cantidad' | 'descuentoPorcentaje' | 'ivaPorcentaje' | 'ivaExento'>
+) => {
+  const totalBrutoLinea = item.precioUnitario * item.cantidad;
+  const descuentoLinea = totalBrutoLinea * (item.descuentoPorcentaje / 100);
+  const totalNetoLinea = Math.max(0, totalBrutoLinea - descuentoLinea);
+
+  if (isItemExento(item)) {
+    return {
+      totalBrutoLinea: roundMoney(totalBrutoLinea),
+      descuentoLinea: roundMoney(descuentoLinea),
+      totalNetoLinea: roundMoney(totalNetoLinea),
+      baseLinea: roundMoney(totalNetoLinea),
+      ivaLinea: 0,
+    };
+  }
+
+  const divisorIva = 1 + item.ivaPorcentaje / 100;
+  const baseLinea = totalNetoLinea / divisorIva;
+  const ivaLinea = totalNetoLinea - baseLinea;
+  return {
+    totalBrutoLinea: roundMoney(totalBrutoLinea),
+    descuentoLinea: roundMoney(descuentoLinea),
+    totalNetoLinea: roundMoney(totalNetoLinea),
+    baseLinea: roundMoney(baseLinea),
+    ivaLinea: roundMoney(ivaLinea),
+  };
+};
+
 const buildCartItemsFromDetalles = (
   detalles: DetalleVenta[]
 ): CartItem[] =>
   detalles.map((detalle, index) => {
-    const precioUnitario = roundCop(Number(detalle.precio_unitario || 0));
+    const precioUnitario = roundMoney(Number(detalle.precio_unitario || 0));
     const cantidad = Number(detalle.cantidad || 0);
     const subtotalLinea = precioUnitario * cantidad;
     const descuentoLinea =
@@ -181,6 +219,9 @@ const buildCartItemsFromDetalles = (
       codigo: detalle.producto_codigo ?? '',
       nombre: detalle.producto_nombre ?? 'Producto',
       ivaPorcentaje: Number(detalle.iva_porcentaje || 0),
+      ivaExento:
+        Math.abs(Number(detalle.total || 0) - Number(detalle.subtotal || 0)) < 0.01
+        || Number(detalle.iva_porcentaje || 0) <= 0,
       precioUnitario,
       stock: Number(detalle.producto_stock ?? 0),
       cantidad,
@@ -195,10 +236,10 @@ const buildDocumentoPreviewFromVenta = (venta: Venta): DocumentoPreview => {
       descripcion: detalle.producto_nombre ?? 'Producto',
       codigo: detalle.producto_codigo ?? '',
       cantidad: Number(detalle.cantidad),
-      precioUnitario: roundCop(Number(detalle.precio_unitario)),
-      descuento: roundCop(Number(detalle.descuento_unitario)),
+      precioUnitario: roundMoney(Number(detalle.precio_unitario)),
+      descuento: roundMoney(Number(detalle.descuento_unitario)),
       ivaPorcentaje: Number(detalle.iva_porcentaje),
-      total: roundCop(Number(detalle.total)),
+      total: roundMoney(Number(detalle.total)),
     })) ?? [];
 
   return {
@@ -210,12 +251,12 @@ const buildDocumentoPreviewFromVenta = (venta: Venta): DocumentoPreview => {
     medioPago: venta.medio_pago_display || venta.medio_pago,
     estado: venta.estado_display || venta.estado,
     detalles: detallesPreview,
-    subtotal: roundCop(Number(venta.subtotal)),
-    descuento: roundCop(Number(venta.descuento_valor)),
-    iva: roundCop(Number(venta.iva)),
-    total: roundCop(Number(venta.total)),
-    efectivoRecibido: roundCop(Number(venta.efectivo_recibido ?? 0)),
-    cambio: roundCop(Number(venta.cambio ?? 0)),
+    subtotal: roundMoney(Number(venta.subtotal)),
+    descuento: roundMoney(Number(venta.descuento_valor)),
+    iva: roundMoney(Number(venta.iva)),
+    total: roundMoney(Number(venta.total)),
+    efectivoRecibido: roundMoney(Number(venta.efectivo_recibido ?? 0)),
+    cambio: roundMoney(Number(venta.cambio ?? 0)),
   };
 };
 
@@ -442,9 +483,10 @@ export default function Ventas() {
           codigo: repuesto.codigo || producto?.codigo || '',
           nombre: repuesto.nombre || producto?.nombre || 'Producto',
           ivaPorcentaje: Number(repuesto.ivaPorcentaje || producto?.iva_porcentaje || 0),
-          precioUnitario: Number(
+          ivaExento: Boolean(producto?.iva_exento),
+          precioUnitario: roundMoney(Number(
             repuesto.precioUnitario || producto?.precio_venta || 0
-          ),
+          )),
           stock: Number(producto?.stock ?? 0),
           cantidad: repuesto.cantidad,
           descuentoPorcentaje: 0,
@@ -480,40 +522,38 @@ export default function Ventas() {
   }, [tallerPayload, navigate]);
 
   const totals = useMemo(() => {
-    const rawSubtotal = cartItems.reduce(
-      (acc, item) => acc + item.precioUnitario * item.cantidad,
-      0
+    const resumenLineas = cartItems.map(calcularLineaDesdePrecioFinal);
+    const subtotal = roundMoney(
+      resumenLineas.reduce((acc, line) => acc + line.baseLinea, 0)
     );
-    const rawDescuentoLineas = cartItems.reduce((acc, item) => {
-      const lineSubtotal = item.precioUnitario * item.cantidad;
-      return acc + lineSubtotal * (item.descuentoPorcentaje / 100);
-    }, 0);
-    const rawBaseImpuestos = Math.max(0, rawSubtotal - rawDescuentoLineas);
-    const rawDescuentoGeneralValor =
-      rawBaseImpuestos * (parseNumber(descuentoGeneral) / 100);
-    const rawIva = cartItems.reduce((acc, item) => {
-      const lineSubtotal = item.precioUnitario * item.cantidad;
-      const lineDesc = lineSubtotal * (item.descuentoPorcentaje / 100);
-      const base = lineSubtotal - lineDesc;
-      return acc + base * (item.ivaPorcentaje / 100);
-    }, 0);
-    const subtotal = rawSubtotal;
-    const descuentoLineas = rawDescuentoLineas;
-    const descuentoGeneralValor = rawDescuentoGeneralValor;
-    const iva = rawIva;
+    const iva = roundMoney(
+      resumenLineas.reduce((acc, line) => acc + line.ivaLinea, 0)
+    );
+    const totalLineas = roundMoney(
+      resumenLineas.reduce((acc, line) => acc + line.totalNetoLinea, 0)
+    );
+    const descuentoLineas = roundMoney(
+      resumenLineas.reduce((acc, line) => acc + line.descuentoLinea, 0)
+    );
+    const descuentoGeneralValor = roundMoney(
+      totalLineas * (parseNumber(descuentoGeneral) / 100)
+    );
     const descuentoTotalPrevio = descuentoLineas + descuentoGeneralValor;
     const descuentoTotalAplicado =
       descuentoLineas +
       (descuentoAutorizado ? descuentoGeneralValor : 0);
-    const totalPrevio = subtotal - descuentoTotalPrevio + iva;
-    const totalAplicado = subtotal - descuentoTotalAplicado + iva;
-    const totalAplicadoRedondeado = roundCop(totalAplicado);
+    const totalPrevio = roundMoney(totalLineas - descuentoGeneralValor);
+    const totalAplicado = roundMoney(
+      totalLineas - (descuentoAutorizado ? descuentoGeneralValor : 0)
+    );
+    const totalAplicadoRedondeado = totalAplicado;
     return {
       subtotal,
       descuentoTotalPrevio,
       descuentoTotalAplicado,
       descuentoGeneralValor,
       iva,
+      totalLineas,
       totalPrevio,
       totalAplicado,
       totalAplicadoRedondeado,
@@ -653,7 +693,8 @@ export default function Ventas() {
           codigo: producto.codigo,
           nombre: producto.nombre,
           ivaPorcentaje: Number(producto.iva_porcentaje ?? 0),
-          precioUnitario: roundCop(Number(producto.precio_venta)),
+          ivaExento: Boolean(producto.iva_exento),
+          precioUnitario: roundMoney(Number(producto.precio_venta)),
           stock: Number(producto.stock),
           cantidad: 1,
           descuentoPorcentaje: 0,
@@ -817,16 +858,13 @@ export default function Ventas() {
       0,
       efectivoRecibidoNumero - totals.totalAplicadoRedondeado
     );
-    const descuentoGeneralPorcentaje = descuentoAutorizado
-      ? parseNumber(descuentoGeneral)
-      : 0;
     return {
       tipo_comprobante: tipo,
       cliente: clienteId ?? 0,
       vendedor: vendedorId,
       subtotal: totals.subtotal.toFixed(2),
       descuento_porcentaje: descuentoAutorizado ? descuentoGeneral : '0',
-      descuento_valor: totals.descuentoTotalAplicado.toFixed(2),
+      descuento_valor: (descuentoAutorizado ? totals.descuentoGeneralValor : 0).toFixed(2),
       iva: totals.iva.toFixed(2),
       total: totals.totalAplicadoRedondeado.toFixed(2),
       medio_pago: medioPago,
@@ -834,22 +872,16 @@ export default function Ventas() {
       cambio: cambioCalculado.toFixed(2),
       inventario_ya_afectado: inventarioYaAfectado,
       detalles: cartItems.map((item) => {
-        const subtotal = item.precioUnitario * item.cantidad;
-        const descuentoLinea = subtotal * (item.descuentoPorcentaje / 100);
-        const base = subtotal - descuentoLinea;
-        const iva = base * (item.ivaPorcentaje / 100);
-        const descuentoGeneralLinea =
-          descuentoAutorizado ? base * (descuentoGeneralPorcentaje / 100) : 0;
-        const total = base + iva - descuentoGeneralLinea;
-        const descuentoUnitario = item.cantidad > 0 ? descuentoLinea / item.cantidad : 0;
+        const linea = calcularLineaDesdePrecioFinal(item);
+        const descuentoUnitario = item.cantidad > 0 ? linea.descuentoLinea / item.cantidad : 0;
         return {
           producto: item.id,
           cantidad: item.cantidad,
           precio_unitario: item.precioUnitario.toFixed(2),
           descuento_unitario: descuentoUnitario.toFixed(2),
           iva_porcentaje: item.ivaPorcentaje.toFixed(2),
-          subtotal: subtotal.toFixed(2),
-          total: total.toFixed(2),
+          subtotal: linea.baseLinea.toFixed(2),
+          total: linea.totalNetoLinea.toFixed(2),
         };
       }),
       descuento_aprobado_por:
@@ -1008,19 +1040,15 @@ export default function Ventas() {
         total: currencyFormatter.format(totals.totalAplicadoRedondeado),
       });
       const detallesPreview: DocumentoDetalle[] = cartItems.map((item) => {
-        const subtotalLinea = item.precioUnitario * item.cantidad;
-        const descuentoLinea = subtotalLinea * (item.descuentoPorcentaje / 100);
-        const base = subtotalLinea - descuentoLinea;
-        const ivaLinea = base * (item.ivaPorcentaje / 100);
-        const totalLinea = base + ivaLinea;
+        const linea = calcularLineaDesdePrecioFinal(item);
         return {
           descripcion: item.nombre,
           codigo: item.codigo,
           cantidad: item.cantidad,
           precioUnitario: item.precioUnitario,
-          descuento: descuentoLinea,
+          descuento: linea.descuentoLinea,
           ivaPorcentaje: item.ivaPorcentaje,
-          total: totalLinea,
+          total: linea.totalNetoLinea,
         };
       });
       const medioPagoDisplay =
@@ -1524,11 +1552,7 @@ export default function Ventas() {
                 </tr>
               )}
               {cartItems.map((item) => {
-                const subtotal = item.precioUnitario * item.cantidad;
-                const descuento = subtotal * (item.descuentoPorcentaje / 100);
-                const base = subtotal - descuento;
-                const iva = base * (item.ivaPorcentaje / 100);
-                const total = base + iva;
+                const linea = calcularLineaDesdePrecioFinal(item);
                 return (
                   <tr key={item.id} className="border-b border-slate-100">
                     <td className="px-3 py-1.5">
@@ -1581,7 +1605,7 @@ export default function Ventas() {
                     </td>
                     <td className="px-3 py-1.5 text-right">{item.ivaPorcentaje}%</td>
                     <td className="px-3 py-1.5 text-right font-semibold text-slate-800">
-                      {currencyFormatter.format(total)}
+                      {currencyFormatter.format(linea.totalNetoLinea)}
                     </td>
                     <td className="px-3 py-1.5 text-right">
                       {currencyFormatter.format(item.precioUnitario)}
