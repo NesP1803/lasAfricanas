@@ -593,7 +593,7 @@ class VentaIVAIncluidoTests(TestCase):
             precio_venta_minimo=Decimal('2500.00'),
             stock=Decimal('50.00'),
             stock_minimo=Decimal('1.00'),
-            iva_porcentaje=Decimal('0.00'),
+            iva_porcentaje=Decimal('19.00'),
             iva_exento=True,
         )
         self.cliente = Cliente.objects.create(
@@ -708,7 +708,7 @@ class VentaIVAIncluidoTests(TestCase):
                 'cantidad': '1',
                 'precio_unitario': '3000.00',
                 'descuento_unitario': '0.00',
-                'iva_porcentaje': '0.00',
+                'iva_porcentaje': '19.00',
             }
         ])
         response = self.client.post('/api/ventas/', payload, format='json')
