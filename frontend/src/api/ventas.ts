@@ -80,6 +80,11 @@ export interface Venta {
   facturada_por?: number | null;
   facturada_at?: string | null;
   detalles: DetalleVenta[];
+  nota_credito_emitida?: {
+    id: number;
+    number: string;
+    status: string;
+  };
 }
 
 export interface FacturaElectronicaResultado {
@@ -578,7 +583,11 @@ export const ventasApi = {
 
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.error || 'Error al anular venta');
+      if (response.status === 502) {
+        const detail = typeof error?.detail === 'string' && error.detail.trim() ? ` Detalle: ${error.detail}` : '';
+        throw new Error(`La venta no fue anulada porque falló Factus al emitir la nota crédito.${detail}`);
+      }
+      throw new Error(error.error || error.detail || 'Error al anular venta');
     }
     return response.json();
   },

@@ -253,6 +253,22 @@ def _validar_estado_para_anulacion(venta):
         raise ValidationError('La venta está en un estado inconsistente y no se puede anular.')
 
 
+def _to_bool(value, default=True):
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {'true', '1', 'si', 'sí', 'yes', 'y', 'on'}:
+            return True
+        if normalized in {'false', '0', 'no', 'n', 'off', ''}:
+            return False
+    return default
+
+
 def _build_credit_note_items(venta):
     items = []
     for detalle in venta.detalles.select_related('producto').all():
@@ -541,7 +557,7 @@ class VentaViewSet(viewsets.ModelViewSet):
         """
         motivo = request.data.get('motivo')
         descripcion = request.data.get('descripcion', '')
-        devuelve_inventario = True
+        devuelve_inventario = _to_bool(request.data.get('devuelve_inventario'), default=True)
         
         if not motivo:
             return Response(

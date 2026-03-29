@@ -510,6 +510,54 @@ class CajaVentaFlowTests(TestCase):
         self.producto.refresh_from_db()
         self.assertEqual(self.producto.stock, stock_inicial)
 
+    def test_anular_con_devuelve_inventario_false_no_crea_movimiento_devolucion(self):
+        venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            cliente=self.cliente,
+            vendedor=self.vendedor,
+            subtotal=Decimal('200'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('38'),
+            total=Decimal('238'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('238'),
+            cambio=Decimal('0'),
+            estado='FACTURADA',
+            inventario_ya_afectado=True,
+            facturada_por=self.cajero,
+            facturada_at=timezone.now(),
+        )
+        DetalleVenta.objects.create(
+            venta=venta,
+            producto=self.producto,
+            cantidad=1,
+            precio_unitario=Decimal('200'),
+            descuento_unitario=Decimal('0'),
+            iva_porcentaje=Decimal('19'),
+            subtotal=Decimal('200'),
+            total=Decimal('238'),
+        )
+        stock_inicial = self.producto.stock
+
+        self.client.force_authenticate(user=self.cajero)
+        response = self.client.post(
+            f'/api/ventas/{venta.id}/anular/',
+            {'motivo': 'DEVOLUCION_TOTAL', 'descripcion': 'test', 'devuelve_inventario': False},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200)
+        venta.refresh_from_db()
+        self.producto.refresh_from_db()
+        self.assertEqual(venta.estado, 'ANULADA')
+        self.assertEqual(self.producto.stock, stock_inicial)
+        self.assertFalse(
+            MovimientoInventario.objects.filter(
+                tipo='DEVOLUCION',
+                referencia=f'Anulación {venta.numero_comprobante}',
+            ).exists()
+        )
+
     @patch('apps.ventas.views.facturar_venta')
     def test_caja_facturar_dispara_servicio_factus(self, mocked_facturar_venta):
         mocked_factura = MagicMock()
