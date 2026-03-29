@@ -9,12 +9,19 @@ from django.db import transaction
 from django.utils import timezone
 from datetime import datetime, time
 from decimal import Decimal
+import time as time_module
 import logging
 
 from apps.facturacion.exceptions import FacturaDuplicadaError
 from apps.facturacion.models import FacturaElectronica
 from apps.facturacion.serializers import FacturaElectronicaSerializer
-from apps.facturacion.services import FactusAPIError, FactusAuthError, FactusValidationError, facturar_venta
+from apps.facturacion.services import (
+    FactusAPIError,
+    FactusAuthError,
+    FactusValidationError,
+    emitir_nota_credito,
+    facturar_venta,
+)
 
 from .models import Cliente, Venta, DetalleVenta, SolicitudDescuento, VentaAnulada, RemisionAnulada
 from .serializers import (
@@ -244,6 +251,70 @@ def _validar_estado_para_anulacion(venta):
         raise ValidationError('Esta venta ya está anulada.')
     if venta.estado == 'FACTURADA' and venta.tipo_comprobante == 'FACTURA' and venta.facturada_at is None:
         raise ValidationError('La venta está en un estado inconsistente y no se puede anular.')
+
+
+def _build_credit_note_items(venta):
+    items = []
+    for detalle in venta.detalles.select_related('producto').all():
+        items.append(
+            {
+                'code_reference': detalle.producto.codigo,
+                'name': detalle.producto.nombre,
+                'quantity': float(detalle.cantidad),
+                'price': float(detalle.precio_unitario),
+                'tax_rate': float(detalle.iva_porcentaje),
+                'discount_rate': 0,
+            }
+        )
+    return items
+
+
+def _anular_factura_electronica_con_nota_credito(venta, motivo, *, max_reintentos=2, backoff_segundos=0.3):
+    if not hasattr(venta, 'factura_electronica_factus'):
+        return None
+
+    factura = venta.factura_electronica_factus
+    if factura.status != 'ACEPTADA':
+        return None
+
+    items = _build_credit_note_items(venta)
+    ultimo_error = None
+    for intento in range(max_reintentos + 1):
+        try:
+            return emitir_nota_credito(factura_id=factura.id, motivo=motivo, items=items)
+        except (FactusAPIError, FactusAuthError) as exc:
+            ultimo_error = exc
+            logger.warning(
+                'Reintento nota crédito para venta_id=%s intento=%s/%s error=%s',
+                venta.id,
+                intento + 1,
+                max_reintentos + 1,
+                str(exc),
+            )
+            if intento >= max_reintentos:
+                break
+            time_module.sleep(backoff_segundos * (intento + 1))
+
+    if ultimo_error:
+        raise ultimo_error
+    return None
+
+
+def _debe_revertir_inventario(venta):
+    if not venta.afecta_inventario:
+        return False
+    if venta.inventario_ya_afectado:
+        return True
+
+    from apps.inventario.models import MovimientoInventario
+
+    referencias = {f'VENTA-{venta.id}'}
+    if venta.numero_comprobante:
+        referencias.add(venta.numero_comprobante)
+    return MovimientoInventario.objects.filter(
+        tipo='SALIDA',
+        referencia__in=referencias,
+    ).exists()
 
 
 
@@ -476,6 +547,7 @@ class VentaViewSet(viewsets.ModelViewSet):
         with transaction.atomic():
             venta = (
                 Venta.objects.select_for_update()
+                .select_related('factura_electronica_factus')
                 .prefetch_related('detalles', 'detalles__producto')
                 .get(pk=pk)
             )
@@ -483,6 +555,22 @@ class VentaViewSet(viewsets.ModelViewSet):
                 _validar_estado_para_anulacion(venta)
             except ValidationError as error:
                 return Response({'error': error.detail}, status=status.HTTP_400_BAD_REQUEST)
+
+            nota_credito = None
+            try:
+                nota_credito = _anular_factura_electronica_con_nota_credito(venta, motivo)
+            except (FactusAPIError, FactusAuthError, FactusValidationError) as exc:
+                logger.exception(
+                    'No se anuló venta_id=%s porque falló emisión de nota crédito en Factus',
+                    venta.id,
+                )
+                return Response(
+                    {
+                        'error': 'No fue posible emitir la nota crédito electrónica en Factus.',
+                        'detail': str(exc),
+                    },
+                    status=status.HTTP_502_BAD_GATEWAY,
+                )
 
             # Crear registro de anulación
             if venta.tipo_comprobante == 'REMISION':
@@ -507,7 +595,7 @@ class VentaViewSet(viewsets.ModelViewSet):
             venta.save(update_fields=['estado', 'updated_at'])
 
             # Si devuelve inventario, restaurar stock
-            if devuelve_inventario and venta.afecta_inventario:
+            if devuelve_inventario and _debe_revertir_inventario(venta):
                 from apps.inventario.models import MovimientoInventario, Producto
                 # Importante: el stock persistido del producto se sincroniza por
                 # signal post_save de MovimientoInventario (no duplicar save aquí).
@@ -537,7 +625,14 @@ class VentaViewSet(viewsets.ModelViewSet):
                     )
 
         serializer = VentaDetailSerializer(venta)
-        return Response(serializer.data)
+        data = serializer.data
+        if nota_credito is not None:
+            data['nota_credito_emitida'] = {
+                'id': nota_credito.id,
+                'number': nota_credito.number,
+                'status': nota_credito.status,
+            }
+        return Response(data)
 
     @action(detail=True, methods=['post'], url_path='enviar-a-caja')
     def enviar_a_caja(self, request, pk=None):
