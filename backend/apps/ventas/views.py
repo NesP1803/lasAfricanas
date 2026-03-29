@@ -77,6 +77,13 @@ def _validar_detalles_venta(venta):
 
 
 def _registrar_salida_inventario(venta, user, detalles=None):
+    """
+    Registra movimientos de inventario por facturación.
+
+    Nota: la sincronización de ``Producto.stock`` se realiza en
+    ``apps.inventario.signals.actualizar_stock_producto`` al guardar
+    ``MovimientoInventario``. Aquí no se debe duplicar ``producto.save()``.
+    """
     if not venta.afecta_inventario:
         return
     if venta.inventario_ya_afectado:
@@ -496,6 +503,8 @@ class VentaViewSet(viewsets.ModelViewSet):
             # Si devuelve inventario, restaurar stock
             if devuelve_inventario and venta.afecta_inventario:
                 from apps.inventario.models import MovimientoInventario, Producto
+                # Importante: el stock persistido del producto se sincroniza por
+                # signal post_save de MovimientoInventario (no duplicar save aquí).
 
                 detalles = [detalle for detalle in venta.detalles.all() if detalle.afecto_inventario]
                 productos_ids = [detalle.producto_id for detalle in detalles]

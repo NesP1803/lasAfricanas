@@ -135,8 +135,61 @@ class CajaVentaFlowTests(TestCase):
         response = self.client.post(f'/api/caja/{venta.id}/facturar/')
         self.assertEqual(response.status_code, 200)
         venta.refresh_from_db()
+        self.producto.refresh_from_db()
         self.assertEqual(venta.estado, 'FACTURADA')
+        self.assertEqual(self.producto.stock, Decimal('9'))
         self.assertTrue(response.data.get('factus_sent'))
+
+    def test_anular_venta_facturada_restituye_stock_real(self):
+        venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            cliente=self.cliente,
+            vendedor=self.vendedor,
+            subtotal=Decimal('200'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('38'),
+            total=Decimal('238'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('238'),
+            cambio=Decimal('0'),
+            estado='ENVIADA_A_CAJA',
+            enviada_a_caja_por=self.vendedor,
+            enviada_a_caja_at=timezone.now(),
+        )
+        DetalleVenta.objects.create(
+            venta=venta,
+            producto=self.producto,
+            cantidad=1,
+            precio_unitario=Decimal('200'),
+            descuento_unitario=Decimal('0'),
+            iva_porcentaje=Decimal('19'),
+            subtotal=Decimal('200'),
+            total=Decimal('238'),
+        )
+
+        self.client.force_authenticate(user=self.cajero)
+        facturar_response = self.client.post(f'/api/caja/{venta.id}/facturar/')
+        self.assertEqual(facturar_response.status_code, 200)
+        self.producto.refresh_from_db()
+        self.assertEqual(self.producto.stock, Decimal('9'))
+
+        self.client.force_authenticate(user=self.vendedor)
+        anular_response = self.client.post(
+            f'/api/ventas/{venta.id}/anular/',
+            {
+                'motivo': 'DEVOLUCION_TOTAL',
+                'descripcion': 'Anulación prueba',
+                'devuelve_inventario': True,
+            },
+            format='json',
+        )
+        self.assertEqual(anular_response.status_code, 200)
+
+        venta.refresh_from_db()
+        self.producto.refresh_from_db()
+        self.assertEqual(venta.estado, 'ANULADA')
+        self.assertEqual(self.producto.stock, Decimal('10'))
 
     @patch('apps.ventas.views.facturar_venta')
     def test_caja_facturar_dispara_servicio_factus(self, mocked_facturar_venta):
@@ -556,6 +609,7 @@ class CajaVentaFlowTests(TestCase):
         self.assertIsNone(venta.facturada_at)
         self.assertIsNone(venta.facturada_por)
         self.assertEqual(self.producto.stock, Decimal('1'))
+        self.assertEqual(MovimientoInventario.objects.count(), 0)
 
 
 class VentaIVAIncluidoTests(TestCase):
