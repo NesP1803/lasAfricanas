@@ -35,6 +35,7 @@ type DocumentoSeleccionado = {
 type AnulacionData = {
   motivo: string;
   numeroNuevaFactura: string;
+  devuelveInventario: boolean;
 };
 
 const motivosAnulacion = [
@@ -112,6 +113,7 @@ export default function Facturas() {
   const [anulacionData, setAnulacionData] = useState<AnulacionData>({
     motivo: motivosAnulacion[0].value,
     numeroNuevaFactura: '',
+    devuelveInventario: true,
   });
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -210,6 +212,12 @@ export default function Facturas() {
   };
 
   const selectedFactura = facturas.find((item) => item.id === selectedIds[0]) ?? null;
+  const anulacionRequiereNotaCredito = Boolean(
+    anulacion &&
+      (anulacion.electronica?.estado_dian ||
+        anulacion.electronica?.estado ||
+        anulacion.electronica?.status) === 'ACEPTADA'
+  );
 
   const handleAccionElectronica = async (
     factura: FacturaItem,
@@ -258,6 +266,7 @@ export default function Facturas() {
     setAnulacionData({
       motivo: motivosAnulacion[0].value,
       numeroNuevaFactura: '',
+      devuelveInventario: true,
     });
   };
 
@@ -269,10 +278,17 @@ export default function Facturas() {
       const descripcion = anulacionData.numeroNuevaFactura
         ? `Nueva factura: ${anulacionData.numeroNuevaFactura}`
         : 'Anulación sin factura de reemplazo.';
-      await ventasApi.anularVenta(anulacion.id, {
+      const ventaAnulada = await ventasApi.anularVenta(anulacion.id, {
         motivo: anulacionData.motivo,
         descripcion,
-        devuelve_inventario: true,
+        devuelve_inventario: anulacionData.devuelveInventario,
+      });
+      const numeroNotaCredito = ventaAnulada?.nota_credito_emitida?.number;
+      showNotification({
+        type: 'success',
+        message: numeroNotaCredito
+          ? `Factura anulada. Nota crédito emitida: ${numeroNotaCredito}.`
+          : 'Factura anulada correctamente.',
       });
       await cargarFacturas({
         estado: estadoFiltro,
@@ -802,6 +818,11 @@ export default function Facturas() {
                 Recuerde generar la nota crédito física que anula el total de la venta y
                 conservar la factura marcada como ANULADA para trazabilidad contable.
               </div>
+              {anulacionRequiereNotaCredito && (
+                <div className="rounded border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                  Se emitirá nota crédito en Factus antes de anular.
+                </div>
+              )}
               <div>
                 <label className="text-xs font-semibold text-slate-500">
                   No. factura nueva (si aplica)
@@ -818,6 +839,19 @@ export default function Facturas() {
                   placeholder="Prefijo y número"
                 />
               </div>
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={anulacionData.devuelveInventario}
+                  onChange={(event) =>
+                    setAnulacionData((prev) => ({
+                      ...prev,
+                      devuelveInventario: event.target.checked,
+                    }))
+                  }
+                />
+                La mercancía regresa al inventario
+              </label>
             </div>
             <div className="mt-6 flex justify-center">
               <button
@@ -826,7 +860,11 @@ export default function Facturas() {
                 className="rounded bg-slate-200 px-6 py-2 text-sm font-semibold uppercase text-slate-700 disabled:opacity-50"
                 disabled={anulando}
               >
-                {anulando ? 'Anulando...' : 'Anular'}
+                {anulando && anulacionRequiereNotaCredito
+                  ? 'Emitiendo nota crédito...'
+                  : anulando
+                    ? 'Anulando...'
+                    : 'Anular'}
               </button>
             </div>
           </div>

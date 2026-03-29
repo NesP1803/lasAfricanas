@@ -6,6 +6,7 @@ from rest_framework.test import APIClient
 
 from apps.inventario.models import Categoria, Producto, Proveedor, MovimientoInventario
 from apps.usuarios.models import Usuario
+from apps.facturacion.models import FacturaElectronica
 from apps.ventas.models import Cliente, Venta, DetalleVenta
 from apps.ventas.views import _registrar_salida_inventario
 
@@ -263,6 +264,299 @@ class CajaVentaFlowTests(TestCase):
         self.producto.refresh_from_db()
         self.assertEqual(venta.estado, 'ANULADA')
         self.assertEqual(self.producto.stock, Decimal('10'))
+
+    @patch('apps.ventas.views.emitir_nota_credito')
+    def test_anular_factura_electronica_aceptada_exige_nota_credito(self, mocked_emitir_nota_credito):
+        venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            cliente=self.cliente,
+            vendedor=self.vendedor,
+            subtotal=Decimal('200'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('38'),
+            total=Decimal('238'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('238'),
+            cambio=Decimal('0'),
+            estado='FACTURADA',
+            inventario_ya_afectado=True,
+            facturada_por=self.cajero,
+            facturada_at=timezone.now(),
+        )
+        DetalleVenta.objects.create(
+            venta=venta,
+            producto=self.producto,
+            cantidad=1,
+            precio_unitario=Decimal('200'),
+            descuento_unitario=Decimal('0'),
+            iva_porcentaje=Decimal('19'),
+            subtotal=Decimal('200'),
+            total=Decimal('238'),
+        )
+        FacturaElectronica.objects.create(
+            venta=venta,
+            cufe='CUFE-001',
+            uuid='UUID-001',
+            number='SETP-100',
+            reference_code='SETP-100',
+            status='ACEPTADA',
+            xml_url='https://example.com/invoice.xml',
+            pdf_url='https://example.com/invoice.pdf',
+            response_json={},
+        )
+        mocked_emitir_nota_credito.return_value = MagicMock(id=10, number='NC-001', status='ACEPTADA')
+
+        self.client.force_authenticate(user=self.cajero)
+        response = self.client.post(
+            f'/api/ventas/{venta.id}/anular/',
+            {'motivo': 'DEVOLUCION_TOTAL', 'descripcion': 'test'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200)
+        mocked_emitir_nota_credito.assert_called_once()
+        venta.refresh_from_db()
+        self.assertEqual(venta.estado, 'ANULADA')
+
+    @patch('apps.ventas.views.emitir_nota_credito')
+    def test_anular_factura_electronica_si_factus_falla_no_anula_ni_restituye_stock(self, mocked_emitir_nota_credito):
+        from apps.facturacion.services import FactusAPIError
+
+        venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            cliente=self.cliente,
+            vendedor=self.vendedor,
+            subtotal=Decimal('200'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('38'),
+            total=Decimal('238'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('238'),
+            cambio=Decimal('0'),
+            estado='FACTURADA',
+            inventario_ya_afectado=True,
+            facturada_por=self.cajero,
+            facturada_at=timezone.now(),
+        )
+        DetalleVenta.objects.create(
+            venta=venta,
+            producto=self.producto,
+            cantidad=1,
+            precio_unitario=Decimal('200'),
+            descuento_unitario=Decimal('0'),
+            iva_porcentaje=Decimal('19'),
+            subtotal=Decimal('200'),
+            total=Decimal('238'),
+        )
+        FacturaElectronica.objects.create(
+            venta=venta,
+            cufe='CUFE-002',
+            uuid='UUID-002',
+            number='SETP-101',
+            reference_code='SETP-101',
+            status='ACEPTADA',
+            xml_url='https://example.com/invoice.xml',
+            pdf_url='https://example.com/invoice.pdf',
+            response_json={},
+        )
+        mocked_emitir_nota_credito.side_effect = FactusAPIError('timeout')
+        stock_inicial = self.producto.stock
+
+        self.client.force_authenticate(user=self.cajero)
+        response = self.client.post(
+            f'/api/ventas/{venta.id}/anular/',
+            {'motivo': 'DEVOLUCION_TOTAL', 'descripcion': 'test'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 502)
+        venta.refresh_from_db()
+        self.producto.refresh_from_db()
+        self.assertEqual(venta.estado, 'FACTURADA')
+        self.assertEqual(self.producto.stock, stock_inicial)
+
+    @patch('apps.ventas.views.emitir_nota_credito')
+    def test_anular_factura_electronica_no_aceptada_no_anula_venta(self, mocked_emitir_nota_credito):
+        venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            cliente=self.cliente,
+            vendedor=self.vendedor,
+            subtotal=Decimal('200'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('38'),
+            total=Decimal('238'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('238'),
+            cambio=Decimal('0'),
+            estado='FACTURADA',
+            inventario_ya_afectado=True,
+            facturada_por=self.cajero,
+            facturada_at=timezone.now(),
+        )
+        DetalleVenta.objects.create(
+            venta=venta,
+            producto=self.producto,
+            cantidad=1,
+            precio_unitario=Decimal('200'),
+            descuento_unitario=Decimal('0'),
+            iva_porcentaje=Decimal('19'),
+            subtotal=Decimal('200'),
+            total=Decimal('238'),
+        )
+        FacturaElectronica.objects.create(
+            venta=venta,
+            cufe='CUFE-003',
+            uuid='UUID-003',
+            number='SETP-102',
+            reference_code='SETP-102',
+            status='ACEPTADA',
+            xml_url='https://example.com/invoice.xml',
+            pdf_url='https://example.com/invoice.pdf',
+            response_json={},
+        )
+        mocked_emitir_nota_credito.return_value = MagicMock(id=11, number='NC-002', status='RECHAZADA')
+        stock_inicial = self.producto.stock
+
+        self.client.force_authenticate(user=self.cajero)
+        response = self.client.post(
+            f'/api/ventas/{venta.id}/anular/',
+            {'motivo': 'DEVOLUCION_TOTAL', 'descripcion': 'test'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 502)
+        venta.refresh_from_db()
+        self.producto.refresh_from_db()
+        self.assertEqual(venta.estado, 'FACTURADA')
+        self.assertEqual(self.producto.stock, stock_inicial)
+
+    @patch('apps.ventas.views.emitir_nota_credito')
+    def test_anular_factura_sin_electronica_aceptada_se_anula_local(self, mocked_emitir_nota_credito):
+        venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            cliente=self.cliente,
+            vendedor=self.vendedor,
+            subtotal=Decimal('200'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('38'),
+            total=Decimal('238'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('238'),
+            cambio=Decimal('0'),
+            estado='FACTURADA',
+            facturada_por=self.cajero,
+            facturada_at=timezone.now(),
+        )
+        DetalleVenta.objects.create(
+            venta=venta,
+            producto=self.producto,
+            cantidad=1,
+            precio_unitario=Decimal('200'),
+            descuento_unitario=Decimal('0'),
+            iva_porcentaje=Decimal('19'),
+            subtotal=Decimal('200'),
+            total=Decimal('238'),
+        )
+
+        self.client.force_authenticate(user=self.cajero)
+        response = self.client.post(
+            f'/api/ventas/{venta.id}/anular/',
+            {'motivo': 'ERROR_SISTEMA', 'descripcion': 'test'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200)
+        mocked_emitir_nota_credito.assert_not_called()
+        venta.refresh_from_db()
+        self.assertEqual(venta.estado, 'ANULADA')
+
+    def test_anular_no_restituye_inventario_si_no_hubo_salida_real(self):
+        venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            cliente=self.cliente,
+            vendedor=self.vendedor,
+            subtotal=Decimal('200'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('38'),
+            total=Decimal('238'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('238'),
+            cambio=Decimal('0'),
+            estado='FACTURADA',
+            inventario_ya_afectado=False,
+            facturada_por=self.cajero,
+            facturada_at=timezone.now(),
+        )
+        DetalleVenta.objects.create(
+            venta=venta,
+            producto=self.producto,
+            cantidad=1,
+            precio_unitario=Decimal('200'),
+            descuento_unitario=Decimal('0'),
+            iva_porcentaje=Decimal('19'),
+            subtotal=Decimal('200'),
+            total=Decimal('238'),
+        )
+        stock_inicial = self.producto.stock
+
+        self.client.force_authenticate(user=self.cajero)
+        response = self.client.post(
+            f'/api/ventas/{venta.id}/anular/',
+            {'motivo': 'ERROR_SISTEMA', 'descripcion': 'test'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.producto.refresh_from_db()
+        self.assertEqual(self.producto.stock, stock_inicial)
+
+    def test_anular_con_devuelve_inventario_false_no_crea_movimiento_devolucion(self):
+        venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            cliente=self.cliente,
+            vendedor=self.vendedor,
+            subtotal=Decimal('200'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('38'),
+            total=Decimal('238'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('238'),
+            cambio=Decimal('0'),
+            estado='FACTURADA',
+            inventario_ya_afectado=True,
+            facturada_por=self.cajero,
+            facturada_at=timezone.now(),
+        )
+        DetalleVenta.objects.create(
+            venta=venta,
+            producto=self.producto,
+            cantidad=1,
+            precio_unitario=Decimal('200'),
+            descuento_unitario=Decimal('0'),
+            iva_porcentaje=Decimal('19'),
+            subtotal=Decimal('200'),
+            total=Decimal('238'),
+        )
+        stock_inicial = self.producto.stock
+
+        self.client.force_authenticate(user=self.cajero)
+        response = self.client.post(
+            f'/api/ventas/{venta.id}/anular/',
+            {'motivo': 'DEVOLUCION_TOTAL', 'descripcion': 'test', 'devuelve_inventario': False},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200)
+        venta.refresh_from_db()
+        self.producto.refresh_from_db()
+        self.assertEqual(venta.estado, 'ANULADA')
+        self.assertEqual(self.producto.stock, stock_inicial)
+        self.assertFalse(
+            MovimientoInventario.objects.filter(
+                tipo='DEVOLUCION',
+                referencia=f'Anulación {venta.numero_comprobante}',
+            ).exists()
+        )
 
     @patch('apps.ventas.views.facturar_venta')
     def test_caja_facturar_dispara_servicio_factus(self, mocked_facturar_venta):

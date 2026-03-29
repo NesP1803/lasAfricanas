@@ -32,6 +32,7 @@ type DocumentoSeleccionado = {
 type AnulacionData = {
   motivo: string;
   numeroNuevaRemision: string;
+  devuelveInventario: boolean;
 };
 
 const motivosAnulacion = [
@@ -108,6 +109,7 @@ export default function Remisiones() {
   const [anulacionData, setAnulacionData] = useState<AnulacionData>({
     motivo: motivosAnulacion[0].value,
     numeroNuevaRemision: '',
+    devuelveInventario: true,
   });
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -199,6 +201,7 @@ export default function Remisiones() {
     setAnulacionData({
       motivo: motivosAnulacion[0].value,
       numeroNuevaRemision: '',
+      devuelveInventario: true,
     });
   };
 
@@ -213,7 +216,7 @@ export default function Remisiones() {
       await ventasApi.anularVenta(anulacion.id, {
         motivo: anulacionData.motivo,
         descripcion,
-        devuelve_inventario: true,
+        devuelve_inventario: anulacionData.devuelveInventario,
       });
       await cargarRemisiones({
         estado: estadoFiltro,
@@ -676,6 +679,19 @@ export default function Remisiones() {
                   placeholder="Prefijo y número"
                 />
               </div>
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={anulacionData.devuelveInventario}
+                  onChange={(event) =>
+                    setAnulacionData((prev) => ({
+                      ...prev,
+                      devuelveInventario: event.target.checked,
+                    }))
+                  }
+                />
+                La mercancía regresa al inventario
+              </label>
             </div>
             <div className="mt-6 flex justify-center">
               <button
