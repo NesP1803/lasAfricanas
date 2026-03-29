@@ -1,7 +1,6 @@
 from django.db import models
 
 from apps.core.models import BaseModel
-from apps.facturacion.models import FacturaElectronica
 from apps.facturacion_electronica.catalogos.models import (  # noqa: F401
     DocumentoIdentificacionFactus,
     MetodoPagoFactus,
@@ -11,37 +10,8 @@ from apps.facturacion_electronica.catalogos.models import (  # noqa: F401
 )
 
 
-class NotaCreditoElectronica(BaseModel):
-    factura = models.ForeignKey(
-        'facturacion.FacturaElectronica',
-        on_delete=models.PROTECT,
-        related_name='notas_credito_legacy',
-        verbose_name='Factura electrónica',
-    )
-    reference_code = models.CharField(max_length=80, unique=True, db_index=True)
-    estado = models.CharField(max_length=20, default='PENDIENTE')
-    payload = models.JSONField(default=dict, blank=True)
-    respuesta_api = models.JSONField(default=dict, blank=True)
-
-    class Meta:
-        db_table = 'notas_credito_electronicas'
-        verbose_name = 'Nota Crédito Electrónica'
-        verbose_name_plural = 'Notas Crédito Electrónicas'
-
-
-class DocumentoSoporteElectronico(BaseModel):
-    reference_code = models.CharField(max_length=80, unique=True, db_index=True)
-    tercero_identificacion = models.CharField(max_length=50)
-    estado = models.CharField(max_length=20, default='PENDIENTE')
-    payload = models.JSONField(default=dict, blank=True)
-    respuesta_api = models.JSONField(default=dict, blank=True)
-
-    class Meta:
-        db_table = 'documentos_soporte_electronicos'
-        verbose_name = 'Documento Soporte Electrónico'
-        verbose_name_plural = 'Documentos Soporte Electrónicos'
-
-
+# Esta app solo contiene infraestructura/integración con Factus.
+# El dominio de documentos electrónicos vive en apps.facturacion.
 class FactusToken(models.Model):
     access_token = models.TextField(verbose_name='Access token')
     refresh_token = models.TextField(blank=True, default='', verbose_name='Refresh token')
