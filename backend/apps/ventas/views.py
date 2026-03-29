@@ -101,6 +101,7 @@ def _registrar_salida_inventario(venta, user, detalles=None):
     else:
         productos = {}
 
+    movimientos_creados = 0
     for detalle in detalles:
         if not detalle.afecto_inventario:
             continue
@@ -120,6 +121,11 @@ def _registrar_salida_inventario(venta, user, detalles=None):
             referencia=venta.numero_comprobante or f'VENTA-{venta.id}',
             observaciones='Facturación en caja',
         )
+        movimientos_creados += 1
+
+    if movimientos_creados > 0:
+        venta.inventario_ya_afectado = True
+        venta.save(update_fields=['inventario_ya_afectado', 'updated_at'])
 
 
 def _facturar_venta(venta, user):
