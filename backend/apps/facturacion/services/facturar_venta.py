@@ -108,22 +108,66 @@ PERSISTABLE_FACTURA_FIELDS = {
 }
 
 
+def _build_attempt_trace(
+    *,
+    factura: FacturaElectronica | None,
+    payload: dict[str, Any],
+    numero: str,
+    reference_code: str,
+    triggered_by: Usuario | None,
+    status: str,
+    response: dict[str, Any] | None = None,
+    response_show: dict[str, Any] | None = None,
+    response_download: dict[str, Any] | None = None,
+    error: dict[str, Any] | None = None,
+    final_fields: dict[str, Any] | None = None,
+    bill_errors: list[str] | None = None,
+) -> dict[str, Any]:
+    previous = factura.response_json if factura and isinstance(factura.response_json, dict) else {}
+    previous_attempts = previous.get('attempts', [])
+    attempts = previous_attempts if isinstance(previous_attempts, list) else []
+    attempts.append(
+        {
+            'status': status,
+            'numero': numero,
+            'reference_code': reference_code,
+            'triggered_by_user_id': triggered_by.id if triggered_by else None,
+            'error': error or {},
+        }
+    )
+    return {
+        'request': payload,
+        'response': response,
+        'response_show': response_show,
+        'response_download': response_download,
+        'final_fields': final_fields or {},
+        'bill_errors': bill_errors or [],
+        'venta_id': factura.venta_id if factura else None,
+        'triggered_by_user_id': triggered_by.id if triggered_by else None,
+        'attempts': attempts,
+    }
+
+
 def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> FacturaElectronica:
     logger.info('facturar_venta.inicio venta_id=%s user_id=%s', venta_id, getattr(triggered_by, 'id', None))
     venta = Venta.objects.select_related('cliente').prefetch_related('detalles__producto').get(pk=venta_id)
     if venta.tipo_comprobante != 'FACTURA':
         raise FactusValidationError('Solo se puede facturar electrónicamente comprobantes de tipo FACTURA.')
-    if venta.estado != 'FACTURADA':
-        raise FactusValidationError('La venta debe estar en estado FACTURADA antes de enviarse a Factus.')
+    if venta.estado == 'ANULADA':
+        raise FactusValidationError('La venta está anulada y no se puede enviar a Factus.')
+    if venta.estado not in {'COBRADA', 'FACTURADA'}:
+        raise FactusValidationError('La venta debe estar en estado COBRADA antes de enviarse a Factus.')
 
     factura_existente = FacturaElectronica.objects.filter(venta=venta).first()
-    if factura_existente:
-        logger.info('facturar_venta.reutiliza_existente venta_id=%s factura=%s', venta.id, factura_existente.number)
+    if factura_existente and factura_existente.status == 'ACEPTADA':
+        logger.info('facturar_venta.reutiliza_aceptada venta_id=%s factura=%s', venta.id, factura_existente.number)
         if not factura_existente.xml_local_path:
             download_xml(factura_existente)
         if not factura_existente.pdf_local_path:
             download_pdf(factura_existente)
         return factura_existente
+    if factura_existente and factura_existente.status == 'EN_PROCESO':
+        raise FactusValidationError('La factura electrónica está EN_PROCESO. No se permite reenviar todavía.')
 
     payload = build_invoice_payload(venta)
     logger.info(
@@ -138,25 +182,71 @@ def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> Factur
         (payload.get('items', [{}])[0].get('is_excluded') if payload.get('items') else None),
         payload.get('send_email'),
     )
-    sequence = get_next_invoice_sequence()
-    if not sequence.numbering_range_id:
-        raise FactusValidationError(
-            'Debe sincronizar/configurar el rango antes de facturar. Falta factus_range_id del rango seleccionado.'
-        )
-    numero = sequence.number
-    venta.numero_comprobante = numero
-    venta.save(update_fields=['numero_comprobante', 'updated_at'])
-    payload['numbering_range_id'] = sequence.numbering_range_id
+    numero = str(venta.numero_comprobante or '').strip()
+    if not numero:
+        sequence = get_next_invoice_sequence()
+        if not sequence.numbering_range_id:
+            raise FactusValidationError(
+                'Debe sincronizar/configurar el rango antes de facturar. Falta factus_range_id del rango seleccionado.'
+            )
+        numero = sequence.number
+        payload['numbering_range_id'] = sequence.numbering_range_id
+        venta.numero_comprobante = numero
+        venta.save(update_fields=['numero_comprobante', 'updated_at'])
+    elif not payload.get('numbering_range_id'):
+        sequence = get_next_invoice_sequence()
+        if not sequence.numbering_range_id:
+            raise FactusValidationError(
+                'Debe sincronizar/configurar el rango antes de facturar. Falta factus_range_id del rango seleccionado.'
+            )
+        payload['numbering_range_id'] = sequence.numbering_range_id
+
     payload['number'] = numero
     payload['reference_code'] = numero
     reference_code = numero
-    if FacturaElectronica.objects.filter(reference_code=reference_code).exists():
+    if FacturaElectronica.objects.filter(reference_code=reference_code).exclude(venta=venta).exists():
         raise FacturaDuplicadaError(f'Ya existe una factura electrónica con reference_code={reference_code}.')
+
+    factura, _ = FacturaElectronica.objects.update_or_create(
+        venta=venta,
+        defaults={
+            'status': 'EN_PROCESO',
+            'number': numero,
+            'reference_code': reference_code,
+            'response_json': _build_attempt_trace(
+                factura=factura_existente,
+                payload=payload,
+                numero=numero,
+                reference_code=reference_code,
+                triggered_by=triggered_by,
+                status='EN_PROCESO',
+            ),
+            'codigo_error': '',
+            'mensaje_error': '',
+        },
+    )
 
     client = FactusClient()
     try:
         response_json = client.send_invoice(payload)
-    except FactusAPIError:
+    except FactusAPIError as exc:
+        factura.status = 'ERROR'
+        factura.codigo_error = str(exc.status_code or 'FACTUS_API_ERROR')
+        factura.mensaje_error = exc.provider_detail or str(exc)
+        factura.response_json = _build_attempt_trace(
+            factura=factura,
+            payload=payload,
+            numero=numero,
+            reference_code=reference_code,
+            triggered_by=triggered_by,
+            status='ERROR',
+            error={
+                'message': str(exc),
+                'status_code': exc.status_code,
+                'provider_detail': exc.provider_detail,
+            },
+        )
+        factura.save(update_fields=['status', 'codigo_error', 'mensaje_error', 'response_json', 'updated_at'])
         logger.warning('facturar_venta.factus_rechazo venta_id=%s numero=%s', venta.id, numero)
         raise
     logger.info('facturar_venta.factus_response venta_id=%s keys=%s', venta.id, sorted(response_json.keys()))
@@ -219,6 +309,27 @@ def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> Factur
     required_fields = ['cufe', 'number', 'uuid', 'xml_url', 'pdf_url']
     missing_fields = [field for field in required_fields if not fields[field]]
     if missing_fields:
+        factura.status = 'ERROR'
+        factura.codigo_error = 'RESPUESTA_INCOMPLETA'
+        factura.mensaje_error = f'Factus no devolvió campos requeridos: {", ".join(missing_fields)}.'
+        factura.response_json = _build_attempt_trace(
+            factura=factura,
+            payload=payload,
+            numero=numero,
+            reference_code=reference_code,
+            triggered_by=triggered_by,
+            status='ERROR',
+            response=response_json,
+            response_show=response_show_json,
+            response_download=response_download_json,
+            final_fields=fields,
+            bill_errors=bill_errors,
+            error={
+                'message': 'Respuesta incompleta de Factus',
+                'missing_fields': missing_fields,
+            },
+        )
+        factura.save(update_fields=['status', 'codigo_error', 'mensaje_error', 'response_json', 'updated_at'])
         logger.error(
             'facturar_venta.respuesta_incompleta venta_id=%s numero=%s faltantes=%s',
             venta.id,
@@ -230,37 +341,38 @@ def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> Factur
     persistable_fields = {k: v for k, v in fields.items() if k in PERSISTABLE_FACTURA_FIELDS}
 
     with transaction.atomic():
-        factura, _ = FacturaElectronica.objects.update_or_create(
-            venta=venta,
-            defaults={
-                **persistable_fields,
-                'reference_code': persistable_fields.get('reference_code') or reference_code,
-                'codigo_error': (
-                    'OBSERVACIONES_FACTUS'
-                    if bill_errors and persistable_fields.get('status') == 'ACEPTADA'
-                    else response_json.get('error_code')
-                ),
-                'mensaje_error': (
-                    '; '.join(bill_errors)
-                    if bill_errors
-                    else response_json.get('error_message')
-                ),
-                'response_json': {
-                    'request': payload,
-                    'response': response_json,
-                    'response_show': response_show_json,
-                    'response_download': response_download_json,
-                    'final_fields': fields,
-                    'persisted_fields': persistable_fields,
-                    'bill_errors': bill_errors,
-                    'venta_id': venta.id,
-                    'triggered_by_user_id': triggered_by.id if triggered_by else None,
-                },
-            },
+        factura = FacturaElectronica.objects.select_for_update().get(pk=factura.pk)
+        for key, value in persistable_fields.items():
+            setattr(factura, key, value)
+        factura.reference_code = persistable_fields.get('reference_code') or reference_code
+        factura.codigo_error = (
+            'OBSERVACIONES_FACTUS'
+            if bill_errors and persistable_fields.get('status') == 'ACEPTADA'
+            else response_json.get('error_code')
         )
-        venta.factura_electronica_uuid = fields['uuid']
-        venta.factura_electronica_cufe = fields['cufe']
-        venta.fecha_envio_dian = factura.created_at
+        factura.mensaje_error = (
+            '; '.join(bill_errors)
+            if bill_errors
+            else response_json.get('error_message')
+        )
+        factura.response_json = _build_attempt_trace(
+            factura=factura,
+            payload=payload,
+            numero=numero,
+            reference_code=reference_code,
+            triggered_by=triggered_by,
+            status=persistable_fields.get('status', 'ERROR'),
+            response=response_json,
+            response_show=response_show_json,
+            response_download=response_download_json,
+            final_fields={**fields, 'persisted_fields': persistable_fields},
+            bill_errors=bill_errors,
+        )
+        factura.save()
+
+        venta.factura_electronica_uuid = fields.get('uuid') or ''
+        venta.factura_electronica_cufe = fields.get('cufe') or ''
+        venta.fecha_envio_dian = factura.updated_at
         venta.save(update_fields=['factura_electronica_uuid', 'factura_electronica_cufe', 'fecha_envio_dian', 'updated_at'])
         logger.info(
             'facturar_venta.persistida venta_id=%s factura=%s status=%s reference_code=%s',
@@ -269,17 +381,19 @@ def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> Factur
             factura.status,
             factura.reference_code,
         )
-        if factura.cufe:
+        if factura.cufe and factura.number:
             qr_file = generate_qr_dian(factura.number, factura.cufe)
             factura.qr.save(qr_file.name, qr_file, save=False)
             factura.save(update_fields=['qr', 'updated_at'])
 
     try:
-        download_xml(factura)
+        if factura.xml_url:
+            download_xml(factura)
     except DescargaFacturaError:
         logger.warning('facturar_venta.xml_descarga_error venta_id=%s factura=%s', venta.id, factura.number, exc_info=True)
     try:
-        download_pdf(factura)
+        if factura.pdf_url:
+            download_pdf(factura)
     except DescargaFacturaError:
         logger.warning('facturar_venta.pdf_descarga_error venta_id=%s factura=%s', venta.id, factura.number, exc_info=True)
     logger.info('facturar_venta.fin_ok venta_id=%s factura=%s', venta.id, factura.number)

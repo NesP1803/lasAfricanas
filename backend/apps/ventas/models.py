@@ -80,7 +80,10 @@ class Venta(BaseModel):
     ESTADO = [
         ('BORRADOR', 'Borrador'),
         ('ENVIADA_A_CAJA', 'Enviada a caja'),
-        ('FACTURADA', 'Facturada'),
+        # Estado operativo: venta cerrada/cobrada localmente.
+        ('COBRADA', 'Cobrada'),
+        # Alias temporal de compatibilidad para datos/consumidores legacy.
+        ('FACTURADA', 'Facturada (legacy)'),
         ('ANULADA', 'Anulada'),
     ]
     

@@ -8,7 +8,6 @@ from .models import (
     SolicitudDescuento,
     VentaAnulada,
 )
-from apps.inventario.serializers import ProductoListSerializer
 from apps.usuarios.models import Usuario
 
 
@@ -41,7 +40,7 @@ class ClienteSerializer(serializers.ModelSerializer):
     
     def get_total_compras(self, obj):
         """Total de ventas del cliente"""
-        return obj.ventas.filter(estado='FACTURADA').count()
+        return obj.ventas.filter(estado='COBRADA').count()
     
     def validate_numero_documento(self, value):
         """Valida que el documento sea único"""
@@ -104,6 +103,8 @@ class VentaListSerializer(serializers.ModelSerializer):
     vendedor_nombre = serializers.CharField(source='vendedor.username', read_only=True)
     tipo_comprobante_display = serializers.CharField(source='get_tipo_comprobante_display', read_only=True)
     estado_display = serializers.CharField(source='get_estado_display', read_only=True)
+    estado_venta = serializers.CharField(source='estado', read_only=True)
+    estado_electronico = serializers.SerializerMethodField()
     medio_pago_display = serializers.CharField(source='get_medio_pago_display', read_only=True)
     
     class Meta:
@@ -125,8 +126,18 @@ class VentaListSerializer(serializers.ModelSerializer):
             'medio_pago',
             'medio_pago_display',
             'estado',
-            'estado_display'
+            'estado_display',
+            'estado_venta',
+            'estado_electronico',
         ]
+
+    def get_estado_electronico(self, obj):
+        factura = getattr(obj, 'factura_electronica_factus', None)
+        if not factura:
+            return None
+        if factura.status == 'ACEPTADA' and factura.codigo_error == 'OBSERVACIONES_FACTUS':
+            return 'EMITIDA_CON_OBSERVACIONES'
+        return factura.status
 
 
 class VentaDetailSerializer(serializers.ModelSerializer):
@@ -136,6 +147,8 @@ class VentaDetailSerializer(serializers.ModelSerializer):
     detalles = DetalleVentaSerializer(many=True, read_only=True)
     tipo_comprobante_display = serializers.CharField(source='get_tipo_comprobante_display', read_only=True)
     estado_display = serializers.CharField(source='get_estado_display', read_only=True)
+    estado_venta = serializers.CharField(source='estado', read_only=True)
+    estado_electronico = serializers.SerializerMethodField()
     medio_pago_display = serializers.CharField(source='get_medio_pago_display', read_only=True)
     
     class Meta:
@@ -163,6 +176,8 @@ class VentaDetailSerializer(serializers.ModelSerializer):
             'cambio',
             'estado',
             'estado_display',
+            'estado_venta',
+            'estado_electronico',
             'creada_por',
             'enviada_a_caja_por',
             'enviada_a_caja_at',
@@ -178,6 +193,14 @@ class VentaDetailSerializer(serializers.ModelSerializer):
             'updated_at'
         ]
         read_only_fields = ['numero_comprobante', 'created_at', 'updated_at']
+
+    def get_estado_electronico(self, obj):
+        factura = getattr(obj, 'factura_electronica_factus', None)
+        if not factura:
+            return None
+        if factura.status == 'ACEPTADA' and factura.codigo_error == 'OBSERVACIONES_FACTUS':
+            return 'EMITIDA_CON_OBSERVACIONES'
+        return factura.status
 
 
 class VentaCreateSerializer(serializers.ModelSerializer):

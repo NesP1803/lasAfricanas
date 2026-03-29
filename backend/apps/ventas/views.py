@@ -136,14 +136,14 @@ def _registrar_salida_inventario(venta, user, detalles=None):
 
 
 def _facturar_venta(venta, user):
-    if venta.estado == 'FACTURADA':
-        raise ValidationError('La venta ya está facturada.')
+    if venta.estado in {'COBRADA', 'FACTURADA'}:
+        raise ValidationError('La venta ya está cobrada.')
     if venta.estado not in {'BORRADOR', 'ENVIADA_A_CAJA'}:
         raise ValidationError('La venta no se puede facturar en este estado.')
 
     detalles = _validar_detalles_venta(venta)
 
-    venta.estado = 'FACTURADA'
+    venta.estado = 'COBRADA'
     venta.facturada_por = user
     venta.facturada_at = timezone.now()
     venta.save()
@@ -249,7 +249,7 @@ def request_user_label(user):
 def _validar_estado_para_anulacion(venta):
     if venta.estado == 'ANULADA':
         raise ValidationError('Esta venta ya está anulada.')
-    if venta.estado == 'FACTURADA' and venta.tipo_comprobante == 'FACTURA' and venta.facturada_at is None:
+    if venta.estado in {'COBRADA', 'FACTURADA'} and venta.tipo_comprobante == 'FACTURA' and venta.facturada_at is None:
         raise ValidationError('La venta está en un estado inconsistente y no se puede anular.')
 
 
@@ -413,7 +413,7 @@ class VentaViewSet(viewsets.ModelViewSet):
             'producto__proveedor',
         )
         queryset = Venta.objects.select_related(
-            'cliente', 'vendedor'
+            'cliente', 'vendedor', 'factura_electronica_factus'
         ).prefetch_related(
             Prefetch('detalles', queryset=detalles_queryset)
         ).all()
@@ -421,7 +421,7 @@ class VentaViewSet(viewsets.ModelViewSet):
         fecha_fin = self.request.query_params.get('fecha_fin')
         estado = self.request.query_params.get('estado')
         inicio_dt, fin_dt = self._get_fecha_range(fecha_inicio, fecha_fin)
-        date_field = 'facturada_at' if estado == 'FACTURADA' else 'fecha'
+        date_field = 'facturada_at' if estado in {'FACTURADA', 'COBRADA'} else 'fecha'
         if inicio_dt:
             queryset = queryset.filter(**{f'{date_field}__gte': inicio_dt})
         if fin_dt:
@@ -442,7 +442,7 @@ class VentaViewSet(viewsets.ModelViewSet):
         if not _is_admin(user):
             vendedor = user
         tipo_comprobante = serializer.validated_data.get('tipo_comprobante')
-        estado = 'BORRADOR' if tipo_comprobante == 'FACTURA' else 'FACTURADA'
+        estado = 'BORRADOR' if tipo_comprobante == 'FACTURA' else 'COBRADA'
         serializer.save(
             vendedor=vendedor or user,
             creada_por=user,
@@ -500,7 +500,7 @@ class VentaViewSet(viewsets.ModelViewSet):
         """
         remisiones = self.get_queryset().filter(
             tipo_comprobante='REMISION',
-            estado='FACTURADA',
+            estado='COBRADA',
             facturas_generadas__isnull=True  # No tiene factura asociada
         )
         
@@ -523,7 +523,7 @@ class VentaViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        if remision.estado != 'FACTURADA':
+        if remision.estado != 'COBRADA':
             return Response(
                 {'error': 'Solo se pueden facturar remisiones confirmadas'},
                 status=status.HTTP_400_BAD_REQUEST
@@ -531,7 +531,7 @@ class VentaViewSet(viewsets.ModelViewSet):
         
         try:
             factura = remision.convertir_a_factura()
-            factura.estado = 'FACTURADA'
+            factura.estado = 'COBRADA'
             factura.facturada_por = request.user
             factura.facturada_at = timezone.now()
             factura.save()
@@ -699,24 +699,31 @@ class VentaViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def facturar(self, request, pk=None):
-        """Genera la factura electrónica en Factus para una venta confirmada."""
+        """Cierra/cobra venta local e intenta emitir factura electrónica en Factus."""
         venta = self.get_object()
 
-        if venta.tipo_comprobante != 'FACTURA':
-            return Response(
-                {'error': 'Solo se puede facturar electrónicamente comprobantes de tipo FACTURA.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if venta.estado != 'FACTURADA':
-            return Response(
-                {'error': 'La venta debe estar en estado FACTURADA antes de enviarse a Factus.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
         try:
+            with transaction.atomic():
+                venta = (
+                    Venta.objects.select_for_update()
+                    .select_related('cliente', 'vendedor')
+                    .prefetch_related('detalles', 'detalles__producto')
+                    .get(pk=pk)
+                )
+                if venta.tipo_comprobante != 'FACTURA':
+                    raise ValidationError('Solo se puede facturar electrónicamente comprobantes de tipo FACTURA.')
+                if venta.estado == 'ANULADA':
+                    raise ValidationError('No se puede facturar una venta anulada.')
+                if venta.estado not in {'COBRADA', 'FACTURADA'}:
+                    _facturar_venta(venta, request.user)
+
             factura = facturar_venta(venta.id, triggered_by=request.user)
+            venta.refresh_from_db()
+        except ValidationError as exc:
+            return Response({'error': exc.detail}, status=status.HTTP_400_BAD_REQUEST)
         except (FactusValidationError, FactusAuthError, FactusAPIError, FacturaDuplicadaError) as exc:
+            venta.refresh_from_db()
+            factura_error = FacturaElectronica.objects.filter(venta=venta).first()
             return Response(
                 {
                     'ok': False,
@@ -724,7 +731,8 @@ class VentaViewSet(viewsets.ModelViewSet):
                     'venta_id': venta.id,
                     'numero_factura': None,
                     'estado_local': venta.estado,
-                    'estado_electronico': 'ERROR',
+                    'estado_venta': venta.estado,
+                    'estado_electronico': _estado_electronico_ui(factura_error) if factura_error else 'ERROR',
                     'cufe': '',
                     'uuid': '',
                     'reference_code': '',
@@ -735,6 +743,8 @@ class VentaViewSet(viewsets.ModelViewSet):
             )
         except Exception as exc:
             logger.exception('ventas.facturar.error_no_controlado venta_id=%s', venta.id)
+            venta.refresh_from_db()
+            factura_error = FacturaElectronica.objects.filter(venta=venta).first()
             return Response(
                 {
                     'ok': False,
@@ -742,7 +752,8 @@ class VentaViewSet(viewsets.ModelViewSet):
                     'venta_id': venta.id,
                     'numero_factura': None,
                     'estado_local': venta.estado,
-                    'estado_electronico': 'ERROR',
+                    'estado_venta': venta.estado,
+                    'estado_electronico': _estado_electronico_ui(factura_error) if factura_error else 'ERROR',
                     'status': 'ERROR',
                     'factus_sent': False,
                 },
@@ -758,6 +769,7 @@ class VentaViewSet(viewsets.ModelViewSet):
             'factura_lista': _build_factura_ready_payload(venta, factura),
             'numero_factura': factura.number,
             'estado_local': venta.estado,
+            'estado_venta': venta.estado,
             'estado_electronico': _estado_electronico_ui(factura),
             'status': factura.status,
             'cufe': factura.cufe,
@@ -780,7 +792,7 @@ class VentaViewSet(viewsets.ModelViewSet):
         fecha_inicio = request.query_params.get('fecha_inicio')
         fecha_fin = request.query_params.get('fecha_fin')
         
-        ventas = self.get_queryset().filter(estado='FACTURADA')
+        ventas = self.get_queryset().filter(estado='COBRADA')
         
         inicio_dt, fin_dt = self._get_fecha_range(fecha_inicio, fecha_fin)
         if inicio_dt:
@@ -850,6 +862,7 @@ class CajaViewSet(viewsets.GenericViewSet):
             'vendedor',
             'facturada_por',
             'enviada_a_caja_por',
+            'factura_electronica_factus',
         ).prefetch_related(
             Prefetch('detalles', queryset=detalles_queryset)
         )
@@ -930,15 +943,17 @@ class CajaViewSet(viewsets.GenericViewSet):
                 logger.info('caja.facturar.validacion_ok venta_id=%s', venta.id)
                 _facturar_venta(venta, request.user)
                 logger.info('caja.facturar.estado_local_ok venta_id=%s estado=%s', venta.id, venta.estado)
-                logger.info('caja.facturar.enviando_factus venta_id=%s', venta.id)
-                factura = facturar_venta(venta.id, triggered_by=request.user)
-                logger.info(
-                    'caja.facturar.factus_ok venta_id=%s numero=%s status=%s cufe=%s',
-                    venta.id,
-                    factura.number,
-                    factura.status,
-                    factura.cufe,
-                )
+
+            logger.info('caja.facturar.enviando_factus venta_id=%s', venta.id)
+            factura = facturar_venta(venta.id, triggered_by=request.user)
+            venta.refresh_from_db()
+            logger.info(
+                'caja.facturar.factus_ok venta_id=%s numero=%s status=%s cufe=%s',
+                venta.id,
+                factura.number,
+                factura.status,
+                factura.cufe,
+            )
         except ValidationError as error:
             logger.warning('caja.facturar.validacion_error venta_id=%s error=%s', pk, error.detail)
             return Response({'error': error.detail}, status=status.HTTP_400_BAD_REQUEST)
@@ -950,14 +965,18 @@ class CajaViewSet(viewsets.GenericViewSet):
             logger.warning('caja.facturar.duplicada_reutilizada venta_id=%s factura=%s', pk, factura.number)
         except (FactusValidationError, FactusAuthError, FactusAPIError) as error:
             logger.exception('caja.facturar.factus_error venta_id=%s', pk)
+            if 'venta' in locals():
+                venta.refresh_from_db()
+            factura_error = FacturaElectronica.objects.filter(venta_id=pk).first()
             return Response(
                 {
                     'ok': False,
                     'message': str(error),
                     'venta_id': int(pk) if pk else None,
                     'numero_factura': None,
-                    'estado_local': 'ENVIADA_A_CAJA',
-                    'estado_electronico': 'ERROR',
+                    'estado_local': venta.estado if 'venta' in locals() else 'COBRADA',
+                    'estado_venta': venta.estado if 'venta' in locals() else 'COBRADA',
+                    'estado_electronico': _estado_electronico_ui(factura_error) if factura_error else 'ERROR',
                     'cufe': '',
                     'uuid': '',
                     'reference_code': '',
@@ -969,14 +988,18 @@ class CajaViewSet(viewsets.GenericViewSet):
             )
         except Exception as error:
             logger.exception('caja.facturar.error_no_controlado venta_id=%s', pk)
+            if 'venta' in locals():
+                venta.refresh_from_db()
+            factura_error = FacturaElectronica.objects.filter(venta_id=pk).first()
             return Response(
                 {
                     'ok': False,
                     'message': f'Error interno al facturar: {error}',
                     'venta_id': int(pk) if pk else None,
                     'numero_factura': None,
-                    'estado_local': 'ENVIADA_A_CAJA',
-                    'estado_electronico': 'ERROR',
+                    'estado_local': venta.estado if 'venta' in locals() else 'COBRADA',
+                    'estado_venta': venta.estado if 'venta' in locals() else 'COBRADA',
+                    'estado_electronico': _estado_electronico_ui(factura_error) if factura_error else 'ERROR',
                     'status': 'ERROR',
                     'factus_sent': False,
                 },
@@ -1001,6 +1024,7 @@ class CajaViewSet(viewsets.GenericViewSet):
                 'factura_lista': _build_factura_ready_payload(venta, factura),
                 'numero_factura': factura.number,
                 'estado_local': venta.estado,
+                'estado_venta': venta.estado,
                 'estado_electronico': _estado_electronico_ui(factura),
                 'status': factura.status,
                 'cufe': factura.cufe,
