@@ -113,8 +113,10 @@ def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> Factur
     venta = Venta.objects.select_related('cliente').prefetch_related('detalles__producto').get(pk=venta_id)
     if venta.tipo_comprobante != 'FACTURA':
         raise FactusValidationError('Solo se puede facturar electrónicamente comprobantes de tipo FACTURA.')
-    if venta.estado != 'FACTURADA':
-        raise FactusValidationError('La venta debe estar en estado FACTURADA antes de enviarse a Factus.')
+    if venta.estado == 'ANULADA':
+        raise FactusValidationError('La venta está anulada y no se puede enviar a Factus.')
+    if venta.estado not in {'COBRADA', 'FACTURADA'}:
+        raise FactusValidationError('La venta debe estar en estado COBRADA antes de enviarse a Factus.')
 
     factura_existente = FacturaElectronica.objects.filter(venta=venta).first()
     if factura_existente:
