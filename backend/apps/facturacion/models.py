@@ -19,13 +19,19 @@ class FacturaElectronica(models.Model):
         related_name='factura_electronica_factus',
         verbose_name='Venta',
     )
-    cufe = models.CharField(max_length=128, unique=True, db_index=True, verbose_name='CUFE')
-    uuid = models.CharField(max_length=128, db_index=True, verbose_name='UUID')
-    number = models.CharField(max_length=64, db_index=True, verbose_name='Número de factura')
-    reference_code = models.CharField(max_length=100, unique=True, verbose_name='Código de referencia')
+    cufe = models.CharField(max_length=128, unique=True, null=True, blank=True, db_index=True, verbose_name='CUFE')
+    uuid = models.CharField(max_length=128, null=True, blank=True, db_index=True, verbose_name='UUID')
+    number = models.CharField(max_length=64, null=True, blank=True, db_index=True, verbose_name='Número de factura')
+    reference_code = models.CharField(
+        max_length=100,
+        unique=True,
+        null=True,
+        blank=True,
+        verbose_name='Código de referencia',
+    )
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, db_index=True, verbose_name='Estado DIAN')
-    xml_url = models.URLField(max_length=500, verbose_name='URL XML')
-    pdf_url = models.URLField(max_length=500, verbose_name='URL PDF')
+    xml_url = models.URLField(max_length=500, null=True, blank=True, verbose_name='URL XML')
+    pdf_url = models.URLField(max_length=500, null=True, blank=True, verbose_name='URL PDF')
     xml_local_path = models.CharField(max_length=500, blank=True, default='', verbose_name='Ruta local XML')
     pdf_local_path = models.CharField(max_length=500, blank=True, default='', verbose_name='Ruta local PDF')
     qr = models.ImageField(upload_to='facturas/qr/', null=True, blank=True, verbose_name='Código QR DIAN')
