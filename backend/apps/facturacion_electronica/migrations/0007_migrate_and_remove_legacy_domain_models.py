@@ -1,8 +1,35 @@
 from django.db import migrations
 
 
+STATUS_MAP = {
+    'PENDIENTE': 'EN_PROCESO',
+    'ENVIANDO': 'EN_PROCESO',
+    'ACEPTADA_DIAN': 'ACEPTADA',
+    'RECHAZADA_DIAN': 'RECHAZADA',
+    'ERROR_API': 'ERROR',
+}
+
+
 def _extract_dict(value):
     return value if isinstance(value, dict) else {}
+
+
+def _normalize_status(legacy_status):
+    if not legacy_status:
+        return 'EN_PROCESO'
+    return STATUS_MAP.get(str(legacy_status).strip().upper(), 'EN_PROCESO')
+
+
+def _pick_first(source, *keys):
+    for key in keys:
+        value = source.get(key)
+        if value not in (None, ''):
+            return value
+    return None
+
+
+def _prefer_non_empty(current, incoming):
+    return current if current not in (None, '') else incoming
 
 
 def migrate_legacy_domain_models(apps, schema_editor):
@@ -13,21 +40,45 @@ def migrate_legacy_domain_models(apps, schema_editor):
     DocumentoSoporteCanonico = apps.get_model('facturacion', 'DocumentoSoporteElectronico')
 
     for legacy in LegacyNotaCredito.objects.all().iterator():
-        response_json = _extract_dict(legacy.respuesta_api) or _extract_dict(legacy.payload)
-        defaults = {
-            'status': legacy.estado or 'EN_PROCESO',
-            'response_json': response_json,
-            'created_at': legacy.created_at,
-        }
-        NotaCreditoCanonica.objects.get_or_create(
+        payload = _extract_dict(legacy.payload)
+        respuesta_api = _extract_dict(legacy.respuesta_api)
+        response_json = respuesta_api or payload
+
+        canonical, _ = NotaCreditoCanonica.objects.update_or_create(
             factura_id=legacy.factura_id,
             number=legacy.reference_code,
-            defaults=defaults,
+            defaults={
+                'status': _normalize_status(legacy.estado),
+                'response_json': response_json,
+                'created_at': legacy.created_at,
+            },
         )
+
+        canonical.cufe = _prefer_non_empty(
+            canonical.cufe,
+            _pick_first(respuesta_api, 'cufe', 'bill_cufe') or _pick_first(payload, 'cufe', 'bill_cufe'),
+        )
+        canonical.uuid = _prefer_non_empty(
+            canonical.uuid,
+            _pick_first(respuesta_api, 'uuid', 'bill_uuid') or _pick_first(payload, 'uuid', 'bill_uuid'),
+        )
+        canonical.xml_url = _prefer_non_empty(
+            canonical.xml_url,
+            _pick_first(respuesta_api, 'xml_url', 'url_xml') or _pick_first(payload, 'xml_url', 'url_xml'),
+        )
+        canonical.pdf_url = _prefer_non_empty(
+            canonical.pdf_url,
+            _pick_first(respuesta_api, 'pdf_url', 'url_pdf') or _pick_first(payload, 'pdf_url', 'url_pdf'),
+        )
+        canonical.save(update_fields=['cufe', 'uuid', 'xml_url', 'pdf_url'])
 
     for legacy in LegacyDocumentoSoporte.objects.all().iterator():
         payload = _extract_dict(legacy.payload)
-        response_json = _extract_dict(legacy.respuesta_api) or payload
+        respuesta_api = _extract_dict(legacy.respuesta_api)
+        response_json = respuesta_api or payload
+
+        # Defaults defensivos: el modelo legacy no almacenaba todos los atributos
+        # estructurados que hoy requiere el modelo canónico.
         proveedor_nombre = (
             payload.get('proveedor_nombre')
             or payload.get('customer', {}).get('company')
@@ -39,18 +90,36 @@ def migrate_legacy_domain_models(apps, schema_editor):
             or payload.get('customer', {}).get('identification_document_id')
             or '13'
         )
-        defaults = {
-            'proveedor_nombre': str(proveedor_nombre)[:200],
-            'proveedor_documento': legacy.tercero_identificacion,
-            'proveedor_tipo_documento': str(proveedor_tipo_documento)[:20],
-            'status': legacy.estado or 'EN_PROCESO',
-            'response_json': response_json,
-            'created_at': legacy.created_at,
-        }
-        DocumentoSoporteCanonico.objects.get_or_create(
+
+        canonical, _ = DocumentoSoporteCanonico.objects.update_or_create(
             number=legacy.reference_code,
-            defaults=defaults,
+            defaults={
+                'proveedor_nombre': str(proveedor_nombre)[:200],
+                'proveedor_documento': legacy.tercero_identificacion,
+                'proveedor_tipo_documento': str(proveedor_tipo_documento)[:20],
+                'status': _normalize_status(legacy.estado),
+                'response_json': response_json,
+                'created_at': legacy.created_at,
+            },
         )
+
+        canonical.cufe = _prefer_non_empty(
+            canonical.cufe,
+            _pick_first(respuesta_api, 'cufe', 'bill_cufe') or _pick_first(payload, 'cufe', 'bill_cufe'),
+        )
+        canonical.uuid = _prefer_non_empty(
+            canonical.uuid,
+            _pick_first(respuesta_api, 'uuid', 'bill_uuid') or _pick_first(payload, 'uuid', 'bill_uuid'),
+        )
+        canonical.xml_url = _prefer_non_empty(
+            canonical.xml_url,
+            _pick_first(respuesta_api, 'xml_url', 'url_xml') or _pick_first(payload, 'xml_url', 'url_xml'),
+        )
+        canonical.pdf_url = _prefer_non_empty(
+            canonical.pdf_url,
+            _pick_first(respuesta_api, 'pdf_url', 'url_pdf') or _pick_first(payload, 'pdf_url', 'url_pdf'),
+        )
+        canonical.save(update_fields=['cufe', 'uuid', 'xml_url', 'pdf_url'])
 
 
 def noop_reverse(apps, schema_editor):
