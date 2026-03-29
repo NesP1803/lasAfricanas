@@ -7,8 +7,10 @@ def forwards_migrate_facturada_to_cobrada(apps, schema_editor):
 
 
 def backwards_migrate_cobrada_to_facturada(apps, schema_editor):
-    Venta = apps.get_model('ventas', 'Venta')
-    Venta.objects.filter(estado='COBRADA').update(estado='FACTURADA')
+    # No-op seguro: no revertir masivamente COBRADA -> FACTURADA porque
+    # mezclaría ventas que originalmente eran no-facturables o creadas
+    # después de aplicar la migración.
+    return None
 
 
 class Migration(migrations.Migration):

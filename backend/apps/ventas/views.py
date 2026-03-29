@@ -718,9 +718,12 @@ class VentaViewSet(viewsets.ModelViewSet):
                     _facturar_venta(venta, request.user)
 
             factura = facturar_venta(venta.id, triggered_by=request.user)
+            venta.refresh_from_db()
         except ValidationError as exc:
             return Response({'error': exc.detail}, status=status.HTTP_400_BAD_REQUEST)
         except (FactusValidationError, FactusAuthError, FactusAPIError, FacturaDuplicadaError) as exc:
+            venta.refresh_from_db()
+            factura_error = FacturaElectronica.objects.filter(venta=venta).first()
             return Response(
                 {
                     'ok': False,
@@ -729,7 +732,7 @@ class VentaViewSet(viewsets.ModelViewSet):
                     'numero_factura': None,
                     'estado_local': venta.estado,
                     'estado_venta': venta.estado,
-                    'estado_electronico': 'ERROR',
+                    'estado_electronico': _estado_electronico_ui(factura_error) if factura_error else 'ERROR',
                     'cufe': '',
                     'uuid': '',
                     'reference_code': '',
@@ -740,6 +743,8 @@ class VentaViewSet(viewsets.ModelViewSet):
             )
         except Exception as exc:
             logger.exception('ventas.facturar.error_no_controlado venta_id=%s', venta.id)
+            venta.refresh_from_db()
+            factura_error = FacturaElectronica.objects.filter(venta=venta).first()
             return Response(
                 {
                     'ok': False,
@@ -748,7 +753,7 @@ class VentaViewSet(viewsets.ModelViewSet):
                     'numero_factura': None,
                     'estado_local': venta.estado,
                     'estado_venta': venta.estado,
-                    'estado_electronico': 'ERROR',
+                    'estado_electronico': _estado_electronico_ui(factura_error) if factura_error else 'ERROR',
                     'status': 'ERROR',
                     'factus_sent': False,
                 },
@@ -941,6 +946,7 @@ class CajaViewSet(viewsets.GenericViewSet):
 
             logger.info('caja.facturar.enviando_factus venta_id=%s', venta.id)
             factura = facturar_venta(venta.id, triggered_by=request.user)
+            venta.refresh_from_db()
             logger.info(
                 'caja.facturar.factus_ok venta_id=%s numero=%s status=%s cufe=%s',
                 venta.id,
@@ -959,6 +965,9 @@ class CajaViewSet(viewsets.GenericViewSet):
             logger.warning('caja.facturar.duplicada_reutilizada venta_id=%s factura=%s', pk, factura.number)
         except (FactusValidationError, FactusAuthError, FactusAPIError) as error:
             logger.exception('caja.facturar.factus_error venta_id=%s', pk)
+            if 'venta' in locals():
+                venta.refresh_from_db()
+            factura_error = FacturaElectronica.objects.filter(venta_id=pk).first()
             return Response(
                 {
                     'ok': False,
@@ -967,7 +976,7 @@ class CajaViewSet(viewsets.GenericViewSet):
                     'numero_factura': None,
                     'estado_local': venta.estado if 'venta' in locals() else 'COBRADA',
                     'estado_venta': venta.estado if 'venta' in locals() else 'COBRADA',
-                    'estado_electronico': 'ERROR',
+                    'estado_electronico': _estado_electronico_ui(factura_error) if factura_error else 'ERROR',
                     'cufe': '',
                     'uuid': '',
                     'reference_code': '',
@@ -979,6 +988,9 @@ class CajaViewSet(viewsets.GenericViewSet):
             )
         except Exception as error:
             logger.exception('caja.facturar.error_no_controlado venta_id=%s', pk)
+            if 'venta' in locals():
+                venta.refresh_from_db()
+            factura_error = FacturaElectronica.objects.filter(venta_id=pk).first()
             return Response(
                 {
                     'ok': False,
@@ -987,7 +999,7 @@ class CajaViewSet(viewsets.GenericViewSet):
                     'numero_factura': None,
                     'estado_local': venta.estado if 'venta' in locals() else 'COBRADA',
                     'estado_venta': venta.estado if 'venta' in locals() else 'COBRADA',
-                    'estado_electronico': 'ERROR',
+                    'estado_electronico': _estado_electronico_ui(factura_error) if factura_error else 'ERROR',
                     'status': 'ERROR',
                     'factus_sent': False,
                 },
