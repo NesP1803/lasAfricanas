@@ -281,7 +281,12 @@ def _anular_factura_electronica_con_nota_credito(venta, motivo, *, max_reintento
     ultimo_error = None
     for intento in range(max_reintentos + 1):
         try:
-            return emitir_nota_credito(factura_id=factura.id, motivo=motivo, items=items)
+            nota_credito = emitir_nota_credito(factura_id=factura.id, motivo=motivo, items=items)
+            if nota_credito.status != 'ACEPTADA':
+                raise FactusAPIError(
+                    f'La nota crédito no fue aceptada por Factus (estado={nota_credito.status}).'
+                )
+            return nota_credito
         except (FactusAPIError, FactusAuthError) as exc:
             ultimo_error = exc
             logger.warning(
