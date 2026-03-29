@@ -116,7 +116,7 @@ class OrdenTallerViewSet(viewsets.ModelViewSet):
             efectivo_recibido=total,
             cambio=Decimal('0'),
             observaciones=f"Venta generada desde orden de taller {orden.id}",
-            estado='FACTURADA',
+            estado='COBRADA',
             facturada_por=user,
             facturada_at=timezone.now(),
             inventario_ya_afectado=True,
