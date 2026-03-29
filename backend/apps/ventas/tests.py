@@ -7,6 +7,7 @@ from rest_framework.test import APIClient
 from apps.inventario.models import Categoria, Producto, Proveedor, MovimientoInventario
 from apps.usuarios.models import Usuario
 from apps.ventas.models import Cliente, Venta, DetalleVenta
+from apps.ventas.views import _registrar_salida_inventario
 
 
 class CajaVentaFlowTests(TestCase):
@@ -102,6 +103,78 @@ class CajaVentaFlowTests(TestCase):
         self.client.force_authenticate(user=self.vendedor)
         response = self.client.post(f'/api/caja/{venta.id}/facturar/')
         self.assertEqual(response.status_code, 403)
+
+
+    def test_facturar_venta_marca_inventario_ya_afectado(self):
+        venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            cliente=self.cliente,
+            vendedor=self.vendedor,
+            subtotal=Decimal('200'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('38'),
+            total=Decimal('238'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('238'),
+            cambio=Decimal('0'),
+            estado='ENVIADA_A_CAJA',
+            enviada_a_caja_por=self.vendedor,
+            enviada_a_caja_at=timezone.now(),
+        )
+        DetalleVenta.objects.create(
+            venta=venta,
+            producto=self.producto,
+            cantidad=1,
+            precio_unitario=Decimal('200'),
+            descuento_unitario=Decimal('0'),
+            iva_porcentaje=Decimal('19'),
+            subtotal=Decimal('200'),
+            total=Decimal('238'),
+        )
+
+        self.client.force_authenticate(user=self.cajero)
+        response = self.client.post(f'/api/caja/{venta.id}/facturar/')
+        self.assertEqual(response.status_code, 200)
+
+        venta.refresh_from_db()
+        self.assertTrue(venta.inventario_ya_afectado)
+
+    def test_reintento_registro_salida_no_duplica_movimientos(self):
+        venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            cliente=self.cliente,
+            vendedor=self.vendedor,
+            subtotal=Decimal('200'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('38'),
+            total=Decimal('238'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('238'),
+            cambio=Decimal('0'),
+            estado='ENVIADA_A_CAJA',
+            enviada_a_caja_por=self.vendedor,
+            enviada_a_caja_at=timezone.now(),
+        )
+        detalle = DetalleVenta.objects.create(
+            venta=venta,
+            producto=self.producto,
+            cantidad=1,
+            precio_unitario=Decimal('200'),
+            descuento_unitario=Decimal('0'),
+            iva_porcentaje=Decimal('19'),
+            subtotal=Decimal('200'),
+            total=Decimal('238'),
+        )
+
+        _registrar_salida_inventario(venta, self.cajero, detalles=[detalle])
+        venta.refresh_from_db()
+        self.assertTrue(venta.inventario_ya_afectado)
+        self.assertEqual(MovimientoInventario.objects.filter(tipo='SALIDA').count(), 1)
+
+        _registrar_salida_inventario(venta, self.cajero, detalles=[detalle])
+        self.assertEqual(MovimientoInventario.objects.filter(tipo='SALIDA').count(), 1)
 
     def test_caja_puede_facturar(self):
         venta = Venta.objects.create(
@@ -418,6 +491,7 @@ class CajaVentaFlowTests(TestCase):
         self.producto.refresh_from_db()
 
         self.assertEqual(venta.estado, 'FACTURADA')
+        self.assertTrue(venta.inventario_ya_afectado)
         self.assertEqual(self.producto.stock, Decimal('9'))
         self.assertEqual(MovimientoInventario.objects.count(), 1)
 
@@ -606,6 +680,7 @@ class CajaVentaFlowTests(TestCase):
         venta.refresh_from_db()
         self.producto.refresh_from_db()
         self.assertEqual(venta.estado, 'ENVIADA_A_CAJA')
+        self.assertFalse(venta.inventario_ya_afectado)
         self.assertIsNone(venta.facturada_at)
         self.assertIsNone(venta.facturada_por)
         self.assertEqual(self.producto.stock, Decimal('1'))
