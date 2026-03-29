@@ -9,10 +9,10 @@ from django.db import transaction
 
 from apps.facturacion.exceptions import FacturaDuplicadaError
 from apps.facturacion.models import FacturaElectronica
-from apps.facturacion.services.consecutivo_service import get_next_invoice_sequence
+from apps.facturacion.services.consecutivo_service import get_next_invoice_sequence, resolve_numbering_range
 from apps.facturacion.services.download_invoice_files import download_pdf, download_xml
 from apps.facturacion.services.exceptions import DescargaFacturaError
-from apps.facturacion.services.factus_client import FactusAPIError, FactusClient, FactusValidationError
+from apps.facturacion.services.factus_client import FactusAPIError, FactusAuthError, FactusClient, FactusValidationError
 from apps.facturacion.services.factus_payload_builder import build_invoice_payload
 from apps.facturacion.services.generate_qr_dian import generate_qr_dian
 from apps.usuarios.models import Usuario
@@ -148,6 +148,39 @@ def _build_attempt_trace(
     }
 
 
+def _persist_remote_error(
+    *,
+    factura: FacturaElectronica,
+    payload: dict[str, Any],
+    numero: str,
+    reference_code: str,
+    triggered_by: Usuario | None,
+    stage: str,
+    error: Exception,
+) -> None:
+    status_code = getattr(error, 'status_code', None)
+    provider_detail = getattr(error, 'provider_detail', '')
+    factura.status = 'ERROR'
+    factura.codigo_error = str(status_code or error.__class__.__name__)
+    factura.mensaje_error = provider_detail or str(error)
+    factura.response_json = _build_attempt_trace(
+        factura=factura,
+        payload=payload,
+        numero=numero,
+        reference_code=reference_code,
+        triggered_by=triggered_by,
+        status='ERROR',
+        error={
+            'stage': stage,
+            'error_type': error.__class__.__name__,
+            'message': str(error),
+            'status_code': status_code,
+            'provider_detail': provider_detail,
+        },
+    )
+    factura.save(update_fields=['status', 'codigo_error', 'mensaje_error', 'response_json', 'updated_at'])
+
+
 def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> FacturaElectronica:
     logger.info('facturar_venta.inicio venta_id=%s user_id=%s', venta_id, getattr(triggered_by, 'id', None))
     venta = Venta.objects.select_related('cliente').prefetch_related('detalles__producto').get(pk=venta_id)
@@ -194,12 +227,13 @@ def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> Factur
         venta.numero_comprobante = numero
         venta.save(update_fields=['numero_comprobante', 'updated_at'])
     elif not payload.get('numbering_range_id'):
-        sequence = get_next_invoice_sequence()
-        if not sequence.numbering_range_id:
+        # Reintentos con número ya asignado: resolver rango sin incrementar consecutivo.
+        rango = resolve_numbering_range(document_code='FACTURA_VENTA')
+        if not rango.factus_range_id:
             raise FactusValidationError(
                 'Debe sincronizar/configurar el rango antes de facturar. Falta factus_range_id del rango seleccionado.'
             )
-        payload['numbering_range_id'] = sequence.numbering_range_id
+        payload['numbering_range_id'] = int(rango.factus_range_id)
 
     payload['number'] = numero
     payload['reference_code'] = numero
@@ -229,24 +263,16 @@ def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> Factur
     client = FactusClient()
     try:
         response_json = client.send_invoice(payload)
-    except FactusAPIError as exc:
-        factura.status = 'ERROR'
-        factura.codigo_error = str(exc.status_code or 'FACTUS_API_ERROR')
-        factura.mensaje_error = exc.provider_detail or str(exc)
-        factura.response_json = _build_attempt_trace(
+    except (FactusAPIError, FactusAuthError) as exc:
+        _persist_remote_error(
             factura=factura,
             payload=payload,
             numero=numero,
             reference_code=reference_code,
             triggered_by=triggered_by,
-            status='ERROR',
-            error={
-                'message': str(exc),
-                'status_code': exc.status_code,
-                'provider_detail': exc.provider_detail,
-            },
+            stage='send_invoice',
+            error=exc,
         )
-        factura.save(update_fields=['status', 'codigo_error', 'mensaje_error', 'response_json', 'updated_at'])
         logger.warning('facturar_venta.factus_rechazo venta_id=%s numero=%s', venta.id, numero)
         raise
     logger.info('facturar_venta.factus_response venta_id=%s keys=%s', venta.id, sorted(response_json.keys()))
@@ -266,7 +292,19 @@ def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> Factur
             fields['number'],
             missing_before,
         )
-        response_show_json = client.get_invoice(fields['number'])
+        try:
+            response_show_json = client.get_invoice(fields['number'])
+        except (FactusAPIError, FactusAuthError) as exc:
+            _persist_remote_error(
+                factura=factura,
+                payload=payload,
+                numero=numero,
+                reference_code=reference_code,
+                triggered_by=triggered_by,
+                stage='get_invoice',
+                error=exc,
+            )
+            raise
         logger.info(
             'facturar_venta.factus_show_response venta_id=%s numero=%s keys=%s',
             venta.id,
@@ -289,13 +327,17 @@ def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> Factur
                 fields = _merge_factus_fields(fields, _extract_factus_data(response_download_json))
                 if not bill_errors:
                     bill_errors = _extract_bill_errors(response_download_json)
-            except FactusAPIError:
-                logger.warning(
-                    'facturar_venta.factus_download_error venta_id=%s numero=%s',
-                    venta.id,
-                    fields['number'],
-                    exc_info=True,
+            except (FactusAPIError, FactusAuthError) as exc:
+                _persist_remote_error(
+                    factura=factura,
+                    payload=payload,
+                    numero=numero,
+                    reference_code=reference_code,
+                    triggered_by=triggered_by,
+                    stage='get_invoice_downloads',
+                    error=exc,
                 )
+                raise
 
     # Factus puede no devolver uuid/xml/pdf en validate; se completa con show/download
     # y, como último recurso, se genera URL directa de descarga para no abortar el flujo.
