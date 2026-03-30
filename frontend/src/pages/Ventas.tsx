@@ -1484,8 +1484,17 @@ export default function Ventas() {
               Cobro
             </h2>
             <div className="mt-4 grid gap-3">
-              <div className="rounded-xl border border-emerald-200/90 bg-emerald-50/70 p-4">
-                <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-emerald-700">
+              <div className="flex min-h-[94px] flex-col justify-between rounded-xl border border-amber-200/80 bg-amber-50 px-4 py-3 sm:flex-row sm:items-center sm:gap-4">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-700">
+                  Total a pagar
+                </span>
+                <span className="text-right text-3xl font-bold leading-none tabular-nums text-slate-900 sm:text-4xl">
+                  {formatCurrencyCOP(totals.totalCobro)}
+                </span>
+              </div>
+
+              <div className="flex min-h-[94px] flex-col justify-between rounded-xl border border-emerald-200/90 bg-emerald-50/70 px-4 py-3 sm:flex-row sm:items-center sm:gap-4">
+                <span className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
                   Efectivo recibido
                 </span>
                 <input
@@ -1494,15 +1503,15 @@ export default function Ventas() {
                   value={formatMoneyCOP(efectivoRecibido)}
                   onChange={(event) => setEfectivoRecibido(parseMoneyCOP(event.target.value))}
                   disabled={ventaBloqueada}
-                  className="w-full rounded-lg border border-emerald-300 bg-white px-4 py-3 text-right text-2xl font-bold tabular-nums text-emerald-800 shadow-sm focus:border-emerald-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100"
+                  className="w-full rounded-lg border border-emerald-300 bg-white px-4 py-2.5 text-right text-3xl font-bold tabular-nums text-emerald-800 shadow-sm focus:border-emerald-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100 sm:w-[58%]"
                 />
               </div>
 
-              <div className="rounded-xl border border-blue-200/80 bg-blue-50/80 p-4">
-                <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-blue-700">
+              <div className="flex min-h-[94px] flex-col justify-between rounded-xl border border-blue-200/80 bg-blue-50/80 px-4 py-3 sm:flex-row sm:items-center sm:gap-4">
+                <span className="text-xs font-semibold uppercase tracking-wide text-blue-700">
                   Cambio
                 </span>
-                <span className="block text-right text-3xl font-bold leading-none tabular-nums text-blue-800">
+                <span className="text-right text-3xl font-bold leading-none tabular-nums text-blue-800 sm:text-4xl">
                   {formatCurrencyCOP(cambio)}
                 </span>
               </div>
