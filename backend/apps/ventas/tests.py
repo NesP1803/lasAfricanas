@@ -1010,6 +1010,11 @@ class VentaServicesTests(TestCase):
         self.assertNotIn(facturada.id, ids)
         self.assertNotIn(remision.id, ids)
 
+    def test_vendedor_no_puede_ver_pendientes_caja(self):
+        self.client.force_authenticate(user=self.vendedor)
+        response = self.client.get('/api/caja/pendientes/')
+        self.assertEqual(response.status_code, 403)
+
     def test_stock_insuficiente_no_cambia_estado_enviada_a_caja(self):
         self.producto.stock = Decimal('1')
         self.producto.save(update_fields=['stock'])
