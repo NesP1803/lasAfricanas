@@ -1343,10 +1343,6 @@ export default function Configuracion() {
                 </button>
               </div>
             </div>
-            <p className="mt-3 text-xs text-slate-500">
-              La homologación con Factus se asigna automáticamente según el tipo
-              de impuesto registrado.
-            </p>
           </div>
         </section>
       )}
