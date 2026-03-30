@@ -228,7 +228,6 @@ export default function Ventas() {
   const [documentoPreview, setDocumentoPreview] = useState<DocumentoPreview | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [mostrarBusqueda, setMostrarBusqueda] = useState(false);
-  const [productoInfo, setProductoInfo] = useState<ProductoList | Producto | null>(null);
   const [guardandoBorrador, setGuardandoBorrador] = useState(false);
   const [enviandoCaja, setEnviandoCaja] = useState(false);
   const [ventaBorrador, setVentaBorrador] = useState<Venta | null>(null);
@@ -625,14 +624,12 @@ export default function Ventas() {
     if (ventaBloqueada) return;
     setMostrarBusqueda(true);
     setBusquedaProducto('');
-    setProductoInfo(null);
   };
 
   const handleSeleccionarProducto = async (productoId: number) => {
     if (ventaBloqueada) return;
     try {
       const producto = await inventarioApi.getProducto(productoId);
-      setProductoInfo(producto);
       agregarProducto(producto);
       setMensaje('Producto agregado.');
     } catch (error) {
@@ -1003,16 +1000,6 @@ export default function Ventas() {
     () => Math.max(efectivoRecibido - totals.totalCobro, 0),
     [efectivoRecibido, totals.totalCobro]
   );
-
-  const obtenerInfoProducto = (info: ProductoList | Producto | null) => {
-    if (!info) return null;
-    return {
-      nombre: info.nombre,
-      codigo: info.codigo,
-      precio: info.precio_venta,
-      stock: info.stock,
-    };
-  };
 
   return (
     <div className="space-y-6">
@@ -1659,30 +1646,7 @@ export default function Ventas() {
                 />
               </div>
             </div>
-            <div className="grid gap-4 px-4 pb-4 lg:grid-cols-[260px,1fr]">
-              <div className="rounded-xl border border-slate-100 bg-white px-3 py-3">
-                <p className="text-xs font-semibold uppercase text-slate-500">
-                  Consulta rápida
-                </p>
-                {(() => {
-                  const info = obtenerInfoProducto(productoInfo);
-                  if (!info) {
-                    return (
-                      <p className="mt-2 text-xs text-slate-400">
-                        Selecciona un producto para ver precio y stock.
-                      </p>
-                    );
-                  }
-                  return (
-                    <div className="mt-2 space-y-1 text-xs text-slate-600">
-                      <p className="font-semibold text-slate-800">{info.nombre}</p>
-                      <p>Código: {info.codigo}</p>
-                      <p>Precio: {formatCurrencyCOP(info.precio)}</p>
-                      <p>Stock: {info.stock}</p>
-                    </div>
-                  );
-                })()}
-              </div>
+            <div className="px-4 pb-4">
               <div className="max-h-[420px] overflow-auto">
                 <table className="min-w-full text-left text-sm">
                   <thead className="sticky top-0 bg-slate-100 text-xs uppercase text-slate-500">
@@ -1709,7 +1673,6 @@ export default function Ventas() {
                       <tr
                         key={producto.id}
                         onDoubleClick={() => handleSeleccionarProducto(producto.id)}
-                        onClick={() => setProductoInfo(producto)}
                         className="cursor-pointer border-b border-slate-100 hover:bg-slate-50"
                       >
                         <td className="px-3 py-2 text-slate-600">{producto.codigo}</td>
