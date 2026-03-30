@@ -228,7 +228,6 @@ export default function Ventas() {
   const [documentoPreview, setDocumentoPreview] = useState<DocumentoPreview | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [mostrarBusqueda, setMostrarBusqueda] = useState(false);
-  const [productoInfo, setProductoInfo] = useState<ProductoList | Producto | null>(null);
   const [guardandoBorrador, setGuardandoBorrador] = useState(false);
   const [enviandoCaja, setEnviandoCaja] = useState(false);
   const [ventaBorrador, setVentaBorrador] = useState<Venta | null>(null);
@@ -625,14 +624,12 @@ export default function Ventas() {
     if (ventaBloqueada) return;
     setMostrarBusqueda(true);
     setBusquedaProducto('');
-    setProductoInfo(null);
   };
 
   const handleSeleccionarProducto = async (productoId: number) => {
     if (ventaBloqueada) return;
     try {
       const producto = await inventarioApi.getProducto(productoId);
-      setProductoInfo(producto);
       agregarProducto(producto);
       setMensaje('Producto agregado.');
     } catch (error) {
@@ -1003,16 +1000,6 @@ export default function Ventas() {
     () => Math.max(efectivoRecibido - totals.totalCobro, 0),
     [efectivoRecibido, totals.totalCobro]
   );
-
-  const obtenerInfoProducto = (info: ProductoList | Producto | null) => {
-    if (!info) return null;
-    return {
-      nombre: info.nombre,
-      codigo: info.codigo,
-      precio: info.precio_venta,
-      stock: info.stock,
-    };
-  };
 
   return (
     <div className="space-y-6">
@@ -1483,28 +1470,32 @@ export default function Ventas() {
             <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600">
               Cobro
             </h2>
-            <div className="mt-4 grid gap-3">
-              <div className="rounded-xl border border-emerald-200/90 bg-emerald-50/70 p-4">
-                <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-emerald-700">
-                  Efectivo recibido
-                </span>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={formatMoneyCOP(efectivoRecibido)}
-                  onChange={(event) => setEfectivoRecibido(parseMoneyCOP(event.target.value))}
-                  disabled={ventaBloqueada}
-                  className="w-full rounded-lg border border-emerald-300 bg-white px-4 py-3 text-right text-2xl font-bold tabular-nums text-emerald-800 shadow-sm focus:border-emerald-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100"
-                />
+            <div className="mt-4 grid gap-2.5">
+              <div className="rounded-xl border border-emerald-200/90 bg-emerald-50/70 px-4 py-3">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                    Efectivo recibido
+                  </span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={formatMoneyCOP(efectivoRecibido)}
+                    onChange={(event) => setEfectivoRecibido(parseMoneyCOP(event.target.value))}
+                    disabled={ventaBloqueada}
+                    className="w-full rounded-lg border border-emerald-300 bg-white px-3.5 py-2 text-right text-2xl font-bold tabular-nums text-emerald-800 shadow-sm focus:border-emerald-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100 sm:max-w-[250px]"
+                  />
+                </div>
               </div>
 
-              <div className="rounded-xl border border-blue-200/80 bg-blue-50/80 p-4">
-                <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-blue-700">
-                  Cambio
-                </span>
-                <span className="block text-right text-3xl font-bold leading-none tabular-nums text-blue-800">
-                  {formatCurrencyCOP(cambio)}
-                </span>
+              <div className="rounded-xl border border-blue-200/80 bg-blue-50/80 px-4 py-3">
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-blue-700">
+                    Cambio
+                  </span>
+                  <span className="text-right text-2xl font-bold leading-none tabular-nums text-blue-800 sm:text-3xl">
+                    {formatCurrencyCOP(cambio)}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -1655,30 +1646,7 @@ export default function Ventas() {
                 />
               </div>
             </div>
-            <div className="grid gap-4 px-4 pb-4 lg:grid-cols-[260px,1fr]">
-              <div className="rounded-xl border border-slate-100 bg-white px-3 py-3">
-                <p className="text-xs font-semibold uppercase text-slate-500">
-                  Consulta rápida
-                </p>
-                {(() => {
-                  const info = obtenerInfoProducto(productoInfo);
-                  if (!info) {
-                    return (
-                      <p className="mt-2 text-xs text-slate-400">
-                        Selecciona un producto para ver precio y stock.
-                      </p>
-                    );
-                  }
-                  return (
-                    <div className="mt-2 space-y-1 text-xs text-slate-600">
-                      <p className="font-semibold text-slate-800">{info.nombre}</p>
-                      <p>Código: {info.codigo}</p>
-                      <p>Precio: {formatCurrencyCOP(info.precio)}</p>
-                      <p>Stock: {info.stock}</p>
-                    </div>
-                  );
-                })()}
-              </div>
+            <div className="px-4 pb-4">
               <div className="max-h-[420px] overflow-auto">
                 <table className="min-w-full text-left text-sm">
                   <thead className="sticky top-0 bg-slate-100 text-xs uppercase text-slate-500">
@@ -1705,7 +1673,6 @@ export default function Ventas() {
                       <tr
                         key={producto.id}
                         onDoubleClick={() => handleSeleccionarProducto(producto.id)}
-                        onClick={() => setProductoInfo(producto)}
                         className="cursor-pointer border-b border-slate-100 hover:bg-slate-50"
                       >
                         <td className="px-3 py-2 text-slate-600">{producto.codigo}</td>
