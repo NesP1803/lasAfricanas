@@ -9,6 +9,8 @@ from apps.usuarios.models import Usuario
 from apps.facturacion.models import FacturaElectronica
 from apps.ventas.models import Cliente, Venta, DetalleVenta
 from apps.ventas.views import _registrar_salida_inventario
+from apps.ventas.services.cerrar_venta import cerrar_venta_local
+from apps.ventas.services.enviar_venta_a_caja import enviar_venta_a_caja
 
 
 class CajaVentaFlowTests(TestCase):
@@ -265,7 +267,7 @@ class CajaVentaFlowTests(TestCase):
         self.assertEqual(venta.estado, 'ANULADA')
         self.assertEqual(self.producto.stock, Decimal('10'))
 
-    @patch('apps.ventas.views.emitir_nota_credito')
+    @patch('apps.ventas.services.anular_venta.emitir_nota_credito')
     def test_anular_factura_electronica_aceptada_exige_nota_credito(self, mocked_emitir_nota_credito):
         venta = Venta.objects.create(
             tipo_comprobante='FACTURA',
@@ -318,7 +320,80 @@ class CajaVentaFlowTests(TestCase):
         venta.refresh_from_db()
         self.assertEqual(venta.estado, 'ANULADA')
 
-    @patch('apps.ventas.views.emitir_nota_credito')
+
+class VentaServicesTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = Usuario.objects.create_user(username='svc-user', password='pass1234')
+        self.vendedor = self.user
+        self.cajero = Usuario.objects.create_user(username='svc-cajero', password='pass1234')
+        self.cajero.es_cajero = True
+        self.cajero.save(update_fields=['es_cajero'])
+        self.cliente = Cliente.objects.create(
+            tipo_documento='CC',
+            numero_documento='998877',
+            nombre='Cliente servicio',
+        )
+        self.categoria = Categoria.objects.create(nombre='Svc categoria')
+        self.proveedor = Proveedor.objects.create(nombre='Svc proveedor')
+        self.producto = Producto.objects.create(
+            codigo='P-SVC',
+            nombre='Producto servicio',
+            categoria=self.categoria,
+            proveedor=self.proveedor,
+            precio_costo=Decimal('10'),
+            precio_venta=Decimal('20'),
+            precio_venta_minimo=Decimal('15'),
+            stock=10,
+            stock_minimo=1,
+            iva_porcentaje=Decimal('19'),
+        )
+
+    def _crear_venta_borrador(self):
+        venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            cliente=self.cliente,
+            vendedor=self.user,
+            subtotal=Decimal('20'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('3.8'),
+            total=Decimal('23.8'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('23.8'),
+            cambio=Decimal('0'),
+            estado='BORRADOR',
+        )
+        DetalleVenta.objects.create(
+            venta=venta,
+            producto=self.producto,
+            cantidad=1,
+            precio_unitario=Decimal('20'),
+            descuento_unitario=Decimal('0'),
+            iva_porcentaje=Decimal('19'),
+            subtotal=Decimal('20'),
+            total=Decimal('23.8'),
+        )
+        return venta
+
+    def test_enviar_venta_a_caja_service(self):
+        venta = self._crear_venta_borrador()
+        enviar_venta_a_caja(venta, self.user)
+        venta.refresh_from_db()
+        self.assertEqual(venta.estado, 'ENVIADA_A_CAJA')
+        self.assertEqual(venta.enviada_a_caja_por_id, self.user.id)
+        self.assertIsNotNone(venta.enviada_a_caja_at)
+
+    def test_cerrar_venta_local_service_afecta_inventario(self):
+        venta = self._crear_venta_borrador()
+        cerrar_venta_local(venta, self.user)
+        venta.refresh_from_db()
+        self.producto.refresh_from_db()
+        self.assertEqual(venta.estado, 'COBRADA')
+        self.assertTrue(venta.inventario_ya_afectado)
+        self.assertEqual(self.producto.stock, Decimal('9'))
+
+    @patch('apps.ventas.services.anular_venta.emitir_nota_credito')
     def test_anular_factura_electronica_si_factus_falla_no_anula_ni_restituye_stock(self, mocked_emitir_nota_credito):
         from apps.facturacion.services import FactusAPIError
 
@@ -375,7 +450,7 @@ class CajaVentaFlowTests(TestCase):
         self.assertEqual(venta.estado, 'FACTURADA')
         self.assertEqual(self.producto.stock, stock_inicial)
 
-    @patch('apps.ventas.views.emitir_nota_credito')
+    @patch('apps.ventas.services.anular_venta.emitir_nota_credito')
     def test_anular_factura_electronica_no_aceptada_no_anula_venta(self, mocked_emitir_nota_credito):
         venta = Venta.objects.create(
             tipo_comprobante='FACTURA',
@@ -430,7 +505,7 @@ class CajaVentaFlowTests(TestCase):
         self.assertEqual(venta.estado, 'FACTURADA')
         self.assertEqual(self.producto.stock, stock_inicial)
 
-    @patch('apps.ventas.views.emitir_nota_credito')
+    @patch('apps.ventas.services.anular_venta.emitir_nota_credito')
     def test_anular_factura_sin_electronica_aceptada_se_anula_local(self, mocked_emitir_nota_credito):
         venta = Venta.objects.create(
             tipo_comprobante='FACTURA',
