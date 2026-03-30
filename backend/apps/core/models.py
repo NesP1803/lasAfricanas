@@ -102,6 +102,8 @@ class ConfiguracionFacturacion(models.Model):
     plantilla_remision_tirilla = models.TextField(blank=True)
     plantilla_nota_credito_carta = models.TextField(blank=True)
     plantilla_nota_credito_tirilla = models.TextField(blank=True)
+    redondeo_caja_efectivo = models.BooleanField(default=True)
+    redondeo_caja_incremento = models.PositiveIntegerField(default=100)
 
     class Meta:
         verbose_name = 'Configuración de Facturación'
