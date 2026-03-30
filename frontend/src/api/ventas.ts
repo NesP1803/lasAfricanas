@@ -481,6 +481,23 @@ export const ventasApi = {
     return [];
   },
 
+  async getDetalleCaja(ventaId: number, options?: { signal?: AbortSignal }): Promise<Venta> {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/caja/${ventaId}/detalle/`, {
+      signal: options?.signal,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    const data = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new Error(extractApiErrorMessage(data, 'Error al cargar venta de caja'));
+    }
+    return data as Venta;
+  },
+
   async facturarEnCaja(ventaId: number): Promise<FacturarCajaResponse> {
     const token = localStorage.getItem('token');
     const response = await fetch(`${API_URL}/caja/${ventaId}/facturar/`, {

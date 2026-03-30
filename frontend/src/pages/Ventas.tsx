@@ -88,6 +88,10 @@ type TallerVentaPayload = {
   }>;
 };
 
+type CajaVentaPayload = {
+  ventaId: number;
+};
+
 const buildDocumentoPreviewFromVenta = (venta: Venta): DocumentoPreview => {
   const detallesPreview: DocumentoDetalle[] =
     venta.detalles?.map((detalle) => ({
@@ -271,8 +275,12 @@ export default function Ventas() {
   );
 
   const tallerPayload = useMemo(() => {
-    const state = location.state as { fromTaller?: TallerVentaPayload } | null;
+    const state = location.state as { fromTaller?: TallerVentaPayload; fromCaja?: CajaVentaPayload } | null;
     return state?.fromTaller ?? null;
+  }, [location.state]);
+  const cajaPayload = useMemo(() => {
+    const state = location.state as { fromTaller?: TallerVentaPayload; fromCaja?: CajaVentaPayload } | null;
+    return state?.fromCaja ?? null;
   }, [location.state]);
   const inventarioYaAfectado = Boolean(tallerPayload?.ordenId);
 
@@ -468,6 +476,63 @@ export default function Ventas() {
 
     applyTallerData();
   }, [tallerPayload, navigate]);
+
+  const cargarVentaEnFormulario = (venta: Venta) => {
+    const items: CartItem[] = (venta.detalles ?? []).map((detalle) => {
+      const cantidad = Number(detalle.cantidad);
+      const descuentoUnitario = Number(detalle.descuento_unitario);
+      const precioFinal = Number(detalle.precio_unitario);
+      const bruto = cantidad > 0 ? precioFinal * cantidad : 0;
+      const descuentoLinea = descuentoUnitario * cantidad;
+      const descuentoPorcentaje = bruto > 0 ? (descuentoLinea / bruto) * 100 : 0;
+
+      return {
+        id: detalle.producto,
+        codigo: detalle.producto_codigo ?? '',
+        nombre: detalle.producto_nombre ?? 'Producto',
+        ivaPorcentaje: Number(detalle.iva_porcentaje),
+        ivaExento: Number(detalle.iva_porcentaje) <= 0,
+        precioUnitario: roundMoney(precioFinal),
+        stock: Number(detalle.producto_stock ?? 0),
+        cantidad: Number(cantidad.toFixed(2)),
+        descuentoPorcentaje: roundMoney(descuentoPorcentaje),
+        unidadMedida: 'N/A',
+      };
+    });
+
+    setCartItems(items);
+    setVentaBorrador(venta);
+    setClienteId(venta.cliente_info?.id ?? venta.cliente ?? null);
+    setClienteNombre(venta.cliente_info?.nombre ?? 'Cliente general');
+    setClienteDocumento(venta.cliente_info?.numero_documento ?? '');
+    setMedioPago((venta.medio_pago as 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'CREDITO') ?? 'EFECTIVO');
+    setEfectivoRecibido(String(roundMoney(Number(venta.efectivo_recibido ?? 0))));
+    setDescuentoGeneral(String(roundMoney(Number(venta.descuento_porcentaje ?? 0))));
+    setDescuentoAutorizado(true);
+    setEstadoSolicitud(null);
+    setSolicitudActivaId(null);
+    setAprobadorId('');
+    setAprobadorNombre('');
+    setMostrarPermiso(false);
+    setDocumentoGenerado(null);
+    setDocumentoPreview(null);
+    setMensaje(`Venta ${venta.numero_comprobante || `#${venta.id}`} cargada en caja. Revisa y confirma para facturar.`);
+  };
+
+  useEffect(() => {
+    if (!cajaPayload?.ventaId || !esCaja) return;
+    ventasApi
+      .getDetalleCaja(cajaPayload.ventaId)
+      .then((venta) => cargarVentaEnFormulario(venta))
+      .catch((error) => {
+        const detail = error instanceof Error ? error.message : 'No se pudo cargar la venta enviada a caja.';
+        setMensaje(detail);
+        showNotification({ type: 'error', message: detail });
+      })
+      .finally(() => {
+        navigate('/ventas', { replace: true, state: null });
+      });
+  }, [cajaPayload?.ventaId, esCaja, navigate, showNotification]);
 
   const totals = useMemo(() => {
     const resumenLineas = cartItems.map(calcularLineaDesdePrecioFinal);
@@ -822,6 +887,35 @@ export default function Ventas() {
     if (!validarVenta()) return;
     setGuardandoBorrador(true);
     try {
+      if (esCaja && ventaBorrador?.estado === 'ENVIADA_A_CAJA') {
+        const ventaActualizada = await ventasApi.actualizarVenta(
+          ventaBorrador.id,
+          buildVentaPayload('FACTURA', ventaBorrador.vendedor)
+        );
+        const emision = await ventasApi.facturarEnCaja(ventaActualizada.id);
+        const ventaFacturada = emision.venta ?? ventaActualizada;
+        setVentaBorrador(ventaFacturada);
+        setDocumentoGenerado({
+          tipo: 'FACTURA',
+          numero: emision.numero_factura || ventaFacturada.numero_comprobante || `FAC-${ventaFacturada.id}`,
+          cliente: ventaFacturada.cliente_info?.nombre ?? clienteNombre,
+          total: currencyFormatter.format(Number(ventaFacturada.total)),
+        });
+        setDocumentoPreview(buildDocumentoPreviewFromVenta(ventaFacturada));
+        setMensaje(
+          emision.factus_sent
+            ? `Factura electrónica emitida: ${emision.numero_factura} (${emision.estado_electronico || emision.status})`
+            : emision.message || 'Factura local confirmada sin envío electrónico.'
+        );
+        showNotification({
+          type: emision.factus_sent ? 'success' : 'error',
+          message: emision.factus_sent
+            ? `Emitida en Factus. CUFE: ${emision.cufe || 'N/D'} Ref: ${emision.reference_code || 'N/D'}`
+            : emision.message || 'No se pudo confirmar emisión electrónica.',
+        });
+        return;
+      }
+
       const venta = await ventasApi.crearVenta({
         ...buildVentaPayload('FACTURA'),
         facturar_directo: true,
