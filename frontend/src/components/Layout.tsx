@@ -454,9 +454,12 @@ export default function Layout() {
             items: [
               { label: "Facturas", path: "/facturacion/facturas" },
               { label: "Remisiones", path: "/facturacion/remisiones" },
-              { label: "Notas crédito", path: "/notas-credito" },
-              { label: "Documentos soporte", path: "/documentos-soporte" },
             ],
+          });
+          facturacionItems.push({ label: "Notas crédito", path: "/notas-credito" });
+          facturacionItems.push({
+            label: "Documentos soporte",
+            path: "/documentos-soporte",
           });
         }
         if (facturacionItems.length > 0) {
