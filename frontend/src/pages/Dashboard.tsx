@@ -167,11 +167,6 @@ export default function Dashboard() {
         <p className="text-gray-600 mt-2">
           Bienvenido, {user?.username}
         </p>
-        <p className="text-sm text-gray-500">
-          {isAdmin
-            ? 'Resumen ejecutivo con indicadores clave del negocio.'
-            : 'Panel operativo para enfocarte en lo urgente del día.'}
-        </p>
         {errorMessage ? (
           <p className="text-sm text-red-600 mt-2">{errorMessage}</p>
         ) : null}
