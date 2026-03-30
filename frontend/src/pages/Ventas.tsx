@@ -655,15 +655,6 @@ export default function Ventas() {
     );
   };
 
-  const handleActualizarDescuento = (id: number, descuento: number) => {
-    if (ventaBloqueada) return;
-    setCartItems((prev) =>
-      prev.map((item) =>
-        item.id === id ? { ...item, descuentoPorcentaje: descuento } : item
-      )
-    );
-  };
-
   const handleEliminarItem = (id: number) => {
     if (ventaBloqueada) return;
     setCartItems((prev) => prev.filter((item) => item.id !== id));
@@ -1374,7 +1365,6 @@ export default function Ventas() {
                 <th className="px-3 py-1.5 text-right">I.V.A.</th>
                 <th className="px-3 py-1.5 text-right">Total</th>
                 <th className="px-3 py-1.5 text-right">Precio U</th>
-                {!esVentaRapida && <th className="px-3 py-1.5 text-right">Desc %</th>}
                 <th className="px-3 py-1.5 text-right">Stock</th>
                 <th className="px-3 py-1.5 text-right">Acciones</th>
               </tr>
@@ -1382,7 +1372,7 @@ export default function Ventas() {
             <tbody>
               {cartItems.length === 0 && (
                 <tr>
-                  <td colSpan={esVentaRapida ? 8 : 9} className="px-3 py-10 text-center text-slate-500">
+                  <td colSpan={8} className="px-3 py-10 text-center text-slate-500">
                     Agrega productos con lector o doble clic.
                   </td>
                 </tr>
@@ -1446,24 +1436,6 @@ export default function Ventas() {
                     <td className="px-3 py-1.5 text-right">
                       {formatCurrencyCOP(item.precioUnitario)}
                     </td>
-                    {!esVentaRapida && (
-                      <td className="px-3 py-1.5 text-right">
-                        <input
-                          type="number"
-                          min={0}
-                          max={100}
-                          value={item.descuentoPorcentaje}
-                          onChange={(event) =>
-                            handleActualizarDescuento(
-                              item.id,
-                              Number(event.target.value || 0)
-                            )
-                          }
-                          className="w-16 rounded border border-slate-200 px-2 py-0.5 text-right text-sm disabled:cursor-not-allowed disabled:bg-slate-100"
-                          disabled={!descuentoAutorizado || ventaBloqueada}
-                        />
-                      </td>
-                    )}
                     <td className="px-3 py-1.5 text-right">{item.stock}</td>
                     <td className="px-3 py-1.5 text-right">
                       <button
