@@ -254,6 +254,7 @@ export default function Ventas() {
     return state?.fromCaja ?? null;
   }, [location.state]);
   const inventarioYaAfectado = Boolean(tallerPayload?.ordenId);
+  const esVentaRapida = Boolean(tallerPayload);
   const redondeoCajaHabilitado = configuracion?.redondeo_caja_efectivo ?? true;
   const incrementoRedondeoCaja = configuracion?.redondeo_caja_incremento ?? 100;
 
