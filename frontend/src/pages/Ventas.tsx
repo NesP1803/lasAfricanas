@@ -1436,37 +1436,37 @@ export default function Ventas() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <div className="grid gap-4 lg:grid-cols-[1fr_minmax(360px,1.15fr)]">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600">
               Resumen de venta
             </h2>
-            <div className="mt-4 space-y-3 text-sm">
-              <div className="flex items-center justify-between">
+            <div className="mt-4 space-y-3 text-sm sm:space-y-2.5">
+              <div className="flex items-center justify-between gap-3 rounded-lg px-1 py-1">
                 <span className="text-slate-500">Subtotal</span>
-                <span className="text-base font-semibold text-slate-900">
+                <span className="text-base font-semibold tabular-nums text-slate-900">
                   {formatCurrencyCOP(totals.subtotal)}
                 </span>
               </div>
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-3 rounded-lg px-1 py-1">
                 <span className="text-slate-500">Impuestos</span>
-                <span className="text-base font-semibold text-slate-900">
+                <span className="text-base font-semibold tabular-nums text-slate-900">
                   {formatCurrencyCOP(totals.iva)}
                 </span>
               </div>
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-3 rounded-lg px-1 py-1">
                 <span className="text-slate-500">Descuentos</span>
-                <span className="text-base font-semibold text-rose-600">
+                <span className="text-base font-semibold tabular-nums text-rose-600">
                   -{formatCurrencyCOP(totals.descuentoTotalAplicado)}
                 </span>
               </div>
-              <div className="mt-2 rounded-xl border border-amber-200 bg-amber-100 px-4 py-3">
+              <div className="mt-3 rounded-xl border border-amber-200/80 bg-amber-50 px-4 py-4 shadow-sm">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-semibold uppercase tracking-wide text-slate-700">
                     Total a pagar
                   </span>
-                  <span className="text-2xl font-bold text-slate-900">
+                  <span className="text-3xl font-bold leading-none tabular-nums text-slate-900">
                     {formatCurrencyCOP(totals.totalCobro)}
                   </span>
                 </div>
@@ -1479,25 +1479,30 @@ export default function Ventas() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600">
               Cobro
             </h2>
-            <div className="mt-4 space-y-3 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500">Efectivo recibido</span>
+            <div className="mt-4 grid gap-3">
+              <div className="rounded-xl border border-emerald-200/90 bg-emerald-50/70 p-4">
+                <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                  Efectivo recibido
+                </span>
                 <input
                   type="text"
                   inputMode="numeric"
                   value={formatMoneyCOP(efectivoRecibido)}
                   onChange={(event) => setEfectivoRecibido(parseMoneyCOP(event.target.value))}
                   disabled={ventaBloqueada}
-                  className="w-44 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-right text-lg font-semibold text-emerald-700 focus:border-emerald-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100"
+                  className="w-full rounded-lg border border-emerald-300 bg-white px-4 py-3 text-right text-2xl font-bold tabular-nums text-emerald-800 shadow-sm focus:border-emerald-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100"
                 />
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500">Cambio</span>
-                <span className="rounded-md bg-blue-50 px-3 py-1.5 text-lg font-semibold text-blue-700">
+
+              <div className="rounded-xl border border-blue-200/80 bg-blue-50/80 p-4">
+                <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-blue-700">
+                  Cambio
+                </span>
+                <span className="block text-right text-3xl font-bold leading-none tabular-nums text-blue-800">
                   {formatCurrencyCOP(cambio)}
                 </span>
               </div>
