@@ -161,6 +161,8 @@ export interface ConfiguracionFacturacion {
   plantilla_remision_tirilla: string;
   plantilla_nota_credito_carta: string;
   plantilla_nota_credito_tirilla: string;
+  redondeo_caja_efectivo?: boolean;
+  redondeo_caja_incremento?: number;
 }
 
 export interface Impuesto {

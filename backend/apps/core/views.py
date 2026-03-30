@@ -80,6 +80,8 @@ class ConfiguracionFacturacionViewSet(viewsets.ModelViewSet):
                 'plantilla_remision_tirilla': '',
                 'plantilla_nota_credito_carta': '',
                 'plantilla_nota_credito_tirilla': '',
+                'redondeo_caja_efectivo': True,
+                'redondeo_caja_incremento': 100,
             },
         )
         serializer = self.get_serializer([configuracion], many=True)
