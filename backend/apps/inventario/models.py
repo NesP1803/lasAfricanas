@@ -214,18 +214,31 @@ class Producto(BaseModel):
         return f"{self.codigo} - {self.nombre}"
 
     def save(self, *args, **kwargs):
+        touch_ultima_compra = kwargs.pop('touch_ultima_compra', True)
         update_fields = kwargs.get('update_fields')
+
         if self.pk:
-            previous = Producto.objects.filter(pk=self.pk).only('stock').first()
-            if previous and self.stock != previous.stock:
-                self.ultima_compra = timezone.now()
-                if update_fields is not None:
-                    update_fields = set(update_fields)
-                    update_fields.add('ultima_compra')
-                    kwargs['update_fields'] = list(update_fields)
-        else:
-            if self.ultima_compra is None:
-                self.ultima_compra = timezone.now()
+            previous = (
+                Producto.objects.filter(pk=self.pk)
+                .only('stock', 'precio_venta', 'precio_costo', 'ultima_compra')
+                .first()
+            )
+
+            if previous and touch_ultima_compra:
+                changed_fields = (
+                    self.stock != previous.stock
+                    or self.precio_venta != previous.precio_venta
+                    or self.precio_costo != previous.precio_costo
+                )
+                if changed_fields:
+                    self.ultima_compra = timezone.now()
+                    if update_fields is not None:
+                        update_fields = set(update_fields)
+                        update_fields.add('ultima_compra')
+                        kwargs['update_fields'] = list(update_fields)
+        elif self.ultima_compra is None:
+            self.ultima_compra = timezone.now()
+
         super().save(*args, **kwargs)
     
     @property
