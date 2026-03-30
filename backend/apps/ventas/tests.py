@@ -1015,6 +1015,63 @@ class VentaServicesTests(TestCase):
         response = self.client.get('/api/caja/pendientes/')
         self.assertEqual(response.status_code, 403)
 
+    def test_caja_puede_obtener_detalle_pendiente(self):
+        venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            cliente=self.cliente,
+            vendedor=self.vendedor,
+            subtotal=Decimal('200'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('38'),
+            total=Decimal('238'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('238'),
+            cambio=Decimal('0'),
+            estado='ENVIADA_A_CAJA',
+            enviada_a_caja_por=self.vendedor,
+            enviada_a_caja_at=timezone.now(),
+        )
+        DetalleVenta.objects.create(
+            venta=venta,
+            producto=self.producto,
+            cantidad=1,
+            precio_unitario=Decimal('200'),
+            descuento_unitario=Decimal('0'),
+            iva_porcentaje=Decimal('19'),
+            subtotal=Decimal('200'),
+            total=Decimal('238'),
+        )
+
+        self.client.force_authenticate(user=self.cajero)
+        response = self.client.get(f'/api/caja/{venta.id}/detalle/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['id'], venta.id)
+        self.assertEqual(response.data['estado'], 'ENVIADA_A_CAJA')
+        self.assertEqual(len(response.data['detalles']), 1)
+
+    def test_detalle_caja_rechaza_ventas_no_pendientes(self):
+        venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            cliente=self.cliente,
+            vendedor=self.vendedor,
+            subtotal=Decimal('200'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('38'),
+            total=Decimal('238'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('238'),
+            cambio=Decimal('0'),
+            estado='BORRADOR',
+        )
+
+        self.client.force_authenticate(user=self.cajero)
+        response = self.client.get(f'/api/caja/{venta.id}/detalle/')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('no está disponible para cargarse en caja', response.data['error'])
+
     def test_stock_insuficiente_no_cambia_estado_enviada_a_caja(self):
         self.producto.stock = Decimal('1')
         self.producto.save(update_fields=['stock'])

@@ -563,6 +563,22 @@ class CajaViewSet(viewsets.GenericViewSet):
         serializer = VentaListSerializer(ventas, many=True)
         return Response(serializer.data)
 
+    @action(detail=True, methods=['get'], url_path='detalle')
+    def detalle(self, request, pk=None):
+        permission_response = self._require_caja(request)
+        if permission_response:
+            return permission_response
+
+        venta = self.get_object()
+        if venta.tipo_comprobante != 'FACTURA' or venta.estado != 'ENVIADA_A_CAJA':
+            return Response(
+                {'error': 'La venta no está disponible para cargarse en caja.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = VentaDetailSerializer(venta)
+        return Response(serializer.data)
+
     @action(detail=True, methods=['post'])
     def facturar(self, request, pk=None):
         logger.info(
