@@ -8,6 +8,18 @@ import type {
   PaginatedResponse,
   AuditoriaRetention,
 } from '../types';
+
+const sessionCache = {
+  empresa: null as ConfiguracionEmpresa | null,
+  facturacion: null as ConfiguracionFacturacion | null,
+  usuarioActual: null as UsuarioAdmin | null,
+};
+
+const inFlightRequests = {
+  empresa: null as Promise<ConfiguracionEmpresa> | null,
+  facturacion: null as Promise<ConfiguracionFacturacion> | null,
+  usuarioActual: null as Promise<UsuarioAdmin> | null,
+};
 const buildEmpresaFormData = (
   data: ConfiguracionEmpresa,
   logoFile?: File | null,
@@ -31,11 +43,26 @@ const buildEmpresaFormData = (
 };
 
 export const configuracionAPI = {
-  obtenerEmpresa: async () => {
-    const response = await apiClient.get<ConfiguracionEmpresa[]>(
-      '/configuracion-empresa/'
-    );
-    return response.data[0];
+  obtenerEmpresa: async (options?: { force?: boolean }) => {
+    if (sessionCache.empresa && !options?.force) {
+      return sessionCache.empresa;
+    }
+    if (inFlightRequests.empresa && !options?.force) {
+      return inFlightRequests.empresa;
+    }
+
+    inFlightRequests.empresa = apiClient
+      .get<ConfiguracionEmpresa[]>('/configuracion-empresa/')
+      .then((response) => {
+        const empresa = response.data[0];
+        sessionCache.empresa = empresa ?? null;
+        return empresa;
+      })
+      .finally(() => {
+        inFlightRequests.empresa = null;
+      });
+
+    return inFlightRequests.empresa;
   },
   actualizarEmpresa: async (
     id: number,
@@ -57,6 +84,7 @@ export const configuracionAPI = {
           },
         }
       );
+      sessionCache.empresa = response.data;
       return response.data;
     }
 
@@ -64,17 +92,36 @@ export const configuracionAPI = {
       `/configuracion-empresa/${id}/`,
       data
     );
+    sessionCache.empresa = response.data;
     return response.data;
   },
-  obtenerFacturacion: async () => {
-    const response = await apiClient.get<ConfiguracionFacturacion[]>('/configuracion-facturacion/');
-    return response.data[0];
+  obtenerFacturacion: async (options?: { force?: boolean }) => {
+    if (sessionCache.facturacion && !options?.force) {
+      return sessionCache.facturacion;
+    }
+    if (inFlightRequests.facturacion && !options?.force) {
+      return inFlightRequests.facturacion;
+    }
+
+    inFlightRequests.facturacion = apiClient
+      .get<ConfiguracionFacturacion[]>('/configuracion-facturacion/')
+      .then((response) => {
+        const facturacion = response.data[0];
+        sessionCache.facturacion = facturacion ?? null;
+        return facturacion;
+      })
+      .finally(() => {
+        inFlightRequests.facturacion = null;
+      });
+
+    return inFlightRequests.facturacion;
   },
   actualizarFacturacion: async (id: number, data: ConfiguracionFacturacion) => {
     const response = await apiClient.put<ConfiguracionFacturacion>(
       `/configuracion-facturacion/${id}/`,
       data
     );
+    sessionCache.facturacion = response.data;
     return response.data;
   },
   obtenerRangosFactus: async () => {
@@ -207,13 +254,38 @@ export const configuracionAPI = {
     const response = await apiClient.get<UsuarioAdmin>(`/usuarios/${id}/`);
     return response.data;
   },
-  obtenerUsuarioActual: async () => {
-    const response = await apiClient.get<UsuarioAdmin>('/usuarios/me/');
-    return response.data;
+  obtenerUsuarioActual: async (options?: { force?: boolean }) => {
+    if (sessionCache.usuarioActual && !options?.force) {
+      return sessionCache.usuarioActual;
+    }
+    if (inFlightRequests.usuarioActual && !options?.force) {
+      return inFlightRequests.usuarioActual;
+    }
+
+    inFlightRequests.usuarioActual = apiClient
+      .get<UsuarioAdmin>('/usuarios/me/')
+      .then((response) => {
+        sessionCache.usuarioActual = response.data;
+        return response.data;
+      })
+      .finally(() => {
+        inFlightRequests.usuarioActual = null;
+      });
+
+    return inFlightRequests.usuarioActual;
   },
   actualizarUsuarioActual: async (data: Partial<UsuarioAdmin>) => {
     const response = await apiClient.patch<UsuarioAdmin>('/usuarios/me/', data);
+    sessionCache.usuarioActual = response.data;
     return response.data;
+  },
+  resetSessionCache: () => {
+    sessionCache.empresa = null;
+    sessionCache.facturacion = null;
+    sessionCache.usuarioActual = null;
+    inFlightRequests.empresa = null;
+    inFlightRequests.facturacion = null;
+    inFlightRequests.usuarioActual = null;
   },
   cambiarClave: async (id: number, newPassword: string) => {
     const response = await apiClient.post<{ detail: string }>(`/usuarios/${id}/change_password/`, {

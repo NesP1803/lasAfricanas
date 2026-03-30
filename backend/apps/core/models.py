@@ -121,6 +121,7 @@ class Impuesto(BaseModel):
         verbose_name = 'Impuesto'
         verbose_name_plural = 'Impuestos'
         db_table = 'impuestos'
+        ordering = ['nombre', 'id']
 
     def __str__(self):
         return self.nombre

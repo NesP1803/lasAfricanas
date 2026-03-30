@@ -393,15 +393,12 @@ export default function Ventas() {
     }
     const actualizarEstadoSolicitud = async () => {
       const now = Date.now();
-      if (now - lastSolicitudFetchRef.current < 2000) {
+      if (now - lastSolicitudFetchRef.current < 15000) {
         return;
       }
       lastSolicitudFetchRef.current = now;
       try {
-        const solicitudes = await descuentosApi.listarSolicitudes();
-        const solicitud = solicitudes.find(
-          (item) => item.id === solicitudActivaId
-        );
+        const solicitud = await descuentosApi.obtenerSolicitud(solicitudActivaId);
         if (!solicitud) {
           setEstadoSolicitud(null);
           setDescuentoAutorizado(false);
@@ -439,7 +436,7 @@ export default function Ventas() {
         if (document.visibilityState === 'visible') {
           actualizarEstadoSolicitud();
         }
-      }, 2000);
+      }, 15000);
     };
     const stopPolling = () => {
       if (intervalId !== null) {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { FileSearch, Printer, Ban, Eye, X, ChevronDown, FileText } from 'lucide-react';
 import { configuracionAPI } from '../api/configuracion';
 import { ventasApi, type Venta, type VentaListItem } from '../api/ventas';
@@ -103,6 +103,11 @@ export default function Facturas() {
   );
   const [fechaInicio, setFechaInicio] = useState(today);
   const [fechaFin, setFechaFin] = useState(today);
+  const [filtrosAplicados, setFiltrosAplicados] = useState({
+    estado: 'FACTURADA' as 'FACTURADA' | 'ANULADA' | 'TODAS',
+    fechaInicio: today,
+    fechaFin: today,
+  });
   const [documento, setDocumento] = useState<DocumentoSeleccionado | null>(null);
   const [detalleFactura, setDetalleFactura] = useState<Venta | null>(null);
   const [detalleCargando, setDetalleCargando] = useState(false);
@@ -119,6 +124,7 @@ export default function Facturas() {
   const [error, setError] = useState<string | null>(null);
   const [anulando, setAnulando] = useState(false);
   const [accionesElectronicas, setAccionesElectronicas] = useState<Record<string, string | null>>({});
+  const ventasAbortRef = useRef<AbortController | null>(null);
 
   const cargarFacturas = async (filters: {
     estado: 'FACTURADA' | 'ANULADA' | 'TODAS';
@@ -130,13 +136,16 @@ export default function Facturas() {
     setError(null);
     try {
       const search = filters.search?.trim();
+      ventasAbortRef.current?.abort();
+      const controller = new AbortController();
+      ventasAbortRef.current = controller;
       const response = await ventasApi.getVentas({
         tipoComprobante: 'FACTURA',
         estado: filters.estado === 'TODAS' ? undefined : filters.estado,
         fechaInicio: filters.fechaInicio || undefined,
         fechaFin: filters.fechaFin || undefined,
         search: search ? search : undefined,
-      });
+      }, { signal: controller.signal });
       const facturasElectronicas = await facturacionApi.getFacturas();
       const porNumero = new Map(
         facturasElectronicas.map((item) => [String(item.numero).trim(), item])
@@ -153,6 +162,9 @@ export default function Facturas() {
       );
       setSelectedIds([]);
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        return;
+      }
       setFacturas([]);
       setError(err instanceof Error ? err.message : 'Error al cargar facturas');
     } finally {
@@ -187,12 +199,11 @@ export default function Facturas() {
   }, [busqueda, facturas, fechaInicio, fechaFin]);
 
   useEffect(() => {
-    cargarFacturas({
-      estado: estadoFiltro,
-      fechaInicio,
-      fechaFin,
-    });
-  }, [estadoFiltro, fechaInicio, fechaFin]);
+    cargarFacturas(filtrosAplicados);
+    return () => {
+      ventasAbortRef.current?.abort();
+    };
+  }, [filtrosAplicados]);
 
   useEffect(() => {
     configuracionAPI
@@ -291,9 +302,7 @@ export default function Facturas() {
           : 'Factura anulada correctamente.',
       });
       await cargarFacturas({
-        estado: estadoFiltro,
-        fechaInicio,
-        fechaFin,
+        ...filtrosAplicados,
         search: busqueda,
       });
       setAnulacion(null);
@@ -435,6 +444,21 @@ export default function Facturas() {
               onChange={(event) => setFechaFin(event.target.value)}
               className="rounded border border-slate-300 px-2 py-1 text-sm"
             />
+          </div>
+          <div className="flex flex-col gap-1 self-end">
+            <button
+              type="button"
+              onClick={() =>
+                setFiltrosAplicados({
+                  estado: estadoFiltro,
+                  fechaInicio,
+                  fechaFin,
+                })
+              }
+              className="rounded bg-blue-600 px-3 py-2 text-xs font-semibold uppercase text-white hover:bg-blue-700"
+            >
+              Aplicar filtros
+            </button>
           </div>
           <div className="flex flex-1 flex-col gap-1">
             <label className="text-xs font-semibold text-slate-500">Buscar por</label>
