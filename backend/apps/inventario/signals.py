@@ -13,4 +13,4 @@ def actualizar_stock_producto(sender, instance, created, **kwargs):
         # Ya el stock_nuevo se calculó, solo actualizamos el producto
         producto = instance.producto
         producto.stock = instance.stock_nuevo
-        producto.save(update_fields=['stock', 'updated_at'])
+        producto.save(update_fields=['stock', 'updated_at'], touch_ultima_compra=False)

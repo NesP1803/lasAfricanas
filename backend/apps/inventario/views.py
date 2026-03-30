@@ -273,7 +273,7 @@ class ProductoViewSet(viewsets.ModelViewSet):
         
         # Actualizar stock del producto
         producto.stock = stock_nuevo
-        producto.save()
+        producto.save(update_fields=['stock', 'updated_at'], touch_ultima_compra=False)
         
         serializer = ProductoDetailSerializer(producto)
         return Response(serializer.data)
