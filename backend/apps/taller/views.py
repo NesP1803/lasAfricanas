@@ -10,6 +10,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 
 from apps.inventario.models import MovimientoInventario, Producto
 from apps.ventas.models import DetalleVenta, Venta
+from apps.ventas.services.calculo_venta import recalcular_totales_venta
 from .models import Mecanico, Moto, OrdenTaller, OrdenRepuesto
 from .serializers import MecanicoSerializer, MotoSerializer, OrdenTallerSerializer
 
@@ -77,43 +78,36 @@ class OrdenTallerViewSet(viewsets.ModelViewSet):
         if not repuestos:
             raise ValueError('La orden no tiene repuestos asociados')
 
-        subtotal = Decimal('0')
-        iva_total = Decimal('0')
         detalles = []
 
         for repuesto in repuestos:
             producto = repuesto.producto
-            subtotal_item = Decimal(repuesto.cantidad) * Decimal(repuesto.precio_unitario)
-            iva_porcentaje = Decimal(producto.iva_porcentaje)
-            iva_item = (subtotal_item * iva_porcentaje) / Decimal('100')
-            total_item = subtotal_item + iva_item
-
-            subtotal += subtotal_item
-            iva_total += iva_item
-
             detalles.append({
                 'producto': producto,
                 'cantidad': repuesto.cantidad,
                 'precio_unitario': repuesto.precio_unitario,
                 'descuento_unitario': Decimal('0'),
-                'iva_porcentaje': iva_porcentaje,
-                'subtotal': subtotal_item,
-                'total': total_item,
+                'iva_porcentaje': Decimal(producto.iva_porcentaje),
             })
 
-        total = subtotal + iva_total
+        totales = recalcular_totales_venta(
+            detalles_data=detalles,
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            efectivo_recibido=None,
+        )
 
         venta = Venta.objects.create(
             tipo_comprobante=tipo_comprobante,
             cliente=orden.moto.cliente,
             vendedor=user,
-            subtotal=subtotal,
+            subtotal=totales['subtotal'],
             descuento_porcentaje=Decimal('0'),
             descuento_valor=Decimal('0'),
-            iva=iva_total,
-            total=total,
+            iva=totales['iva'],
+            total=totales['total'],
             medio_pago='EFECTIVO',
-            efectivo_recibido=total,
+            efectivo_recibido=totales['total'],
             cambio=Decimal('0'),
             observaciones=f"Venta generada desde orden de taller {orden.id}",
             estado='COBRADA',
