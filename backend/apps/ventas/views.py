@@ -29,6 +29,7 @@ from apps.ventas.services import (
     registrar_salida_inventario,
     validar_para_facturar_en_caja,
 )
+from apps.ventas.permissions import has_caja_access, is_admin_user
 
 from .models import Cliente, Venta, DetalleVenta, SolicitudDescuento
 from .serializers import (
@@ -43,22 +44,11 @@ logger = logging.getLogger(__name__)
 
 
 def _is_admin(user):
-    return bool(
-        user
-        and (
-            user.is_superuser
-            or user.is_staff
-            or getattr(user, 'tipo_usuario', None) == 'ADMIN'
-        )
-    )
+    return is_admin_user(user)
 
 
 def _is_caja(user):
-    return bool(
-        _is_admin(user)
-        or getattr(user, 'es_cajero', False)
-        or user.has_perm('ventas.caja_facturar')
-    )
+    return has_caja_access(user)
 
 
 _registrar_salida_inventario = registrar_salida_inventario

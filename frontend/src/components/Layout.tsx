@@ -276,6 +276,11 @@ export default function Layout() {
         return { moduleKey: "facturacion", sectionKey: "cuentas" };
       }
 
+
+      if (pathname.startsWith("/facturacion/caja")) {
+        return { moduleKey: "facturacion", sectionKey: "caja" };
+      }
+
       if (pathname.startsWith("/ventas")) {
         return { moduleKey: "facturacion", sectionKey: "venta_rapida" };
       }

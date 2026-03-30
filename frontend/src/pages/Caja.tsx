@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Navigate } from 'react-router-dom';
 import { Printer, X } from 'lucide-react';
 import { configuracionAPI } from '../api/configuracion';
 import { ventasApi, type FacturaElectronicaResultado, type FacturaLista, type Venta, type VentaListItem } from '../api/ventas';
 import ComprobanteTemplate from '../components/ComprobanteTemplate';
 import { useNotification } from '../contexts/NotificationContext';
+import { useAuth } from '../contexts/AuthContext';
+import { createFullModuleAccess, isSectionEnabled, normalizeModuleAccess } from '../store/moduleAccess';
 import type { ConfiguracionEmpresa, ConfiguracionFacturacion } from '../types';
 import { printComprobante } from '../utils/printComprobante';
 
@@ -15,6 +18,7 @@ const currencyFormatter = new Intl.NumberFormat('es-CO', {
 });
 
 export default function Caja() {
+  const { user } = useAuth();
   const { showNotification } = useNotification();
   const [pendientes, setPendientes] = useState<VentaListItem[]>([]);
   const [cargando, setCargando] = useState(false);
@@ -24,6 +28,14 @@ export default function Caja() {
   const [facturaLista, setFacturaLista] = useState<FacturaLista | null>(null);
   const [empresa, setEmpresa] = useState<ConfiguracionEmpresa | null>(null);
   const [facturacion, setFacturacion] = useState<ConfiguracionFacturacion | null>(null);
+  const isAdmin = useMemo(() => user?.role?.toUpperCase() === 'ADMIN', [user?.role]);
+  const moduleAccess = useMemo(
+    () => (isAdmin ? createFullModuleAccess() : normalizeModuleAccess(user?.modulos_permitidos ?? null)),
+    [isAdmin, user?.modulos_permitidos]
+  );
+  const hasCajaRole = Boolean(user?.es_cajero || isAdmin);
+  const hasCajaModule = isAdmin || isSectionEnabled(moduleAccess, 'facturacion', 'caja');
+  const canAccessCaja = hasCajaRole && hasCajaModule;
 
   const cargarPendientes = () => {
     setCargando(true);
@@ -35,10 +47,16 @@ export default function Caja() {
   };
 
   useEffect(() => {
+    if (!canAccessCaja) {
+      return;
+    }
     cargarPendientes();
-  }, []);
+  }, [canAccessCaja]);
 
   useEffect(() => {
+    if (!canAccessCaja) {
+      return;
+    }
     configuracionAPI
       .obtenerEmpresa()
       .then(setEmpresa)
@@ -47,7 +65,11 @@ export default function Caja() {
       .obtenerFacturacion()
       .then(setFacturacion)
       .catch(() => setFacturacion(null));
-  }, []);
+  }, [canAccessCaja]);
+
+  if (!canAccessCaja) {
+    return <Navigate to="/" replace />;
+  }
 
   const handleFacturar = async (ventaId: number) => {
     setFacturandoId(ventaId);
