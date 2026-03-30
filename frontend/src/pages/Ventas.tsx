@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Barcode,
-  CircleDollarSign,
   FileText,
   MinusCircle,
   PlusCircle,
@@ -1301,24 +1300,6 @@ export default function Ventas() {
             )}
           </div>
 
-          <div className="space-y-2 lg:col-span-2">
-            <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-              Efectivo recibido
-            </label>
-          <input
-            type="text"
-            inputMode="numeric"
-            value={formatMoneyCOP(efectivoRecibido)}
-            onChange={(event) => setEfectivoRecibido(parseMoneyCOP(event.target.value))}
-            disabled={ventaBloqueada}
-            className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
-          />
-            {!descuentoAutorizado && parsePercentToBasisPoints(descuentoGeneral) > 0 && (
-              <p className="text-xs text-amber-600">
-                Descuento pendiente de aprobación.
-              </p>
-            )}
-          </div>
         </div>
 
         {estadoSolicitud && (
@@ -1480,6 +1461,16 @@ export default function Ventas() {
                   -{formatCurrencyCOP(totals.descuentoTotalAplicado)}
                 </span>
               </div>
+              <div className="mt-2 rounded-xl border border-amber-200 bg-amber-100 px-4 py-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold uppercase tracking-wide text-slate-700">
+                    Total a pagar
+                  </span>
+                  <span className="text-2xl font-bold text-slate-900">
+                    {formatCurrencyCOP(totals.totalCobro)}
+                  </span>
+                </div>
+              </div>
               {!descuentoAutorizado && totals.descuentoTotalPrevio > totals.descuentoTotalAplicado && (
                 <p className="text-xs text-amber-600">
                   Hay un descuento general pendiente de aprobación.
@@ -1489,37 +1480,24 @@ export default function Ventas() {
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between rounded-xl bg-yellow-50 px-3 py-2">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700">
-                Total a pagar
-              </h2>
-              <CircleDollarSign className="text-slate-400" size={20} />
-            </div>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600">
+              Cobro
+            </h2>
             <div className="mt-4 space-y-3 text-sm">
-              <div className="rounded-xl border border-amber-200 bg-amber-100 px-4 py-3 text-lg font-semibold text-slate-900">
-                {formatCurrencyCOP(totals.totalCobro)}
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500">Total fiscal</span>
-                <span className="text-base font-semibold text-slate-900">
-                  {formatCurrencyCOP(totals.totalFiscal)}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500">Total a cobrar</span>
-                <span className="text-base font-semibold text-slate-900">
-                  {formatCurrencyCOP(totals.totalCobro)}
-                </span>
-              </div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-500">Efectivo recibido</span>
-                <span className="rounded-md bg-emerald-600 px-2 py-1 text-sm font-semibold text-white">
-                  {formatCurrencyCOP(efectivoRecibido)}
-                </span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={formatMoneyCOP(efectivoRecibido)}
+                  onChange={(event) => setEfectivoRecibido(parseMoneyCOP(event.target.value))}
+                  disabled={ventaBloqueada}
+                  className="w-44 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-right text-lg font-semibold text-emerald-700 focus:border-emerald-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100"
+                />
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-500">Cambio</span>
-                <span className="rounded-md bg-blue-50 px-2 py-1 font-semibold text-blue-700">
+                <span className="rounded-md bg-blue-50 px-3 py-1.5 text-lg font-semibold text-blue-700">
                   {formatCurrencyCOP(cambio)}
                 </span>
               </div>
