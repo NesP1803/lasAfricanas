@@ -1,4 +1,4 @@
-import apiClient from './client';
+import apiClient, { clearAuthStorage } from './client';
 import type { LoginResponse } from '../types';
 
 export const authApi = {
@@ -21,8 +21,7 @@ export const authApi = {
 
   // Logout (limpiar tokens locales)
   logout: () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
+    clearAuthStorage();
     localStorage.removeItem('user');
   },
 };

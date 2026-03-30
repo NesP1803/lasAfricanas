@@ -1,3 +1,4 @@
+import { authFetch } from './client';
 import type { PaginatedResponse, UsuarioAdmin } from '../types';
 
 export interface DescuentoApprovalPayload {
@@ -25,7 +26,6 @@ export const usuariosApi = {
       sede?: string;
     }
   ): Promise<PaginatedResponse<UsuarioAdmin> | UsuarioAdmin[]> {
-    const token = localStorage.getItem('token');
     const queryParams = new URLSearchParams();
     if (params?.search) queryParams.append('search', params.search);
     if (params?.page) queryParams.append('page', params.page.toString());
@@ -34,9 +34,8 @@ export const usuariosApi = {
     if (params?.tipo_usuario) queryParams.append('tipo_usuario', params.tipo_usuario);
     if (params?.sede) queryParams.append('sede', params.sede);
     const query = queryParams.toString();
-    const response = await fetch(`${API_URL}/usuarios/${query ? `?${query}` : ''}`, {
+    const response = await authFetch(`${API_URL}/usuarios/${query ? `?${query}` : ''}`, {
       headers: {
-        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
     });
@@ -47,11 +46,9 @@ export const usuariosApi = {
     return response.json();
   },
   async validarDescuento(payload: DescuentoApprovalPayload): Promise<DescuentoApprovalResponse> {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/usuarios/validar_descuento/`, {
+    const response = await authFetch(`${API_URL}/usuarios/validar_descuento/`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
@@ -65,11 +62,9 @@ export const usuariosApi = {
     return response.json();
   },
   async createUsuario(data: Partial<UsuarioAdmin>): Promise<UsuarioAdmin> {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/usuarios/`, {
+    const response = await authFetch(`${API_URL}/usuarios/`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
@@ -82,11 +77,9 @@ export const usuariosApi = {
     return response.json();
   },
   async updateUsuario(id: number, data: Partial<UsuarioAdmin>): Promise<UsuarioAdmin> {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/usuarios/${id}/`, {
+    const response = await authFetch(`${API_URL}/usuarios/${id}/`, {
       method: 'PATCH',
       headers: {
-        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
@@ -99,11 +92,9 @@ export const usuariosApi = {
     return response.json();
   },
   async deleteUsuario(id: number): Promise<void> {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/usuarios/${id}/`, {
+    const response = await authFetch(`${API_URL}/usuarios/${id}/`, {
       method: 'DELETE',
       headers: {
-        Authorization: `Bearer ${token}`,
       },
     });
 

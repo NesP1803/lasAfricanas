@@ -1,3 +1,4 @@
+import { authFetch } from './client';
 import type { PaginatedResponse } from '../types';
 
 const API_URL = '/api';
@@ -59,21 +60,17 @@ export interface OrdenTaller {
   total: string;
 }
 
-const getToken = () => localStorage.getItem('token');
-
 export const tallerApi = {
   async getMecanicos(
     params?: { search?: string; page?: number; is_active?: boolean }
   ): Promise<PaginatedResponse<Mecanico> | Mecanico[]> {
-    const token = getToken();
     const queryParams = new URLSearchParams();
     if (params?.search) queryParams.append('search', params.search);
     if (params?.page) queryParams.append('page', params.page.toString());
     if (params?.is_active !== undefined) queryParams.append('is_active', String(params.is_active));
     const query = queryParams.toString();
-    const response = await fetch(`${API_URL}/mecanicos/${query ? `?${query}` : ''}`, {
+    const response = await authFetch(`${API_URL}/mecanicos/${query ? `?${query}` : ''}`, {
       headers: {
-        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
     });
@@ -83,11 +80,9 @@ export const tallerApi = {
   },
 
   async createMecanico(data: Partial<Mecanico>): Promise<Mecanico> {
-    const token = getToken();
-    const response = await fetch(`${API_URL}/mecanicos/`, {
+    const response = await authFetch(`${API_URL}/mecanicos/`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
@@ -101,11 +96,9 @@ export const tallerApi = {
   },
 
   async updateMecanico(id: number, data: Partial<Mecanico>): Promise<Mecanico> {
-    const token = getToken();
-    const response = await fetch(`${API_URL}/mecanicos/${id}/`, {
+    const response = await authFetch(`${API_URL}/mecanicos/${id}/`, {
       method: 'PATCH',
       headers: {
-        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
@@ -119,11 +112,9 @@ export const tallerApi = {
   },
 
   async deleteMecanico(id: number): Promise<void> {
-    const token = getToken();
-    const response = await fetch(`${API_URL}/mecanicos/${id}/`, {
+    const response = await authFetch(`${API_URL}/mecanicos/${id}/`, {
       method: 'DELETE',
       headers: {
-        Authorization: `Bearer ${token}`,
       },
     });
 
@@ -131,15 +122,13 @@ export const tallerApi = {
   },
 
   async getMotos(params?: { search?: string; page?: number; mecanico?: number }): Promise<PaginatedResponse<Moto> | Moto[]> {
-    const token = getToken();
     const queryParams = new URLSearchParams();
     if (params?.search) queryParams.append('search', params.search);
     if (params?.page) queryParams.append('page', params.page.toString());
     if (params?.mecanico) queryParams.append('mecanico', params.mecanico.toString());
     const query = queryParams.toString();
-    const response = await fetch(`${API_URL}/motos/${query ? `?${query}` : ''}`, {
+    const response = await authFetch(`${API_URL}/motos/${query ? `?${query}` : ''}`, {
       headers: {
-        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
     });
@@ -149,11 +138,9 @@ export const tallerApi = {
   },
 
   async createMoto(data: Partial<Moto>): Promise<Moto> {
-    const token = getToken();
-    const response = await fetch(`${API_URL}/motos/`, {
+    const response = await authFetch(`${API_URL}/motos/`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
@@ -167,11 +154,9 @@ export const tallerApi = {
   },
 
   async updateMoto(id: number, data: Partial<Moto>): Promise<Moto> {
-    const token = getToken();
-    const response = await fetch(`${API_URL}/motos/${id}/`, {
+    const response = await authFetch(`${API_URL}/motos/${id}/`, {
       method: 'PATCH',
       headers: {
-        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
@@ -185,11 +170,9 @@ export const tallerApi = {
   },
 
   async deleteMoto(id: number): Promise<void> {
-    const token = getToken();
-    const response = await fetch(`${API_URL}/motos/${id}/`, {
+    const response = await authFetch(`${API_URL}/motos/${id}/`, {
       method: 'DELETE',
       headers: {
-        Authorization: `Bearer ${token}`,
       },
     });
 
@@ -197,7 +180,6 @@ export const tallerApi = {
   },
 
   async getOrdenes(params?: { search?: string; page?: number; moto?: number; mecanico?: number; estado?: string }): Promise<PaginatedResponse<OrdenTaller> | OrdenTaller[]> {
-    const token = getToken();
     const queryParams = new URLSearchParams();
     if (params?.search) queryParams.append('search', params.search);
     if (params?.page) queryParams.append('page', params.page.toString());
@@ -205,9 +187,8 @@ export const tallerApi = {
     if (params?.mecanico) queryParams.append('mecanico', params.mecanico.toString());
     if (params?.estado) queryParams.append('estado', params.estado);
     const query = queryParams.toString();
-    const response = await fetch(`${API_URL}/ordenes-taller/${query ? `?${query}` : ''}`, {
+    const response = await authFetch(`${API_URL}/ordenes-taller/${query ? `?${query}` : ''}`, {
       headers: {
-        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
     });
@@ -217,11 +198,9 @@ export const tallerApi = {
   },
 
   async createOrden(data: Partial<OrdenTaller>): Promise<OrdenTaller> {
-    const token = getToken();
-    const response = await fetch(`${API_URL}/ordenes-taller/`, {
+    const response = await authFetch(`${API_URL}/ordenes-taller/`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
@@ -235,11 +214,9 @@ export const tallerApi = {
   },
 
   async updateOrden(id: number, data: Partial<OrdenTaller>): Promise<OrdenTaller> {
-    const token = getToken();
-    const response = await fetch(`${API_URL}/ordenes-taller/${id}/`, {
+    const response = await authFetch(`${API_URL}/ordenes-taller/${id}/`, {
       method: 'PATCH',
       headers: {
-        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
@@ -253,11 +230,9 @@ export const tallerApi = {
   },
 
   async deleteOrden(id: number): Promise<void> {
-    const token = getToken();
-    const response = await fetch(`${API_URL}/ordenes-taller/${id}/`, {
+    const response = await authFetch(`${API_URL}/ordenes-taller/${id}/`, {
       method: 'DELETE',
       headers: {
-        Authorization: `Bearer ${token}`,
       },
     });
 
@@ -265,11 +240,9 @@ export const tallerApi = {
   },
 
   async agregarRepuesto(ordenId: number, payload: { producto: number; cantidad: number }): Promise<OrdenTaller> {
-    const token = getToken();
-    const response = await fetch(`${API_URL}/ordenes-taller/${ordenId}/agregar_repuesto/`, {
+    const response = await authFetch(`${API_URL}/ordenes-taller/${ordenId}/agregar_repuesto/`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
@@ -283,11 +256,9 @@ export const tallerApi = {
   },
 
   async quitarRepuesto(ordenId: number, payload: { repuesto_id?: number; producto?: number }): Promise<OrdenTaller> {
-    const token = getToken();
-    const response = await fetch(`${API_URL}/ordenes-taller/${ordenId}/quitar_repuesto/`, {
+    const response = await authFetch(`${API_URL}/ordenes-taller/${ordenId}/quitar_repuesto/`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
@@ -301,11 +272,9 @@ export const tallerApi = {
   },
 
   async facturarOrden(ordenId: number, payload?: { tipo_comprobante?: 'REMISION' | 'FACTURA' }): Promise<OrdenTaller> {
-    const token = getToken();
-    const response = await fetch(`${API_URL}/ordenes-taller/${ordenId}/facturar/`, {
+    const response = await authFetch(`${API_URL}/ordenes-taller/${ordenId}/facturar/`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload ?? {}),
