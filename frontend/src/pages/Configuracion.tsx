@@ -194,7 +194,6 @@ export default function Configuracion() {
   const [syncingRangos, setSyncingRangos] = useState(false);
   const [savingRango, setSavingRango] = useState(false);
   const [mensajeImpuesto, setMensajeImpuesto] = useState("");
-  const [savingImpuestoId, setSavingImpuestoId] = useState<number | null>(null);
   const [mensajeUsuario, setMensajeUsuario] = useState("");
   const [mensajeNuevoUsuario, setMensajeNuevoUsuario] = useState("");
   const [updatingCajaUserId, setUpdatingCajaUserId] = useState<number | null>(
@@ -581,7 +580,6 @@ export default function Configuracion() {
     try {
       const nuevo = await configuracionAPI.crearImpuesto({
         nombre: nuevoImpuesto.nombre,
-        factus_tribute_id: nuevoImpuesto.factus_tribute_id ?? null,
       });
       setImpuestos((prev) => [...prev, nuevo]);
       setNuevoImpuesto({ nombre: "" });
@@ -617,25 +615,6 @@ export default function Configuracion() {
         message: "No se pudo quitar el impuesto.",
         type: "error",
       });
-    }
-  };
-
-  const handleGuardarHomologacionImpuesto = async (impuesto: Impuesto) => {
-    if (impuesto.id <= 0) return;
-    setSavingImpuestoId(impuesto.id);
-    try {
-      const updated = await configuracionAPI.actualizarImpuesto(impuesto.id, {
-        factus_tribute_id: impuesto.factus_tribute_id ?? null,
-      });
-      setImpuestos((prev) =>
-        prev.map((item) => (item.id === updated.id ? updated : item))
-      );
-      setMensajeImpuesto("Homologación Factus guardada.");
-    } catch (error) {
-      console.error("Error guardando homologación:", error);
-      setMensajeImpuesto("No se pudo guardar la homologación Factus.");
-    } finally {
-      setSavingImpuestoId(null);
     }
   };
 
@@ -1288,12 +1267,6 @@ export default function Configuracion() {
                     Impuesto
                   </th>
                   <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                    Porcentaje
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                    Homologación
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">
                     Acciones
                   </th>
                 </tr>
@@ -1314,32 +1287,8 @@ export default function Configuracion() {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-center whitespace-nowrap">
-                        <span className="text-sm text-slate-700">
-                          {Number(impuesto.porcentaje ?? 0).toFixed(2)}%
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center whitespace-nowrap">
-                        {impuesto.factus_tribute_id ? (
-                          <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">
-                            Homologado
-                          </span>
-                        ) : (
-                          <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
-                            Pendiente
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-center whitespace-nowrap">
                         {!esFijo && (
-                          <div className="inline-flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => handleGuardarHomologacionImpuesto(impuesto)}
-                              className="rounded-lg border border-blue-200 px-2 py-1 text-xs text-blue-700 hover:bg-blue-50"
-                              disabled={savingImpuestoId === impuesto.id}
-                            >
-                              Guardar
-                            </button>
+                          <div className="inline-flex items-center">
                             <button
                               type="button"
                               onClick={() => handleEliminarImpuesto(impuesto)}
@@ -1385,21 +1334,6 @@ export default function Configuracion() {
                 />
               </div>
               <div className="flex items-end">
-                <input
-                  type="number"
-                  min={1}
-                  value={nuevoImpuesto.factus_tribute_id ?? ""}
-                  onChange={(event) =>
-                    setNuevoImpuesto((prev) => ({
-                      ...prev,
-                      factus_tribute_id: event.target.value
-                        ? Number(event.target.value)
-                        : null,
-                    }))
-                  }
-                  placeholder="Tributo Factus (ej 18/21)"
-                  className="mr-2 w-52 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
                 <button
                   type="button"
                   onClick={handleAgregarImpuesto}
@@ -1409,6 +1343,10 @@ export default function Configuracion() {
                 </button>
               </div>
             </div>
+            <p className="mt-3 text-xs text-slate-500">
+              La homologación con Factus se asigna automáticamente según el tipo
+              de impuesto registrado.
+            </p>
           </div>
         </section>
       )}
