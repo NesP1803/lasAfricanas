@@ -1,10 +1,23 @@
 import apiClient, { clearAuthStorage } from './client';
-import type { LoginResponse } from '../types';
+import type { ModulosPermitidos } from '../types';
+
+interface AuthLoginResponse {
+  access: string;
+  refresh: string;
+  user: {
+    id: number;
+    username: string;
+    role: string;
+    email?: string;
+    es_cajero?: boolean;
+    modulos_permitidos?: ModulosPermitidos | null;
+  };
+}
 
 export const authApi = {
   // Login
-  login: async (username: string, password: string): Promise<LoginResponse> => {
-    const response = await apiClient.post<LoginResponse>('/auth/login/', {
+  login: async (username: string, password: string): Promise<AuthLoginResponse> => {
+    const response = await apiClient.post<AuthLoginResponse>('/auth/login/', {
       username,
       password,
     });
