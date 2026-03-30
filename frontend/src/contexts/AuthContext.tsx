@@ -138,6 +138,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('token');
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
+    configuracionAPI.resetSessionCache();
     persistUser(null);
   };
 
@@ -173,20 +174,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     refreshUser();
-    const intervalId = window.setInterval(refreshUser, 60000);
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        refreshUser();
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       isMounted = false;
-      window.clearInterval(intervalId);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [user]);
+
 
   return (
     <AuthContext.Provider

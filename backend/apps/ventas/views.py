@@ -707,9 +707,10 @@ class SolicitudDescuentoViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
+        base_queryset = SolicitudDescuento.objects.select_related('vendedor', 'aprobador')
         if user.is_superuser or user.is_staff or getattr(user, 'tipo_usuario', None) == 'ADMIN':
-            return SolicitudDescuento.objects.filter(aprobador=user)
-        return SolicitudDescuento.objects.filter(vendedor=user)
+            return base_queryset.filter(aprobador=user)
+        return base_queryset.filter(vendedor=user)
 
     def perform_create(self, serializer):
         aprobador = serializer.validated_data.get('aprobador')

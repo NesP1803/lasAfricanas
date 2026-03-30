@@ -50,6 +50,10 @@ export const descuentosApi = {
     }
     return response.data.results ?? [];
   },
+  obtenerSolicitud: async (id: number) => {
+    const response = await apiClient.get<SolicitudDescuento>(`/solicitudes-descuento/${id}/`);
+    return response.data;
+  },
   actualizarSolicitud: async (
     id: number,
     payload: Partial<Pick<SolicitudDescuento, 'estado' | 'descuento_aprobado'>>

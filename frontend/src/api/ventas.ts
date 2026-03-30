@@ -379,7 +379,7 @@ export const ventasApi = {
     ordering?: string;
     fechaInicio?: string;
     fechaFin?: string;
-  }): Promise<VentaListItem[]> {
+  }, options?: { signal?: AbortSignal }): Promise<VentaListItem[]> {
     const token = localStorage.getItem('token');
     const queryParams = new URLSearchParams();
     if (params?.tipoComprobante) queryParams.append('tipo_comprobante', params.tipoComprobante);
@@ -390,6 +390,7 @@ export const ventasApi = {
     if (params?.fechaFin) queryParams.append('fecha_fin', params.fechaFin);
     const query = queryParams.toString();
     const response = await fetch(`${API_URL}/ventas/${query ? `?${query}` : ''}`, {
+      signal: options?.signal,
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
@@ -454,12 +455,13 @@ export const ventasApi = {
     return response.json();
   },
 
-  async getPendientesCaja(params?: { fecha?: string }): Promise<VentaListItem[]> {
+  async getPendientesCaja(params?: { fecha?: string }, options?: { signal?: AbortSignal }): Promise<VentaListItem[]> {
     const token = localStorage.getItem('token');
     const queryParams = new URLSearchParams();
     if (params?.fecha) queryParams.append('fecha', params.fecha);
     const query = queryParams.toString();
     const response = await fetch(`${API_URL}/caja/pendientes/${query ? `?${query}` : ''}`, {
+      signal: options?.signal,
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',

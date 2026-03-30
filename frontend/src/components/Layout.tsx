@@ -136,6 +136,7 @@ export default function Layout() {
   const [isBellOpen, setIsBellOpen] = useState(false);
   const bellRef = useRef<HTMLDivElement | null>(null);
   const lastNotificationFetchRef = useRef(0);
+  const NOTIFICATION_FETCH_COOLDOWN_MS = 60000;
 
   // --- Menú principal con delay ---
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
@@ -480,7 +481,7 @@ export default function Layout() {
       return;
     }
     const now = Date.now();
-    if (now - lastNotificationFetchRef.current < 5000) {
+    if (now - lastNotificationFetchRef.current < NOTIFICATION_FETCH_COOLDOWN_MS) {
       return;
     }
     lastNotificationFetchRef.current = now;
@@ -507,13 +508,7 @@ export default function Layout() {
       }
     };
     document.addEventListener("visibilitychange", handleVisibility);
-    const intervalId = window.setInterval(() => {
-      if (document.visibilityState === "visible") {
-        actualizarNotificaciones();
-      }
-    }, 5000);
     return () => {
-      window.clearInterval(intervalId);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [actualizarNotificaciones, isAdmin]);
