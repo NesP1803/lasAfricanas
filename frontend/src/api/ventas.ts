@@ -1,12 +1,26 @@
-import { authFetch } from './client';
+import axios from 'axios';
+import apiClient from './client';
 import type { Cliente, PaginatedResponse } from '../types';
 
 export type { Cliente };
 
 const API_URL = '/api';
 
+const toApiPath = (url: string) => (url.startsWith('/api') ? url.replace(/^\/api/, '') : url);
+
+const apiRequest = async <T>(config: { url: string; method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'; data?: unknown; signal?: AbortSignal }) => {
+  const response = await apiClient.request<T>({
+    ...config,
+    url: toApiPath(config.url),
+  });
+  return response.data;
+};
+
 
 const extractApiErrorMessage = (error: unknown, fallback: string): string => {
+  if (axios.isAxiosError(error)) {
+    return extractApiErrorMessage(error.response?.data, fallback);
+  }
   if (typeof error === 'string' && error.trim()) return error;
   if (error && typeof error === 'object') {
     const data = error as Record<string, unknown>;
@@ -231,19 +245,13 @@ export interface EstadisticasVentas {
 export const ventasApi = {
   // Clientes
   async buscarCliente(documento: string): Promise<Cliente> {
-    const response = await authFetch(
-      `${API_URL}/clientes/buscar_por_documento/?documento=${documento}`,
-      {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-
-    if (!response.ok) {
+    try {
+      return await apiRequest<Cliente>({
+        url: `${API_URL}/clientes/buscar_por_documento/?documento=${documento}`,
+      });
+    } catch {
       throw new Error('Cliente no encontrado');
     }
-    return response.json();
   },
 
   async getClientes(
@@ -255,106 +263,73 @@ export const ventasApi = {
     if (params?.ordering) queryParams.append('ordering', params.ordering);
     if (params?.is_active !== undefined) queryParams.append('is_active', String(params.is_active));
     const query = queryParams.toString();
-    const response = await authFetch(`${API_URL}/clientes/${query ? `?${query}` : ''}`, {
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
+    try {
+      return await apiRequest<PaginatedResponse<Cliente> | Cliente[]>({
+        url: `${API_URL}/clientes/${query ? `?${query}` : ''}`,
+      });
+    } catch {
       throw new Error('Error al obtener clientes');
     }
-    return response.json();
   },
 
   async getCliente(id: number): Promise<Cliente> {
-    const response = await authFetch(`${API_URL}/clientes/${id}/`, {
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
+    try {
+      return await apiRequest<Cliente>({ url: `${API_URL}/clientes/${id}/` });
+    } catch {
       throw new Error('Error al obtener cliente');
     }
-    return response.json();
   },
 
   async crearCliente(data: Partial<Cliente>): Promise<Cliente> {
-    const response = await authFetch(`${API_URL}/clientes/`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
+    try {
+      return await apiRequest<Cliente>({
+        url: `${API_URL}/clientes/`,
+        method: 'POST',
+        data,
+      });
+    } catch (error) {
       throw new Error(JSON.stringify(error));
     }
-    return response.json();
   },
 
   async actualizarCliente(id: number, data: Partial<Cliente>): Promise<Cliente> {
-    const response = await authFetch(`${API_URL}/clientes/${id}/`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
+    try {
+      return await apiRequest<Cliente>({
+        url: `${API_URL}/clientes/${id}/`,
+        method: 'PATCH',
+        data,
+      });
+    } catch (error) {
       throw new Error(JSON.stringify(error));
     }
-    return response.json();
   },
 
   async eliminarCliente(id: number): Promise<void> {
-    const response = await authFetch(`${API_URL}/clientes/${id}/`, {
-      method: 'DELETE',
-      headers: {
-      },
-    });
-
-    if (!response.ok) {
+    try {
+      await apiRequest<void>({
+        url: `${API_URL}/clientes/${id}/`,
+        method: 'DELETE',
+      });
+    } catch {
       throw new Error('Error al eliminar cliente');
     }
   },
 
   // Ventas
   async crearVenta(data: VentaCreate): Promise<Venta> {
-    const response = await authFetch(`${API_URL}/ventas/`, {
+    return apiRequest<Venta>({
+      url: `${API_URL}/ventas/`,
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
+      data,
     });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw error;
-    }
-    return response.json();
   },
 
   async actualizarVenta(id: number, data: Partial<VentaCreate>): Promise<Venta> {
-    const response = await authFetch(`${API_URL}/ventas/${id}/`, {
+    return apiRequest<Venta>({
+      url: `${API_URL}/ventas/${id}/`,
       method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
+      data,
     });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw error;
-    }
-    return response.json();
   },
 
   async getVentas(params?: {
@@ -373,207 +348,180 @@ export const ventasApi = {
     if (params?.fechaInicio) queryParams.append('fecha_inicio', params.fechaInicio);
     if (params?.fechaFin) queryParams.append('fecha_fin', params.fechaFin);
     const query = queryParams.toString();
-    const response = await authFetch(`${API_URL}/ventas/${query ? `?${query}` : ''}`, {
-      signal: options?.signal,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
+    let data: unknown;
+    try {
+      data = await apiRequest<unknown>({
+        url: `${API_URL}/ventas/${query ? `?${query}` : ''}`,
+        signal: options?.signal,
+      });
+    } catch {
       throw new Error('Error al obtener ventas');
     }
-    const data = await response.json();
+
     if (Array.isArray(data)) {
-      return data;
+      return data as VentaListItem[];
     }
-    if (Array.isArray(data?.results)) {
-      return data.results;
+    if (Array.isArray((data as { results?: unknown[] })?.results)) {
+      return (data as { results: VentaListItem[] }).results;
     }
     throw new Error('Respuesta inválida al obtener ventas');
   },
 
   async getVenta(id: number): Promise<Venta> {
-    const response = await authFetch(`${API_URL}/ventas/${id}/`, {
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
+    try {
+      return await apiRequest<Venta>({ url: `${API_URL}/ventas/${id}/` });
+    } catch {
       throw new Error('Error al obtener la venta');
     }
-    return response.json();
   },
 
   async getRemisionesPendientes(): Promise<Venta[]> {
-    const response = await authFetch(`${API_URL}/ventas/remisiones_pendientes/`, {
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) throw new Error('Error al obtener remisiones');
-    return response.json();
+    try {
+      return await apiRequest<Venta[]>({ url: `${API_URL}/ventas/remisiones_pendientes/` });
+    } catch {
+      throw new Error('Error al obtener remisiones');
+    }
   },
 
   async enviarACaja(ventaId: number): Promise<Venta> {
-    const response = await authFetch(`${API_URL}/ventas/${ventaId}/enviar-a-caja/`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Error al enviar a caja');
+    try {
+      return await apiRequest<Venta>({
+        url: `${API_URL}/ventas/${ventaId}/enviar-a-caja/`,
+        method: 'POST',
+      });
+    } catch (error) {
+      throw new Error(extractApiErrorMessage(error, 'Error al enviar a caja'));
     }
-    return response.json();
   },
 
   async getPendientesCaja(params?: { fecha?: string }, options?: { signal?: AbortSignal }): Promise<VentaListItem[]> {
     const queryParams = new URLSearchParams();
     if (params?.fecha) queryParams.append('fecha', params.fecha);
     const query = queryParams.toString();
-    const response = await authFetch(`${API_URL}/caja/pendientes/${query ? `?${query}` : ''}`, {
-      signal: options?.signal,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
+    try {
+      const data = await apiRequest<unknown>({
+        url: `${API_URL}/caja/pendientes/${query ? `?${query}` : ''}`,
+        signal: options?.signal,
+      });
+      if (Array.isArray(data)) {
+        return data as VentaListItem[];
+      }
+      if (Array.isArray((data as { results?: unknown[] })?.results)) {
+        return (data as { results: VentaListItem[] }).results;
+      }
+      return [];
+    } catch {
       throw new Error('Error al obtener ventas pendientes');
     }
-    const data = await response.json();
-    if (Array.isArray(data)) {
-      return data;
-    }
-    if (Array.isArray(data?.results)) {
-      return data.results;
-    }
-    return [];
   },
 
   async getDetalleCaja(ventaId: number, options?: { signal?: AbortSignal }): Promise<Venta> {
-    const response = await authFetch(`${API_URL}/caja/${ventaId}/detalle/`, {
-      signal: options?.signal,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    const data = await response.json().catch(() => null);
-    if (!response.ok) {
-      throw new Error(extractApiErrorMessage(data, 'Error al cargar venta de caja'));
+    try {
+      return await apiRequest<Venta>({
+        url: `${API_URL}/caja/${ventaId}/detalle/`,
+        signal: options?.signal,
+      });
+    } catch (error) {
+      throw new Error(extractApiErrorMessage(error, 'Error al cargar venta de caja'));
     }
-    return data as Venta;
   },
 
   async facturarEnCaja(ventaId: number): Promise<FacturarCajaResponse> {
-    const response = await authFetch(`${API_URL}/caja/${ventaId}/facturar/`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
+    let data: unknown;
+    try {
+      data = await apiRequest<unknown>({
+        url: `${API_URL}/caja/${ventaId}/facturar/`,
+        method: 'POST',
+      });
+    } catch (error) {
       throw new Error(extractApiErrorMessage(error, 'Error al facturar en caja'));
     }
-    const data = await response.json();
-    if (data?.venta && data?.factura_electronica) {
-      return data;
+    const payload = data as Partial<FacturarCajaResponse> & Record<string, unknown>;
+    if (payload?.venta && payload?.factura_electronica) {
+      return payload as FacturarCajaResponse;
     }
     return {
       ok: true,
       message: 'Venta facturada correctamente.',
-      venta_id: data.id,
-      venta: data,
+      venta_id: payload.id as number,
+      venta: payload as unknown as Venta,
       factura_electronica: {} as FacturaElectronicaResultado,
-      numero_factura: data.numero_comprobante || `#${data.id}`,
-      estado_local: data.estado || 'FACTURADA',
-      status: data.estado || 'FACTURADA',
+      numero_factura: (payload.numero_comprobante as string) || `#${String(payload.id ?? '')}`,
+      estado_local: (payload.estado as string) || 'FACTURADA',
+      status: (payload.estado as string) || 'FACTURADA',
       factus_sent: false,
     };
   },
 
   async facturarVentaElectronica(ventaId: number): Promise<FacturarCajaResponse> {
-    const response = await authFetch(`${API_URL}/ventas/${ventaId}/facturar/`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(extractApiErrorMessage(data, 'Error al emitir factura electrónica'));
+    let data: unknown;
+    try {
+      data = await apiRequest<unknown>({
+        url: `${API_URL}/ventas/${ventaId}/facturar/`,
+        method: 'POST',
+      });
+    } catch (error) {
+      throw new Error(extractApiErrorMessage(error, 'Error al emitir factura electrónica'));
     }
-    if (data?.venta && data?.factura_electronica) {
-      return data;
+    const payload = data as Partial<FacturarCajaResponse> & Record<string, unknown>;
+    if (payload?.venta && payload?.factura_electronica) {
+      return payload as FacturarCajaResponse;
     }
     return {
       ok: true,
-      message: data?.message || 'Factura electrónica emitida.',
-      venta_id: data?.venta_id || ventaId,
-      venta: data?.venta ?? ({} as Venta),
-      factura_electronica: data?.factura_electronica ?? ({} as FacturaElectronicaResultado),
-      factura_lista: data?.factura_lista,
-      numero_factura: data?.numero_factura || '',
-      estado_local: data?.estado_local,
-      estado_electronico: data?.estado_electronico,
-      status: data?.status || data?.estado_electronico || 'ERROR',
-      cufe: data?.cufe,
-      uuid: data?.uuid,
-      reference_code: data?.reference_code,
-      send_email: data?.send_email,
-      pos_ticket: data?.pos_ticket,
-      factus_sent: data?.factus_sent,
-      errores: data?.errores,
+      message: (payload.message as string) || 'Factura electrónica emitida.',
+      venta_id: (payload.venta_id as number) || ventaId,
+      venta: (payload.venta as Venta) ?? ({} as Venta),
+      factura_electronica: (payload.factura_electronica as FacturaElectronicaResultado) ?? ({} as FacturaElectronicaResultado),
+      factura_lista: payload.factura_lista as FacturaLista | undefined,
+      numero_factura: (payload.numero_factura as string) || '',
+      estado_local: payload.estado_local as string | undefined,
+      estado_electronico: payload.estado_electronico as string | undefined,
+      status: (payload.status as string) || (payload.estado_electronico as string) || 'ERROR',
+      cufe: payload.cufe as string | undefined,
+      uuid: payload.uuid as string | undefined,
+      reference_code: payload.reference_code as string | undefined,
+      send_email: payload.send_email as boolean | undefined,
+      pos_ticket: payload.pos_ticket as PosTicketData | undefined,
+      factus_sent: payload.factus_sent as boolean | undefined,
+      errores: payload.errores as string[] | undefined,
     };
   },
 
   async convertirAFactura(remisionId: number): Promise<Venta> {
-    const response = await authFetch(
-      `${API_URL}/ventas/${remisionId}/convertir_a_factura/`,
-      {
+    try {
+      return await apiRequest<Venta>({
+        url: `${API_URL}/ventas/${remisionId}/convertir_a_factura/`,
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Error al convertir a factura');
+      });
+    } catch (error) {
+      throw new Error(extractApiErrorMessage(error, 'Error al convertir a factura'));
     }
-    return response.json();
   },
 
   async anularVenta(
     ventaId: number,
     data: { motivo: string; descripcion: string; devuelve_inventario: boolean }
   ): Promise<Venta> {
-    const response = await authFetch(`${API_URL}/ventas/${ventaId}/anular/`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      if (response.status === 502) {
-        const detail = typeof error?.detail === 'string' && error.detail.trim() ? ` Detalle: ${error.detail}` : '';
+    try {
+      return await apiRequest<Venta>({
+        url: `${API_URL}/ventas/${ventaId}/anular/`,
+        method: 'POST',
+        data,
+      });
+    } catch (error) {
+      const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+      const apiError = axios.isAxiosError(error) ? error.response?.data : error;
+      if (status === 502) {
+        const detail =
+          typeof (apiError as { detail?: unknown })?.detail === 'string' &&
+          (apiError as { detail: string }).detail.trim()
+            ? ` Detalle: ${(apiError as { detail: string }).detail}`
+            : '';
         throw new Error(`La venta no fue anulada porque falló Factus al emitir la nota crédito.${detail}`);
       }
-      throw new Error(error.error || error.detail || 'Error al anular venta');
+      throw new Error(extractApiErrorMessage(apiError, 'Error al anular venta'));
     }
-    return response.json();
   },
 
   async getEstadisticasHoy(): Promise<EstadisticasVentas> {
@@ -582,17 +530,13 @@ export const ventasApi = {
       fecha_inicio: hoy,
       fecha_fin: hoy,
     });
-    const response = await authFetch(
-      `${API_URL}/ventas/estadisticas/?${queryParams.toString()}`,
-      {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-
-    if (!response.ok) throw new Error('Error al obtener estadísticas');
-    return response.json();
+    try {
+      return await apiRequest<EstadisticasVentas>({
+        url: `${API_URL}/ventas/estadisticas/?${queryParams.toString()}`,
+      });
+    } catch {
+      throw new Error('Error al obtener estadísticas');
+    }
   },
 
   async getEstadisticas(params?: {
@@ -603,13 +547,12 @@ export const ventasApi = {
     if (params?.fechaInicio) queryParams.append('fecha_inicio', params.fechaInicio);
     if (params?.fechaFin) queryParams.append('fecha_fin', params.fechaFin);
     const query = queryParams.toString();
-    const response = await authFetch(`${API_URL}/ventas/estadisticas/${query ? `?${query}` : ''}`, {
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) throw new Error('Error al obtener estadísticas');
-    return response.json();
+    try {
+      return await apiRequest<EstadisticasVentas>({
+        url: `${API_URL}/ventas/estadisticas/${query ? `?${query}` : ''}`,
+      });
+    } catch {
+      throw new Error('Error al obtener estadísticas');
+    }
   },
 };

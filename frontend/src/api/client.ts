@@ -11,19 +11,31 @@ const apiClient = axios.create({
 
 const ACCESS_TOKEN_KEY = 'access_token';
 const REFRESH_TOKEN_KEY = 'refresh_token';
-const LEGACY_TOKEN_KEY = 'token';
+const LEGACY_ACCESS_TOKEN_KEY = 'token';
 
 const clearAuthStorage = () => {
   localStorage.removeItem(ACCESS_TOKEN_KEY);
   localStorage.removeItem(REFRESH_TOKEN_KEY);
-  localStorage.removeItem(LEGACY_TOKEN_KEY);
+  localStorage.removeItem(LEGACY_ACCESS_TOKEN_KEY);
 };
 
 const getAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY);
+const getRefreshToken = () => localStorage.getItem(REFRESH_TOKEN_KEY);
 
 const setAccessToken = (accessToken: string) => {
   localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
-  localStorage.removeItem(LEGACY_TOKEN_KEY);
+  localStorage.removeItem(LEGACY_ACCESS_TOKEN_KEY);
+};
+
+const setRefreshToken = (refreshToken: string) => {
+  localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+};
+
+const setAuthTokens = ({ accessToken, refreshToken }: { accessToken: string; refreshToken?: string }) => {
+  setAccessToken(accessToken);
+  if (refreshToken) {
+    setRefreshToken(refreshToken);
+  }
 };
 
 // Interceptor para agregar token JWT en cada request
@@ -55,7 +67,7 @@ apiClient.interceptors.response.use(
       originalRequest._retry = true;
 
       try {
-        const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+        const refreshToken = getRefreshToken();
         if (!refreshToken) {
           throw new Error('No refresh token');
         }
@@ -65,7 +77,7 @@ apiClient.interceptors.response.use(
         });
 
         const { access } = response.data;
-        setAccessToken(access);
+        setAuthTokens({ accessToken: access });
 
         originalRequest.headers.Authorization = `Bearer ${access}`;
         return apiClient(originalRequest);
@@ -141,5 +153,14 @@ export const authFetch = async (input: string, options: AuthFetchOptions = {}) =
   }
 };
 
-export { ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY, LEGACY_TOKEN_KEY, clearAuthStorage, getAccessToken, setAccessToken };
+export {
+  ACCESS_TOKEN_KEY,
+  REFRESH_TOKEN_KEY,
+  clearAuthStorage,
+  getAccessToken,
+  getRefreshToken,
+  setAccessToken,
+  setRefreshToken,
+  setAuthTokens,
+};
 export default apiClient;

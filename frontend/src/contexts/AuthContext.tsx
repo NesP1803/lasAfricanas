@@ -1,7 +1,8 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
+import { authApi } from '../api/auth';
 import { configuracionAPI } from '../api/configuracion';
-import { REFRESH_TOKEN_KEY, clearAuthStorage, getAccessToken, setAccessToken } from '../api/client';
+import { clearAuthStorage, getAccessToken, setAuthTokens } from '../api/client';
 import type { ModulosPermitidos } from '../types';
 
 interface User {
@@ -70,68 +71,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const login = async (username: string, password: string) => {
-    try {
-      console.log('Intentando login con:', { username });
-      
-      const response = await fetch('/api/auth/login/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ username, password }),
-      });
+    const data = await authApi.login(username, password);
 
-      console.log('Response status:', response.status);
-
-      const parseResponseBody = async () => {
-        const text = await response.text();
-        if (!text) {
-          return null;
-        }
-        try {
-          return JSON.parse(text);
-        } catch (parseError) {
-          console.error('Error parsing login response:', parseError);
-          throw new Error('Respuesta inválida del servidor');
-        }
-      };
-
-      if (!response.ok) {
-        const errorData = await parseResponseBody();
-        const message =
-          errorData?.detail ||
-          errorData?.error ||
-          `Error ${response.status}: ${response.statusText}`;
-        throw new Error(message || 'Usuario o contraseña incorrectos');
-      }
-
-      // Parsear la respuesta JSON directamente
-      const data = await parseResponseBody();
-      if (!data) {
-        throw new Error('Respuesta del servidor vacía');
-      }
-      console.log('Login exitoso:', data);
-      
-      // Verificar que tengamos los datos del usuario
-      if (!data.user) {
-        throw new Error('Respuesta del servidor sin datos de usuario');
-      }
-      
-      // Guardar tokens y datos del usuario
-      setAccessToken(data.access);
-      localStorage.setItem(REFRESH_TOKEN_KEY, data.refresh);
-      persistUser({
-        id: data.user.id,
-        username: data.user.username,
-        role: data.user.role,
-        email: data.user.email,
-        es_cajero: data.user.es_cajero ?? false,
-        modulos_permitidos: data.user.modulos_permitidos ?? null,
-      });
-    } catch (error) {
-      console.error('Error completo en login:', error);
-      throw error;
+    if (!data.user) {
+      throw new Error('Respuesta del servidor sin datos de usuario');
     }
+
+    setAuthTokens({
+      accessToken: data.access,
+      refreshToken: data.refresh,
+    });
+    persistUser({
+      id: data.user.id,
+      username: data.user.username,
+      role: data.user.role,
+      email: data.user.email,
+      es_cajero: data.user.es_cajero ?? false,
+      modulos_permitidos: data.user.modulos_permitidos ?? null,
+    });
   };
 
   const logout = () => {
