@@ -159,17 +159,6 @@ export default function Dashboard() {
     },
   ];
 
-  const adminAlerts = [
-    {
-      label: 'Stock bajo',
-      value: inventarioStats?.stock_bajo ?? 0,
-    },
-    {
-      label: 'Productos agotados',
-      value: inventarioStats?.agotados ?? 0,
-    },
-  ];
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -214,8 +203,8 @@ export default function Dashboard() {
             ))}
           </div>
 
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-            <div className="bg-white rounded-lg shadow-md p-6 xl:col-span-2">
+          <div className="grid grid-cols-1 gap-6">
+            <div className="bg-white rounded-lg shadow-md p-6">
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h2 className="text-xl font-semibold text-gray-900">
@@ -275,83 +264,6 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold text-gray-900">
-                  Alertas críticas
-                </h2>
-                <AlertCircle className="w-6 h-6 text-red-600" />
-              </div>
-              <div className="space-y-4">
-                {adminAlerts.every((item) => item.value === 0) ? (
-                  <div className="rounded-lg bg-emerald-50 p-4 text-emerald-700 text-sm">
-                    Sin alertas críticas por ahora.
-                  </div>
-                ) : (
-                  adminAlerts.map((alert) => (
-                    <div
-                      key={alert.label}
-                      className="flex items-center justify-between rounded-lg border border-gray-100 p-4"
-                    >
-                      <div>
-                        <p className="text-sm text-gray-600">{alert.label}</p>
-                        <p className="text-xl font-semibold text-gray-900 mt-1">
-                          {loading ? '...' : alert.value}
-                        </p>
-                      </div>
-                      <TriangleAlert className="w-5 h-5 text-orange-500" />
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="bg-white rounded-lg shadow-md p-6 lg:col-span-2">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold text-gray-900">
-                  Acciones gerenciales
-                </h2>
-                <ClipboardList className="w-6 h-6 text-blue-600" />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {[
-                  'Aprobar descuentos pendientes',
-                  'Revisar stock crítico',
-                  'Analizar ventas por canal',
-                  'Programar reposiciones clave',
-                ].map((action) => (
-                  <button
-                    key={action}
-                    className="w-full text-left px-4 py-3 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 transition-colors"
-                  >
-                    {action}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                Enfoque del día
-              </h2>
-              <div className="space-y-3">
-                <div className="rounded-lg bg-slate-50 p-4">
-                  <p className="text-sm text-gray-600">Objetivo de facturación</p>
-                  <p className="text-2xl font-semibold text-gray-900 mt-2">
-                    {loading
-                      ? '...'
-                      : formatCurrency(ventasStats?.total_facturado ?? 0)}
-                  </p>
-                </div>
-                <div className="rounded-lg bg-slate-50 p-4">
-                  <p className="text-sm text-gray-600">Productos críticos</p>
-                  <p className="text-2xl font-semibold text-gray-900 mt-2">
-                    {loading ? '...' : inventarioStats?.stock_bajo ?? 0}
-                  </p>
-                </div>
-              </div>
-            </div>
           </div>
         </>
       ) : (

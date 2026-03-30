@@ -4,13 +4,16 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { useNotification } from "../contexts/NotificationContext";
 import { descuentosApi, type SolicitudDescuento } from "../api/descuentos";
+import Pagination from "../components/Pagination";
 
 export default function Notificaciones() {
+  const SOLICITUDES_POR_PAGINA = 15;
   const { user } = useAuth();
   const { showNotification } = useNotification();
   const navigate = useNavigate();
   const [solicitudes, setSolicitudes] = useState<SolicitudDescuento[]>([]);
   const [ajustesDescuento, setAjustesDescuento] = useState<Record<string, string>>({});
+  const [paginaActual, setPaginaActual] = useState(1);
   const lastSolicitudFetchRef = useRef(0);
 
   const esAdmin = useMemo(() => user?.role === "ADMIN", [user?.role]);
@@ -78,6 +81,19 @@ export default function Notificaciones() {
   const handleAjusteDescuento = (id: number, value: string) => {
     setAjustesDescuento((prev) => ({ ...prev, [id]: value }));
   };
+
+  const totalPaginas = Math.max(1, Math.ceil(solicitudes.length / SOLICITUDES_POR_PAGINA));
+  const indiceInicial = (paginaActual - 1) * SOLICITUDES_POR_PAGINA;
+  const solicitudesPaginadas = solicitudes.slice(
+    indiceInicial,
+    indiceInicial + SOLICITUDES_POR_PAGINA
+  );
+
+  useEffect(() => {
+    if (paginaActual > totalPaginas) {
+      setPaginaActual(totalPaginas);
+    }
+  }, [paginaActual, totalPaginas]);
 
   const handleResolverSolicitud = (
     solicitud: SolicitudDescuento,
@@ -148,7 +164,7 @@ export default function Notificaciones() {
           </div>
         ) : (
           <div className="mt-4 space-y-4">
-            {solicitudes.map((solicitud) => (
+            {solicitudesPaginadas.map((solicitud) => (
               <div
                 key={solicitud.id}
                 className="rounded-xl border border-slate-200 p-4 text-sm"
@@ -217,6 +233,14 @@ export default function Notificaciones() {
                 )}
               </div>
             ))}
+            {solicitudes.length > SOLICITUDES_POR_PAGINA && (
+              <Pagination
+                page={paginaActual}
+                totalPages={totalPaginas}
+                onPageChange={setPaginaActual}
+                className="pt-2"
+              />
+            )}
           </div>
         )}
       </section>
