@@ -1,3 +1,4 @@
+import { authFetch } from './client';
 const API_URL = '/api';
 
 export interface Producto {
@@ -109,7 +110,6 @@ export const inventarioApi = {
     proveedor?: number;
     stock_estado?: string;
   }): Promise<PaginatedResponse<ProductoList>> {
-    const token = localStorage.getItem('token');
     const queryParams = new URLSearchParams();
     
     if (params?.page) queryParams.append('page', params.page.toString());
@@ -118,9 +118,8 @@ export const inventarioApi = {
     if (params?.proveedor) queryParams.append('proveedor', params.proveedor.toString());
     if (params?.stock_estado) queryParams.append('stock_estado', params.stock_estado);
 
-    const response = await fetch(`${API_URL}/productos/?${queryParams}`, {
+    const response = await authFetch(`${API_URL}/productos/?${queryParams}`, {
       headers: {
-        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
     });
@@ -130,10 +129,8 @@ export const inventarioApi = {
   },
 
   async getProducto(id: number): Promise<Producto> {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/productos/${id}/`, {
+    const response = await authFetch(`${API_URL}/productos/${id}/`, {
       headers: {
-        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
     });
@@ -143,12 +140,10 @@ export const inventarioApi = {
   },
 
   async buscarPorCodigo(codigo: string): Promise<Producto> {
-    const token = localStorage.getItem('token');
     const trimmedCodigo = codigo.trim();
     const queryParams = new URLSearchParams({ codigo: trimmedCodigo });
-    const response = await fetch(`${API_URL}/productos/buscar_por_codigo/?${queryParams}`, {
+    const response = await authFetch(`${API_URL}/productos/buscar_por_codigo/?${queryParams}`, {
       headers: {
-        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
     });
@@ -171,11 +166,9 @@ export const inventarioApi = {
   },
 
   async createProducto(data: Partial<Producto>): Promise<Producto> {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/productos/`, {
+    const response = await authFetch(`${API_URL}/productos/`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
@@ -189,11 +182,9 @@ export const inventarioApi = {
   },
 
   async updateProducto(id: number, data: Partial<Producto>): Promise<Producto> {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/productos/${id}/`, {
+    const response = await authFetch(`${API_URL}/productos/${id}/`, {
       method: 'PUT',
       headers: {
-        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
@@ -207,11 +198,9 @@ export const inventarioApi = {
   },
 
   async deleteProducto(id: number): Promise<void> {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/productos/${id}/`, {
+    const response = await authFetch(`${API_URL}/productos/${id}/`, {
       method: 'DELETE',
       headers: {
-        'Authorization': `Bearer ${token}`,
       },
     });
 
@@ -221,13 +210,11 @@ export const inventarioApi = {
   async getStockBajo(
     params?: { page?: number }
   ): Promise<PaginatedResponse<ProductoList> | ProductoList[]> {
-    const token = localStorage.getItem('token');
     const queryParams = new URLSearchParams();
     if (params?.page) queryParams.append('page', params.page.toString());
     const query = queryParams.toString();
-    const response = await fetch(`${API_URL}/productos/stock_bajo/${query ? `?${query}` : ''}`, {
+    const response = await authFetch(`${API_URL}/productos/stock_bajo/${query ? `?${query}` : ''}`, {
       headers: {
-        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
     });
@@ -237,10 +224,8 @@ export const inventarioApi = {
   },
 
   async getFavoritos(): Promise<ProductoFavorito[]> {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/productos-favoritos/`, {
+    const response = await authFetch(`${API_URL}/productos-favoritos/`, {
       headers: {
-        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
     });
@@ -257,11 +242,9 @@ export const inventarioApi = {
   },
 
   async agregarFavorito(data: { producto: number; alias?: string; orden?: number }): Promise<ProductoFavorito> {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/productos-favoritos/`, {
+    const response = await authFetch(`${API_URL}/productos-favoritos/`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
@@ -275,11 +258,9 @@ export const inventarioApi = {
   },
 
   async eliminarFavorito(id: number): Promise<void> {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/productos-favoritos/${id}/`, {
+    const response = await authFetch(`${API_URL}/productos-favoritos/${id}/`, {
       method: 'DELETE',
       headers: {
-        Authorization: `Bearer ${token}`,
       },
     });
 
@@ -287,10 +268,8 @@ export const inventarioApi = {
   },
 
   async getEstadisticas(): Promise<InventarioEstadisticas> {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/productos/estadisticas/`, {
+    const response = await authFetch(`${API_URL}/productos/estadisticas/`, {
       headers: {
-        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
     });
@@ -300,11 +279,9 @@ export const inventarioApi = {
   },
 
   async ajustarStock(id: number, payload: AjusteStockPayload): Promise<Producto> {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/productos/${id}/ajustar_stock/`, {
+    const response = await authFetch(`${API_URL}/productos/${id}/ajustar_stock/`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
@@ -321,16 +298,14 @@ export const inventarioApi = {
   async getCategorias(
     params?: { search?: string; page?: number; ordering?: string; is_active?: boolean }
   ): Promise<Categoria[] | PaginatedResponse<Categoria>> {
-    const token = localStorage.getItem('token');
     const queryParams = new URLSearchParams();
     if (params?.search) queryParams.append('search', params.search);
     if (params?.page) queryParams.append('page', params.page.toString());
     if (params?.ordering) queryParams.append('ordering', params.ordering);
     if (params?.is_active !== undefined) queryParams.append('is_active', String(params.is_active));
     const query = queryParams.toString();
-    const response = await fetch(`${API_URL}/categorias/${query ? `?${query}` : ''}`, {
+    const response = await authFetch(`${API_URL}/categorias/${query ? `?${query}` : ''}`, {
       headers: {
-        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
     });
@@ -340,11 +315,9 @@ export const inventarioApi = {
   },
 
   async createCategoria(data: Partial<Categoria>): Promise<Categoria> {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/categorias/`, {
+    const response = await authFetch(`${API_URL}/categorias/`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
@@ -358,11 +331,9 @@ export const inventarioApi = {
   },
 
   async updateCategoria(id: number, data: Partial<Categoria>): Promise<Categoria> {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/categorias/${id}/`, {
+    const response = await authFetch(`${API_URL}/categorias/${id}/`, {
       method: 'PATCH',
       headers: {
-        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
@@ -376,11 +347,9 @@ export const inventarioApi = {
   },
 
   async deleteCategoria(id: number): Promise<void> {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/categorias/${id}/`, {
+    const response = await authFetch(`${API_URL}/categorias/${id}/`, {
       method: 'DELETE',
       headers: {
-        'Authorization': `Bearer ${token}`,
       },
     });
 
@@ -391,16 +360,14 @@ export const inventarioApi = {
   async getProveedores(
     params?: { search?: string; page?: number; ordering?: string; is_active?: boolean }
   ): Promise<Proveedor[] | PaginatedResponse<Proveedor>> {
-    const token = localStorage.getItem('token');
     const queryParams = new URLSearchParams();
     if (params?.search) queryParams.append('search', params.search);
     if (params?.page) queryParams.append('page', params.page.toString());
     if (params?.ordering) queryParams.append('ordering', params.ordering);
     if (params?.is_active !== undefined) queryParams.append('is_active', String(params.is_active));
     const query = queryParams.toString();
-    const response = await fetch(`${API_URL}/proveedores/${query ? `?${query}` : ''}`, {
+    const response = await authFetch(`${API_URL}/proveedores/${query ? `?${query}` : ''}`, {
       headers: {
-        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
     });
@@ -410,11 +377,9 @@ export const inventarioApi = {
   },
 
   async createProveedor(data: Partial<Proveedor>): Promise<Proveedor> {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/proveedores/`, {
+    const response = await authFetch(`${API_URL}/proveedores/`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
@@ -428,11 +393,9 @@ export const inventarioApi = {
   },
 
   async updateProveedor(id: number, data: Partial<Proveedor>): Promise<Proveedor> {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/proveedores/${id}/`, {
+    const response = await authFetch(`${API_URL}/proveedores/${id}/`, {
       method: 'PATCH',
       headers: {
-        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
@@ -446,11 +409,9 @@ export const inventarioApi = {
   },
 
   async deleteProveedor(id: number): Promise<void> {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/proveedores/${id}/`, {
+    const response = await authFetch(`${API_URL}/proveedores/${id}/`, {
       method: 'DELETE',
       headers: {
-        'Authorization': `Bearer ${token}`,
       },
     });
 

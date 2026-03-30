@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { configuracionAPI } from '../api/configuracion';
+import { REFRESH_TOKEN_KEY, clearAuthStorage, getAccessToken, setAccessToken } from '../api/client';
 import type { ModulosPermitidos } from '../types';
 
 interface User {
@@ -23,14 +24,14 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(() => {
-    const token = localStorage.getItem('token');
+    const token = getAccessToken();
     const savedUser = localStorage.getItem('user');
     if (token && savedUser) {
       try {
         return JSON.parse(savedUser) as User;
       } catch (error) {
         console.error('Error parsing saved user:', error);
-        localStorage.removeItem('token');
+        clearAuthStorage();
         localStorage.removeItem('user');
       }
     }
@@ -116,10 +117,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error('Respuesta del servidor sin datos de usuario');
       }
       
-      // Guardar el token y datos del usuario
-      localStorage.setItem('token', data.access);
-      localStorage.setItem('access_token', data.access);
-      localStorage.setItem('refresh_token', data.refresh);
+      // Guardar tokens y datos del usuario
+      setAccessToken(data.access);
+      localStorage.setItem(REFRESH_TOKEN_KEY, data.refresh);
       persistUser({
         id: data.user.id,
         username: data.user.username,
@@ -135,9 +135,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
+    clearAuthStorage();
     configuracionAPI.resetSessionCache();
     persistUser(null);
   };
@@ -150,7 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let isMounted = true;
 
     const refreshUser = async () => {
-      const token = localStorage.getItem('access_token') || localStorage.getItem('token');
+      const token = getAccessToken();
       if (!token) {
         return;
       }

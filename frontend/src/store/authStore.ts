@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY, LEGACY_TOKEN_KEY } from '../api/client';
 
 interface User {
   id: number;
@@ -32,8 +33,9 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
 
       setAuth: (user, accessToken, refreshToken) => {
-        localStorage.setItem('access_token', accessToken);
-        localStorage.setItem('refresh_token', refreshToken);
+        localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
+        localStorage.removeItem(LEGACY_TOKEN_KEY);
+        localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
         set({
           user,
           accessToken,
@@ -43,8 +45,9 @@ export const useAuthStore = create<AuthState>()(
       },
 
       clearAuth: () => {
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
+        localStorage.removeItem(ACCESS_TOKEN_KEY);
+        localStorage.removeItem(REFRESH_TOKEN_KEY);
+        localStorage.removeItem(LEGACY_TOKEN_KEY);
         set({
           user: null,
           accessToken: null,

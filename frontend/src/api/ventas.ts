@@ -1,3 +1,4 @@
+import { authFetch } from './client';
 import type { Cliente, PaginatedResponse } from '../types';
 
 export type { Cliente };
@@ -230,12 +231,10 @@ export interface EstadisticasVentas {
 export const ventasApi = {
   // Clientes
   async buscarCliente(documento: string): Promise<Cliente> {
-    const token = localStorage.getItem('token');
-    const response = await fetch(
+    const response = await authFetch(
       `${API_URL}/clientes/buscar_por_documento/?documento=${documento}`,
       {
         headers: {
-          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
       }
@@ -250,16 +249,14 @@ export const ventasApi = {
   async getClientes(
     params?: { search?: string; page?: number; ordering?: string; is_active?: boolean }
   ): Promise<PaginatedResponse<Cliente> | Cliente[]> {
-    const token = localStorage.getItem('token');
     const queryParams = new URLSearchParams();
     if (params?.search) queryParams.append('search', params.search);
     if (params?.page) queryParams.append('page', params.page.toString());
     if (params?.ordering) queryParams.append('ordering', params.ordering);
     if (params?.is_active !== undefined) queryParams.append('is_active', String(params.is_active));
     const query = queryParams.toString();
-    const response = await fetch(`${API_URL}/clientes/${query ? `?${query}` : ''}`, {
+    const response = await authFetch(`${API_URL}/clientes/${query ? `?${query}` : ''}`, {
       headers: {
-        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
     });
@@ -271,10 +268,8 @@ export const ventasApi = {
   },
 
   async getCliente(id: number): Promise<Cliente> {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/clientes/${id}/`, {
+    const response = await authFetch(`${API_URL}/clientes/${id}/`, {
       headers: {
-        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
     });
@@ -286,11 +281,9 @@ export const ventasApi = {
   },
 
   async crearCliente(data: Partial<Cliente>): Promise<Cliente> {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/clientes/`, {
+    const response = await authFetch(`${API_URL}/clientes/`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
@@ -304,11 +297,9 @@ export const ventasApi = {
   },
 
   async actualizarCliente(id: number, data: Partial<Cliente>): Promise<Cliente> {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/clientes/${id}/`, {
+    const response = await authFetch(`${API_URL}/clientes/${id}/`, {
       method: 'PATCH',
       headers: {
-        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
@@ -322,11 +313,9 @@ export const ventasApi = {
   },
 
   async eliminarCliente(id: number): Promise<void> {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/clientes/${id}/`, {
+    const response = await authFetch(`${API_URL}/clientes/${id}/`, {
       method: 'DELETE',
       headers: {
-        Authorization: `Bearer ${token}`,
       },
     });
 
@@ -337,11 +326,9 @@ export const ventasApi = {
 
   // Ventas
   async crearVenta(data: VentaCreate): Promise<Venta> {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/ventas/`, {
+    const response = await authFetch(`${API_URL}/ventas/`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
@@ -355,11 +342,9 @@ export const ventasApi = {
   },
 
   async actualizarVenta(id: number, data: Partial<VentaCreate>): Promise<Venta> {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/ventas/${id}/`, {
+    const response = await authFetch(`${API_URL}/ventas/${id}/`, {
       method: 'PATCH',
       headers: {
-        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
@@ -380,7 +365,6 @@ export const ventasApi = {
     fechaInicio?: string;
     fechaFin?: string;
   }, options?: { signal?: AbortSignal }): Promise<VentaListItem[]> {
-    const token = localStorage.getItem('token');
     const queryParams = new URLSearchParams();
     if (params?.tipoComprobante) queryParams.append('tipo_comprobante', params.tipoComprobante);
     if (params?.estado) queryParams.append('estado', params.estado);
@@ -389,10 +373,9 @@ export const ventasApi = {
     if (params?.fechaInicio) queryParams.append('fecha_inicio', params.fechaInicio);
     if (params?.fechaFin) queryParams.append('fecha_fin', params.fechaFin);
     const query = queryParams.toString();
-    const response = await fetch(`${API_URL}/ventas/${query ? `?${query}` : ''}`, {
+    const response = await authFetch(`${API_URL}/ventas/${query ? `?${query}` : ''}`, {
       signal: options?.signal,
       headers: {
-        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
     });
@@ -411,10 +394,8 @@ export const ventasApi = {
   },
 
   async getVenta(id: number): Promise<Venta> {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/ventas/${id}/`, {
+    const response = await authFetch(`${API_URL}/ventas/${id}/`, {
       headers: {
-        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
     });
@@ -426,10 +407,8 @@ export const ventasApi = {
   },
 
   async getRemisionesPendientes(): Promise<Venta[]> {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/ventas/remisiones_pendientes/`, {
+    const response = await authFetch(`${API_URL}/ventas/remisiones_pendientes/`, {
       headers: {
-        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
     });
@@ -439,11 +418,9 @@ export const ventasApi = {
   },
 
   async enviarACaja(ventaId: number): Promise<Venta> {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/ventas/${ventaId}/enviar-a-caja/`, {
+    const response = await authFetch(`${API_URL}/ventas/${ventaId}/enviar-a-caja/`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
     });
@@ -456,14 +433,12 @@ export const ventasApi = {
   },
 
   async getPendientesCaja(params?: { fecha?: string }, options?: { signal?: AbortSignal }): Promise<VentaListItem[]> {
-    const token = localStorage.getItem('token');
     const queryParams = new URLSearchParams();
     if (params?.fecha) queryParams.append('fecha', params.fecha);
     const query = queryParams.toString();
-    const response = await fetch(`${API_URL}/caja/pendientes/${query ? `?${query}` : ''}`, {
+    const response = await authFetch(`${API_URL}/caja/pendientes/${query ? `?${query}` : ''}`, {
       signal: options?.signal,
       headers: {
-        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
     });
@@ -482,11 +457,9 @@ export const ventasApi = {
   },
 
   async getDetalleCaja(ventaId: number, options?: { signal?: AbortSignal }): Promise<Venta> {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/caja/${ventaId}/detalle/`, {
+    const response = await authFetch(`${API_URL}/caja/${ventaId}/detalle/`, {
       signal: options?.signal,
       headers: {
-        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
     });
@@ -499,11 +472,9 @@ export const ventasApi = {
   },
 
   async facturarEnCaja(ventaId: number): Promise<FacturarCajaResponse> {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/caja/${ventaId}/facturar/`, {
+    const response = await authFetch(`${API_URL}/caja/${ventaId}/facturar/`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
     });
@@ -530,11 +501,9 @@ export const ventasApi = {
   },
 
   async facturarVentaElectronica(ventaId: number): Promise<FacturarCajaResponse> {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/ventas/${ventaId}/facturar/`, {
+    const response = await authFetch(`${API_URL}/ventas/${ventaId}/facturar/`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
     });
@@ -567,13 +536,11 @@ export const ventasApi = {
   },
 
   async convertirAFactura(remisionId: number): Promise<Venta> {
-    const token = localStorage.getItem('token');
-    const response = await fetch(
+    const response = await authFetch(
       `${API_URL}/ventas/${remisionId}/convertir_a_factura/`,
       {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
       }
@@ -590,11 +557,9 @@ export const ventasApi = {
     ventaId: number,
     data: { motivo: string; descripcion: string; devuelve_inventario: boolean }
   ): Promise<Venta> {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/ventas/${ventaId}/anular/`, {
+    const response = await authFetch(`${API_URL}/ventas/${ventaId}/anular/`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
@@ -613,16 +578,14 @@ export const ventasApi = {
 
   async getEstadisticasHoy(): Promise<EstadisticasVentas> {
     const hoy = new Date().toISOString().split('T')[0];
-    const token = localStorage.getItem('token');
     const queryParams = new URLSearchParams({
       fecha_inicio: hoy,
       fecha_fin: hoy,
     });
-    const response = await fetch(
+    const response = await authFetch(
       `${API_URL}/ventas/estadisticas/?${queryParams.toString()}`,
       {
         headers: {
-          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
       }
@@ -636,14 +599,12 @@ export const ventasApi = {
     fechaInicio?: string;
     fechaFin?: string;
   }): Promise<EstadisticasVentas> {
-    const token = localStorage.getItem('token');
     const queryParams = new URLSearchParams();
     if (params?.fechaInicio) queryParams.append('fecha_inicio', params.fechaInicio);
     if (params?.fechaFin) queryParams.append('fecha_fin', params.fechaFin);
     const query = queryParams.toString();
-    const response = await fetch(`${API_URL}/ventas/estadisticas/${query ? `?${query}` : ''}`, {
+    const response = await authFetch(`${API_URL}/ventas/estadisticas/${query ? `?${query}` : ''}`, {
       headers: {
-        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
     });
