@@ -8,8 +8,6 @@ from django.db.models import Sum, Count, Q, Prefetch
 from django.db import transaction
 from django.utils import timezone
 from datetime import datetime, time
-from decimal import Decimal
-import time as time_module
 import logging
 
 from apps.facturacion.exceptions import FacturaDuplicadaError
@@ -19,17 +17,25 @@ from apps.facturacion.services import (
     FactusAPIError,
     FactusAuthError,
     FactusValidationError,
-    emitir_nota_credito,
     facturar_venta,
 )
+from apps.ventas.services import (
+    anular_venta,
+    build_factura_ready_payload,
+    build_pos_ticket_payload,
+    cerrar_venta_local,
+    enviar_venta_a_caja,
+    estado_electronico_ui,
+    registrar_salida_inventario,
+    validar_para_facturar_en_caja,
+)
 
-from .models import Cliente, Venta, DetalleVenta, SolicitudDescuento, VentaAnulada, RemisionAnulada
+from .models import Cliente, Venta, DetalleVenta, SolicitudDescuento
 from .serializers import (
     ClienteSerializer,
     VentaListSerializer,
     VentaDetailSerializer,
     VentaCreateSerializer,
-    VentaAnuladaSerializer,
     SolicitudDescuentoSerializer,
 )
 
@@ -55,202 +61,7 @@ def _is_caja(user):
     )
 
 
-def _validar_detalles_venta(venta):
-    detalles = list(venta.detalles.select_related('producto'))
-    if not detalles:
-        raise ValidationError('La venta no tiene detalles para facturar.')
-
-    subtotal = sum((detalle.subtotal for detalle in detalles), Decimal('0.00'))
-    total_detalles = sum((detalle.total for detalle in detalles), Decimal('0.00'))
-    descuento_global = Decimal(venta.descuento_valor or 0)
-    total_esperado = total_detalles - descuento_global
-    if total_esperado < 0:
-        total_esperado = Decimal('0.00')
-
-    normalized_subtotal = Decimal(subtotal).quantize(Decimal('0.01'))
-    normalized_iva = Decimal(total_detalles - subtotal).quantize(Decimal('0.01'))
-    normalized_total = Decimal(total_esperado).quantize(Decimal('0.01'))
-
-    if normalized_subtotal != Decimal(venta.subtotal).quantize(Decimal('0.01')):
-        raise ValidationError('El subtotal no coincide con los detalles.')
-
-    if normalized_iva != Decimal(venta.iva).quantize(Decimal('0.01')):
-        raise ValidationError('El IVA no coincide con los detalles.')
-
-    if normalized_total != Decimal(venta.total).quantize(Decimal('0.01')):
-        raise ValidationError('El total no coincide con los detalles.')
-
-    return detalles
-
-
-def _registrar_salida_inventario(venta, user, detalles=None):
-    """
-    Registra movimientos de inventario por facturación.
-
-    Nota: la sincronización de ``Producto.stock`` se realiza en
-    ``apps.inventario.signals.actualizar_stock_producto`` al guardar
-    ``MovimientoInventario``. Aquí no se debe duplicar ``producto.save()``.
-    """
-    if not venta.afecta_inventario:
-        return
-    if venta.inventario_ya_afectado:
-        return
-
-    from apps.inventario.models import MovimientoInventario, Producto
-
-    detalles = detalles or list(venta.detalles.select_related('producto'))
-    productos_ids = [detalle.producto_id for detalle in detalles if detalle.afecto_inventario]
-    if productos_ids:
-        productos = {
-            producto.id: producto
-            for producto in Producto.objects.select_for_update().filter(id__in=productos_ids)
-        }
-    else:
-        productos = {}
-
-    movimientos_creados = 0
-    for detalle in detalles:
-        if not detalle.afecto_inventario:
-            continue
-        producto = productos.get(detalle.producto_id) or detalle.producto
-        stock_anterior = producto.stock
-        stock_nuevo = stock_anterior - detalle.cantidad
-        if stock_nuevo < 0:
-            raise ValidationError(f'Stock insuficiente para {producto.nombre}.')
-        MovimientoInventario.objects.create(
-            producto=producto,
-            tipo='SALIDA',
-            cantidad=-abs(detalle.cantidad),
-            stock_anterior=stock_anterior,
-            stock_nuevo=stock_nuevo,
-            costo_unitario=detalle.precio_unitario,
-            usuario=user,
-            referencia=venta.numero_comprobante or f'VENTA-{venta.id}',
-            observaciones='Facturación en caja',
-        )
-        movimientos_creados += 1
-
-    if movimientos_creados > 0:
-        venta.inventario_ya_afectado = True
-        venta.save(update_fields=['inventario_ya_afectado', 'updated_at'])
-
-
-def _facturar_venta(venta, user):
-    if venta.estado in {'COBRADA', 'FACTURADA'}:
-        raise ValidationError('La venta ya está cobrada.')
-    if venta.estado not in {'BORRADOR', 'ENVIADA_A_CAJA'}:
-        raise ValidationError('La venta no se puede facturar en este estado.')
-
-    detalles = _validar_detalles_venta(venta)
-
-    venta.estado = 'COBRADA'
-    venta.facturada_por = user
-    venta.facturada_at = timezone.now()
-    venta.save()
-
-    _registrar_salida_inventario(venta, user, detalles=detalles)
-
-
-def _build_pos_ticket_payload(venta, factura):
-    detalles = []
-    for detalle in venta.detalles.select_related('producto').all():
-        detalles.append(
-            {
-                'descripcion': detalle.producto.nombre,
-                'codigo': detalle.producto.codigo,
-                'cantidad': float(detalle.cantidad),
-                'precio_unitario': float(detalle.precio_unitario),
-                'descuento': float(detalle.descuento_unitario),
-                'iva_porcentaje': float(detalle.iva_porcentaje),
-                'total': float(detalle.total),
-            }
-        )
-    return {
-        'empresa': {
-            'nombre': 'MOTOREPUESTOS LAS AFRICANAS',
-        },
-        'venta_id': venta.id,
-        'numero_factura': factura.number,
-        'fecha_hora': venta.facturada_at.isoformat() if venta.facturada_at else venta.fecha.isoformat(),
-        'cliente': {
-            'nombre': venta.cliente.nombre,
-            'documento': venta.cliente.numero_documento,
-        },
-        'vendedor_caja': request_user_label(venta.facturada_por),
-        'medio_pago': venta.get_medio_pago_display(),
-        'estado_documento': factura.status,
-        'reference_code': factura.reference_code,
-        'subtotal': float(venta.subtotal),
-        'impuestos': float(venta.iva),
-        'descuento': float(venta.descuento_valor),
-        'total': float(venta.total),
-        'cufe': factura.cufe,
-        'uuid': factura.uuid,
-        'qr_url': factura.qr.url if factura.qr else '',
-        'xml_url': factura.xml_url,
-        'items': detalles,
-    }
-
-
-def _build_factura_ready_payload(venta, factura):
-    final_fields = factura.response_json.get('final_fields', {}) if isinstance(factura.response_json, dict) else {}
-    bill_errors = factura.response_json.get('bill_errors', []) if isinstance(factura.response_json, dict) else []
-    return {
-        'id': factura.id,
-        'number': factura.number,
-        'numero_visible': factura.number,
-        'prefix': ''.join(filter(str.isalpha, factura.number or '')),
-        'status': factura.status,
-        'estado': factura.status,
-        'cufe': factura.cufe,
-        'uuid': factura.uuid,
-        'qr_url': factura.qr.url if factura.qr else '',
-        'qr_image': final_fields.get('qr_image', ''),
-        'factus_qr': final_fields.get('qr', ''),
-        'public_url': final_fields.get('public_url', ''),
-        'bill_errors': bill_errors if isinstance(bill_errors, list) else [],
-        'observaciones': factura.mensaje_error or '',
-        'reference_code': factura.reference_code,
-        'xml_url': factura.xml_url,
-        'pdf_url': factura.pdf_url,
-        'xml_local_path': factura.xml_local_path,
-        'pdf_local_path': factura.pdf_local_path,
-        'cliente': {
-            'nombre': venta.cliente.nombre,
-            'documento': venta.cliente.numero_documento,
-            'email': venta.cliente.email,
-            'telefono': venta.cliente.telefono,
-            'direccion': venta.cliente.direccion,
-        },
-        'totales': {
-            'subtotal': float(venta.subtotal),
-            'impuestos': float(venta.iva),
-            'descuento': float(venta.descuento_valor),
-            'total': float(venta.total),
-            'efectivo_recibido': float(venta.efectivo_recibido),
-            'cambio': float(venta.cambio),
-        },
-    }
-
-
-def _estado_electronico_ui(factura):
-    if factura.status == 'ACEPTADA' and factura.codigo_error == 'OBSERVACIONES_FACTUS':
-        return 'EMITIDA_CON_OBSERVACIONES'
-    return factura.status
-
-
-def request_user_label(user):
-    if not user:
-        return ''
-    full_name = user.get_full_name().strip()
-    return full_name or user.username
-
-
-def _validar_estado_para_anulacion(venta):
-    if venta.estado == 'ANULADA':
-        raise ValidationError('Esta venta ya está anulada.')
-    if venta.estado in {'COBRADA', 'FACTURADA'} and venta.tipo_comprobante == 'FACTURA' and venta.facturada_at is None:
-        raise ValidationError('La venta está en un estado inconsistente y no se puede anular.')
+_registrar_salida_inventario = registrar_salida_inventario
 
 
 def _to_bool(value, default=True):
@@ -267,77 +78,6 @@ def _to_bool(value, default=True):
         if normalized in {'false', '0', 'no', 'n', 'off', ''}:
             return False
     return default
-
-
-def _build_credit_note_items(venta):
-    items = []
-    for detalle in venta.detalles.select_related('producto').all():
-        items.append(
-            {
-                'code_reference': detalle.producto.codigo,
-                'name': detalle.producto.nombre,
-                'quantity': float(detalle.cantidad),
-                'price': float(detalle.precio_unitario),
-                'tax_rate': float(detalle.iva_porcentaje),
-                'discount_rate': 0,
-            }
-        )
-    return items
-
-
-def _anular_factura_electronica_con_nota_credito(venta, motivo, *, max_reintentos=2, backoff_segundos=0.3):
-    if not hasattr(venta, 'factura_electronica_factus'):
-        return None
-
-    factura = venta.factura_electronica_factus
-    if factura.status != 'ACEPTADA':
-        return None
-
-    items = _build_credit_note_items(venta)
-    ultimo_error = None
-    for intento in range(max_reintentos + 1):
-        try:
-            nota_credito = emitir_nota_credito(factura_id=factura.id, motivo=motivo, items=items)
-            if nota_credito.status != 'ACEPTADA':
-                raise FactusAPIError(
-                    f'La nota crédito no fue aceptada por Factus (estado={nota_credito.status}).'
-                )
-            return nota_credito
-        except (FactusAPIError, FactusAuthError) as exc:
-            ultimo_error = exc
-            logger.warning(
-                'Reintento nota crédito para venta_id=%s intento=%s/%s error=%s',
-                venta.id,
-                intento + 1,
-                max_reintentos + 1,
-                str(exc),
-            )
-            if intento >= max_reintentos:
-                break
-            time_module.sleep(backoff_segundos * (intento + 1))
-
-    if ultimo_error:
-        raise ultimo_error
-    return None
-
-
-def _debe_revertir_inventario(venta):
-    if not venta.afecta_inventario:
-        return False
-    if venta.inventario_ya_afectado:
-        return True
-
-    from apps.inventario.models import MovimientoInventario
-
-    referencias = {f'VENTA-{venta.id}'}
-    if venta.numero_comprobante:
-        referencias.add(venta.numero_comprobante)
-    return MovimientoInventario.objects.filter(
-        tipo='SALIDA',
-        referencia__in=referencias,
-    ).exists()
-
-
 
 
 
@@ -458,7 +198,7 @@ class VentaViewSet(viewsets.ModelViewSet):
             self.perform_create(serializer)
             venta = serializer.instance
             if facturar_directo and venta.tipo_comprobante == 'FACTURA':
-                _facturar_venta(venta, request.user)
+                cerrar_venta_local(venta, request.user)
         detail_serializer = VentaDetailSerializer(venta, context=self.get_serializer_context())
         headers = self.get_success_headers(detail_serializer.data)
         return Response(detail_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
@@ -573,13 +313,15 @@ class VentaViewSet(viewsets.ModelViewSet):
                 .get(pk=pk)
             )
             try:
-                _validar_estado_para_anulacion(venta)
+                nota_credito = anular_venta(
+                    venta,
+                    request.user,
+                    motivo=motivo,
+                    descripcion=descripcion,
+                    devuelve_inventario=devuelve_inventario,
+                )
             except ValidationError as error:
                 return Response({'error': error.detail}, status=status.HTTP_400_BAD_REQUEST)
-
-            nota_credito = None
-            try:
-                nota_credito = _anular_factura_electronica_con_nota_credito(venta, motivo)
             except (FactusAPIError, FactusAuthError, FactusValidationError) as exc:
                 logger.exception(
                     'No se anuló venta_id=%s porque falló emisión de nota crédito en Factus',
@@ -592,58 +334,6 @@ class VentaViewSet(viewsets.ModelViewSet):
                     },
                     status=status.HTTP_502_BAD_GATEWAY,
                 )
-
-            # Crear registro de anulación
-            if venta.tipo_comprobante == 'REMISION':
-                RemisionAnulada.objects.create(
-                    remision=venta,
-                    motivo=motivo,
-                    descripcion=descripcion,
-                    anulado_por=request.user,
-                    devuelve_inventario=devuelve_inventario
-                )
-            else:
-                VentaAnulada.objects.create(
-                    venta=venta,
-                    motivo=motivo,
-                    descripcion=descripcion,
-                    anulado_por=request.user,
-                    devuelve_inventario=devuelve_inventario
-                )
-
-            # Cambiar estado de la venta
-            venta.estado = 'ANULADA'
-            venta.save(update_fields=['estado', 'updated_at'])
-
-            # Si devuelve inventario, restaurar stock
-            if devuelve_inventario and _debe_revertir_inventario(venta):
-                from apps.inventario.models import MovimientoInventario, Producto
-                # Importante: el stock persistido del producto se sincroniza por
-                # signal post_save de MovimientoInventario (no duplicar save aquí).
-
-                detalles = [detalle for detalle in venta.detalles.all() if detalle.afecto_inventario]
-                productos_ids = [detalle.producto_id for detalle in detalles]
-                productos = {
-                    producto.id: producto
-                    for producto in Producto.objects.select_for_update().filter(id__in=productos_ids)
-                }
-
-                for detalle in detalles:
-                    producto = productos.get(detalle.producto_id) or detalle.producto
-                    stock_anterior = producto.stock
-                    stock_nuevo = stock_anterior + detalle.cantidad
-
-                    MovimientoInventario.objects.create(
-                        producto=producto,
-                        tipo='DEVOLUCION',
-                        cantidad=detalle.cantidad,
-                        stock_anterior=stock_anterior,
-                        stock_nuevo=stock_nuevo,
-                        costo_unitario=detalle.precio_unitario,
-                        usuario=request.user,
-                        referencia=f"Anulación {venta.numero_comprobante}",
-                        observaciones=f"Devolución por anulación: {descripcion}"
-                    )
 
         serializer = VentaDetailSerializer(venta)
         data = serializer.data
@@ -665,34 +355,10 @@ class VentaViewSet(viewsets.ModelViewSet):
                 .get(pk=pk)
             )
 
-            if venta.estado != 'BORRADOR':
-                return Response(
-                    {'error': 'Solo se pueden enviar a caja ventas en borrador.'},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            if venta.tipo_comprobante != 'FACTURA':
-                return Response(
-                    {'error': 'Solo las facturas se pueden enviar a caja.'},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
             try:
-                _validar_detalles_venta(venta)
+                enviar_venta_a_caja(venta, request.user)
             except ValidationError as error:
                 return Response({'error': error.detail}, status=status.HTTP_400_BAD_REQUEST)
-
-            venta.estado = 'ENVIADA_A_CAJA'
-            venta.enviada_a_caja_por = request.user
-            venta.enviada_a_caja_at = timezone.now()
-            venta.save(
-                update_fields=[
-                    'estado',
-                    'enviada_a_caja_por',
-                    'enviada_a_caja_at',
-                    'updated_at',
-                ]
-            )
 
         serializer = VentaDetailSerializer(venta)
         return Response(serializer.data)
@@ -715,7 +381,7 @@ class VentaViewSet(viewsets.ModelViewSet):
                 if venta.estado == 'ANULADA':
                     raise ValidationError('No se puede facturar una venta anulada.')
                 if venta.estado not in {'COBRADA', 'FACTURADA'}:
-                    _facturar_venta(venta, request.user)
+                    cerrar_venta_local(venta, request.user)
 
             factura = facturar_venta(venta.id, triggered_by=request.user)
             venta.refresh_from_db()
@@ -732,7 +398,7 @@ class VentaViewSet(viewsets.ModelViewSet):
                     'numero_factura': None,
                     'estado_local': venta.estado,
                     'estado_venta': venta.estado,
-                    'estado_electronico': _estado_electronico_ui(factura_error) if factura_error else 'ERROR',
+                    'estado_electronico': estado_electronico_ui(factura_error) if factura_error else 'ERROR',
                     'cufe': '',
                     'uuid': '',
                     'reference_code': '',
@@ -753,7 +419,7 @@ class VentaViewSet(viewsets.ModelViewSet):
                     'numero_factura': None,
                     'estado_local': venta.estado,
                     'estado_venta': venta.estado,
-                    'estado_electronico': _estado_electronico_ui(factura_error) if factura_error else 'ERROR',
+                    'estado_electronico': estado_electronico_ui(factura_error) if factura_error else 'ERROR',
                     'status': 'ERROR',
                     'factus_sent': False,
                 },
@@ -766,16 +432,16 @@ class VentaViewSet(viewsets.ModelViewSet):
             'venta_id': venta.id,
             'venta': VentaDetailSerializer(venta).data,
             'factura_electronica': FacturaElectronicaSerializer(factura).data,
-            'factura_lista': _build_factura_ready_payload(venta, factura),
+            'factura_lista': build_factura_ready_payload(venta, factura),
             'numero_factura': factura.number,
             'estado_local': venta.estado,
             'estado_venta': venta.estado,
-            'estado_electronico': _estado_electronico_ui(factura),
+            'estado_electronico': estado_electronico_ui(factura),
             'status': factura.status,
             'cufe': factura.cufe,
             'uuid': factura.uuid,
             'reference_code': factura.reference_code,
-            'pos_ticket': _build_pos_ticket_payload(venta, factura),
+            'pos_ticket': build_pos_ticket_payload(venta, factura),
             'factus_sent': True,
             'pdf_url': factura.pdf_url,
             'xml_url': factura.xml_url,
@@ -873,16 +539,7 @@ class CajaViewSet(viewsets.GenericViewSet):
         return None
 
     def _validar_para_facturar(self, venta):
-        if venta.estado != 'ENVIADA_A_CAJA':
-            raise ValidationError('La venta no está enviada a caja.')
-
-        if venta.tipo_comprobante != 'FACTURA':
-            raise ValidationError('Solo las facturas enviadas a caja se pueden facturar en caja.')
-
-        if not venta.enviada_a_caja_at or not venta.enviada_a_caja_por_id:
-            raise ValidationError('La venta no tiene traza válida de envío a caja.')
-
-        _validar_detalles_venta(venta)
+        validar_para_facturar_en_caja(venta)
 
     @action(detail=False, methods=['get'], url_path='pendientes')
     def pendientes(self, request):
@@ -941,7 +598,7 @@ class CajaViewSet(viewsets.GenericViewSet):
                 logger.info('caja.facturar.validando venta_id=%s estado=%s tipo=%s', venta.id, venta.estado, venta.tipo_comprobante)
                 self._validar_para_facturar(venta)
                 logger.info('caja.facturar.validacion_ok venta_id=%s', venta.id)
-                _facturar_venta(venta, request.user)
+                cerrar_venta_local(venta, request.user)
                 logger.info('caja.facturar.estado_local_ok venta_id=%s estado=%s', venta.id, venta.estado)
 
             logger.info('caja.facturar.enviando_factus venta_id=%s', venta.id)
@@ -976,7 +633,7 @@ class CajaViewSet(viewsets.GenericViewSet):
                     'numero_factura': None,
                     'estado_local': venta.estado if 'venta' in locals() else 'COBRADA',
                     'estado_venta': venta.estado if 'venta' in locals() else 'COBRADA',
-                    'estado_electronico': _estado_electronico_ui(factura_error) if factura_error else 'ERROR',
+                    'estado_electronico': estado_electronico_ui(factura_error) if factura_error else 'ERROR',
                     'cufe': '',
                     'uuid': '',
                     'reference_code': '',
@@ -999,7 +656,7 @@ class CajaViewSet(viewsets.GenericViewSet):
                     'numero_factura': None,
                     'estado_local': venta.estado if 'venta' in locals() else 'COBRADA',
                     'estado_venta': venta.estado if 'venta' in locals() else 'COBRADA',
-                    'estado_electronico': _estado_electronico_ui(factura_error) if factura_error else 'ERROR',
+                    'estado_electronico': estado_electronico_ui(factura_error) if factura_error else 'ERROR',
                     'status': 'ERROR',
                     'factus_sent': False,
                 },
@@ -1021,17 +678,17 @@ class CajaViewSet(viewsets.GenericViewSet):
                 'venta_id': venta.id,
                 'venta': serializer.data,
                 'factura_electronica': FacturaElectronicaSerializer(factura).data,
-                'factura_lista': _build_factura_ready_payload(venta, factura),
+                'factura_lista': build_factura_ready_payload(venta, factura),
                 'numero_factura': factura.number,
                 'estado_local': venta.estado,
                 'estado_venta': venta.estado,
-                'estado_electronico': _estado_electronico_ui(factura),
+                'estado_electronico': estado_electronico_ui(factura),
                 'status': factura.status,
                 'cufe': factura.cufe,
                 'uuid': factura.uuid,
                 'reference_code': factura.reference_code,
                 'send_email': bool(factura.response_json.get('request', {}).get('send_email', False)),
-                'pos_ticket': _build_pos_ticket_payload(venta, factura),
+                'pos_ticket': build_pos_ticket_payload(venta, factura),
                 'factus_sent': True,
                 'errores': [],
             }
