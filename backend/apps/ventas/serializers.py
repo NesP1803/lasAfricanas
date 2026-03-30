@@ -9,6 +9,7 @@ from .models import (
     VentaAnulada,
 )
 from apps.usuarios.models import Usuario
+from apps.ventas.services.calculo_venta import calcular_detalle_venta, recalcular_totales_venta
 
 
 class ClienteSerializer(serializers.ModelSerializer):
@@ -232,83 +233,22 @@ class VentaCreateSerializer(serializers.ModelSerializer):
             'detalles'
         ]
 
-    @staticmethod
-    def _to_decimal(value, default='0'):
-        if value is None:
-            return Decimal(default)
-        return Decimal(str(value))
-
-    @staticmethod
-    def _q(value):
-        return Decimal(value).quantize(Decimal('0.01'))
-
-    @staticmethod
-    def _detalle_es_exento(detalle, iva_porcentaje):
-        producto = detalle.get('producto')
-        if producto is not None and getattr(producto, 'iva_exento', False):
-            return True
-        return iva_porcentaje <= Decimal('0')
 
     def _calcular_detalle(self, detalle):
-        cantidad = self._to_decimal(detalle.get('cantidad'))
-        precio_unitario = self._to_decimal(detalle.get('precio_unitario'))
-        descuento_unitario = self._to_decimal(detalle.get('descuento_unitario', 0))
-        iva_porcentaje = self._to_decimal(detalle.get('iva_porcentaje', 0))
-
-        total_bruto_linea = cantidad * precio_unitario
-        descuento_linea = min(total_bruto_linea, cantidad * max(descuento_unitario, Decimal('0')))
-        total_neto_linea = total_bruto_linea - descuento_linea
-        total_neto_linea_q = self._q(total_neto_linea)
-
-        if self._detalle_es_exento(detalle, iva_porcentaje):
-            base_linea_q = total_neto_linea_q
-            iva_linea_q = Decimal('0.00')
-        else:
-            divisor_iva = Decimal('1') + (iva_porcentaje / Decimal('100'))
-            base_linea_q = self._q(total_neto_linea_q / divisor_iva)
-            iva_linea_q = self._q(total_neto_linea_q - base_linea_q)
-
-        detalle['subtotal'] = base_linea_q
-        detalle['total'] = total_neto_linea_q
-
-        return {
-            'base_linea': base_linea_q,
-            'iva_linea': iva_linea_q,
-            'total_linea': total_neto_linea_q,
-        }
+        return calcular_detalle_venta(detalle)
 
     def _recalcular_totales(self, validated_data, detalles_data):
-        subtotal = Decimal('0.00')
-        iva = Decimal('0.00')
-        total_detalles = Decimal('0.00')
+        try:
+            totales = recalcular_totales_venta(
+                detalles_data=detalles_data,
+                descuento_porcentaje=validated_data.get('descuento_porcentaje', 0),
+                descuento_valor=validated_data.get('descuento_valor', 0),
+                efectivo_recibido=validated_data.get('efectivo_recibido'),
+            )
+        except ValueError as error:
+            raise serializers.ValidationError({'descuento_valor': str(error)})
 
-        for detalle in detalles_data:
-            calculo = self._calcular_detalle(detalle)
-            subtotal += calculo['base_linea']
-            iva += calculo['iva_linea']
-            total_detalles += calculo['total_linea']
-
-        descuento_porcentaje = self._to_decimal(validated_data.get('descuento_porcentaje', 0))
-        descuento_valor = self._to_decimal(validated_data.get('descuento_valor', 0))
-
-        if descuento_porcentaje < 0 or descuento_valor < 0:
-            raise serializers.ValidationError({'descuento_valor': 'El descuento no puede ser negativo.'})
-
-        descuento_porcentaje_valor = (total_detalles * descuento_porcentaje) / Decimal('100')
-        descuento_total = descuento_valor if descuento_valor > 0 else descuento_porcentaje_valor
-        descuento_total = min(descuento_total, total_detalles)
-
-        total = total_detalles - descuento_total
-
-        validated_data['subtotal'] = self._q(subtotal)
-        validated_data['iva'] = self._q(iva)
-        validated_data['descuento_valor'] = self._q(descuento_total)
-        validated_data['total'] = self._q(total)
-
-        efectivo_recibido = validated_data.get('efectivo_recibido')
-        if efectivo_recibido is not None:
-            cambio = self._to_decimal(efectivo_recibido) - validated_data['total']
-            validated_data['cambio'] = self._q(cambio if cambio > 0 else Decimal('0'))
+        validated_data.update(totales)
 
     def create(self, validated_data):
         """Crea la venta con sus detalles y totales calculados en backend"""
