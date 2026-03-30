@@ -19,6 +19,7 @@ import {
 } from '../api/inventario';
 import {
   ventasApi,
+  type Cliente,
   type Venta,
 } from '../api/ventas';
 import { configuracionAPI } from '../api/configuracion';
@@ -228,6 +229,10 @@ export default function Ventas() {
   const [documentoPreview, setDocumentoPreview] = useState<DocumentoPreview | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [mostrarBusqueda, setMostrarBusqueda] = useState(false);
+  const [mostrarBusquedaClientes, setMostrarBusquedaClientes] = useState(false);
+  const [busquedaClienteModal, setBusquedaClienteModal] = useState('');
+  const [clientesBusqueda, setClientesBusqueda] = useState<Cliente[]>([]);
+  const [cargandoClientesBusqueda, setCargandoClientesBusqueda] = useState(false);
   const [guardandoBorrador, setGuardandoBorrador] = useState(false);
   const [enviandoCaja, setEnviandoCaja] = useState(false);
   const [ventaBorrador, setVentaBorrador] = useState<Venta | null>(null);
@@ -252,7 +257,6 @@ export default function Ventas() {
     return state?.fromCaja ?? null;
   }, [location.state]);
   const inventarioYaAfectado = Boolean(tallerPayload?.ordenId);
-  const esVentaRapida = Boolean(tallerPayload);
   const redondeoCajaHabilitado = configuracion?.redondeo_caja_efectivo ?? true;
   const incrementoRedondeoCaja = configuracion?.redondeo_caja_incremento ?? 100;
 
@@ -274,6 +278,29 @@ export default function Ventas() {
       .then((response) => setProductos(response.results ?? []))
       .catch(() => setProductos([]));
   }, [busquedaProducto, mostrarBusqueda]);
+
+  useEffect(() => {
+    if (!mostrarBusquedaClientes) return;
+    const timer = window.setTimeout(async () => {
+      setCargandoClientesBusqueda(true);
+      try {
+        const response = await ventasApi.getClientes({
+          search: busquedaClienteModal.trim() || undefined,
+          is_active: true,
+        });
+        if (Array.isArray(response)) {
+          setClientesBusqueda(response.slice(0, 25));
+        } else {
+          setClientesBusqueda((response.results ?? []).slice(0, 25));
+        }
+      } catch (error) {
+        setClientesBusqueda([]);
+      } finally {
+        setCargandoClientesBusqueda(false);
+      }
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [busquedaClienteModal, mostrarBusquedaClientes]);
 
   useEffect(() => {
     if (!mostrarPermiso) return;
@@ -553,22 +580,27 @@ export default function Ventas() {
     );
     return tieneDescuentoGeneral || tieneDescuentoLineas;
   }, [cartItems, descuentoGeneral]);
-
-
-
-  const handleBuscarCliente = async () => {
+  const abrirModalBusquedaClientes = (textoInicial = '') => {
     if (ventaBloqueada) return;
-    if (!clienteDocumento.trim()) return;
-    try {
-      const cliente = await ventasApi.buscarCliente(clienteDocumento.trim());
-      setClienteNombre(cliente.nombre);
-      setClienteId(cliente.id);
-      setMensaje(null);
-    } catch (error) {
-      setMensaje('Cliente no encontrado. Regístralo desde Listados.');
-      setClienteNombre('Cliente general');
-      setClienteId(null);
+    setMostrarBusquedaClientes(true);
+    setBusquedaClienteModal(textoInicial);
+  };
+
+  const handleDocumentoClienteChange = (value: string) => {
+    setClienteDocumento(value);
+    if (!mostrarBusquedaClientes) {
+      abrirModalBusquedaClientes(value);
+      return;
     }
+    setBusquedaClienteModal(value);
+  };
+
+  const handleSeleccionarCliente = (cliente: Cliente) => {
+    setClienteId(cliente.id);
+    setClienteDocumento(cliente.numero_documento ?? '');
+    setClienteNombre(cliente.nombre ?? 'Cliente general');
+    setMensaje(null);
+    setMostrarBusquedaClientes(false);
   };
 
   const agregarProducto = (producto: Producto) => {
@@ -1013,10 +1045,11 @@ export default function Ventas() {
               <input
                 type="text"
                 value={clienteDocumento}
-                onChange={(event) => setClienteDocumento(event.target.value)}
+                onChange={(event) => handleDocumentoClienteChange(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') {
-                    handleBuscarCliente();
+                    event.preventDefault();
+                    abrirModalBusquedaClientes(clienteDocumento);
                   }
                 }}
                 placeholder="Digite NIT/CC"
@@ -1025,7 +1058,7 @@ export default function Ventas() {
               />
               <button
                 type="button"
-                onClick={handleBuscarCliente}
+                onClick={() => abrirModalBusquedaClientes(clienteDocumento)}
                 disabled={ventaBloqueada}
                 className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
               >
@@ -1696,6 +1729,99 @@ export default function Ventas() {
                         </td>
                       </tr>
                     ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {mostrarBusquedaClientes && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-4xl rounded-2xl bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+              <div>
+                <p className="text-xs font-semibold uppercase text-slate-500">
+                  Búsqueda de clientes
+                </p>
+                <h3 className="text-lg font-semibold text-slate-900">
+                  Buscar por NIT/CC o razón social
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMostrarBusquedaClientes(false)}
+                className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-50"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="px-4 py-3">
+              <div className="flex items-center gap-2">
+                <Search size={18} className="text-slate-400" />
+                <input
+                  type="text"
+                  value={busquedaClienteModal}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setBusquedaClienteModal(value);
+                    setClienteDocumento(value);
+                  }}
+                  placeholder="Buscar cliente por NIT/CC o nombre..."
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                />
+              </div>
+            </div>
+            <div className="px-4 pb-4">
+              <div className="max-h-[380px] overflow-auto rounded-xl border border-slate-100">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="sticky top-0 bg-slate-100 text-xs uppercase text-slate-500">
+                    <tr>
+                      <th className="px-3 py-2">NIT/CC</th>
+                      <th className="px-3 py-2">Nombre / Razón social</th>
+                      <th className="px-3 py-2">Teléfono</th>
+                      <th className="px-3 py-2 text-right">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cargandoClientesBusqueda && (
+                      <tr>
+                        <td colSpan={4} className="px-3 py-4 text-center text-slate-500">
+                          Buscando clientes...
+                        </td>
+                      </tr>
+                    )}
+                    {!cargandoClientesBusqueda && clientesBusqueda.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="px-3 py-6 text-center text-slate-500">
+                          No hay clientes para la búsqueda actual.
+                        </td>
+                      </tr>
+                    )}
+                    {!cargandoClientesBusqueda &&
+                      clientesBusqueda.map((cliente) => (
+                        <tr
+                          key={cliente.id}
+                          onDoubleClick={() => handleSeleccionarCliente(cliente)}
+                          className="cursor-pointer border-b border-slate-100 hover:bg-slate-50"
+                        >
+                          <td className="px-3 py-2 text-slate-600">{cliente.numero_documento}</td>
+                          <td className="px-3 py-2 font-medium text-slate-800">{cliente.nombre}</td>
+                          <td className="px-3 py-2 text-slate-600">
+                            {cliente.telefono || '—'}
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            <button
+                              type="button"
+                              onClick={() => handleSeleccionarCliente(cliente)}
+                              className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-semibold uppercase text-slate-600 hover:bg-slate-50"
+                            >
+                              Seleccionar
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
                   </tbody>
                 </table>
               </div>
