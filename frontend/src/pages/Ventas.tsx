@@ -32,6 +32,12 @@ import { printComprobante } from '../utils/printComprobante';
 import { descuentosApi, type SolicitudDescuento } from '../api/descuentos';
 import type { ConfiguracionEmpresa } from '../types';
 import type { ConfiguracionFacturacion } from '../types';
+import {
+  formatCurrencyCOP,
+  formatMoneyCOP,
+  parseMoneyCOP,
+  roundCashCOP,
+} from '../utils/moneyCOP';
 
 type CartItem = {
   id: number;
@@ -65,7 +71,8 @@ type DocumentoPreview = {
   subtotal: number;
   descuento: number;
   iva: number;
-  total: number;
+  totalFiscal: number;
+  totalCobro: number;
   efectivoRecibido: number;
   cambio: number;
 };
@@ -98,10 +105,10 @@ const buildDocumentoPreviewFromVenta = (venta: Venta): DocumentoPreview => {
       descripcion: detalle.producto_nombre ?? 'Producto',
       codigo: detalle.producto_codigo ?? '',
       cantidad: Number(detalle.cantidad),
-      precioUnitario: roundMoney(Number(detalle.precio_unitario)),
-      descuento: roundMoney(Number(detalle.descuento_unitario)),
+      precioUnitario: parseMoneyCOP(detalle.precio_unitario),
+      descuento: parseMoneyCOP(detalle.descuento_unitario),
       ivaPorcentaje: Number(detalle.iva_porcentaje),
-      total: roundMoney(Number(detalle.total)),
+      total: parseMoneyCOP(detalle.total),
     })) ?? [];
 
   return {
@@ -113,67 +120,14 @@ const buildDocumentoPreviewFromVenta = (venta: Venta): DocumentoPreview => {
     medioPago: venta.medio_pago_display || venta.medio_pago,
     estado: venta.estado_display || venta.estado,
     detalles: detallesPreview,
-    subtotal: roundMoney(Number(venta.subtotal)),
-    descuento: roundMoney(Number(venta.descuento_valor)),
-    iva: roundMoney(Number(venta.iva)),
-    total: roundMoney(Number(venta.total)),
-    efectivoRecibido: roundMoney(Number(venta.efectivo_recibido ?? 0)),
-    cambio: roundMoney(Number(venta.cambio ?? 0)),
+    subtotal: parseMoneyCOP(venta.subtotal),
+    descuento: parseMoneyCOP(venta.descuento_valor),
+    iva: parseMoneyCOP(venta.iva),
+    totalFiscal: parseMoneyCOP(venta.total),
+    totalCobro: parseMoneyCOP(venta.total),
+    efectivoRecibido: parseMoneyCOP(venta.efectivo_recibido ?? 0),
+    cambio: parseMoneyCOP(venta.cambio ?? 0),
   };
-};
-
-const currencyFormatter = new Intl.NumberFormat('es-CO', {
-  style: 'currency',
-  currency: 'COP',
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 0,
-});
-
-const parseNumber = (value: string) => {
-  const normalized = value.replace(/[^\d,.-]/g, '');
-  let cleaned = normalized;
-  if (normalized.includes(',') && normalized.includes('.')) {
-    cleaned = normalized.replace(/\./g, '').replace(',', '.');
-  } else if (normalized.includes(',')) {
-    cleaned = normalized.replace(',', '.');
-  } else if (/\.\d{3}(\D|$)/.test(normalized)) {
-    cleaned = normalized.replace(/\./g, '');
-  }
-  const parsed = Number(cleaned);
-  return Number.isNaN(parsed) ? 0 : parsed;
-};
-
-const SIGNIFICANT_DIGITS_COP = 2;
-const roundHalfEven = (value: number) => {
-  if (!Number.isFinite(value)) {
-    return 0;
-  }
-  const sign = value < 0 ? -1 : 1;
-  const absValue = Math.abs(value);
-  const base = Math.floor(absValue + Number.EPSILON);
-  const fraction = absValue - base;
-  const epsilon = 1e-10;
-
-  if (fraction > 0.5 + epsilon) {
-    return sign * (base + 1);
-  }
-  if (fraction < 0.5 - epsilon) {
-    return sign * base;
-  }
-
-  return sign * (base % 2 === 0 ? base : base + 1);
-};
-
-const roundCop = (value: number, significantDigits = SIGNIFICANT_DIGITS_COP) => {
-  if (!Number.isFinite(value) || value === 0) {
-    return 0;
-  }
-  const sign = value < 0 ? -1 : 1;
-  const absValue = Math.abs(value);
-  const exponent = Math.floor(Math.log10(absValue));
-  const scale = 10 ** (exponent - significantDigits + 1);
-  const scaled = absValue / scale;
-  return sign * roundHalfEven(scaled) * scale;
 };
 const unidadPermiteDecimales = (unidadMedida?: string) =>
   Boolean(unidadMedida && unidadMedida !== 'N/A');
@@ -196,9 +150,23 @@ const normalizeCantidad = (cantidad: number, unidadMedida?: string) => {
   return Math.round(clamped);
 };
 
-const roundMoney = (value: number) => {
-  if (!Number.isFinite(value)) return 0;
-  return Number(value.toFixed(2));
+const roundDiv = (numerator: number, denominator: number) => {
+  if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator === 0) {
+    return 0;
+  }
+  return Math.round(numerator / denominator);
+};
+
+const parsePercentToBasisPoints = (value: unknown) => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.max(0, Math.round(value * 100));
+  }
+  const normalized = String(value ?? '')
+    .replace(/[^\d,.-]/g, '')
+    .replace(',', '.');
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(0, Math.round(parsed * 100));
 };
 
 const isItemExento = (item: Pick<CartItem, 'ivaExento' | 'ivaPorcentaje'>) =>
@@ -208,28 +176,31 @@ const calcularLineaDesdePrecioFinal = (
   item: Pick<CartItem, 'precioUnitario' | 'cantidad' | 'descuentoPorcentaje' | 'ivaPorcentaje' | 'ivaExento'>
 ) => {
   const totalBrutoLinea = item.precioUnitario * item.cantidad;
-  const descuentoLinea = totalBrutoLinea * (item.descuentoPorcentaje / 100);
+  const descuentoLinea = roundDiv(
+    totalBrutoLinea * parsePercentToBasisPoints(item.descuentoPorcentaje),
+    10000
+  );
   const totalNetoLinea = Math.max(0, totalBrutoLinea - descuentoLinea);
 
   if (isItemExento(item)) {
     return {
-      totalBrutoLinea: roundMoney(totalBrutoLinea),
-      descuentoLinea: roundMoney(descuentoLinea),
-      totalNetoLinea: roundMoney(totalNetoLinea),
-      baseLinea: roundMoney(totalNetoLinea),
+      totalBrutoLinea: Math.round(totalBrutoLinea),
+      descuentoLinea: Math.round(descuentoLinea),
+      totalNetoLinea: Math.round(totalNetoLinea),
+      baseLinea: Math.round(totalNetoLinea),
       ivaLinea: 0,
     };
   }
 
-  const divisorIva = 1 + item.ivaPorcentaje / 100;
-  const baseLinea = totalNetoLinea / divisorIva;
+  const ivaBasisPoints = parsePercentToBasisPoints(item.ivaPorcentaje);
+  const baseLinea = roundDiv(totalNetoLinea * 10000, 10000 + ivaBasisPoints);
   const ivaLinea = totalNetoLinea - baseLinea;
   return {
-    totalBrutoLinea: roundMoney(totalBrutoLinea),
-    descuentoLinea: roundMoney(descuentoLinea),
-    totalNetoLinea: roundMoney(totalNetoLinea),
-    baseLinea: roundMoney(baseLinea),
-    ivaLinea: roundMoney(ivaLinea),
+    totalBrutoLinea: Math.round(totalBrutoLinea),
+    descuentoLinea: Math.round(descuentoLinea),
+    totalNetoLinea: Math.round(totalNetoLinea),
+    baseLinea: Math.round(baseLinea),
+    ivaLinea: Math.round(ivaLinea),
   };
 };
 
@@ -253,7 +224,7 @@ export default function Ventas() {
   const [aprobadorNombre, setAprobadorNombre] = useState('');
   const [estadoSolicitud, setEstadoSolicitud] = useState<SolicitudDescuento | null>(null);
   const [medioPago, setMedioPago] = useState<'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'CREDITO'>('EFECTIVO');
-  const [efectivoRecibido, setEfectivoRecibido] = useState('0');
+  const [efectivoRecibido, setEfectivoRecibido] = useState(0);
   const [documentoGenerado, setDocumentoGenerado] = useState<DocumentoGenerado | null>(null);
   const [documentoPreview, setDocumentoPreview] = useState<DocumentoPreview | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
@@ -283,6 +254,8 @@ export default function Ventas() {
     return state?.fromCaja ?? null;
   }, [location.state]);
   const inventarioYaAfectado = Boolean(tallerPayload?.ordenId);
+  const redondeoCajaHabilitado = configuracion?.redondeo_caja_efectivo ?? true;
+  const incrementoRedondeoCaja = configuracion?.redondeo_caja_incremento ?? 100;
 
   useEffect(() => {
     configuracionAPI
@@ -440,9 +413,9 @@ export default function Ventas() {
           nombre: repuesto.nombre || producto?.nombre || 'Producto',
           ivaPorcentaje: Number(repuesto.ivaPorcentaje || producto?.iva_porcentaje || 0),
           ivaExento: Boolean(producto?.iva_exento),
-          precioUnitario: roundMoney(Number(
+          precioUnitario: parseMoneyCOP(
             repuesto.precioUnitario || producto?.precio_venta || 0
-          )),
+          ),
           stock: Number(producto?.stock ?? 0),
           cantidad: repuesto.cantidad,
           descuentoPorcentaje: 0,
@@ -492,10 +465,10 @@ export default function Ventas() {
         nombre: detalle.producto_nombre ?? 'Producto',
         ivaPorcentaje: Number(detalle.iva_porcentaje),
         ivaExento: Number(detalle.iva_porcentaje) <= 0,
-        precioUnitario: roundMoney(precioFinal),
+        precioUnitario: parseMoneyCOP(precioFinal),
         stock: Number(detalle.producto_stock ?? 0),
         cantidad: Number(cantidad.toFixed(2)),
-        descuentoPorcentaje: roundMoney(descuentoPorcentaje),
+        descuentoPorcentaje: Number.isFinite(descuentoPorcentaje) ? descuentoPorcentaje : 0,
         unidadMedida: 'N/A',
       };
     });
@@ -506,8 +479,8 @@ export default function Ventas() {
     setClienteNombre(venta.cliente_info?.nombre ?? 'Cliente general');
     setClienteDocumento(venta.cliente_info?.numero_documento ?? '');
     setMedioPago((venta.medio_pago as 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'CREDITO') ?? 'EFECTIVO');
-    setEfectivoRecibido(String(roundMoney(Number(venta.efectivo_recibido ?? 0))));
-    setDescuentoGeneral(String(roundMoney(Number(venta.descuento_porcentaje ?? 0))));
+    setEfectivoRecibido(parseMoneyCOP(venta.efectivo_recibido ?? 0));
+    setDescuentoGeneral(String(Number(venta.descuento_porcentaje ?? 0)));
     setDescuentoAutorizado(true);
     setEstadoSolicitud(null);
     setSolicitudActivaId(null);
@@ -536,30 +509,23 @@ export default function Ventas() {
 
   const totals = useMemo(() => {
     const resumenLineas = cartItems.map(calcularLineaDesdePrecioFinal);
-    const subtotal = roundMoney(
-      resumenLineas.reduce((acc, line) => acc + line.baseLinea, 0)
-    );
-    const iva = roundMoney(
-      resumenLineas.reduce((acc, line) => acc + line.ivaLinea, 0)
-    );
-    const totalLineas = roundMoney(
-      resumenLineas.reduce((acc, line) => acc + line.totalNetoLinea, 0)
-    );
-    const descuentoLineas = roundMoney(
-      resumenLineas.reduce((acc, line) => acc + line.descuentoLinea, 0)
-    );
-    const descuentoGeneralValor = roundMoney(
-      totalLineas * (parseNumber(descuentoGeneral) / 100)
+    const subtotal = resumenLineas.reduce((acc, line) => acc + line.baseLinea, 0);
+    const iva = resumenLineas.reduce((acc, line) => acc + line.ivaLinea, 0);
+    const totalLineas = resumenLineas.reduce((acc, line) => acc + line.totalNetoLinea, 0);
+    const descuentoLineas = resumenLineas.reduce((acc, line) => acc + line.descuentoLinea, 0);
+    const descuentoGeneralValor = roundDiv(
+      totalLineas * parsePercentToBasisPoints(descuentoGeneral),
+      10000
     );
     const descuentoTotalPrevio = descuentoLineas + descuentoGeneralValor;
     const descuentoTotalAplicado =
       descuentoLineas +
       (descuentoAutorizado ? descuentoGeneralValor : 0);
-    const totalPrevio = roundMoney(totalLineas - descuentoGeneralValor);
-    const totalAplicado = roundMoney(
-      totalLineas - (descuentoAutorizado ? descuentoGeneralValor : 0)
-    );
-    const totalAplicadoRedondeado = totalAplicado;
+    const totalFiscal = totalLineas - (descuentoAutorizado ? descuentoGeneralValor : 0);
+    const aplicaRedondeoCaja = medioPago === 'EFECTIVO' && redondeoCajaHabilitado;
+    const totalCobro = aplicaRedondeoCaja
+      ? roundCashCOP(totalFiscal, incrementoRedondeoCaja)
+      : totalFiscal;
     return {
       subtotal,
       descuentoTotalPrevio,
@@ -567,15 +533,22 @@ export default function Ventas() {
       descuentoGeneralValor,
       iva,
       totalLineas,
-      totalPrevio,
-      totalAplicado,
-      totalAplicadoRedondeado,
+      totalFiscal,
+      totalCobro,
+      aplicaRedondeoCaja,
     };
-  }, [cartItems, descuentoAutorizado, descuentoGeneral]);
+  }, [
+    cartItems,
+    descuentoAutorizado,
+    descuentoGeneral,
+    medioPago,
+    redondeoCajaHabilitado,
+    incrementoRedondeoCaja,
+  ]);
 
   // Detectar si hay descuentos aplicados (para deshabilitar cotizaciones)
   const tieneDescuentosAplicados = useMemo(() => {
-    const tieneDescuentoGeneral = parseNumber(descuentoGeneral) > 0;
+    const tieneDescuentoGeneral = parsePercentToBasisPoints(descuentoGeneral) > 0;
     const tieneDescuentoLineas = cartItems.some(
       (item) => item.descuentoPorcentaje > 0
     );
@@ -624,7 +597,7 @@ export default function Ventas() {
           nombre: producto.nombre,
           ivaPorcentaje: Number(producto.iva_porcentaje ?? 0),
           ivaExento: Boolean(producto.iva_exento),
-          precioUnitario: roundMoney(Number(producto.precio_venta)),
+          precioUnitario: parseMoneyCOP(producto.precio_venta),
           stock: Number(producto.stock),
           cantidad: 1,
           descuentoPorcentaje: 0,
@@ -714,7 +687,7 @@ export default function Ventas() {
     setClienteNombre('Cliente general');
     setClienteDocumento('');
     setMedioPago('EFECTIVO');
-    setEfectivoRecibido('0');
+    setEfectivoRecibido(0);
     resetDescuentoState();
     setMensaje(null);
   };
@@ -756,7 +729,7 @@ export default function Ventas() {
         subtotal: totals.subtotal,
         iva: totals.iva,
         total_antes_descuento: totals.subtotal + totals.iva,
-        total_con_descuento: totals.totalPrevio,
+        total_con_descuento: totals.totalFiscal,
       })
       .then((nuevaSolicitud) => {
         setEstadoSolicitud(nuevaSolicitud);
@@ -783,23 +756,20 @@ export default function Ventas() {
     tipo: DocumentoGenerado['tipo'],
     vendedorId = ventaBorrador?.vendedor ?? user?.id ?? 0
   ) => {
-    const efectivoRecibidoNumero = roundCop(parseNumber(efectivoRecibido));
-    const cambioCalculado = Math.max(
-      0,
-      efectivoRecibidoNumero - totals.totalAplicadoRedondeado
-    );
+    const efectivoRecibidoNumero = efectivoRecibido;
+    const cambioCalculado = Math.max(0, efectivoRecibidoNumero - totals.totalCobro);
     return {
       tipo_comprobante: tipo,
       cliente: clienteId ?? 0,
       vendedor: vendedorId,
-      subtotal: totals.subtotal.toFixed(2),
+      subtotal: String(totals.subtotal),
       descuento_porcentaje: descuentoAutorizado ? descuentoGeneral : '0',
-      descuento_valor: (descuentoAutorizado ? totals.descuentoGeneralValor : 0).toFixed(2),
-      iva: totals.iva.toFixed(2),
-      total: totals.totalAplicadoRedondeado.toFixed(2),
+      descuento_valor: String(descuentoAutorizado ? totals.descuentoGeneralValor : 0),
+      iva: String(totals.iva),
+      total: String(totals.totalFiscal),
       medio_pago: medioPago,
-      efectivo_recibido: efectivoRecibidoNumero.toFixed(2),
-      cambio: cambioCalculado.toFixed(2),
+      efectivo_recibido: String(efectivoRecibidoNumero),
+      cambio: String(cambioCalculado),
       inventario_ya_afectado: inventarioYaAfectado,
       detalles: cartItems.map((item) => {
         const linea = calcularLineaDesdePrecioFinal(item);
@@ -807,11 +777,11 @@ export default function Ventas() {
         return {
           producto: item.id,
           cantidad: item.cantidad,
-          precio_unitario: item.precioUnitario.toFixed(2),
-          descuento_unitario: descuentoUnitario.toFixed(2),
-          iva_porcentaje: item.ivaPorcentaje.toFixed(2),
-          subtotal: linea.baseLinea.toFixed(2),
-          total: linea.totalNetoLinea.toFixed(2),
+          precio_unitario: String(item.precioUnitario),
+          descuento_unitario: String(Math.round(descuentoUnitario)),
+          iva_porcentaje: String(item.ivaPorcentaje),
+          subtotal: String(linea.baseLinea),
+          total: String(linea.totalNetoLinea),
         };
       }),
       descuento_aprobado_por:
@@ -830,7 +800,7 @@ export default function Ventas() {
       setMensaje('Agrega productos antes de continuar.');
       return false;
     }
-    if (!descuentoAutorizado && parseNumber(descuentoGeneral) > 0) {
+    if (!descuentoAutorizado && parsePercentToBasisPoints(descuentoGeneral) > 0) {
       setMensaje('El descuento general está pendiente de aprobación.');
       return false;
     }
@@ -899,7 +869,7 @@ export default function Ventas() {
           tipo: 'FACTURA',
           numero: emision.numero_factura || ventaFacturada.numero_comprobante || `FAC-${ventaFacturada.id}`,
           cliente: ventaFacturada.cliente_info?.nombre ?? clienteNombre,
-          total: currencyFormatter.format(Number(ventaFacturada.total)),
+          total: formatCurrencyCOP(ventaFacturada.total),
         });
         setDocumentoPreview(buildDocumentoPreviewFromVenta(ventaFacturada));
         setMensaje(
@@ -926,7 +896,7 @@ export default function Ventas() {
         tipo: 'FACTURA',
         numero: emision.numero_factura || venta.numero_comprobante || `FAC-${venta.id}`,
         cliente: clienteNombre,
-        total: currencyFormatter.format(totals.totalAplicadoRedondeado),
+        total: formatCurrencyCOP(totals.totalCobro),
       });
       setDocumentoPreview(buildDocumentoPreviewFromVenta(venta));
       setMensaje(
@@ -957,7 +927,7 @@ export default function Ventas() {
 
     // Las cotizaciones NO pueden tener descuentos
     if (tipo === 'COTIZACION') {
-      const tieneDescuentoGeneral = parseNumber(descuentoGeneral) > 0;
+      const tieneDescuentoGeneral = parsePercentToBasisPoints(descuentoGeneral) > 0;
       const tieneDescuentoLineas = cartItems.some(
         (item) => item.descuentoPorcentaje > 0
       );
@@ -977,11 +947,8 @@ export default function Ventas() {
     }
 
     try {
-      const efectivoRecibidoNumero = roundCop(parseNumber(efectivoRecibido));
-      const cambioCalculado = Math.max(
-        0,
-        efectivoRecibidoNumero - totals.totalAplicadoRedondeado
-      );
+      const efectivoRecibidoNumero = efectivoRecibido;
+      const cambioCalculado = Math.max(0, efectivoRecibidoNumero - totals.totalCobro);
       const venta = await ventasApi.crearVenta(buildVentaPayload(tipo));
       const numeroComprobante =
         venta.numero_comprobante ||
@@ -995,7 +962,7 @@ export default function Ventas() {
         tipo,
         numero: numeroComprobante,
         cliente: clienteNombre,
-        total: currencyFormatter.format(totals.totalAplicadoRedondeado),
+        total: formatCurrencyCOP(totals.totalCobro),
       });
       const detallesPreview: DocumentoDetalle[] = cartItems.map((item) => {
         const linea = calcularLineaDesdePrecioFinal(item);
@@ -1029,9 +996,10 @@ export default function Ventas() {
         subtotal: totals.subtotal,
         descuento: totals.descuentoTotalAplicado,
         iva: totals.iva,
-        total: totals.totalAplicadoRedondeado,
+        totalFiscal: totals.totalFiscal,
+        totalCobro: totals.totalCobro,
         efectivoRecibido: efectivoRecibidoNumero,
-        cambio: roundCop(cambioCalculado),
+        cambio: cambioCalculado,
       });
       resetDescuentoState();
       setMensaje(`${venta.tipo_comprobante_display} generado correctamente.`);
@@ -1040,11 +1008,10 @@ export default function Ventas() {
     }
   };
 
-  const cambio = useMemo(() => {
-    const calculado =
-      roundCop(parseNumber(efectivoRecibido)) - totals.totalAplicadoRedondeado;
-    return roundCop(calculado >= 0 ? calculado : 0);
-  }, [efectivoRecibido, totals.totalAplicadoRedondeado]);
+  const cambio = useMemo(
+    () => Math.max(efectivoRecibido - totals.totalCobro, 0),
+    [efectivoRecibido, totals.totalCobro]
+  );
 
   const obtenerInfoProducto = (info: ProductoList | Producto | null) => {
     if (!info) return null;
@@ -1348,12 +1315,13 @@ export default function Ventas() {
             </label>
           <input
             type="text"
-            value={efectivoRecibido}
-            onChange={(event) => setEfectivoRecibido(event.target.value)}
+            inputMode="numeric"
+            value={formatMoneyCOP(efectivoRecibido)}
+            onChange={(event) => setEfectivoRecibido(parseMoneyCOP(event.target.value))}
             disabled={ventaBloqueada}
             className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
           />
-            {!descuentoAutorizado && parseNumber(descuentoGeneral) > 0 && (
+            {!descuentoAutorizado && parsePercentToBasisPoints(descuentoGeneral) > 0 && (
               <p className="text-xs text-amber-600">
                 Descuento pendiente de aprobación.
               </p>
@@ -1472,10 +1440,10 @@ export default function Ventas() {
                     </td>
                     <td className="px-3 py-1.5 text-right">{item.ivaPorcentaje}%</td>
                     <td className="px-3 py-1.5 text-right font-semibold text-slate-800">
-                      {currencyFormatter.format(linea.totalNetoLinea)}
+                      {formatCurrencyCOP(linea.totalNetoLinea)}
                     </td>
                     <td className="px-3 py-1.5 text-right">
-                      {currencyFormatter.format(item.precioUnitario)}
+                      {formatCurrencyCOP(item.precioUnitario)}
                     </td>
                     <td className="px-3 py-1.5 text-right">
                       <input
@@ -1522,19 +1490,19 @@ export default function Ventas() {
               <div className="flex items-center justify-between">
                 <span className="text-slate-500">Subtotal</span>
                 <span className="text-base font-semibold text-slate-900">
-                  {currencyFormatter.format(totals.subtotal)}
+                  {formatCurrencyCOP(totals.subtotal)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-500">Impuestos</span>
                 <span className="text-base font-semibold text-slate-900">
-                  {currencyFormatter.format(totals.iva)}
+                  {formatCurrencyCOP(totals.iva)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-500">Descuentos</span>
                 <span className="text-base font-semibold text-rose-600">
-                  -{currencyFormatter.format(totals.descuentoTotalAplicado)}
+                  -{formatCurrencyCOP(totals.descuentoTotalAplicado)}
                 </span>
               </div>
               {!descuentoAutorizado && totals.descuentoTotalPrevio > totals.descuentoTotalAplicado && (
@@ -1554,18 +1522,30 @@ export default function Ventas() {
             </div>
             <div className="mt-4 space-y-3 text-sm">
               <div className="rounded-xl border border-amber-200 bg-amber-100 px-4 py-3 text-lg font-semibold text-slate-900">
-                {currencyFormatter.format(totals.totalAplicadoRedondeado)}
+                {formatCurrencyCOP(totals.totalCobro)}
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">Total fiscal</span>
+                <span className="text-base font-semibold text-slate-900">
+                  {formatCurrencyCOP(totals.totalFiscal)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">Total a cobrar</span>
+                <span className="text-base font-semibold text-slate-900">
+                  {formatCurrencyCOP(totals.totalCobro)}
+                </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-500">Efectivo recibido</span>
                 <span className="rounded-md bg-emerald-600 px-2 py-1 text-sm font-semibold text-white">
-                  {currencyFormatter.format(roundCop(parseNumber(efectivoRecibido)))}
+                  {formatCurrencyCOP(efectivoRecibido)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-500">Cambio</span>
                 <span className="rounded-md bg-blue-50 px-2 py-1 font-semibold text-blue-700">
-                  {currencyFormatter.format(cambio)}
+                  {formatCurrencyCOP(cambio)}
                 </span>
               </div>
             </div>
@@ -1634,7 +1614,7 @@ export default function Ventas() {
                   subtotal={documentoPreview.subtotal}
                   descuento={documentoPreview.descuento}
                   iva={documentoPreview.iva}
-                  total={documentoPreview.total}
+                  total={documentoPreview.totalFiscal}
                   efectivoRecibido={documentoPreview.efectivoRecibido}
                   cambio={documentoPreview.cambio}
                   notas={configuracion?.notas_factura}
@@ -1659,7 +1639,7 @@ export default function Ventas() {
                       subtotal: documentoPreview.subtotal,
                       descuento: documentoPreview.descuento,
                       iva: documentoPreview.iva,
-                      total: documentoPreview.total,
+                      total: documentoPreview.totalFiscal,
                       efectivoRecibido: documentoPreview.efectivoRecibido,
                       cambio: documentoPreview.cambio,
                       notas: configuracion?.notas_factura,
@@ -1735,7 +1715,7 @@ export default function Ventas() {
                     <div className="mt-2 space-y-1 text-xs text-slate-600">
                       <p className="font-semibold text-slate-800">{info.nombre}</p>
                       <p>Código: {info.codigo}</p>
-                      <p>Precio: {currencyFormatter.format(Number(info.precio))}</p>
+                      <p>Precio: {formatCurrencyCOP(info.precio)}</p>
                       <p>Stock: {info.stock}</p>
                     </div>
                   );
@@ -1775,7 +1755,7 @@ export default function Ventas() {
                           {producto.nombre}
                         </td>
                         <td className="px-3 py-2 text-right text-slate-600">
-                          {currencyFormatter.format(roundCop(Number(producto.precio_venta)))}
+                          {formatCurrencyCOP(producto.precio_venta)}
                         </td>
                         <td className="px-3 py-2 text-right text-slate-600">
                           {producto.stock}
