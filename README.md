@@ -274,9 +274,9 @@ Coloca todos los `.xlsx` exportados del sistema anterior en la carpeta:
 data/
 ```
 
-### 3) Cargar XLSX a staging temporal
+### 3) Cargar XLSX a staging persistente
 
-El script `backend/scripts/import_legacy_stage.py` crea tablas temporales `staging_*` (no `legacy_*`) y normaliza encabezados evitando columnas repetidas.
+El script `backend/scripts/import_legacy_stage.py` crea o reutiliza tablas persistentes `staging_*` en `public` (no `legacy_*`) y normaliza encabezados, incluyendo columnas repetidas con sufijos determinísticos (`campo`, `campo_2`, `campo_3`...).
 
 **Prueba (sin guardar cambios):**
 
@@ -317,5 +317,6 @@ python scripts/migrate_legacy_to_app.py --commit --include-duplicates
 ### 6) Notas importantes
 
 - No se crean tablas finales con prefijo `legacy_`.
+- Las tablas `staging_*` quedan persistidas en la base para inspección, trazabilidad y re-ejecuciones controladas (sin volver a cargar XLSX si no cambió el origen).
 - Las compras se acoplan como `movimientos_inventario` tipo `ENTRADA`.
 - Los resúmenes de IVA legacy no se migran como tablas separadas; el IVA se deriva desde ventas y detalles.
