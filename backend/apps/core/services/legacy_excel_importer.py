@@ -10,9 +10,10 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import connection
-from django.db.models import Count, Sum
+from django.db.models import Count
 from django.utils import timezone
 from openpyxl import load_workbook
 
@@ -51,23 +52,37 @@ def normalize_header(text: Any) -> str:
 
 
 def to_decimal(value: Any, default: Decimal = Decimal("0")) -> Decimal:
-    if value is None:
-        return default
-    if isinstance(value, Decimal):
-        return value
-    if isinstance(value, (int, float)):
-        return Decimal(str(value))
-    text = str(value).strip()
-    if not text or text.lower() in {"nan", "none", "null", "n/a", "na", "s/n", "-"}:
-        return default
-    text = text.replace(" ", "")
-    if "." in text and "," in text:
-        text = text.replace(".", "").replace(",", ".") if text.rfind(",") > text.rfind(".") else text.replace(",", "")
-    elif "," in text:
-        text = text.replace(".", "").replace(",", ".")
     try:
+        if value is None:
+            return default
+        if isinstance(value, bool):
+            return default
+        if isinstance(value, Decimal):
+            return value
+        if isinstance(value, (int, float)):
+            return Decimal(str(value))
+
+        text = str(value).strip()
+        if not text or text.lower() in {"nan", "none", "null", "n/a", "na", "s/n", "-"}:
+            return default
+
+        text = text.replace(" ", "").replace("\u00a0", "")
+        if text.endswith("%"):
+            text = text[:-1]
+
+        # limpieza de símbolos y ruido legacy sin eliminar separadores decimales
+        text = re.sub(r"[^0-9,.\-]", "", text)
+        if text in {"", "-", ".", ","}:
+            return default
+
+        if "." in text and "," in text:
+            # Escenario 1.234,56 o 1,234.56
+            text = text.replace(".", "").replace(",", ".") if text.rfind(",") > text.rfind(".") else text.replace(",", "")
+        elif "," in text:
+            text = text.replace(".", "").replace(",", ".")
+
         return Decimal(text)
-    except (InvalidOperation, ValueError):
+    except (InvalidOperation, ValueError, TypeError):
         return default
 
 
@@ -75,17 +90,26 @@ def to_dt(value: Any) -> datetime | None:
     if not value:
         return None
     if isinstance(value, datetime):
-        return value
+        dt = value
+        if settings.USE_TZ and timezone.is_naive(dt):
+            return timezone.make_aware(dt, timezone.get_current_timezone())
+        return dt
     if isinstance(value, (int, float)):
         try:
             # Excel serial date base
-            return datetime(1899, 12, 30) + timedelta(days=float(value))
+            dt = datetime(1899, 12, 30) + timedelta(days=float(value))
+            if settings.USE_TZ and timezone.is_naive(dt):
+                return timezone.make_aware(dt, timezone.get_current_timezone())
+            return dt
         except (TypeError, ValueError):
             return None
     text = str(value).strip()
     for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d %H:%M:%S"):
         try:
-            return datetime.strptime(text, fmt)
+            dt = datetime.strptime(text, fmt)
+            if settings.USE_TZ and timezone.is_naive(dt):
+                return timezone.make_aware(dt, timezone.get_current_timezone())
+            return dt
         except ValueError:
             continue
     return None
@@ -96,10 +120,6 @@ def clean_value(value: Any) -> Any:
         value = value.strip()
         if value.lower() in {"", "nan", "none", "null", "n/a", "na", "s/n", "-"}:
             return None
-        if value.lower() in {"si", "sí", "true", "verdadero", "1"}:
-            return True
-        if value.lower() in {"no", "false", "falso", "0"}:
-            return False
     return value
 
 

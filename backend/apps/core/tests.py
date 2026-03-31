@@ -1,10 +1,14 @@
 from decimal import Decimal
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.test import APIClient
 
+from apps.core.services.legacy_excel_importer import Dataset, FileReport, LegacyExcelImporter, to_decimal, to_dt
+from apps.inventario.models import Categoria, Producto
 from apps.core.models import Auditoria
 from apps.facturacion.models import FacturaElectronica, NotaCreditoElectronica
 from apps.ventas.models import Cliente, Venta
@@ -109,3 +113,61 @@ class AuditoriaFacturacionNotasCreditoTests(TestCase):
         audit = Auditoria.objects.first()
         self.assertEqual(audit.accion, 'CREAR')
         self.assertIn('nota crédito electrónica', audit.notas.lower())
+
+
+class LegacyExcelImporterNormalizationTests(TestCase):
+    def setUp(self):
+        self.importer = LegacyExcelImporter(base_path=None, commit=False, cleanup_temp_on_success=False)
+        self.categoria = Categoria.objects.create(nombre='General', descripcion='', orden=0)
+
+    def test_to_decimal_formats(self):
+        self.assertEqual(to_decimal("19"), Decimal("19"))
+        self.assertEqual(to_decimal("19%"), Decimal("19"))
+        self.assertEqual(to_decimal("1.234,56"), Decimal("1234.56"))
+        self.assertEqual(to_decimal("1234,56"), Decimal("1234.56"))
+        self.assertEqual(to_decimal("1234.56"), Decimal("1234.56"))
+
+    def test_to_decimal_bool_returns_default_without_exception(self):
+        self.assertEqual(to_decimal(True, Decimal("7")), Decimal("7"))
+        self.assertEqual(to_decimal(False, Decimal("9")), Decimal("9"))
+
+    def test_to_dt_string_and_excel_serial_are_aware(self):
+        string_dt = to_dt("2025-01-10 15:30:00")
+        serial_dt = to_dt(45200)
+        self.assertTrue(timezone.is_aware(string_dt))
+        self.assertTrue(timezone.is_aware(serial_dt))
+
+    def test_import_productos_with_iva_zero_and_nineteen(self):
+        dataset = Dataset(
+            path=Path("dbo_articulos.xlsx"),
+            sheet="Sheet1",
+            headers=["codigo", "nombre", "categoria", "precio_venta", "costo", "stock", "iva"],
+            raw_headers=["codigo", "nombre", "categoria", "precio_venta", "costo", "stock", "iva"],
+            rows=[
+                {"codigo": "P-001", "nombre": "Prod 1", "categoria": "General", "precio_venta": "100", "costo": "50", "stock": "2", "iva": "0", "_row_number": 2},
+                {"codigo": "P-002", "nombre": "Prod 2", "categoria": "General", "precio_venta": "120", "costo": "70", "stock": "4", "iva": "19", "_row_number": 3},
+            ],
+        )
+        report = FileReport(filename="dbo_articulos.xlsx", sheet="Sheet1", classification="productos")
+        self.importer._import_productos(dataset, report)
+
+        p1 = Producto.objects.get(codigo="P-001")
+        p2 = Producto.objects.get(codigo="P-002")
+        self.assertEqual(p1.iva_porcentaje, Decimal("0"))
+        self.assertTrue(p1.iva_exento)
+        self.assertEqual(p2.iva_porcentaje, Decimal("19"))
+
+    def test_import_productos_handles_true_iva_without_conversionsyntax(self):
+        dataset = Dataset(
+            path=Path("dbo_articulos.xlsx"),
+            sheet="Sheet1",
+            headers=["codigo", "nombre", "categoria", "precio_venta", "costo", "stock", "iva"],
+            raw_headers=["codigo", "nombre", "categoria", "precio_venta", "costo", "stock", "iva"],
+            rows=[
+                {"codigo": "P-003", "nombre": "Prod Bool", "categoria": "General", "precio_venta": "100", "costo": "50", "stock": "1", "iva": True, "_row_number": 2},
+            ],
+        )
+        report = FileReport(filename="dbo_articulos.xlsx", sheet="Sheet1", classification="productos")
+        self.importer._import_productos(dataset, report)
+        p = Producto.objects.get(codigo="P-003")
+        self.assertEqual(p.iva_porcentaje, Decimal("19"))
