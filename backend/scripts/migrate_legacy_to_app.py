@@ -118,6 +118,13 @@ def table_exists(table: str) -> bool:
         return bool(cursor.fetchone()[0])
 
 
+def table_row_count(table: str) -> int:
+    quote = connection.ops.quote_name
+    with connection.cursor() as cursor:
+        cursor.execute(f"SELECT COUNT(*) FROM {quote(table)}")
+        return int(cursor.fetchone()[0] or 0)
+
+
 def iter_table_rows(table: str, batch: int = 500) -> Iterable[Dict[str, object]]:
     quote = connection.ops.quote_name
     with connection.cursor() as cursor:
@@ -743,6 +750,18 @@ def main() -> None:
 
     LOGGER.info("Modo: %s", "COMMIT" if (args.commit and not args.dry_run) else "DRY-RUN")
     LOGGER.info("Include duplicates (*1): %s", "SI" if include_dupes else "NO")
+
+    expected_tables = [table for _, acciones in steps for table, _ in acciones]
+    existing_tables = [table for table in expected_tables if table_exists(table)]
+    total_rows = sum(table_row_count(table) for table in existing_tables)
+    LOGGER.info(
+        "Resumen pre-migración: %s/%s tablas staging detectadas en public, %s filas totales disponibles",
+        len(existing_tables),
+        len(expected_tables),
+        total_rows,
+    )
+    for table in existing_tables:
+        LOGGER.info(" - %s: %s filas", table, table_row_count(table))
 
     with transaction.atomic():
         for etapa, acciones in steps:
