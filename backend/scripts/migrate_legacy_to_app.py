@@ -15,7 +15,7 @@ import logging
 import os
 import re
 from decimal import Decimal, InvalidOperation
-from typing import Dict, Iterable, Optional, Tuple
+from typing import Dict, Iterable, Optional
 
 import django
 from django.contrib.auth import get_user_model
@@ -34,18 +34,6 @@ Proveedor = None
 Venta = None
 VentaAnulada = None
 MovimientoInventario = None
-
-CACHE: Dict[str, Dict[str, object]] = {
-    "categorias": {},
-    "proveedores": {},
-    "clientes_doc": {},
-    "clientes_nombre": {},
-    "productos_codigo": {},
-    "productos_nombre": {},
-    "usuarios": {},
-    "ventas": {},
-    "detalle_keys": {},
-}
 
 
 def setup_django() -> None:
@@ -101,17 +89,7 @@ def to_decimal(value: str, default: Decimal = Decimal("0")) -> Decimal:
     if value in (None, ""):
         return default
     try:
-        text = str(value).strip().replace(" ", "")
-        if not text:
-            return default
-        if "." in text and "," in text:
-            if text.rfind(",") > text.rfind("."):
-                text = text.replace(".", "").replace(",", ".")
-            else:
-                text = text.replace(",", "")
-        elif "," in text:
-            text = text.replace(".", "").replace(",", ".")
-        return Decimal(text)
+        return Decimal(str(value).replace(",", "."))
     except (InvalidOperation, ValueError):
         return default
 
@@ -154,33 +132,22 @@ def iter_table_rows(table: str, batch: int = 500) -> Iterable[Dict[str, object]]
 
 
 def get_default_categoria() -> "Categoria":
-    cached = CACHE["categorias"].get("__default__")
-    if cached:
-        return cached
     categoria, _ = Categoria.objects.get_or_create(
         nombre="Sin categoría",
         defaults={"descripcion": "Categoría por defecto para legacy", "orden": 0},
     )
-    CACHE["categorias"]["__default__"] = categoria
     return categoria
 
 
 def get_default_proveedor() -> "Proveedor":
-    cached = CACHE["proveedores"].get("__default__")
-    if cached:
-        return cached
     proveedor, _ = Proveedor.objects.get_or_create(
         nombre="Proveedor Legacy",
         defaults={"nit": "", "telefono": "", "email": ""},
     )
-    CACHE["proveedores"]["__default__"] = proveedor
     return proveedor
 
 
 def get_default_cliente() -> "Cliente":
-    cached = CACHE["clientes_doc"].get("0000000")
-    if cached:
-        return cached
     cliente, _ = Cliente.objects.get_or_create(
         numero_documento="0000000",
         defaults={
@@ -192,68 +159,27 @@ def get_default_cliente() -> "Cliente":
             "ciudad": "",
         },
     )
-    CACHE["clientes_doc"]["0000000"] = cliente
-    CACHE["clientes_nombre"][cliente.nombre.lower()] = cliente
     return cliente
 
 
 def get_admin_user():
-    cached = CACHE["usuarios"].get("__admin__")
-    if cached:
-        return cached
     User = get_user_model()
-    admin = User.objects.filter(username="admin").first()
-    CACHE["usuarios"]["__admin__"] = admin
-    return admin
+    return User.objects.filter(username="admin").first()
 
 
 def find_user(value: str):
     User = get_user_model()
     if not value:
         return get_admin_user()
-    key = value.strip().lower()
-    if key in CACHE["usuarios"]:
-        return CACHE["usuarios"][key]
     user = User.objects.filter(username__iexact=value).first()
     if user:
-        CACHE["usuarios"][key] = user
         return user
     parts = value.split()
     if parts:
         user = User.objects.filter(first_name__iexact=parts[0]).first()
         if user:
-            CACHE["usuarios"][key] = user
             return user
-    user = get_admin_user()
-    CACHE["usuarios"][key] = user
-    return user
-
-
-def get_or_create_categoria(nombre: str) -> "Categoria":
-    key = nombre.strip().lower()
-    if not key:
-        return get_default_categoria()
-    cached = CACHE["categorias"].get(key)
-    if cached:
-        return cached
-    categoria, _ = Categoria.objects.get_or_create(
-        nombre=nombre.strip(),
-        defaults={"descripcion": "", "orden": 0},
-    )
-    CACHE["categorias"][key] = categoria
-    return categoria
-
-
-def get_or_create_proveedor(nombre: str) -> "Proveedor":
-    key = nombre.strip().lower()
-    if not key:
-        return get_default_proveedor()
-    cached = CACHE["proveedores"].get(key)
-    if cached:
-        return cached
-    proveedor, _ = Proveedor.objects.get_or_create(nombre=nombre.strip())
-    CACHE["proveedores"][key] = proveedor
-    return proveedor
+    return get_admin_user()
 
 
 def import_categorias(table: str) -> int:
@@ -321,10 +247,6 @@ def import_clientes(table: str) -> int:
                 "ciudad": ciudad,
             },
         )
-        cliente = Cliente.objects.filter(numero_documento=numero_documento).first()
-        if cliente:
-            CACHE["clientes_doc"][cliente.numero_documento] = cliente
-            CACHE["clientes_nombre"][cliente.nombre.lower()] = cliente
         created += int(was_created)
 
     LOGGER.info("Clientes importados desde %s: %s", table, created)
@@ -381,10 +303,17 @@ def import_productos(table: str) -> int:
             continue
 
         categoria_nombre = value_from_row(row_map, ["categoria", "linea", "grupo"], default="")
-        categoria = get_or_create_categoria(categoria_nombre) if categoria_nombre else default_categoria
+        categoria = default_categoria
+        if categoria_nombre:
+            categoria, _ = Categoria.objects.get_or_create(
+                nombre=categoria_nombre,
+                defaults={"descripcion": "", "orden": 0},
+            )
 
         proveedor_nombre = value_from_row(row_map, ["proveedor", "marca", "fabricante"], default="")
-        proveedor = get_or_create_proveedor(proveedor_nombre) if proveedor_nombre else default_proveedor
+        proveedor = default_proveedor
+        if proveedor_nombre:
+            proveedor, _ = Proveedor.objects.get_or_create(nombre=proveedor_nombre)
 
         precio_costo = to_decimal(value_from_row(row_map, ["costo", "precio_costo", "precio_compra"], default="1"), Decimal("1"))
         precio_venta = to_decimal(value_from_row(row_map, ["precio", "precio_venta", "valor", "precioventa"], default="1"), Decimal("1"))
@@ -413,10 +342,6 @@ def import_productos(table: str) -> int:
                 "es_servicio": False,
             },
         )
-        producto = Producto.objects.filter(codigo=codigo).first()
-        if producto:
-            CACHE["productos_codigo"][producto.codigo] = producto
-            CACHE["productos_nombre"][producto.nombre.lower()] = producto
         created += int(was_created)
 
     LOGGER.info("Productos importados desde %s: %s", table, created)
@@ -440,12 +365,7 @@ def import_motos(table: str) -> int:
         cliente_doc = value_from_row(row_map, ["documento", "cedula", "nit", "idcliente", "cliente"], default="")
         cliente = None
         if cliente_doc:
-            cliente = CACHE["clientes_doc"].get(cliente_doc)
-            if not cliente:
-                cliente = Cliente.objects.filter(numero_documento=cliente_doc).first()
-                if cliente:
-                    CACHE["clientes_doc"][cliente.numero_documento] = cliente
-                    CACHE["clientes_nombre"][cliente.nombre.lower()] = cliente
+            cliente = Cliente.objects.filter(numero_documento=cliente_doc).first()
 
         mecanico_nombre = value_from_row(row_map, ["mecanico"], default="")
         mecanico = None
@@ -474,24 +394,13 @@ def import_motos(table: str) -> int:
 def get_cliente_from_row(row_map: Dict[str, object]) -> "Cliente":
     doc = value_from_row(row_map, ["documento", "cedula", "nit", "idcliente", "cliente"], default="")
     if doc:
-        cliente = CACHE["clientes_doc"].get(doc)
-        if not cliente:
-            cliente = Cliente.objects.filter(numero_documento=doc).first()
-            if cliente:
-                CACHE["clientes_doc"][doc] = cliente
-                CACHE["clientes_nombre"][cliente.nombre.lower()] = cliente
+        cliente = Cliente.objects.filter(numero_documento=doc).first()
         if cliente:
             return cliente
 
     nombre = value_from_row(row_map, ["cliente", "nombre", "razon_social"], default="")
     if nombre:
-        key = nombre.lower()
-        cliente = CACHE["clientes_nombre"].get(key)
-        if not cliente:
-            cliente = Cliente.objects.filter(nombre__iexact=nombre).first()
-            if cliente:
-                CACHE["clientes_doc"][cliente.numero_documento] = cliente
-                CACHE["clientes_nombre"][key] = cliente
+        cliente = Cliente.objects.filter(nombre__iexact=nombre).first()
         if cliente:
             return cliente
 
@@ -576,9 +485,6 @@ def import_ventas(table: str, tipo_comprobante: str) -> int:
                 "cambio": Decimal("0"),
             },
         )
-        venta = Venta.objects.filter(numero_comprobante=numero).first()
-        if venta:
-            CACHE["ventas"][f"{tipo_comprobante}|{numero}"] = venta
         created += int(was_created)
 
     LOGGER.info("Ventas %s importadas desde %s: %s", tipo_comprobante, table, created)
@@ -588,26 +494,13 @@ def import_ventas(table: str, tipo_comprobante: str) -> int:
 def find_producto(row_map: Dict[str, object]) -> Optional["Producto"]:
     codigo = value_from_row(row_map, ["codigo", "sku", "referencia", "id"], default="")
     if codigo:
-        producto = CACHE["productos_codigo"].get(codigo)
-        if not producto:
-            producto = Producto.objects.filter(codigo=codigo).first()
-            if producto:
-                CACHE["productos_codigo"][codigo] = producto
-                CACHE["productos_nombre"][producto.nombre.lower()] = producto
+        producto = Producto.objects.filter(codigo=codigo).first()
         if producto:
             return producto
 
     nombre = value_from_row(row_map, ["producto", "nombre", "descripcion", "articulo"], default="")
     if nombre:
-        key = nombre.lower()
-        producto = CACHE["productos_nombre"].get(key)
-        if producto:
-            return producto
-        producto = Producto.objects.filter(nombre__iexact=nombre).first()
-        if producto:
-            CACHE["productos_codigo"][producto.codigo] = producto
-            CACHE["productos_nombre"][key] = producto
-        return producto
+        return Producto.objects.filter(nombre__iexact=nombre).first()
 
     return None
 
@@ -626,12 +519,7 @@ def import_detalles(table: str, tipo_comprobante: str) -> int:
         if not numero:
             continue
 
-        venta_key = f"{tipo_comprobante}|{numero}"
-        venta = CACHE["ventas"].get(venta_key)
-        if not venta:
-            venta = Venta.objects.filter(numero_comprobante=numero, tipo_comprobante=tipo_comprobante).first()
-            if venta:
-                CACHE["ventas"][venta_key] = venta
+        venta = Venta.objects.filter(numero_comprobante=numero, tipo_comprobante=tipo_comprobante).first()
         if not venta:
             continue
 
@@ -653,41 +541,20 @@ def import_detalles(table: str, tipo_comprobante: str) -> int:
         subtotal = precio_unitario * Decimal(cantidad)
         total = subtotal - (descuento_unitario * Decimal(cantidad))
 
-        detail_key: Tuple[object, object, Decimal, Decimal, Decimal, Decimal] = (
-            venta.id,
-            producto.id,
-            Decimal(cantidad),
-            precio_unitario,
-            descuento_unitario,
-            iva_porcentaje,
-        )
-        if detail_key in CACHE["detalle_keys"]:
-            continue
-        exists = DetalleVenta.objects.filter(
+        _, was_created = DetalleVenta.objects.get_or_create(
             venta=venta,
             producto=producto,
-            cantidad=Decimal(cantidad),
-            precio_unitario=precio_unitario,
-            descuento_unitario=descuento_unitario,
-            iva_porcentaje=iva_porcentaje,
-        ).exists()
-        if exists:
-            CACHE["detalle_keys"][detail_key] = True
-            continue
-
-        DetalleVenta.objects.create(
-            venta=venta,
-            producto=producto,
-            cantidad=cantidad,
-            precio_unitario=precio_unitario,
-            descuento_unitario=descuento_unitario,
-            iva_porcentaje=iva_porcentaje,
-            subtotal=subtotal,
-            total=total,
-            afecto_inventario=True,
+            defaults={
+                "cantidad": cantidad,
+                "precio_unitario": precio_unitario,
+                "descuento_unitario": descuento_unitario,
+                "iva_porcentaje": iva_porcentaje,
+                "subtotal": subtotal,
+                "total": total,
+                "afecto_inventario": True,
+            },
         )
-        CACHE["detalle_keys"][detail_key] = True
-        created += 1
+        created += int(was_created)
 
     LOGGER.info("Detalles %s importados desde %s: %s", tipo_comprobante, table, created)
     return created
@@ -713,15 +580,10 @@ def import_anulaciones(table: str, tipo_comprobante: str) -> int:
         if not numero:
             continue
 
-        venta_key = f"{tipo_comprobante}|{numero}"
-        venta = CACHE["ventas"].get(venta_key)
-        if not venta:
-            venta = Venta.objects.filter(
-                numero_comprobante=numero,
-                tipo_comprobante=tipo_comprobante,
-            ).first()
-            if venta:
-                CACHE["ventas"][venta_key] = venta
+        venta = Venta.objects.filter(
+            numero_comprobante=numero,
+            tipo_comprobante=tipo_comprobante,
+        ).first()
 
         if not venta:
             continue
