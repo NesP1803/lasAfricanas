@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Import legacy XLSX files into temporary staging tables (staging_*)."""
+"""Import legacy XLSX files into persistent staging tables (staging_*)."""
 from __future__ import annotations
 
 import argparse
@@ -7,7 +7,7 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Iterable, List
+from typing import Dict, Iterable, List
 
 import django
 from django.db import connection, transaction
@@ -30,15 +30,14 @@ def normalize_identifier(name: str) -> str:
 
 
 def build_unique_columns(headers: Iterable[str]) -> tuple[List[str], List[int]]:
-    seen = set()
+    seen: Dict[str, int] = {}
     unique = []
     indices = []
     for idx, raw in enumerate(headers):
         base = normalize_identifier(str(raw) if raw is not None else f"col_{idx + 1}")
-        if base in seen:
-            continue
-        seen.add(base)
-        unique.append(base)
+        count = seen.get(base, 0) + 1
+        seen[base] = count
+        unique.append(base if count == 1 else f"{base}_{count}")
         indices.append(idx)
     return unique, indices
 
@@ -73,9 +72,9 @@ def ensure_table(table: str, columns: List[str]) -> None:
         columns_sql = ", ".join(f"{quote(col)} TEXT" for col in columns)
         with connection.cursor() as cursor:
             cursor.execute(
-                f"CREATE TEMP TABLE IF NOT EXISTS {quote(table)} ({columns_sql});"
+                f"CREATE TABLE IF NOT EXISTS {quote(table)} ({columns_sql});"
             )
-        LOGGER.info("Created temp staging table %s with %s columns", table, len(columns))
+        LOGGER.info("Created staging table %s with %s columns", table, len(columns))
         return
 
     missing = [col for col in columns if col not in existing]
@@ -91,8 +90,11 @@ def ensure_table(table: str, columns: List[str]) -> None:
 def clear_table(table: str) -> int:
     quote = connection.ops.quote_name
     with connection.cursor() as cursor:
-        cursor.execute(f"DELETE FROM {quote(table)};")
-        return cursor.rowcount
+        cursor.execute(f"SELECT COUNT(*) FROM {quote(table)};")
+        existing = int(cursor.fetchone()[0] or 0)
+        if existing:
+            cursor.execute(f"TRUNCATE TABLE {quote(table)};")
+        return existing
 
 
 def insert_rows(table: str, columns: List[str], rows: Iterable[List[object]], batch: int = 500) -> int:
@@ -134,7 +136,9 @@ def load_workbook_rows(path: Path) -> tuple[List[str], Iterable[List[object]]]:
             normalized = [normalized[idx] if idx < len(normalized) else "" for idx in indices]
             if len(normalized) < len(columns):
                 normalized.extend([""] * (len(columns) - len(normalized)))
-            yield normalized[: len(columns)]
+            normalized = normalized[: len(columns)]
+            if any(cell != "" for cell in normalized):
+                yield normalized
 
     return columns, row_iter()
 
@@ -187,6 +191,7 @@ def main() -> None:
                 continue
 
             table = table_name_for_file(path)
+            LOGGER.info("Tabla destino %s con %s columnas detectadas", table, len(columns))
             ensure_table(table, columns)
             deleted = clear_table(table)
             if deleted:
