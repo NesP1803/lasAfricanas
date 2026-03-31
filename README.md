@@ -254,7 +254,7 @@ python manage.py loaddata data/seed.json
 
 ## Migración de archivos del sistema anterior (XLSX)
 
-Esta sección explica cómo **activar y ejecutar** los scripts que importan los archivos del sistema anterior sin romper la estructura actual.
+El flujo recomendado ahora es **directo a tablas reales** con un comando Django unificado.
 
 ### 1) Preparar entorno
 
@@ -264,59 +264,49 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-> En Windows usa `venv\Scripts\Activate.ps1` o `.venv\Scripts\Activate.ps1`.
+### 2) Copiar archivos XLSX legacy
 
-### 2) Copiar archivos XLSX
-
-Coloca todos los `.xlsx` exportados del sistema anterior en la carpeta:
+Coloca todos los `.xlsx` en:
 
 ```bash
 data/
 ```
 
-### 3) Cargar XLSX a staging persistente
-
-El script `backend/scripts/import_legacy_stage.py` crea o reutiliza tablas persistentes `staging_*` en `public` (no `legacy_*`) y normaliza encabezados, incluyendo columnas repetidas con sufijos determinísticos (`campo`, `campo_2`, `campo_3`...).
-
-**Prueba (sin guardar cambios):**
+### 3) Simular importación (sin persistir)
 
 ```bash
-python scripts/import_legacy_stage.py --dry-run
+python manage.py importar_legacy_excel --path ../data --dry-run
 ```
 
-**Ejecución real:**
+Este modo:
+- clasifica archivos por estructura (encabezados + muestra de contenido),
+- normaliza encabezados/valores,
+- calcula mapeos a tablas reales,
+- genera reportes en `data/migration_reports/`,
+- y hace rollback al finalizar.
+
+### 4) Ejecutar importación real
 
 ```bash
-python scripts/import_legacy_stage.py --commit
+python manage.py importar_legacy_excel --path ../data --commit
 ```
 
-### 4) Migrar desde staging a tablas reales de la app
+### 5) Limpieza segura de staging heredado (opcional)
 
-El script `backend/scripts/migrate_legacy_to_app.py` toma datos `staging_*` y los inserta en tablas actuales (`ventas`, `detalles_venta`, `productos`, `clientes`, etc.) respetando los flujos vigentes.
-
-**Prueba (sin guardar cambios):**
+Si existen tablas `staging_*` de flujos anteriores y deseas eliminarlas automáticamente al terminar una migración correcta:
 
 ```bash
-python scripts/migrate_legacy_to_app.py --dry-run
+python manage.py importar_legacy_excel --path ../data --commit --cleanup-temp-on-success
 ```
 
-**Ejecución real:**
-
-```bash
-python scripts/migrate_legacy_to_app.py --commit
-```
-
-### 5) Modo opcional para tablas duplicadas (*1)
-
-Si necesitas incluir tablas duplicadas del origen (por ejemplo `...1`):
-
-```bash
-python scripts/migrate_legacy_to_app.py --commit --include-duplicates
-```
+La limpieza solo se ejecuta si:
+- el proceso termina sin errores críticos,
+- se generan reportes finales,
+- y la migración está en modo `--commit`.
 
 ### 6) Notas importantes
 
-- No se crean tablas finales con prefijo `legacy_`.
-- Las tablas `staging_*` quedan persistidas en la base para inspección, trazabilidad y re-ejecuciones controladas (sin volver a cargar XLSX si no cambió el origen).
-- Las compras se acoplan como `movimientos_inventario` tipo `ENTRADA`.
-- Los resúmenes de IVA legacy no se migran como tablas separadas; el IVA se deriva desde ventas y detalles.
+- El enfoque principal **ya no es** crear una tabla por cada XLSX.
+- Los datos legacy se mapean hacia tablas operativas (`ventas`, `detalles_venta`, `productos`, `clientes`, `motos`, `movimientos_inventario`, etc.).
+- Archivos/vistas derivadas o columnas no mapeables se preservan en reportes estructurados dentro de `data/migration_reports/` con trazabilidad (archivo, hoja, fila y payload).
+- Se mantiene compatibilidad con scripts antiguos en `backend/scripts/`, pero el comando recomendado es `importar_legacy_excel`.
