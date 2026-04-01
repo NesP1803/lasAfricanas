@@ -6,6 +6,7 @@ import argparse
 import logging
 import os
 import re
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable
@@ -180,6 +181,9 @@ def main() -> None:
     args = parse_args()
     dry_run = (not args.commit) or args.dry_run
 
+    backend_dir = Path(__file__).resolve().parents[1]
+    if str(backend_dir) not in sys.path:
+        sys.path.insert(0, str(backend_dir))
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
     django.setup()
 

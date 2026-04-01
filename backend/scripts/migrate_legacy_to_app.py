@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import sys
 from collections import defaultdict
 from dataclasses import dataclass
 from decimal import Decimal
@@ -40,6 +41,9 @@ class Counter:
 
 def setup_django() -> None:
     global Categoria, Cliente, ConfiguracionEmpresa, Impuesto, Mecanico, Moto, Producto, Proveedor, Usuario
+    backend_dir = Path(__file__).resolve().parents[1]
+    if str(backend_dir) not in sys.path:
+        sys.path.insert(0, str(backend_dir))
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
     django.setup()
 
