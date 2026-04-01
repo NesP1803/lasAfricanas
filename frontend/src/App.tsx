@@ -15,7 +15,6 @@ import DetallesCuentas from './pages/DetallesCuentas';
 import Facturas from './pages/Facturas';
 import Remisiones from './pages/Remisiones';
 import Caja from './pages/Caja';
-import IntercambioDatosPage from './pages/intercambio/IntercambioDatosPage';
 import { NotificationProvider } from './contexts/NotificationContext';
 import NotasCreditoPage from './modules/notasCredito/pages/NotasCreditoPage';
 import CrearNotaCreditoPage from './modules/notasCredito/pages/CrearNotaCreditoPage';
@@ -48,7 +47,6 @@ function App() {
               <Route path="documentos-soporte/crear" element={<CrearDocumentoSoportePage />} />
               <Route path="facturacion/remisiones" element={<Remisiones />} />
               <Route path="facturacion/caja" element={<Caja />} />
-              <Route path="intercambio-datos" element={<IntercambioDatosPage />} />
             </Route>
           </Routes>
         </BrowserRouter>
