@@ -205,6 +205,10 @@ const calcularLineaDesdePrecioFinal = (
 };
 
 export default function Ventas() {
+  const MAX_EFECTIVO_DIGITOS = 13;
+  const sanitizarEfectivoRecibido = (input: string): string =>
+    input.replace(/\D/g, '').slice(0, MAX_EFECTIVO_DIGITOS);
+
   const { user } = useAuth();
   const { showNotification } = useNotification();
   const location = useLocation();
@@ -224,7 +228,7 @@ export default function Ventas() {
   const [aprobadorNombre, setAprobadorNombre] = useState('');
   const [estadoSolicitud, setEstadoSolicitud] = useState<SolicitudDescuento | null>(null);
   const [medioPago, setMedioPago] = useState<'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'CREDITO'>('EFECTIVO');
-  const [efectivoRecibido, setEfectivoRecibido] = useState(0);
+  const [efectivoRecibido, setEfectivoRecibido] = useState('0');
   const [documentoGenerado, setDocumentoGenerado] = useState<DocumentoGenerado | null>(null);
   const [documentoPreview, setDocumentoPreview] = useState<DocumentoPreview | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
@@ -505,7 +509,9 @@ export default function Ventas() {
     setClienteNombre(venta.cliente_info?.nombre ?? 'Cliente general');
     setClienteDocumento(venta.cliente_info?.numero_documento ?? '');
     setMedioPago((venta.medio_pago as 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'CREDITO') ?? 'EFECTIVO');
-    setEfectivoRecibido(parseMoneyCOP(venta.efectivo_recibido ?? 0));
+    setEfectivoRecibido(
+      sanitizarEfectivoRecibido(String(parseMoneyCOP(venta.efectivo_recibido ?? 0)))
+    );
     setDescuentoGeneral(String(Number(venta.descuento_porcentaje ?? 0)));
     setDescuentoAutorizado(true);
     setEstadoSolicitud(null);
@@ -707,7 +713,7 @@ export default function Ventas() {
     setClienteNombre('Cliente general');
     setClienteDocumento('');
     setMedioPago('EFECTIVO');
-    setEfectivoRecibido(0);
+    setEfectivoRecibido('0');
     resetDescuentoState();
     setMensaje(null);
   };
@@ -776,7 +782,7 @@ export default function Ventas() {
     tipo: DocumentoGenerado['tipo'],
     vendedorId = ventaBorrador?.vendedor ?? user?.id ?? 0
   ) => {
-    const efectivoRecibidoNumero = efectivoRecibido;
+    const efectivoRecibidoNumero = Number(efectivoRecibido || '0');
     const cambioCalculado = Math.max(0, efectivoRecibidoNumero - totals.totalCobro);
     return {
       tipo_comprobante: tipo,
@@ -967,7 +973,7 @@ export default function Ventas() {
     }
 
     try {
-      const efectivoRecibidoNumero = efectivoRecibido;
+      const efectivoRecibidoNumero = Number(efectivoRecibido || '0');
       const cambioCalculado = Math.max(0, efectivoRecibidoNumero - totals.totalCobro);
       const venta = await ventasApi.crearVenta(buildVentaPayload(tipo));
       const numeroComprobante =
@@ -1029,7 +1035,7 @@ export default function Ventas() {
   };
 
   const cambio = useMemo(
-    () => Math.max(efectivoRecibido - totals.totalCobro, 0),
+    () => Math.max(Number(efectivoRecibido || '0') - totals.totalCobro, 0),
     [efectivoRecibido, totals.totalCobro]
   );
 
@@ -1513,7 +1519,9 @@ export default function Ventas() {
                     type="text"
                     inputMode="numeric"
                     value={formatMoneyCOP(efectivoRecibido)}
-                    onChange={(event) => setEfectivoRecibido(parseMoneyCOP(event.target.value))}
+                    onChange={(event) =>
+                      setEfectivoRecibido(sanitizarEfectivoRecibido(event.target.value))
+                    }
                     disabled={ventaBloqueada}
                     className="w-full rounded-lg border border-emerald-300 bg-white px-3.5 py-2 text-right text-2xl font-bold tabular-nums text-emerald-800 shadow-sm focus:border-emerald-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100 sm:max-w-[250px]"
                   />
