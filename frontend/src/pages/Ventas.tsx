@@ -205,7 +205,7 @@ const calcularLineaDesdePrecioFinal = (
 };
 
 export default function Ventas() {
-  const MAX_EFECTIVO_DIGITOS = 10;
+  const MAX_EFECTIVO_DIGITOS = 13;
   const sanitizarEfectivoRecibido = (input: string): string =>
     input.replace(/\D/g, '').slice(0, MAX_EFECTIVO_DIGITOS);
 
