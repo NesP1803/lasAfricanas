@@ -62,6 +62,13 @@ def unique_columns(headers: Iterable[object]) -> list[str]:
     return columns
 
 
+def list_xlsx_files(data_dir: Path) -> tuple[list[Path], list[Path]]:
+    all_xlsx = sorted(path for path in data_dir.glob("*.xlsx"))
+    ignored = [path for path in all_xlsx if path.name.startswith("~$")]
+    valid = [path for path in all_xlsx if not path.name.startswith("~$")]
+    return valid, ignored
+
+
 def table_exists(table: str) -> bool:
     with connection.cursor() as cursor:
         cursor.execute(
@@ -125,7 +132,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--data-dir",
         type=Path,
-        default=Path(__file__).resolve().parents[1] / "media" / "intercambio" / "imports",
+        default=Path(__file__).resolve().parents[2] / "data",
         help="Directorio con XLSX legacy",
     )
     parser.add_argument("--commit", action="store_true", help="Confirma inserción")
@@ -192,32 +199,54 @@ def main() -> None:
     if not data_dir.exists():
         raise SystemExit(f"No existe data-dir: {data_dir}")
 
-    files = sorted(p for p in data_dir.glob("*.xlsx"))
-    if not files:
+    files, ignored = list_xlsx_files(data_dir)
+    if not files and not ignored:
         raise SystemExit(f"No se encontraron .xlsx en {data_dir}")
 
-    total = 0
+    LOGGER.info("Data dir: %s", data_dir)
+    LOGGER.info("Archivos encontrados (.xlsx): %s", len(files) + len(ignored))
+    LOGGER.info("Archivos ignorados (temporales ~$): %s", len(ignored))
+    for path in ignored:
+        LOGGER.info("IGNORADO: %s", path.name)
+    LOGGER.info("Archivos válidos a procesar: %s", len(files))
+    for path in files:
+        LOGGER.info("DETECTADO: %s -> %s", path.name, table_name_for_file(path))
+
+    total_rows = 0
+    processed = 0
+    failed = 0
+
     with transaction.atomic():
         for path in files:
-            name_lc = path.name.lower()
-            if name_lc not in EXPECTED_FILES:
-                incidents.add("WARN", "STAGE", path.name, "", "Archivo no esperado; se omite")
-                continue
+            try:
+                columns, rows = excel_rows(path)
+                if not columns:
+                    incidents.add("WARN", "STAGE", path.name, "", "Archivo vacío o sin encabezados")
+                    LOGGER.warning("Sin encabezados o vacío: %s", path.name)
+                    processed += 1
+                    continue
 
-            columns, rows = excel_rows(path)
-            if not columns:
-                incidents.add("WARN", "STAGE", path.name, "", "Archivo vacío o sin encabezados")
-                continue
-
-            table = table_name_for_file(path)
-            ensure_table(table, columns)
-            previous = clear_table(table)
-            inserted = insert_rows(table, path.name, columns, rows)
-            total += inserted
-            LOGGER.info("%s -> %s (previas=%s, insertadas=%s)", path.name, table, previous, inserted)
+                table = table_name_for_file(path)
+                ensure_table(table, columns)
+                previous = clear_table(table)
+                inserted = insert_rows(table, path.name, columns, rows)
+                total_rows += inserted
+                processed += 1
+                LOGGER.info("PROCESADO: %s -> %s (previas=%s, insertadas=%s)", path.name, table, previous, inserted)
+            except Exception as exc:  # noqa: BLE001 - necesitamos registrar y continuar con otros archivos
+                failed += 1
+                incidents.add("ERROR", "STAGE", path.name, "", f"Fallo procesando archivo: {exc}")
+                LOGGER.exception("FALLIDO: %s", path.name)
 
         incidents.dump_json(args.incidents_json)
-        LOGGER.info("Filas insertadas staging: %s", total)
+
+        LOGGER.info("=== Resumen staging ===")
+        LOGGER.info("Total archivos detectados: %s", len(files) + len(ignored))
+        LOGGER.info("Total archivos procesados: %s", processed)
+        LOGGER.info("Total archivos ignorados: %s", len(ignored))
+        LOGGER.info("Total archivos fallidos: %s", failed)
+        LOGGER.info("Total filas insertadas staging: %s", total_rows)
+
         if dry_run:
             LOGGER.warning("Dry-run activo: rollback")
             transaction.set_rollback(True)
