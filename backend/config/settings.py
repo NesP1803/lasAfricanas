@@ -59,6 +59,7 @@ INSTALLED_APPS = [
     'apps.taller',
     'apps.facturacion_electronica',
     'apps.facturacion',
+    'apps.intercambio_datos',
 ]
 
 MIDDLEWARE = [
