@@ -19,5 +19,3 @@ python-dateutil==2.9.0.post0
 python-dotenv==1.2.2
 six==1.17.0
 urllib3==2.6.3
-xlrd==2.0.1
-odfpy==1.4.1
