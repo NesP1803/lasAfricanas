@@ -1,9 +1,6 @@
-from odf.opendocument import load
-from odf.table import Table, TableRow, TableCell
-from odf.text import P
-
-
 def _cell_text(cell):
+    from odf.text import P
+
     texts = []
     for p in cell.getElementsByType(P):
         texts.append(''.join(t.data for t in p.childNodes if hasattr(t, 'data')))
@@ -11,6 +8,14 @@ def _cell_text(cell):
 
 
 def parse_ods(file_path):
+    try:
+        from odf.opendocument import load
+        from odf.table import Table, TableRow, TableCell
+    except ImportError as exc:
+        raise RuntimeError(
+            'Para procesar archivos .ods debes instalar la dependencia opcional odfpy==1.4.1'
+        ) from exc
+
     doc = load(file_path)
     sheets = []
     for table in doc.spreadsheet.getElementsByType(Table):

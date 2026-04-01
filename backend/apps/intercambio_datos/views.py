@@ -44,7 +44,13 @@ class ImportacionesAnalyzeView(APIView):
                 checksum=checksum_bytes(content),
                 archivo=ContentFile(content, name=f.name),
             )
-            analyze_file(import_file)
+            try:
+                analyze_file(import_file)
+            except Exception as exc:
+                job.estado = 'ERROR'
+                job.errores = [str(exc)]
+                job.save(update_fields=['estado', 'errores', 'updated_at'])
+                return Response({'error': str(exc), 'job_id': job.id}, status=400)
         job.estado = 'ANALIZADO'
         job.save(update_fields=['estado', 'updated_at'])
         return Response(ImportJobSerializer(job).data)

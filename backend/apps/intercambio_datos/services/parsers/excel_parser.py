@@ -1,9 +1,14 @@
 from openpyxl import load_workbook
-import xlrd
 
 
 def parse_excel(file_path, extension):
     if extension in {'.xls'}:
+        try:
+            import xlrd
+        except ImportError as exc:
+            raise RuntimeError(
+                'Para procesar archivos .xls debes instalar la dependencia opcional xlrd==2.0.1'
+            ) from exc
         wb = xlrd.open_workbook(file_path)
         sheets = []
         for s in wb.sheets():
