@@ -1,0 +1,150 @@
+{
+  "generated_at": "2026-04-01T05:30:14.833428Z",
+  "summary": {
+    "INFO": 8,
+    "WARN": 12,
+    "ERROR": 0
+  },
+  "incidents": [
+    {
+      "severity": "WARN",
+      "stage": "MIGRATE",
+      "source": "staging_dbo_categorias",
+      "key": "row:37",
+      "message": "Categoría vacía"
+    },
+    {
+      "severity": "WARN",
+      "stage": "MIGRATE",
+      "source": "staging_dbo_contactos",
+      "key": "1010",
+      "message": "Sin nombre/razón social"
+    },
+    {
+      "severity": "WARN",
+      "stage": "MIGRATE",
+      "source": "staging_dbo_articulos",
+      "key": "215183DIS",
+      "message": "Precio costo <= 0; ajustado a 0.01"
+    },
+    {
+      "severity": "WARN",
+      "stage": "MIGRATE",
+      "source": "staging_dbo_articulos",
+      "key": "215183DIS",
+      "message": "Precio venta inválido; fila omitida"
+    },
+    {
+      "severity": "WARN",
+      "stage": "MIGRATE",
+      "source": "staging_dbo_articulos",
+      "key": "756F",
+      "message": "Precio costo <= 0; ajustado a 0.01"
+    },
+    {
+      "severity": "WARN",
+      "stage": "MIGRATE",
+      "source": "staging_dbo_articulos",
+      "key": "756F",
+      "message": "Precio venta inválido; fila omitida"
+    },
+    {
+      "severity": "WARN",
+      "stage": "MIGRATE",
+      "source": "staging_dbo_articulos",
+      "key": "956F",
+      "message": "Precio costo <= 0; ajustado a 0.01"
+    },
+    {
+      "severity": "WARN",
+      "stage": "MIGRATE",
+      "source": "staging_dbo_articulos",
+      "key": "956F",
+      "message": "Precio venta inválido; fila omitida"
+    },
+    {
+      "severity": "WARN",
+      "stage": "MIGRATE",
+      "source": "staging_dbo_articulos",
+      "key": "KD150945",
+      "message": "Precio costo <= 0; ajustado a 0.01"
+    },
+    {
+      "severity": "WARN",
+      "stage": "MIGRATE",
+      "source": "staging_dbo_articulos",
+      "key": "KD150945",
+      "message": "Precio venta inválido; fila omitida"
+    },
+    {
+      "severity": "WARN",
+      "stage": "MIGRATE",
+      "source": "staging_dbo_articulos",
+      "key": "KD1509543",
+      "message": "Precio costo <= 0; ajustado a 0.01"
+    },
+    {
+      "severity": "WARN",
+      "stage": "MIGRATE",
+      "source": "staging_dbo_articulos",
+      "key": "KD1509543",
+      "message": "Precio venta inválido; fila omitida"
+    },
+    {
+      "severity": "INFO",
+      "stage": "MIGRATE",
+      "source": "staging_dbo_usuarios",
+      "key": "jorge",
+      "message": "Usuario creado inactivo; password legacy no migrado"
+    },
+    {
+      "severity": "INFO",
+      "stage": "MIGRATE",
+      "source": "staging_dbo_usuarios",
+      "key": "johan",
+      "message": "Usuario creado inactivo; password legacy no migrado"
+    },
+    {
+      "severity": "INFO",
+      "stage": "MIGRATE",
+      "source": "staging_dbo_usuarios",
+      "key": "edwin",
+      "message": "Usuario creado inactivo; password legacy no migrado"
+    },
+    {
+      "severity": "INFO",
+      "stage": "MIGRATE",
+      "source": "staging_dbo_usuarios",
+      "key": "yorelis",
+      "message": "Usuario creado inactivo; password legacy no migrado"
+    },
+    {
+      "severity": "INFO",
+      "stage": "MIGRATE",
+      "source": "staging_dbo_prefactura",
+      "key": "",
+      "message": "No migrada por falta de correspondencia determinística"
+    },
+    {
+      "severity": "INFO",
+      "stage": "MIGRATE",
+      "source": "staging_dbo_ivas",
+      "key": "",
+      "message": "No migrada (uso analítico/conciliación)"
+    },
+    {
+      "severity": "INFO",
+      "stage": "MIGRATE",
+      "source": "staging_dbo_ivas_r",
+      "key": "",
+      "message": "No migrada (uso analítico/conciliación)"
+    },
+    {
+      "severity": "INFO",
+      "stage": "MIGRATE",
+      "source": "staging_dbo_numeracion_fac",
+      "key": "",
+      "message": "No migrada a DIAN/Factus por criterio conservador"
+    }
+  ]
+}

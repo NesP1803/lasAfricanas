@@ -175,10 +175,6 @@ def migrate_impuestos(incidents: IncidentLogger) -> Counter:
         c.updated += int(not created and bool(obj.pk))
     return c
 
-        if not documento:
-            incidents.add("WARN", "MIGRATE", table, key, "Cliente sin documento; omitido")
-            result["clientes"].omitted += 1
-            continue
 
 def migrate_empresa(incidents: IncidentLogger) -> Counter:
     c = Counter()

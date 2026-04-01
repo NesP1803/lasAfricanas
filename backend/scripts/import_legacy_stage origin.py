@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+backend/scripts/import_legacy_stage.py#!/usr/bin/env python
 """Importa archivos XLSX legacy a tablas staging_* (carga cruda e idempotente)."""
 from __future__ import annotations
 
@@ -62,15 +62,10 @@ def unique_columns(headers: Iterable[object]) -> list[str]:
     return columns
 
 
-def list_xlsx_files(data_dir: Path, only: list[str] | None = None) -> tuple[list[Path], list[Path]]:
+def list_xlsx_files(data_dir: Path) -> tuple[list[Path], list[Path]]:
     all_xlsx = sorted(path for path in data_dir.glob("*.xlsx"))
     ignored = [path for path in all_xlsx if path.name.startswith("~$")]
     valid = [path for path in all_xlsx if not path.name.startswith("~$")]
-
-    if only:
-        only_set = {name.strip().lower() for name in only if name.strip()}
-        valid = [path for path in valid if path.name.lower() in only_set]
-
     return valid, ignored
 
 
@@ -147,11 +142,6 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=Path(__file__).resolve().parents[1] / "logs" / "legacy_stage_incidents.json",
     )
-    parser.add_argument(
-        "--only",
-        nargs="+",
-        help="Lista de archivos XLSX a procesar, por ejemplo: dbo_empleados.xlsx dbo_usuarios.xlsx dbo_vendedores.xlsx",
-    )
     return parser.parse_args()
 
 
@@ -209,7 +199,7 @@ def main() -> None:
     if not data_dir.exists():
         raise SystemExit(f"No existe data-dir: {data_dir}")
 
-    files, ignored = list_xlsx_files(data_dir, only=args.only)
+    files, ignored = list_xlsx_files(data_dir)
     if not files and not ignored:
         raise SystemExit(f"No se encontraron .xlsx en {data_dir}")
 

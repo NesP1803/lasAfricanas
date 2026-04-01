@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+import unicodedata
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any
@@ -172,6 +174,49 @@ class Command(BaseCommand):
         self._resolved_tables[table] = chosen
         return chosen
 
+    def _slug_username(self, value: str) -> str:
+        raw = norm_str(value).lower()
+        raw = unicodedata.normalize("NFKD", raw)
+        raw = "".join(ch for ch in raw if not unicodedata.combining(ch))
+        raw = re.sub(r"[^a-z0-9]+", "_", raw)
+        raw = re.sub(r"_+", "_", raw).strip("_")
+        return raw[:150]
+
+    def _build_fallback_username(self, person: ConsolidatedPerson, key: str) -> str:
+        base = ""
+        if person.username:
+            base = self._slug_username(person.username)
+        elif person.email:
+            base = self._slug_username(person.email.split("@")[0])
+
+        if not base:
+            full_name = norm_str(f"{person.first_name} {person.last_name}")
+            base = self._slug_username(full_name)
+
+        if not base:
+            base = self._slug_username(key.replace(":", "_"))
+
+        if not base:
+            base = "legacy_user"
+
+        return base[:150]
+
+    def _ensure_unique_username(self, base_username: str, exclude_pk: int | None = None) -> str:
+        base = (base_username or "legacy_user").strip()[:150]
+        candidate = base
+        seq = 2
+
+        while True:
+            qs = Usuario.objects.filter(username__iexact=candidate)
+            if exclude_pk:
+                qs = qs.exclude(pk=exclude_pk)
+            if not qs.exists():
+                return candidate
+
+            suffix = f"_{seq}"
+            candidate = f"{base[:150 - len(suffix)]}{suffix}"
+            seq += 1
+
     def _build_person_from_source(self, row: dict[str, Any], from_vendedor: bool = False) -> ConsolidatedPerson:
         username = pick(row, "username", "usuario", "login", "user")[:150]
         email = norm_email(pick(row, "email", "correo", "mail"))[:254]
@@ -282,31 +327,54 @@ class Command(BaseCommand):
         sede_values = {choice[0] for choice in Usuario.SEDE_CHOICES}
 
         for key, person in persons.items():
-            if person.ambiguous:
-                counter.ambiguos += 1
-                self.stdout.write(self.style.WARNING(f"[{key}] ambiguo: {person.ambiguous_reason}. Omitido."))
-                continue
-
-            if not person.username:
-                counter.ambiguos += 1
-                self.stdout.write(self.style.WARNING(f"[{key}] sin username confiable. Omitido."))
-                continue
-
             if person.tipo_usuario == "MECANICO":
                 counter.omitidos += 1
                 self.stdout.write(self.style.WARNING(f"[{key}] marcado como MECANICO. Omitido por regla."))
                 continue
 
-            existing_by_username = Usuario.objects.filter(username__iexact=person.username).first()
-            existing_by_email = Usuario.objects.filter(email__iexact=person.email).first() if person.email else None
-            if existing_by_username and existing_by_email and existing_by_username.pk != existing_by_email.pk:
-                counter.ambiguos += 1
+            if person.ambiguous:
                 self.stdout.write(
-                    self.style.WARNING(f"[{key}] username/email apuntan a usuarios distintos. Omitido por ambigüedad.")
+                    self.style.WARNING(
+                        f"[{key}] ambiguo: {person.ambiguous_reason}. Se intentará crear/adaptar."
+                    )
                 )
-                continue
 
-            user = existing_by_username or existing_by_email
+            requested_username = person.username.strip()[:150] if person.username else ""
+            if not requested_username:
+                requested_username = self._build_fallback_username(person, key)
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"[{key}] sin username confiable. Se autogenera: {requested_username}"
+                    )
+                )
+            else:
+                requested_username = self._slug_username(requested_username) or self._build_fallback_username(person, key)
+
+            existing_by_username = Usuario.objects.filter(username__iexact=requested_username).first()
+            existing_by_email = Usuario.objects.filter(email__iexact=person.email).first() if person.email else None
+
+            user = None
+
+            if existing_by_username and existing_by_email and existing_by_username.pk == existing_by_email.pk:
+                user = existing_by_username
+            elif existing_by_username and existing_by_email and existing_by_username.pk != existing_by_email.pk:
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"[{key}] username/email apuntan a usuarios distintos. "
+                        f"Se prioriza username='{existing_by_username.username}' y se ignora email conflictivo."
+                    )
+                )
+                user = existing_by_username
+                person.email = ""
+            elif existing_by_username:
+                user = existing_by_username
+            elif existing_by_email:
+                user = existing_by_email
+                if user.username.lower() != requested_username.lower():
+                    requested_username = self._ensure_unique_username(requested_username, exclude_pk=user.pk)
+            else:
+                requested_username = self._ensure_unique_username(requested_username)
+
             defaults = {
                 "email": person.email,
                 "first_name": person.first_name,
@@ -321,23 +389,32 @@ class Command(BaseCommand):
             try:
                 if user:
                     changed = False
+
+                    if user.username != requested_username:
+                        username_candidate = self._ensure_unique_username(requested_username, exclude_pk=user.pk)
+                        if user.username != username_candidate:
+                            user.username = username_candidate
+                            changed = True
+
                     for field, value in defaults.items():
                         if getattr(user, field) != value:
                             setattr(user, field, value)
                             changed = True
+
                     if changed:
-                        user.save(update_fields=list(defaults.keys()))
+                        user.save(update_fields=["username", *defaults.keys()])
                         counter.actualizados += 1
                     else:
                         counter.omitidos += 1
                 else:
-                    user = Usuario(username=person.username, **defaults)
+                    user = Usuario(username=requested_username, **defaults)
                     user.set_unusable_password()
                     user.save()
                     counter.creados += 1
 
                 if user.tipo_usuario == "VENDEDOR":
                     PerfilVendedor.objects.get_or_create(usuario=user)
+
             except Exception as exc:  # noqa: BLE001
                 counter.errores += 1
                 self.stdout.write(self.style.ERROR(f"[{key}] error al upsert: {exc}"))
