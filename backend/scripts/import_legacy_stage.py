@@ -24,6 +24,22 @@ except ImportError as exc:
 
 LOGGER = logging.getLogger(__name__)
 
+EXPECTED_FILES = {
+    "dbo_articulos.xlsx",
+    "dbo_categorias.xlsx",
+    "dbo_contactos.xlsx",
+    "dbo_datosempresa.xlsx",
+    "dbo_empleados.xlsx",
+    "dbo_impuestos.xlsx",
+    "dbo_ivas.xlsx",
+    "dbo_ivas_r.xlsx",
+    "dbo_motos_registradas.xlsx",
+    "dbo_numeracion_fac.xlsx",
+    "dbo_prefactura.xlsx",
+    "dbo_usuarios.xlsx",
+    "dbo_vendedores.xlsx",
+}
+
 
 def normalize_identifier(name: str) -> str:
     cleaned = re.sub(r"[^a-zA-Z0-9_]+", "_", name.strip())
