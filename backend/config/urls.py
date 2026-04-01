@@ -39,7 +39,6 @@ urlpatterns = [
     
     # API completa
     path('api/', include(router.urls)),
-    path('api/intercambio/', include('apps.intercambio_datos.urls')),
     path('api/configuracion/dian/', configuracion_dian_list, name='configuracion-dian'),
     path('api/configuracion/dian/rangos/', configuracion_dian_rangos, name='configuracion-dian-rangos'),
     path('api/configuracion/dian/rangos/sync/', configuracion_dian_rangos_sync, name='configuracion-dian-rangos-sync'),
