@@ -103,6 +103,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         dry_run = options["dry_run"]
         counter = ImportCounter()
+        self._resolved_tables: dict[str, tuple[str, str]] = {}
 
         with transaction.atomic():
             empleados_rows = self._read_table("staging_dbo_empleados")
@@ -125,29 +126,51 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING("Dry-run activo: se hizo rollback de todos los cambios."))
 
     def _read_table(self, table: str) -> list[dict[str, Any]]:
-        if not self._table_exists(table):
+        resolved = self._resolve_table(table)
+        if not resolved:
             self.stdout.write(self.style.WARNING(f"Tabla {table} no existe; se omite."))
             return []
+        schema_name, table_name = resolved
 
+        self.stdout.write(f"Usando tabla {schema_name}.{table_name} para '{table}'.")
         quote = connection.ops.quote_name
         with connection.cursor() as cursor:
-            cursor.execute(f"SELECT * FROM {quote(table)}")
+            qualified = f"{quote(schema_name)}.{quote(table_name)}"
+            cursor.execute(f"SELECT * FROM {qualified}")
             columns = [col[0] for col in cursor.description]
             return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
-    def _table_exists(self, table: str) -> bool:
+    def _resolve_table(self, table: str) -> tuple[str, str] | None:
+        if table in self._resolved_tables:
+            return self._resolved_tables[table]
+
+        normalized_target = table.lower()
         with connection.cursor() as cursor:
             cursor.execute(
                 """
-                SELECT EXISTS (
-                    SELECT 1
-                    FROM information_schema.tables
-                    WHERE table_schema='public' AND table_name=%s
-                )
+                SELECT table_schema, table_name
+                FROM information_schema.tables
+                WHERE table_type='BASE TABLE'
+                  AND table_schema NOT IN ('pg_catalog', 'information_schema')
+                  AND lower(table_name) = %s
+                ORDER BY CASE WHEN table_schema='public' THEN 0 ELSE 1 END, table_schema, table_name
                 """,
-                [table],
+                [normalized_target],
             )
-            return bool(cursor.fetchone()[0])
+            matches = cursor.fetchall()
+
+        if not matches:
+            return None
+        if len(matches) > 1:
+            pretty = ", ".join(f"{schema}.{name}" for schema, name in matches)
+            self.stdout.write(
+                self.style.WARNING(
+                    f"Tabla '{table}' encontrada en múltiples esquemas ({pretty}); se usa {matches[0][0]}.{matches[0][1]}"
+                )
+            )
+        chosen = (matches[0][0], matches[0][1])
+        self._resolved_tables[table] = chosen
+        return chosen
 
     def _build_person_from_source(self, row: dict[str, Any], from_vendedor: bool = False) -> ConsolidatedPerson:
         username = pick(row, "username", "usuario", "login", "user")[:150]
