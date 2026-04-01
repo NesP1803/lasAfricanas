@@ -1,58 +1,98 @@
 #!/usr/bin/env python
-"""Import legacy XLSX files into persistent staging tables (staging_*)."""
+"""Importa archivos XLSX legacy a tablas staging_* (carga cruda e idempotente)."""
 from __future__ import annotations
 
 import argparse
 import logging
 import os
 import re
+from datetime import datetime
 from pathlib import Path
-from typing import Dict, Iterable, List
+from typing import Iterable
 
 import django
 from django.db import connection, transaction
 
+from legacy_migration_utils import IncidentLogger, normalize_string
+
 try:
     import openpyxl
 except ImportError as exc:
-    raise SystemExit(
-        "openpyxl is required to run this script. Install it with: pip install openpyxl"
-    ) from exc
+    raise SystemExit("Falta openpyxl. Instala con: pip install openpyxl") from exc
 
 
 LOGGER = logging.getLogger(__name__)
+
+EXPECTED_FILES = {
+    "dbo_articulos.xlsx",
+    "dbo_categorias.xlsx",
+    "dbo_contactos.xlsx",
+    "dbo_datosempresa.xlsx",
+    "dbo_empleados.xlsx",
+    "dbo_impuestos.xlsx",
+    "dbo_ivas.xlsx",
+    "dbo_ivas_r.xlsx",
+    "dbo_motos_registradas.xlsx",
+    "dbo_numeracion_fac.xlsx",
+    "dbo_prefactura.xlsx",
+    "dbo_usuarios.xlsx",
+    "dbo_vendedores.xlsx",
+}
 
 
 def normalize_identifier(name: str) -> str:
     cleaned = re.sub(r"[^a-zA-Z0-9_]+", "_", name.strip())
     cleaned = re.sub(r"_+", "_", cleaned).strip("_")
-    return cleaned.lower() or "column"
-
-
-def build_unique_columns(headers: Iterable[str]) -> tuple[List[str], List[int]]:
-    seen: Dict[str, int] = {}
-    unique = []
-    indices = []
-    for idx, raw in enumerate(headers):
-        base = normalize_identifier(str(raw) if raw is not None else f"col_{idx + 1}")
-        count = seen.get(base, 0) + 1
-        seen[base] = count
-        unique.append(base if count == 1 else f"{base}_{count}")
-        indices.append(idx)
-    return unique, indices
+    return cleaned.lower() or "col"
 
 
 def table_name_for_file(path: Path) -> str:
     return f"staging_{normalize_identifier(path.stem)}"
 
 
-def list_xlsx_files(data_dir: Path) -> List[Path]:
-    files = sorted(path for path in data_dir.glob("*.xlsx"))
-    return [path for path in files if not path.name.lower().startswith("dbo_view_")]
+def unique_columns(headers: Iterable[object]) -> list[str]:
+    seen: dict[str, int] = {}
+    columns: list[str] = []
+    for idx, raw in enumerate(headers, start=1):
+        base = normalize_identifier(normalize_string(raw) or f"col_{idx}")
+        seen[base] = seen.get(base, 0) + 1
+        col = base if seen[base] == 1 else f"{base}_{seen[base]}"
+        columns.append(col)
+    return columns
 
 
-def get_existing_columns(table: str) -> List[str]:
+def table_exists(table: str) -> bool:
     with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.tables
+                WHERE table_schema = 'public' AND table_name = %s
+            )
+            """,
+            [table],
+        )
+        return bool(cursor.fetchone()[0])
+
+
+def ensure_table(table: str, columns: list[str]) -> None:
+    quote = connection.ops.quote_name
+    with connection.cursor() as cursor:
+        if not table_exists(table):
+            cols_sql = ", ".join(f"{quote(col)} TEXT" for col in columns)
+            cursor.execute(
+                f"""
+                CREATE TABLE {quote(table)} (
+                    _source_file TEXT NOT NULL,
+                    _source_row INTEGER NOT NULL,
+                    _loaded_at TIMESTAMP NOT NULL,
+                    {cols_sql}
+                )
+                """
+            )
+            LOGGER.info("Creada tabla staging %s", table)
+            return
+
         cursor.execute(
             """
             SELECT column_name
@@ -62,85 +102,21 @@ def get_existing_columns(table: str) -> List[str]:
             """,
             [table],
         )
-        return [row[0] for row in cursor.fetchall()]
-
-
-def ensure_table(table: str, columns: List[str]) -> None:
-    quote = connection.ops.quote_name
-    existing = get_existing_columns(table)
-    if not existing:
-        columns_sql = ", ".join(f"{quote(col)} TEXT" for col in columns)
-        with connection.cursor() as cursor:
-            cursor.execute(
-                f"CREATE TABLE IF NOT EXISTS {quote(table)} ({columns_sql});"
-            )
-        LOGGER.info("Created staging table %s with %s columns", table, len(columns))
-        return
-
-    missing = [col for col in columns if col not in existing]
-    if missing:
-        with connection.cursor() as cursor:
-            for col in missing:
-                cursor.execute(
-                    f"ALTER TABLE {quote(table)} ADD COLUMN {quote(col)} TEXT;"
-                )
-        LOGGER.info("Added %s new columns to %s", len(missing), table)
+        existing = {r[0] for r in cursor.fetchall()}
+        for col in columns:
+            if col not in existing:
+                cursor.execute(f"ALTER TABLE {quote(table)} ADD COLUMN {quote(col)} TEXT")
+                LOGGER.info("Tabla %s: columna agregada %s", table, col)
 
 
 def clear_table(table: str) -> int:
     quote = connection.ops.quote_name
     with connection.cursor() as cursor:
-        cursor.execute(f"SELECT COUNT(*) FROM {quote(table)};")
-        existing = int(cursor.fetchone()[0] or 0)
-        if existing:
-            cursor.execute(f"TRUNCATE TABLE {quote(table)};")
-        return existing
-
-
-def insert_rows(table: str, columns: List[str], rows: Iterable[List[object]], batch: int = 500) -> int:
-    quote = connection.ops.quote_name
-    col_sql = ", ".join(quote(col) for col in columns)
-    placeholders = ", ".join(["%s"] * len(columns))
-    sql = f"INSERT INTO {quote(table)} ({col_sql}) VALUES ({placeholders})"
-
-    inserted = 0
-    batch_rows: List[List[object]] = []
-
-    with connection.cursor() as cursor:
-        for row in rows:
-            batch_rows.append(row)
-            if len(batch_rows) >= batch:
-                cursor.executemany(sql, batch_rows)
-                inserted += len(batch_rows)
-                batch_rows = []
-        if batch_rows:
-            cursor.executemany(sql, batch_rows)
-            inserted += len(batch_rows)
-
-    return inserted
-
-
-def load_workbook_rows(path: Path) -> tuple[List[str], Iterable[List[object]]]:
-    workbook = openpyxl.load_workbook(path, read_only=True, data_only=True)
-    sheet = workbook.active
-    rows = sheet.iter_rows(values_only=True)
-    try:
-        headers = next(rows)
-    except StopIteration:
-        return [], []
-    columns, indices = build_unique_columns(headers)
-
-    def row_iter() -> Iterable[List[object]]:
-        for row in rows:
-            normalized = ["" if value is None else str(value) for value in row]
-            normalized = [normalized[idx] if idx < len(normalized) else "" for idx in indices]
-            if len(normalized) < len(columns):
-                normalized.extend([""] * (len(columns) - len(normalized)))
-            normalized = normalized[: len(columns)]
-            if any(cell != "" for cell in normalized):
-                yield normalized
-
-    return columns, row_iter()
+        cursor.execute(f"SELECT COUNT(*) FROM {quote(table)}")
+        rows = int(cursor.fetchone()[0] or 0)
+        if rows:
+            cursor.execute(f"TRUNCATE TABLE {quote(table)}")
+        return rows
 
 
 def parse_args() -> argparse.Namespace:
@@ -148,62 +124,98 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--data-dir",
         type=Path,
-        default=Path(__file__).resolve().parents[2] / "data",
-        help="Ruta al directorio data/ con XLSX legacy",
+        default=Path(__file__).resolve().parents[1] / "media" / "intercambio" / "imports",
+        help="Directorio con XLSX legacy",
     )
+    parser.add_argument("--commit", action="store_true", help="Confirma inserción")
+    parser.add_argument("--dry-run", action="store_true", help="Forzar rollback")
     parser.add_argument(
-        "--commit",
-        action="store_true",
-        help="Aplica cambios en la base de datos",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Simula la carga (default)",
+        "--incidents-json",
+        type=Path,
+        default=Path(__file__).resolve().parents[1] / "logs" / "legacy_stage_incidents.json",
     )
     return parser.parse_args()
+
+
+def excel_rows(path: Path) -> tuple[list[str], list[list[str]]]:
+    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    ws = wb.active
+    stream = ws.iter_rows(values_only=True)
+    headers = next(stream, None)
+    if not headers:
+        return [], []
+    columns = unique_columns(headers)
+    rows_out: list[list[str]] = []
+    for row in stream:
+        normalized = [normalize_string(v) for v in (row or ())]
+        if len(normalized) < len(columns):
+            normalized.extend([""] * (len(columns) - len(normalized)))
+        normalized = normalized[: len(columns)]
+        if any(normalized):
+            rows_out.append(normalized)
+    return columns, rows_out
+
+
+def insert_rows(table: str, source_file: str, columns: list[str], rows: list[list[str]]) -> int:
+    if not rows:
+        return 0
+    quote = connection.ops.quote_name
+    all_cols = ["_source_file", "_source_row", "_loaded_at", *columns]
+    col_sql = ", ".join(quote(c) for c in all_cols)
+    placeholders = ", ".join(["%s"] * len(all_cols))
+    sql = f"INSERT INTO {quote(table)} ({col_sql}) VALUES ({placeholders})"
+
+    payload = []
+    now = datetime.utcnow()
+    for i, row in enumerate(rows, start=2):
+        payload.append([source_file, i, now, *row])
+
+    with connection.cursor() as cursor:
+        cursor.executemany(sql, payload)
+    return len(payload)
 
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
     args = parse_args()
-    dry_run = not args.commit or args.dry_run
+    dry_run = (not args.commit) or args.dry_run
 
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
     django.setup()
 
+    incidents = IncidentLogger()
     data_dir = args.data_dir
     if not data_dir.exists():
-        raise SystemExit(f"No existe data dir: {data_dir}")
+        raise SystemExit(f"No existe data-dir: {data_dir}")
 
-    files = list_xlsx_files(data_dir)
+    files = sorted(p for p in data_dir.glob("*.xlsx"))
     if not files:
-        LOGGER.warning("No se encontraron archivos XLSX en %s", data_dir)
-        return
+        raise SystemExit(f"No se encontraron .xlsx en {data_dir}")
 
-    total_inserted = 0
+    total = 0
     with transaction.atomic():
         for path in files:
-            LOGGER.info("Procesando %s", path.name)
-            columns, row_iter = load_workbook_rows(path)
+            name_lc = path.name.lower()
+            if name_lc not in EXPECTED_FILES:
+                incidents.add("WARN", "STAGE", path.name, "", "Archivo no esperado; se omite")
+                continue
+
+            columns, rows = excel_rows(path)
             if not columns:
-                LOGGER.warning("Archivo vacío o sin encabezados: %s", path.name)
+                incidents.add("WARN", "STAGE", path.name, "", "Archivo vacío o sin encabezados")
                 continue
 
             table = table_name_for_file(path)
-            LOGGER.info("Tabla destino %s con %s columnas detectadas", table, len(columns))
             ensure_table(table, columns)
-            deleted = clear_table(table)
-            if deleted:
-                LOGGER.info("Limpiadas %s filas existentes en %s", deleted, table)
+            previous = clear_table(table)
+            inserted = insert_rows(table, path.name, columns, rows)
+            total += inserted
+            LOGGER.info("%s -> %s (previas=%s, insertadas=%s)", path.name, table, previous, inserted)
 
-            inserted = insert_rows(table, columns, row_iter)
-            total_inserted += inserted
-            LOGGER.info("Insertadas %s filas en %s", inserted, table)
-
-        LOGGER.info("Total filas insertadas en staging: %s", total_inserted)
+        incidents.dump_json(args.incidents_json)
+        LOGGER.info("Filas insertadas staging: %s", total)
         if dry_run:
-            LOGGER.warning("Dry-run activo: realizando rollback")
+            LOGGER.warning("Dry-run activo: rollback")
             transaction.set_rollback(True)
 
 
