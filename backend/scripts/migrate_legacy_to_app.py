@@ -110,6 +110,11 @@ def row_value(row: dict[str, Any], *keys: str) -> str:
     return ""
 
 
+def fit(value: str, max_len: int) -> str:
+    value = normalize_string(value)
+    return value[:max_len] if len(value) > max_len else value
+
+
 def normalize_tipo_documento(sigla: str, tipoid: str) -> str:
     candidate = normalize_string(sigla, upper=True) or normalize_string(tipoid, upper=True)
     if candidate in {"NIT", "31"}:
@@ -170,6 +175,10 @@ def migrate_impuestos(incidents: IncidentLogger) -> Counter:
         c.updated += int(not created and bool(obj.pk))
     return c
 
+        if not documento:
+            incidents.add("WARN", "MIGRATE", table, key, "Cliente sin documento; omitido")
+            result["clientes"].omitted += 1
+            continue
 
 def migrate_empresa(incidents: IncidentLogger) -> Counter:
     c = Counter()
@@ -196,16 +205,16 @@ def migrate_empresa(incidents: IncidentLogger) -> Counter:
 
     defaults = {
         "tipo_identificacion": normalize_tipo_documento(row_value(best_row, "siglaid"), row_value(best_row, "tipoid")),
-        "dv": normalize_string(row_value(best_row, "dv"))[:1],
+        "dv": fit(row_value(best_row, "dv"), 1),
         "tipo_persona": "Persona jurídica" if "jur" in row_value(best_row, "tipopersona").lower() else "Persona natural",
-        "razon_social": row_value(best_row, "razonsocial") or "EMPRESA LEGACY",
+        "razon_social": fit(row_value(best_row, "razonsocial") or "EMPRESA LEGACY", 200),
         "regimen": "RÉGIMEN COMÚN" if "com" in row_value(best_row, "regimen").lower() else "RÉGIMEN SIMPLIFICADO",
-        "direccion": row_value(best_row, "direccion"),
-        "ciudad": row_value(best_row, "departamento") or "NO DEFINIDA",
-        "municipio": row_value(best_row, "municipio") or "NO DEFINIDO",
-        "telefono": row_value(best_row, "telefono"),
-        "sitio_web": row_value(best_row, "web"),
-        "correo": normalize_email(row_value(best_row, "correo")),
+        "direccion": fit(row_value(best_row, "direccion"), 200),
+        "ciudad": fit(row_value(best_row, "departamento") or "NO DEFINIDA", 100),
+        "municipio": fit(row_value(best_row, "municipio") or "NO DEFINIDO", 100),
+        "telefono": fit(row_value(best_row, "telefono"), 20),
+        "sitio_web": fit(row_value(best_row, "web"), 200),
+        "correo": fit(normalize_email(row_value(best_row, "correo")), 254),
     }
 
     current = ConfiguracionEmpresa.objects.first()
@@ -240,7 +249,7 @@ def contacto_nombre(row: dict[str, Any]) -> str:
         row_value(row, "apellido1"),
         row_value(row, "apellido2"),
     ]
-    return normalize_string(" ".join(p for p in parts if p))
+    return fit(" ".join(p for p in parts if p), 200)
 
 
 def migrate_contactos(incidents: IncidentLogger) -> dict[str, Counter]:
@@ -252,8 +261,8 @@ def migrate_contactos(incidents: IncidentLogger) -> dict[str, Counter]:
 
     for row in iter_table_rows(table):
         role = resolve_contact_role(row_value(row, "tipocontacto"))
-        documento = normalize_document(row_value(row, "id", "codigo"))
-        nombre = contacto_nombre(row)
+        documento = fit(normalize_document(row_value(row, "id", "codigo")), 50)
+        nombre = fit(contacto_nombre(row), 200)
         key = documento or nombre or f"row:{row.get('_source_row', '?')}"
 
         if role == "AMBIGUO":
@@ -273,12 +282,12 @@ def migrate_contactos(incidents: IncidentLogger) -> dict[str, Counter]:
             _, created = Proveedor.objects.update_or_create(
                 nombre=nombre,
                 defaults={
-                    "nit": documento,
-                    "telefono": row_value(row, "telefono", "celular"),
-                    "email": normalize_email(row_value(row, "correo")),
+                    "nit": fit(documento, 20),
+                    "telefono": fit(row_value(row, "telefono", "celular"), 20),
+                    "email": fit(normalize_email(row_value(row, "correo")), 254),
                     "direccion": row_value(row, "direccion"),
-                    "ciudad": row_value(row, "ciudad"),
-                    "contacto": nombre,
+                    "ciudad": fit(row_value(row, "ciudad"), 100),
+                    "contacto": fit(nombre, 200),
                 },
             )
             result["proveedores"].inserted += int(created)
@@ -294,11 +303,11 @@ def migrate_contactos(incidents: IncidentLogger) -> dict[str, Counter]:
             numero_documento=documento,
             defaults={
                 "tipo_documento": normalize_tipo_documento(row_value(row, "siglaid"), row_value(row, "tipoid")),
-                "nombre": nombre,
-                "telefono": row_value(row, "telefono", "celular"),
-                "email": normalize_email(row_value(row, "correo")),
+                "nombre": fit(nombre, 200),
+                "telefono": fit(row_value(row, "telefono", "celular"), 50),
+                "email": fit(normalize_email(row_value(row, "correo")), 254),
                 "direccion": row_value(row, "direccion"),
-                "ciudad": row_value(row, "ciudad"),
+                "ciudad": fit(row_value(row, "ciudad"), 100),
             },
         )
         result["clientes"].inserted += int(created)
@@ -315,7 +324,7 @@ def migrate_mecanicos(incidents: IncidentLogger) -> Counter:
         return c
 
     for row in iter_table_rows(table):
-        nombre = row_value(row, "empleado")
+        nombre = fit(row_value(row, "empleado"), 200)
         key = nombre or f"row:{row.get('_source_row', '?')}"
         if not nombre:
             incidents.add("WARN", "MIGRATE", table, key, "Empleado sin nombre")
@@ -325,9 +334,9 @@ def migrate_mecanicos(incidents: IncidentLogger) -> Counter:
             nombre=nombre,
             defaults={
                 "telefono": row_value(row, "telefono"),
-                "email": normalize_email(row_value(row, "correo")),
+                "email": fit(normalize_email(row_value(row, "correo")), 254),
                 "direccion": row_value(row, "direccion"),
-                "ciudad": "",
+                "ciudad": fit("", 100),
             },
         )
         c.inserted += int(created)
@@ -352,8 +361,8 @@ def migrate_productos(incidents: IncidentLogger) -> Counter:
     categoria_default, _ = Categoria.objects.get_or_create(nombre="SIN CATEGORIA", defaults={"descripcion": "Legacy"})
 
     for row in iter_table_rows(table):
-        codigo = normalize_code(row_value(row, "codigo"))
-        nombre = row_value(row, "articulo")
+        codigo = fit(normalize_code(row_value(row, "codigo")), 50)
+        nombre = fit(row_value(row, "articulo"), 300)
         key = codigo or f"row:{row.get('_source_row', '?')}"
         if not codigo or not nombre:
             incidents.add("WARN", "MIGRATE", table, key, "Producto sin código o nombre")
@@ -363,12 +372,12 @@ def migrate_productos(incidents: IncidentLogger) -> Counter:
         categoria_nombre = row_value(row, "categoria")
         categoria = categoria_default
         if categoria_nombre:
-            categoria, _ = Categoria.objects.get_or_create(nombre=categoria_nombre, defaults={"descripcion": "Legacy"})
+            categoria, _ = Categoria.objects.get_or_create(nombre=fit(categoria_nombre, 100), defaults={"descripcion": "Legacy"})
 
         proveedor = None
         proveedor_nombre = row_value(row, "proveedor")
         if proveedor_nombre:
-            proveedor, _ = Proveedor.objects.get_or_create(nombre=proveedor_nombre)
+            proveedor, _ = Proveedor.objects.get_or_create(nombre=fit(proveedor_nombre, 200))
 
         precio_costo = parse_decimal(row_value(row, "precio"), default=Decimal("0.01"))
         precio_venta = parse_decimal(row_value(row, "precioventa"), default=precio_costo)
@@ -416,7 +425,7 @@ def migrate_motos(incidents: IncidentLogger) -> Counter:
         return c
 
     for row in iter_table_rows(table):
-        placa = normalize_code(row_value(row, "moto"))
+        placa = fit(normalize_code(row_value(row, "moto")), 20)
         key = placa or f"row:{row.get('_source_row', '?')}"
         if not placa:
             incidents.add("WARN", "MIGRATE", table, key, "Moto sin placa")
@@ -424,7 +433,7 @@ def migrate_motos(incidents: IncidentLogger) -> Counter:
             continue
 
         mecanico = None
-        mecanico_nombre = row_value(row, "mecanico")
+        mecanico_nombre = fit(row_value(row, "mecanico"), 200)
         if mecanico_nombre:
             mecanico = Mecanico.objects.filter(nombre__iexact=mecanico_nombre).first()
             if not mecanico:
@@ -433,9 +442,9 @@ def migrate_motos(incidents: IncidentLogger) -> Counter:
         _, created = Moto.objects.update_or_create(
             placa=placa,
             defaults={
-                "marca": row_value(row, "marca") or "NO ESPECIFICADA",
-                "modelo": "",
-                "color": "",
+                "marca": fit(row_value(row, "marca") or "NO ESPECIFICADA", 100),
+                "modelo": fit("", 100),
+                "color": fit("", 50),
                 "anio": None,
                 "cliente": None,
                 "mecanico": mecanico,
@@ -455,7 +464,7 @@ def migrate_usuarios_conservador(incidents: IncidentLogger) -> Counter:
     if not table_exists(table):
         return c
     for row in iter_table_rows(table):
-        username = normalize_string(row_value(row, "usuario"), upper=False)
+        username = fit(normalize_string(row_value(row, "usuario"), upper=False), 150)
         if not username:
             c.omitted += 1
             continue
@@ -465,7 +474,7 @@ def migrate_usuarios_conservador(incidents: IncidentLogger) -> Counter:
         # Conservador: no activar password legacy plano.
         Usuario.objects.create(
             username=username,
-            first_name=row_value(row, "nombre"),
+            first_name=fit(row_value(row, "nombre"), 150),
             is_active=False,
             tipo_usuario="VENDEDOR",
         )
