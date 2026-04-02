@@ -51,7 +51,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     }
     timeoutRef.current = window.setTimeout(() => {
       setNotification((prev) => ({ ...prev, open: false }));
-    }, payload.durationMs ?? 6000);
+    }, payload.durationMs ?? 2500);
   }, []);
 
   useEffect(() => {
