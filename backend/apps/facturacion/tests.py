@@ -11,6 +11,7 @@ from apps.facturacion.exceptions import DocumentoSoporteInvalido
 
 from django.core.management import call_command
 from django.contrib.auth import get_user_model
+from django.db import DataError
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
@@ -29,7 +30,11 @@ from apps.facturacion.services.factus_payload_builder import build_invoice_paylo
 from apps.facturacion.services.support_document_payload_builder import build_support_document_payload
 from apps.facturacion.services.exceptions import DescargaFacturaError
 from apps.facturacion.services.factus_client import FactusValidationError
-from apps.facturacion.services.persistence_safety import safe_assign_charfield, safe_assign_json
+from apps.facturacion.services.persistence_safety import (
+    normalize_qr_image_value,
+    safe_assign_charfield,
+    safe_assign_json,
+)
 from apps.core.models import Impuesto
 from apps.inventario.models import Categoria, Producto, Proveedor
 from apps.ventas.models import Cliente, DetalleVenta, Venta
@@ -1149,3 +1154,108 @@ class ElectronicStateMachineTests(TestCase):
         factura = facturar_venta(self.venta.id, triggered_by=self.user)
         self.assertEqual(factura.estado_electronico, 'ACEPTADA')
         mocked_send_invoice.assert_not_called()
+
+
+class FacturarVentaPersistenciaQrTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(username='qr-user', password='1234')
+        self.cliente = Cliente.objects.create(numero_documento='777', nombre='Cliente QR', tipo_documento='CC')
+        self.venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            numero_comprobante='FAC9001',
+            cliente=self.cliente,
+            vendedor=self.user,
+            subtotal=Decimal('100'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('19'),
+            total=Decimal('119'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('119'),
+            cambio=Decimal('0'),
+            estado='FACTURADA',
+        )
+
+    def test_normalize_qr_image_data_url(self):
+        url, data = normalize_qr_image_value('data:image/png;base64,' + ('A' * 100))
+        self.assertEqual(url, '')
+        self.assertTrue(data.startswith('data:image/png;base64,'))
+
+    @patch('apps.facturacion.services.facturar_venta.download_xml')
+    @patch('apps.facturacion.services.facturar_venta.download_pdf')
+    @patch('apps.facturacion.services.facturar_venta.resolve_numbering_range')
+    @patch('apps.facturacion.services.facturar_venta.build_invoice_payload')
+    @patch('apps.facturacion.services.facturar_venta.FactusClient.send_invoice')
+    def test_facturar_venta_mueve_qr_base64_a_textfield_sin_overflow(
+        self,
+        mocked_send_invoice,
+        mocked_build_payload,
+        mocked_resolve_range,
+        _mocked_pdf,
+        _mocked_xml,
+    ):
+        mocked_resolve_range.return_value = MagicMock(prefijo='FAC', factus_range_id=55)
+        mocked_build_payload.return_value = {
+            'customer': {'identification': '777', 'names': 'Cliente QR', 'identification_document_id': 3},
+            'items': [{'sku': 'P1'}],
+            'numbering_range_id': 55,
+        }
+        mocked_send_invoice.return_value = {
+            'data': {
+                'bill': {
+                    'status': 'valid',
+                    'number': 'FAC9001',
+                    'reference_code': 'FAC9001',
+                    'uuid': 'UUID-QR-1',
+                    'cufe': 'CUFE-QR-1',
+                    'xml_url': 'https://factus.test/xml/FAC9001',
+                    'pdf_url': 'https://factus.test/pdf/FAC9001',
+                    'qr_image': 'data:image/png;base64,' + ('A' * 14000),
+                }
+            }
+        }
+        factura = facturar_venta(self.venta.id, triggered_by=self.user)
+        self.assertEqual(factura.estado_electronico, 'ACEPTADA')
+        self.assertEqual(factura.qr_image_url, '')
+        self.assertTrue((factura.qr_image_data or '').startswith('data:image/png;base64,'))
+        self.assertGreater(len(factura.qr_image_data or ''), 2048)
+
+    @patch('apps.facturacion.services.facturar_venta.download_xml')
+    @patch('apps.facturacion.services.facturar_venta.download_pdf')
+    @patch('apps.facturacion.services.facturar_venta.resolve_numbering_range')
+    @patch('apps.facturacion.services.facturar_venta.build_invoice_payload')
+    @patch('apps.facturacion.services.facturar_venta.FactusClient.send_invoice')
+    @patch('apps.facturacion.services.facturar_venta.FacturaElectronica.save')
+    def test_dataerror_no_deja_transaccion_rota_y_marca_error_persistencia(
+        self,
+        mocked_save,
+        mocked_send_invoice,
+        mocked_build_payload,
+        mocked_resolve_range,
+        _mocked_pdf,
+        _mocked_xml,
+    ):
+        mocked_resolve_range.return_value = MagicMock(prefijo='FAC', factus_range_id=55)
+        mocked_build_payload.return_value = {
+            'customer': {'identification': '777', 'names': 'Cliente QR', 'identification_document_id': 3},
+            'items': [{'sku': 'P1'}],
+            'numbering_range_id': 55,
+        }
+        mocked_send_invoice.return_value = {
+            'data': {'bill': {'status': 'valid', 'number': 'FAC9001', 'reference_code': 'FAC9001', 'uuid': 'UUID-QR-2', 'cufe': 'CUFE-QR-2', 'xml_url': 'https://factus.test/xml/FAC9001', 'pdf_url': 'https://factus.test/pdf/FAC9001'}}
+        }
+        real_save = FacturaElectronica.save
+        calls = {'n': 0}
+
+        def flaky_save(instance, *args, **kwargs):
+            calls['n'] += 1
+            if calls['n'] == 1:
+                raise DataError('value too long')
+            return real_save(instance, *args, **kwargs)
+
+        mocked_save.side_effect = flaky_save
+        with self.assertRaises(DataError):
+            facturar_venta(self.venta.id, triggered_by=self.user)
+        factura = FacturaElectronica.objects.get(venta=self.venta)
+        self.assertEqual(factura.estado_electronico, 'ERROR_PERSISTENCIA')

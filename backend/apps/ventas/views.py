@@ -230,7 +230,11 @@ class VentaViewSet(viewsets.ModelViewSet):
             factura_error = FacturaElectronica.objects.filter(venta=venta).first()
             warning_code, warning_detail = _factus_error_category(exc)
             http_status, codigo_error = _factus_http_status_and_code(exc)
-            estado_electronico = estado_electronico_ui(factura_error) if factura_error else 'ERROR_PERSISTENCIA'
+            estado_electronico = (
+                'ERROR_PERSISTENCIA'
+                if isinstance(exc, DataError)
+                else (estado_electronico_ui(factura_error) if factura_error else 'ERROR_PERSISTENCIA')
+            )
             return Response(
                 {
                     'ok': False,
@@ -252,7 +256,7 @@ class VentaViewSet(viewsets.ModelViewSet):
                     'estado_local': venta.estado,
                     'estado_venta': venta.estado,
                     'estado_electronico': estado_electronico,
-                    'status': factura_error.status if factura_error else estado_electronico,
+                    'status': estado_electronico if isinstance(exc, DataError) else (factura_error.status if factura_error else estado_electronico),
                     'cufe': factura_error.cufe if factura_error else '',
                     'uuid': factura_error.uuid if factura_error else '',
                     'reference_code': factura_error.reference_code if factura_error else '',

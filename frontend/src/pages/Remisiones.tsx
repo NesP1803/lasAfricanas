@@ -279,8 +279,15 @@ export default function Remisiones() {
         resultado.venta?.numero_comprobante ||
         '';
       const estado = resultado.estado_electronico || resultado.status;
+      const errorCode = resultado.error_code || '';
+      const esPersistencia = errorCode === 'ERROR_PERSISTENCIA' || estado === 'ERROR_PERSISTENCIA';
+      const esIntegracion = estado === 'ERROR_INTEGRACION';
       setMensajeExito(
-        `${resultado.message}${numero ? ` Factura: ${numero}.` : ''}${estado ? ` Estado: ${estado}.` : ''}`
+        esPersistencia
+          ? `La remisión se convirtió localmente, pero hubo error de persistencia electrónica.${numero ? ` Factura: ${numero}.` : ''}${estado ? ` Estado electrónico: ${estado}.` : ''}`
+          : esIntegracion
+            ? `La remisión se convirtió localmente, pero falló la integración electrónica.${numero ? ` Factura: ${numero}.` : ''}${estado ? ` Estado electrónico: ${estado}.` : ''}`
+            : `${resultado.message}${numero ? ` Factura: ${numero}.` : ''}${estado ? ` Estado: ${estado}.` : ''}`
       );
       await cargarRemisiones({
         estado: estadoFiltro,

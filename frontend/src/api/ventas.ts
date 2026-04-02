@@ -36,6 +36,17 @@ const extractApiErrorMessage = (error: unknown, fallback: string): string => {
   return fallback;
 };
 
+const buildFacturacionErrorMessage = (data: Record<string, unknown>, fallback: string): string => {
+  const errorCode = typeof data.error_code === 'string' ? data.error_code : '';
+  const estadoVenta = typeof data.estado_venta === 'string' ? data.estado_venta : '';
+  const estadoElectronico = typeof data.estado_electronico === 'string' ? data.estado_electronico : '';
+  const base = extractApiErrorMessage(data, fallback);
+  if (errorCode === 'ERROR_PERSISTENCIA') {
+    return `${base} (venta=${estadoVenta || 'N/D'}, electrónico=${estadoElectronico || 'ERROR_PERSISTENCIA'})`;
+  }
+  return base;
+};
+
 
 export interface DetalleVenta {
   producto: number;
@@ -629,6 +640,10 @@ export const ventasApi = {
         errores: payload.errores as string[] | undefined,
       };
     } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.data && typeof error.response.data === 'object') {
+        const data = error.response.data as Record<string, unknown>;
+        throw new Error(buildFacturacionErrorMessage(data, 'Error al convertir a factura'));
+      }
       throw new Error(extractApiErrorMessage(error, 'Error al convertir a factura'));
     }
   },

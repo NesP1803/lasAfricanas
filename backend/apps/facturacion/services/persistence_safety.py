@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from typing import Any
+from urllib.parse import urlparse
 
 from django.db import models
 
@@ -84,3 +85,16 @@ def log_model_string_overflow_diagnostics(
                 max_length,
             )
     return overflows
+
+
+def normalize_qr_image_value(value: Any) -> tuple[str, str]:
+    """Separa URL remota corta de contenido embebido/base64 para QR."""
+    raw = str(value or '').strip()
+    if not raw:
+        return '', ''
+    if raw.startswith('data:image'):
+        return '', raw
+    parsed = urlparse(raw)
+    if parsed.scheme in {'http', 'https'} and parsed.netloc:
+        return raw, ''
+    return '', raw

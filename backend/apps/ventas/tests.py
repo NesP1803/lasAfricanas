@@ -790,6 +790,40 @@ class VentaServicesTests(TestCase):
         self.assertEqual(response.data['error_code'], 'ERROR_PERSISTENCIA')
         self.assertIn('warnings', response.data)
 
+    @patch('apps.ventas.views.emitir_factura_completa')
+    def test_convertir_remision_dataerror_retorna_error_persistencia_controlado(self, mocked_emitir_factura_completa):
+        mocked_emitir_factura_completa.side_effect = DataError('value too long for type character varying(2048)')
+        remision = Venta.objects.create(
+            tipo_comprobante='REMISION',
+            cliente=self.cliente,
+            vendedor=self.vendedor,
+            subtotal=Decimal('200'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('38'),
+            total=Decimal('238'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('238'),
+            cambio=Decimal('0'),
+            estado='COBRADA',
+        )
+        DetalleVenta.objects.create(
+            venta=remision,
+            producto=self.producto,
+            cantidad=1,
+            precio_unitario=Decimal('200'),
+            descuento_unitario=Decimal('0'),
+            iva_porcentaje=Decimal('19'),
+            subtotal=Decimal('200'),
+            total=Decimal('238'),
+        )
+        self.client.force_authenticate(user=self.vendedor)
+        response = self.client.post(f'/api/ventas/{remision.id}/convertir_a_factura/')
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data['ok'])
+        self.assertEqual(response.data['error_code'], 'ERROR_PERSISTENCIA')
+        self.assertEqual(response.data['estado_electronico'], 'ERROR_PERSISTENCIA')
+
     @patch('apps.ventas.views.facturar_venta')
     def test_facturar_venta_retorna_advertencia_de_datos_cliente(self, mocked_facturar_venta):
         from apps.facturacion.services import FactusValidationError
