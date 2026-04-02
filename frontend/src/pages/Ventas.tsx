@@ -273,6 +273,7 @@ export default function Ventas() {
   const [documentoPreview, setDocumentoPreview] = useState<DocumentoPreview | null>(null);
   const [documentoFormato, setDocumentoFormato] = useState<DocumentoFormato>('POS');
   const [mensaje, setMensaje] = useState<string | null>(null);
+  const [resultadoFacturacion, setResultadoFacturacion] = useState<FacturarCajaResponse | null>(null);
   const [mostrarBusqueda, setMostrarBusqueda] = useState(false);
   const [mostrarBusquedaClientes, setMostrarBusquedaClientes] = useState(false);
   const [busquedaClienteModal, setBusquedaClienteModal] = useState('');
@@ -906,6 +907,7 @@ export default function Ventas() {
 
   const handleEnviarCaja = async () => {
     if (ventaBloqueada) return;
+    setResultadoFacturacion(null);
     let venta = ventaBorrador;
     if (!venta) {
       venta = await guardarBorrador();
@@ -933,6 +935,7 @@ export default function Ventas() {
 
   const handleFacturarDirecto = async () => {
     if (!validarVenta()) return;
+    setResultadoFacturacion(null);
     setGuardandoBorrador(true);
     try {
       const guardarVentaParaFacturar = async () => {
@@ -973,6 +976,7 @@ export default function Ventas() {
             ? `Emitida en Factus. CUFE: ${emision.cufe || 'N/D'} Ref: ${emision.reference_code || 'N/D'}`
             : emision.message || 'No se pudo confirmar emisión electrónica.',
         });
+        setResultadoFacturacion(emision);
         return;
       }
 
@@ -999,6 +1003,7 @@ export default function Ventas() {
           ? `Emitida en Factus. CUFE: ${emision.cufe || 'N/D'} Ref: ${emision.reference_code || 'N/D'}`
           : emision.message || 'No se pudo confirmar emisión electrónica.',
       });
+      setResultadoFacturacion(emision);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'No se pudo facturar. Revisa la conexión.';
       setMensaje(message);
@@ -1417,6 +1422,15 @@ export default function Ventas() {
       {mensaje && (
         <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
           {mensaje}
+        </div>
+      )}
+      {resultadoFacturacion && (
+        <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-700">
+          <p><strong>Número factura:</strong> {resultadoFacturacion.numero_factura || 'N/D'}</p>
+          <p><strong>CUFE:</strong> {resultadoFacturacion.cufe || 'N/D'}</p>
+          <p><strong>Estado electrónico:</strong> {resultadoFacturacion.estado_electronico || resultadoFacturacion.status}</p>
+          <p><strong>Descargar PDF/XML:</strong> {resultadoFacturacion.pdf_disponible ? 'PDF OK' : 'PDF pendiente'} · {resultadoFacturacion.xml_disponible ? 'XML OK' : 'XML pendiente'}</p>
+          <p><strong>Correo:</strong> {resultadoFacturacion.correo_enviado ? 'Enviado' : (resultadoFacturacion.correo_error || 'Pendiente')}</p>
         </div>
       )}
 

@@ -23,6 +23,12 @@ export interface FacturaElectronica {
   qr_image?: string;
   xml_url?: string;
   pdf_url?: string;
+  xml_local_path?: string;
+  pdf_local_path?: string;
+  pdf_uploaded_to_factus?: boolean;
+  correo_enviado?: boolean;
+  correo_enviado_at?: string;
+  ultimo_error_correo?: string;
 }
 
 interface EstadoFacturaResponse {
@@ -72,27 +78,27 @@ export const facturacionApi = {
     return response.data;
   },
 
-  async descargarXML(numero: string) {
-    const response = await apiClient.get<Blob>(`/facturacion/${encodeURIComponent(numero)}/xml/`, {
+  async descargarXMLById(id: number, numero: string) {
+    const response = await apiClient.get<Blob>(`/facturacion/facturas-electronicas/${id}/xml/`, {
       responseType: 'blob',
     });
     crearArchivoDescargable(response.data, `factura-${encodeURIComponent(numero)}.xml`);
   },
 
-  async descargarPDF(numero: string) {
-    const response = await apiClient.get<Blob>(`/facturacion/${encodeURIComponent(numero)}/pdf/`, {
+  async descargarPDFById(id: number, numero: string) {
+    const response = await apiClient.get<Blob>(`/facturacion/facturas-electronicas/${id}/pdf/`, {
       responseType: 'blob',
     });
     crearArchivoDescargable(response.data, `factura-${encodeURIComponent(numero)}.pdf`);
   },
 
-  async enviarFacturaCorreo(numero: string) {
-    const response = await apiClient.post(`/facturacion/${encodeURIComponent(numero)}/enviar-correo/`);
+  async enviarFacturaCorreoById(id: number) {
+    const response = await apiClient.post(`/facturacion/facturas-electronicas/${id}/enviar_correo/`);
     return response.data;
   },
 
   async sincronizarFactura(facturaId: number) {
-    const response = await apiClient.post<SincronizarFacturaResponse>(`/facturacion/${facturaId}/sincronizar/`);
+    const response = await apiClient.post<SincronizarFacturaResponse>(`/facturacion/facturas-electronicas/${facturaId}/sincronizar/`);
     return response.data;
   },
 };

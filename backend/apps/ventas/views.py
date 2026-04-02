@@ -17,7 +17,7 @@ from apps.facturacion.services import (
     FactusAPIError,
     FactusAuthError,
     FactusValidationError,
-    facturar_venta,
+    emitir_factura_completa,
 )
 from apps.ventas.services import (
     anular_venta,
@@ -212,7 +212,9 @@ class VentaViewSet(viewsets.ModelViewSet):
     def _emitir_factura_electronica(self, venta, user):
         try:
             logger.info('ventas.facturar.enviando_factus venta_id=%s', venta.id)
-            factura = facturar_venta(venta.id, triggered_by=user)
+            flow_result = emitir_factura_completa(venta.id, triggered_by=user)
+            factura = flow_result['factura']
+            warnings = flow_result.get('warnings', [])
             logger.info(
                 'ventas.facturar.factus_ok venta_id=%s factura_number=%s status=%s',
                 venta.id,
@@ -297,6 +299,12 @@ class VentaViewSet(viewsets.ModelViewSet):
             'factus_sent': True,
             'pdf_url': factura.pdf_url,
             'xml_url': factura.xml_url,
+            'xml_disponible': bool(factura.xml_local_path),
+            'pdf_disponible': bool(factura.pdf_local_path),
+            'pdf_subido_factus': factura.pdf_uploaded_to_factus,
+            'correo_enviado': factura.correo_enviado,
+            'correo_error': factura.ultimo_error_correo,
+            'warnings': warnings,
             'factus_result': (
                 'PENDING_DIAN'
                 if is_pending
@@ -718,7 +726,9 @@ class CajaViewSet(viewsets.GenericViewSet):
                 logger.info('caja.facturar.estado_local_ok venta_id=%s estado=%s', venta.id, venta.estado)
 
             logger.info('caja.facturar.enviando_factus venta_id=%s', venta.id)
-            factura = facturar_venta(venta.id, triggered_by=request.user)
+            flow_result = emitir_factura_completa(venta.id, triggered_by=request.user)
+            factura = flow_result['factura']
+            warnings = flow_result.get('warnings', [])
             venta.refresh_from_db()
             logger.info(
                 'caja.facturar.factus_ok venta_id=%s numero=%s status=%s cufe=%s',
@@ -810,6 +820,10 @@ class CajaViewSet(viewsets.GenericViewSet):
                 'pos_ticket': build_pos_ticket_payload(venta, factura),
                 'factus_sent': True,
                 'errores': [],
+                'warnings': warnings,
+                'xml_disponible': bool(factura.xml_local_path),
+                'pdf_disponible': bool(factura.pdf_local_path),
+                'correo_enviado': factura.correo_enviado,
             }
         )
 

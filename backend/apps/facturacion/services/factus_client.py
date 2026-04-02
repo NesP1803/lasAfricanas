@@ -58,6 +58,15 @@ class FactusClient:
             default='/support-document-adjustment-notes/validate',
         )
         self.numbering_ranges_path = config('FACTUS_NUMBERING_RANGES_PATH', default='/v1/numbering-ranges')
+        self.invoice_show_path = config('FACTUS_INVOICE_SHOW_PATH', default='/v1/bills/show/{number}')
+        self.invoice_download_xml_path = config('FACTUS_INVOICE_DOWNLOAD_XML_PATH', default='/v1/bills/download-xml/{number}')
+        self.invoice_download_pdf_path = config('FACTUS_INVOICE_DOWNLOAD_PDF_PATH', default='/v1/bills/download-pdf/{number}')
+        self.invoice_send_email_path = config('FACTUS_INVOICE_SEND_EMAIL_PATH', default='/v1/bills/send-email/{number}')
+        self.invoice_email_template_path = config('FACTUS_INVOICE_EMAIL_TEMPLATE_PATH', default='/v1/bills/email-template/{number}')
+        self.invoice_custom_pdf_upload_path = config(
+            'FACTUS_INVOICE_CUSTOM_PDF_UPLOAD_PATH',
+            default='/v1/bills/custom-pdf/{number}',
+        )
         self.client_id = config('FACTUS_CLIENT_ID', default='')
         self.client_secret = config('FACTUS_CLIENT_SECRET', default='')
         self.username = config('FACTUS_USERNAME', default='')
@@ -324,7 +333,7 @@ class FactusClient:
 
     def get_invoice(self, number: str) -> dict[str, Any]:
         """Consulta una factura electrónica existente en Factus por número."""
-        path = f'/v1/bills/show/{number}'
+        path = self.invoice_show_path.format(number=number)
         return self.request(
             'GET',
             path,
@@ -335,7 +344,7 @@ class FactusClient:
 
     def get_invoice_downloads(self, number: str) -> dict[str, Any]:
         """Consulta enlaces de descarga XML/PDF de una factura en Factus."""
-        path = f'/v1/bills/download-pdf/{number}'
+        path = self.invoice_download_pdf_path.format(number=number)
         return self.request(
             'GET',
             path,
@@ -343,3 +352,45 @@ class FactusClient:
                 'Content-Type': 'application/json',
             },
         )
+
+    def download_invoice_xml(self, number: str) -> bytes:
+        path = self.invoice_download_xml_path.format(number=number)
+        content, _ = self.download_resource(path)
+        return content
+
+    def download_invoice_pdf(self, number: str) -> bytes:
+        path = self.invoice_download_pdf_path.format(number=number)
+        content, _ = self.download_resource(path)
+        return content
+
+    def send_invoice_email(self, number: str, email: str | None = None) -> dict[str, Any]:
+        payload = {'email': email} if email else None
+        return self.request('POST', self.invoice_send_email_path.format(number=number), json=payload)
+
+    def get_invoice_email_template(self, number: str) -> dict[str, Any]:
+        return self.request('GET', self.invoice_email_template_path.format(number=number))
+
+    def upload_custom_pdf(self, number: str, pdf_bytes: bytes, filename: str | None = None) -> dict[str, Any]:
+        token = self.get_valid_token()
+        url = f"{self.base_url}{self.invoice_custom_pdf_upload_path.format(number=number)}"
+        files = {
+            'file': (filename or f'{number}.pdf', pdf_bytes, 'application/pdf'),
+        }
+        headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/json'}
+        try:
+            response = requests.post(url, headers=headers, files=files, timeout=45)
+            if response.status_code == 401:
+                token = self.authenticate().access_token
+                headers['Authorization'] = f'Bearer {token}'
+                response = requests.post(url, headers=headers, files=files, timeout=45)
+            response.raise_for_status()
+            return response.json()
+        except requests.HTTPError as exc:
+            detail = (exc.response.text or '')[:500] if exc.response is not None else ''
+            raise FactusAPIError(
+                f'Factus rechazó el PDF personalizado. Detalle: {detail}' if detail else 'Factus rechazó el PDF personalizado.',
+                status_code=getattr(exc.response, 'status_code', None),
+                provider_detail=detail,
+            ) from exc
+        except requests.RequestException as exc:
+            raise FactusAPIError('No fue posible subir PDF personalizado a Factus.') from exc

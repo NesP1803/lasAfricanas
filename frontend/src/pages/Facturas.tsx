@@ -279,6 +279,7 @@ export default function Facturas() {
     action: 'estado' | 'xml' | 'pdf' | 'correo'
   ) => {
     const numero = factura.electronica?.numero;
+    const facturaId = factura.electronica?.id;
     if (!hasValidElectronicDocument(factura.electronica)) {
       showNotification({
         type: 'error',
@@ -286,7 +287,7 @@ export default function Facturas() {
       });
       return;
     }
-    if (!numero) {
+    if (!numero || !facturaId) {
       showNotification({
         type: 'error',
         message: 'Esta factura no tiene emisión electrónica registrada.',
@@ -302,11 +303,11 @@ export default function Facturas() {
           message: `Estado DIAN (${numero}): ${resolveEstadoFactura(data)}`,
         });
       } else if (action === 'xml') {
-        await facturacionApi.descargarXML(numero);
+        await facturacionApi.descargarXMLById(facturaId, numero);
       } else if (action === 'pdf') {
-        await facturacionApi.descargarPDF(numero);
+        await facturacionApi.descargarPDFById(facturaId, numero);
       } else {
-        await facturacionApi.enviarFacturaCorreo(numero);
+        await facturacionApi.enviarFacturaCorreoById(facturaId);
         showNotification({
           type: 'success',
           message: `Factura ${numero} enviada por correo.`,
@@ -541,13 +542,16 @@ export default function Facturas() {
                   <th className="w-44 px-2 py-2 text-left">Cliente</th>
                   <th className="w-32 px-2 py-2 text-left">Usuario</th>
                   <th className="w-[20rem] px-2 py-2 text-left">CUFE / Ref</th>
+                  <th className="w-24 px-2 py-2 text-left">XML</th>
+                  <th className="w-24 px-2 py-2 text-left">PDF</th>
+                  <th className="w-24 px-2 py-2 text-left">Correo</th>
                   <th className="w-44 px-2 py-2 text-left">Acciones FE</th>
                 </tr>
               </thead>
               <tbody>
                 {cargando && (
                   <tr>
-                    <td colSpan={13} className="px-4 py-6 text-center text-sm text-slate-500">
+                    <td colSpan={16} className="px-4 py-6 text-center text-sm text-slate-500">
                       Cargando facturas...
                     </td>
                   </tr>
@@ -624,6 +628,15 @@ export default function Facturas() {
                             'Sin emisión FE'
                           )}
                         </td>
+                        <td className="px-2 py-2.5 text-xs text-slate-600">
+                          {factura.electronica?.xml_local_path ? 'Sí' : 'No'}
+                        </td>
+                        <td className="px-2 py-2.5 text-xs text-slate-600">
+                          {factura.electronica?.pdf_local_path ? 'Sí' : 'No'}
+                        </td>
+                        <td className="px-2 py-2.5 text-xs text-slate-600">
+                          {factura.electronica?.correo_enviado ? 'Enviado' : 'Pendiente'}
+                        </td>
                         <td className="px-2 py-2.5">
                           {electronicaValida ? (
                             <div className="flex flex-wrap gap-1">
@@ -669,7 +682,7 @@ export default function Facturas() {
                   })}
                 {!cargando && facturasFiltradas.length === 0 && (
                   <tr>
-                    <td colSpan={13} className="px-4 py-6 text-center text-sm text-slate-500">
+                    <td colSpan={16} className="px-4 py-6 text-center text-sm text-slate-500">
                       No hay facturas para mostrar con los filtros actuales.
                     </td>
                   </tr>

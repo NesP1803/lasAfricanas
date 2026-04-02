@@ -21,13 +21,17 @@ from django.conf.urls.static import static
 from rest_framework_simplejwt.views import TokenRefreshView
 from apps.usuarios.serializers import CustomTokenObtainPairView
 from .api_router import router
-from apps.facturacion.views import ConfiguracionDIANViewSet
+from apps.facturacion.views import ConfiguracionDIANViewSet, FacturaElectronicaViewSet
 
 
 configuracion_dian_list = ConfiguracionDIANViewSet.as_view({'get': 'list', 'post': 'create'})
 configuracion_dian_rangos = ConfiguracionDIANViewSet.as_view({'get': 'rangos'})
 configuracion_dian_rangos_sync = ConfiguracionDIANViewSet.as_view({'post': 'sync_ranges'})
 configuracion_dian_rangos_select = ConfiguracionDIANViewSet.as_view({'post': 'select_range'})
+factura_electronica_xml = FacturaElectronicaViewSet.as_view({'get': 'xml_by_id'})
+factura_electronica_pdf = FacturaElectronicaViewSet.as_view({'get': 'pdf_by_id'})
+factura_electronica_correo = FacturaElectronicaViewSet.as_view({'post': 'enviar_correo_by_id'})
+factura_electronica_sync = FacturaElectronicaViewSet.as_view({'post': 'sincronizar'})
 
 urlpatterns = [
     # Admin de Django
@@ -43,6 +47,10 @@ urlpatterns = [
     path('api/configuracion/dian/rangos/', configuracion_dian_rangos, name='configuracion-dian-rangos'),
     path('api/configuracion/dian/rangos/sync/', configuracion_dian_rangos_sync, name='configuracion-dian-rangos-sync'),
     path('api/configuracion/dian/rangos/select/', configuracion_dian_rangos_select, name='configuracion-dian-rangos-select'),
+    path('api/facturacion/facturas-electronicas/<int:pk>/xml/', factura_electronica_xml, name='factura-electronica-xml'),
+    path('api/facturacion/facturas-electronicas/<int:pk>/pdf/', factura_electronica_pdf, name='factura-electronica-pdf'),
+    path('api/facturacion/facturas-electronicas/<int:pk>/enviar_correo/', factura_electronica_correo, name='factura-electronica-correo'),
+    path('api/facturacion/facturas-electronicas/<int:pk>/sincronizar/', factura_electronica_sync, name='factura-electronica-sync'),
     
     # Autenticación de DRF (para browsable API)
     path('api-auth/', include('rest_framework.urls')),
