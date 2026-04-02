@@ -358,39 +358,6 @@ export default function Layout() {
       }
 
       {
-        const listadosItems = [
-          { label: "Clientes", path: "/listados?tab=clientes", key: "clientes" },
-          {
-            label: "Proveedores",
-            path: "/listados?tab=proveedores",
-            key: "proveedores",
-          },
-          {
-            label: "Empleados",
-            path: "/listados?tab=empleados",
-            key: "empleados",
-          },
-          {
-            label: "Categorias",
-            path: "/listados?tab=categorias",
-            key: "categorias",
-          },
-          { label: "Mecánicos", path: "/listados?tab=mecanicos", key: "mecanicos" },
-        ];
-        const filtered = isAdmin
-          ? listadosItems
-          : listadosItems.filter((item) =>
-              sectionEnabled("listados", item.key)
-            );
-        if (filtered.length > 0) {
-          items.push({
-            label: "Listados",
-            icon: <ClipboardList size={18} />,
-            items: filtered.map(({ label, path }) => ({ label, path })),
-          });
-        }
-      }
-      {
         const articulosItems = [
           { label: "Mercancia", path: "/articulos?tab=mercancia", key: "mercancia" },
           {
@@ -430,6 +397,7 @@ export default function Layout() {
       }
       {
         const facturacionItems: MenuItem[] = [];
+        const facturacionListadosItems: MenuItem[] = [];
         if (isAdmin || sectionEnabled("facturacion", "venta_rapida")) {
           facturacionItems.push({ label: "Venta rápida", path: "/ventas" });
         }
@@ -437,7 +405,7 @@ export default function Layout() {
           facturacionItems.push({ label: "Caja", path: "/facturacion/caja" });
         }
         if (isAdmin || sectionEnabled("facturacion", "cuentas")) {
-          facturacionItems.push({
+          facturacionListadosItems.push({
             label: "Cuentas",
             items: [
               { label: "Cuentas del día", path: "/ventas/cuentas-dia" },
@@ -449,7 +417,7 @@ export default function Layout() {
           });
         }
         if (isAdmin || sectionEnabled("facturacion", "listados")) {
-          facturacionItems.push({
+          facturacionListadosItems.push({
             label: "Listados",
             items: [
               { label: "Facturas", path: "/facturacion/facturas" },
@@ -460,6 +428,13 @@ export default function Layout() {
           facturacionItems.push({
             label: "Documentos soporte",
             path: "/documentos-soporte",
+          });
+        }
+        if (facturacionListadosItems.length > 0) {
+          items.push({
+            label: "Listados",
+            icon: <ClipboardList size={18} />,
+            items: facturacionListadosItems,
           });
         }
         if (facturacionItems.length > 0) {
@@ -563,6 +538,35 @@ export default function Layout() {
     setMobileExpanded((prev) => ({ ...prev, [label]: !prev[label] }));
   };
 
+  const normalizePath = (path: string) => path.replace(/\/+$/, "") || "/";
+
+  const isItemActive = useCallback(
+    (item: MenuItem): boolean => {
+      if (item.path) {
+        const [targetPath, targetSearch = ""] = item.path.split("?");
+        const currentPath = normalizePath(location.pathname);
+        const normalizedTarget = normalizePath(targetPath);
+
+        if (currentPath !== normalizedTarget) {
+          return false;
+        }
+
+        if (!targetSearch) {
+          return true;
+        }
+
+        const expectedParams = new URLSearchParams(targetSearch);
+        const currentParams = new URLSearchParams(location.search);
+        return Array.from(expectedParams.entries()).every(
+          ([key, value]) => currentParams.get(key) === value
+        );
+      }
+
+      return Boolean(item.items?.some((child) => isItemActive(child)));
+    },
+    [location.pathname, location.search]
+  );
+
   const renderMobileItems = (items: MenuItem[], level = 0) => (
     <div
       className={
@@ -574,6 +578,7 @@ export default function Layout() {
       {items.map((item) => {
         const hasChildren = Boolean(item.items && item.items.length > 0);
         const isExpanded = Boolean(mobileExpanded[item.label]);
+        const isActive = isItemActive(item);
 
         return (
           <div key={item.label}>
@@ -586,7 +591,11 @@ export default function Layout() {
                   onSelectLeaf(item);
                 }
               }}
-              className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm font-medium text-white/90 hover:bg-white/15"
+              className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm font-medium transition ${
+                isActive
+                  ? "bg-white/20 text-white"
+                  : "text-white/90 hover:bg-white/15"
+              }`}
             >
               <span>{item.label}</span>
               {hasChildren && (
@@ -742,6 +751,7 @@ export default function Layout() {
         <nav className="hidden flex-wrap items-center justify-center gap-2 border-t border-white/10 px-6 py-2 lg:flex">
           {menuItems.map((item) => {
             const hasChildren = Boolean(item.items && item.items.length > 0);
+            const isActive = isItemActive(item);
             return (
             <div
               key={item.label}
@@ -764,7 +774,11 @@ export default function Layout() {
                     onSelectLeaf(item);
                   }
                 }}
-                className="flex items-center gap-2 rounded-md px-3 py-2 text-base font-medium text-white/90 transition hover:bg-white/15 hover:text-white"
+                className={`flex items-center gap-2 rounded-md px-3 py-2 text-base font-medium transition ${
+                  isActive
+                    ? "bg-white/20 text-white"
+                    : "text-white/90 hover:bg-white/15 hover:text-white"
+                }`}
               >
                 {renderMenuButton(item.label, item.icon)}
               </button>
