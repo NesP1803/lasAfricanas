@@ -20,6 +20,7 @@ import {
 import {
   ventasApi,
   type Cliente,
+  type FacturarCajaResponse,
   type Venta,
 } from '../api/ventas';
 import { configuracionAPI } from '../api/configuracion';
@@ -27,6 +28,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../contexts/NotificationContext';
 import ComprobanteTemplate, {
   type DocumentoDetalle,
+  type DocumentoFormato,
 } from '../components/ComprobanteTemplate';
 import { printComprobante } from '../utils/printComprobante';
 import { descuentosApi, type SolicitudDescuento } from '../api/descuentos';
@@ -75,6 +77,14 @@ type DocumentoPreview = {
   totalCobro: number;
   efectivoRecibido: number;
   cambio: number;
+  cufe?: string;
+  qrUrl?: string;
+  qrImageUrl?: string;
+  referenceCode?: string;
+  clienteDireccion?: string;
+  clienteTelefono?: string;
+  clienteEmail?: string;
+  representacionGrafica?: string;
 };
 
 type TallerVentaPayload = {
@@ -99,7 +109,10 @@ type CajaVentaPayload = {
   ventaId: number;
 };
 
-const buildDocumentoPreviewFromVenta = (venta: Venta): DocumentoPreview => {
+const buildDocumentoPreviewFromVenta = (
+  venta: Venta,
+  emision?: Partial<FacturarCajaResponse>
+): DocumentoPreview => {
   const detallesPreview: DocumentoDetalle[] =
     venta.detalles?.map((detalle) => ({
       descripcion: detalle.producto_nombre ?? 'Producto',
@@ -127,6 +140,31 @@ const buildDocumentoPreviewFromVenta = (venta: Venta): DocumentoPreview => {
     totalCobro: parseMoneyCOP(venta.total),
     efectivoRecibido: parseMoneyCOP(venta.efectivo_recibido ?? 0),
     cambio: parseMoneyCOP(venta.cambio ?? 0),
+    cufe:
+      emision?.factura_electronica?.cufe ||
+      emision?.cufe ||
+      undefined,
+    qrUrl:
+      emision?.factura_lista?.public_url ||
+      emision?.factura_lista?.qr_url ||
+      emision?.pos_ticket?.qr_url ||
+      undefined,
+    qrImageUrl:
+      emision?.factura_lista?.qr_image ||
+      emision?.factura_lista?.factus_qr ||
+      undefined,
+    referenceCode:
+      emision?.factura_lista?.reference_code ||
+      emision?.reference_code ||
+      undefined,
+    clienteDireccion:
+      venta.cliente_info?.direccion || '',
+    clienteTelefono:
+      venta.cliente_info?.telefono || '',
+    clienteEmail:
+      venta.cliente_info?.email || '',
+    representacionGrafica:
+      'Representación gráfica de factura electrónica de venta. Valide en DIAN con CUFE.',
   };
 };
 const unidadPermiteDecimales = (unidadMedida?: string) =>
@@ -231,6 +269,7 @@ export default function Ventas() {
   const [efectivoRecibido, setEfectivoRecibido] = useState('0');
   const [documentoGenerado, setDocumentoGenerado] = useState<DocumentoGenerado | null>(null);
   const [documentoPreview, setDocumentoPreview] = useState<DocumentoPreview | null>(null);
+  const [documentoFormato, setDocumentoFormato] = useState<DocumentoFormato>('POS');
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [mostrarBusqueda, setMostrarBusqueda] = useState(false);
   const [mostrarBusquedaClientes, setMostrarBusquedaClientes] = useState(false);
@@ -908,7 +947,8 @@ export default function Ventas() {
           cliente: ventaFacturada.cliente_info?.nombre ?? clienteNombre,
           total: formatCurrencyCOP(ventaFacturada.total),
         });
-        setDocumentoPreview(buildDocumentoPreviewFromVenta(ventaFacturada));
+        setDocumentoFormato('POS');
+        setDocumentoPreview(buildDocumentoPreviewFromVenta(ventaFacturada, emision));
         setMensaje(
           emision.factus_sent
             ? `Factura electrónica emitida: ${emision.numero_factura} (${emision.estado_electronico || emision.status})`
@@ -932,7 +972,8 @@ export default function Ventas() {
         cliente: clienteNombre,
         total: formatCurrencyCOP(totals.totalCobro),
       });
-      setDocumentoPreview(buildDocumentoPreviewFromVenta(venta));
+      setDocumentoFormato('POS');
+      setDocumentoPreview(buildDocumentoPreviewFromVenta(venta, emision));
       setMensaje(
         emision.factus_sent
           ? `Factura electrónica emitida: ${emision.numero_factura} (${emision.estado_electronico || emision.status})`
@@ -1599,13 +1640,41 @@ export default function Ventas() {
                   {documentoPreview.tipo}
                 </h3>
               </div>
+              <div className="flex justify-center gap-2">
+                <button
+                  type="button"
+                  className={`rounded border px-3 py-1 text-xs font-semibold ${
+                    documentoFormato === 'POS'
+                      ? 'border-blue-600 bg-blue-600 text-white'
+                      : 'border-slate-300 text-slate-700'
+                  }`}
+                  onClick={() => setDocumentoFormato('POS')}
+                >
+                  Formato POS
+                </button>
+                <button
+                  type="button"
+                  className={`rounded border px-3 py-1 text-xs font-semibold ${
+                    documentoFormato === 'CARTA'
+                      ? 'border-blue-600 bg-blue-600 text-white'
+                      : 'border-slate-300 text-slate-700'
+                  }`}
+                  onClick={() => setDocumentoFormato('CARTA')}
+                >
+                  Formato Carta/A4
+                </button>
+              </div>
               <div className="max-h-[70vh] overflow-auto rounded border border-slate-200 bg-slate-50 p-4">
                 <ComprobanteTemplate
+                  formato={documentoFormato}
                   tipo={documentoPreview.tipo}
                   numero={documentoPreview.numero}
                   fecha={documentoPreview.fecha}
                   clienteNombre={documentoPreview.clienteNombre}
                   clienteDocumento={documentoPreview.clienteDocumento}
+                  clienteDireccion={documentoPreview.clienteDireccion}
+                  clienteTelefono={documentoPreview.clienteTelefono}
+                  clienteEmail={documentoPreview.clienteEmail}
                   medioPago={documentoPreview.medioPago}
                   estado={documentoPreview.estado}
                   detalles={documentoPreview.detalles}
@@ -1618,6 +1687,11 @@ export default function Ventas() {
                   notas={configuracion?.notas_factura}
                   resolucion={configuracion?.resolucion}
                   empresa={empresa}
+                  cufe={documentoPreview.cufe}
+                  qrUrl={documentoPreview.qrUrl}
+                  qrImageUrl={documentoPreview.qrImageUrl}
+                  referenceCode={documentoPreview.referenceCode}
+                  representacionGrafica={documentoPreview.representacionGrafica}
                 />
               </div>
               <div className="flex flex-wrap justify-end gap-2">
@@ -1626,11 +1700,15 @@ export default function Ventas() {
                   onClick={() => {
                     if (!documentoPreview) return;
                     printComprobante({
+                      formato: documentoFormato,
                       tipo: documentoPreview.tipo,
                       numero: documentoPreview.numero,
                       fecha: documentoPreview.fecha,
                       clienteNombre: documentoPreview.clienteNombre,
                       clienteDocumento: documentoPreview.clienteDocumento,
+                      clienteDireccion: documentoPreview.clienteDireccion,
+                      clienteTelefono: documentoPreview.clienteTelefono,
+                      clienteEmail: documentoPreview.clienteEmail,
                       medioPago: documentoPreview.medioPago,
                       estado: documentoPreview.estado,
                       detalles: documentoPreview.detalles,
@@ -1643,6 +1721,11 @@ export default function Ventas() {
                       notas: configuracion?.notas_factura,
                       resolucion: configuracion?.resolucion,
                       empresa,
+                      cufe: documentoPreview.cufe,
+                      qrUrl: documentoPreview.qrUrl,
+                      qrImageUrl: documentoPreview.qrImageUrl,
+                      referenceCode: documentoPreview.referenceCode,
+                      representacionGrafica: documentoPreview.representacionGrafica,
                     });
                   }}
                   className="flex items-center gap-2 rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
