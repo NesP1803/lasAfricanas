@@ -302,7 +302,32 @@ def _sync_existing_pending_invoice(
         return factura
 
     fields = _extract_factus_data(response)
+    _assert_emitted_document_matches_sale(
+        venta=venta,
+        fields=fields,
+        expected_number=factura.number or str(venta.numero_comprobante or ''),
+        expected_reference_code=factura.reference_code or str(venta.numero_comprobante or ''),
+    )
     bill_errors = _extract_bill_errors(response)
+    missing_after_show = [field for field in ['xml_url', 'pdf_url'] if not fields.get(field)]
+    if missing_after_show:
+        try:
+            response_download = client.get_invoice_downloads(factura.number)
+            fields = _merge_factus_fields(fields, _extract_factus_data(response_download))
+            _assert_emitted_document_matches_sale(
+                venta=venta,
+                fields=fields,
+                expected_number=factura.number or str(venta.numero_comprobante or ''),
+                expected_reference_code=factura.reference_code or str(venta.numero_comprobante or ''),
+            )
+            if not bill_errors:
+                bill_errors = _extract_bill_errors(response_download)
+        except (FactusAPIError, FactusAuthError):
+            logger.info(
+                'facturar_venta.pending_sync_download_no_disponible venta_id=%s numero=%s',
+                venta.id,
+                factura.number,
+            )
     persistable_fields = {k: v for k, v in fields.items() if k in PERSISTABLE_FACTURA_FIELDS}
     with transaction.atomic():
         locked = FacturaElectronica.objects.select_for_update().get(pk=factura.pk)
@@ -329,6 +354,30 @@ def _sync_existing_pending_invoice(
             locked.number,
             locked.status,
         )
+        if locked.status == 'ACEPTADA' and locked.cufe and locked.number and not locked.qr:
+            qr_file = generate_qr_dian(locked.number, locked.cufe)
+            locked.qr.save(qr_file.name, qr_file, save=False)
+            locked.save(update_fields=['qr', 'updated_at'])
+        try:
+            if locked.xml_url:
+                download_xml(locked)
+        except DescargaFacturaError:
+            logger.warning(
+                'facturar_venta.pending_sync_xml_descarga_error venta_id=%s factura=%s',
+                venta.id,
+                locked.number,
+                exc_info=True,
+            )
+        try:
+            if locked.pdf_url:
+                download_pdf(locked)
+        except DescargaFacturaError:
+            logger.warning(
+                'facturar_venta.pending_sync_pdf_descarga_error venta_id=%s factura=%s',
+                venta.id,
+                locked.number,
+                exc_info=True,
+            )
         return locked
 
 
@@ -364,7 +413,12 @@ def _validate_customer_for_factus(customer: dict[str, Any], venta: Venta) -> Non
         raise FactusValidationError(field_messages[missing_fields[0]])
 
 
-def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> FacturaElectronica:
+def facturar_venta(
+    venta_id: int,
+    triggered_by: Usuario | None = None,
+    *,
+    force_resend_pending: bool = False,
+) -> FacturaElectronica:
     logger.info('facturar_venta.inicio venta_id=%s user_id=%s', venta_id, getattr(triggered_by, 'id', None))
     venta = Venta.objects.select_related('cliente').prefetch_related('detalles__producto').get(pk=venta_id)
     if venta.tipo_comprobante != 'FACTURA':
@@ -389,13 +443,19 @@ def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> Factur
         if not factura_existente.pdf_local_path:
             download_pdf(factura_existente)
         return factura_existente
-    if factura_existente and factura_existente.status == 'EN_PROCESO':
+    if factura_existente and factura_existente.status == 'EN_PROCESO' and not force_resend_pending:
         logger.info(
             'facturar_venta.reutiliza_en_proceso venta_id=%s numero=%s',
             venta.id,
             factura_existente.number,
         )
         return _sync_existing_pending_invoice(factura=factura_existente, venta=venta, triggered_by=triggered_by)
+    if factura_existente and factura_existente.status == 'EN_PROCESO' and force_resend_pending:
+        logger.warning(
+            'facturar_venta.reenvio_forzado_en_proceso venta_id=%s numero=%s',
+            venta.id,
+            factura_existente.number,
+        )
 
     payload = build_invoice_payload(venta)
     _validate_customer_for_factus(payload.get('customer', {}), venta)

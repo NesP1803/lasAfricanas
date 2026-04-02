@@ -35,6 +35,8 @@ from apps.facturacion.services import (
     DescargaFacturaError,
     DownloadResourceError,
     FacturaNoEncontrada,
+    FactusAPIError,
+    FactusAuthError,
     FactusConsultaError,
     FactusValidationError,
     download_pdf,
@@ -46,6 +48,7 @@ from apps.facturacion.services import (
     read_local_media_file,
     sync_numbering_ranges,
     sync_invoice_status,
+    facturar_venta,
 )
 
 logger = logging.getLogger(__name__)
@@ -129,6 +132,83 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
             for factura in facturas
         ]
         return Response(data)
+
+    @action(detail=True, methods=['post'], url_path='sincronizar')
+    def sincronizar(self, request, pk=None):
+        factura = (
+            FacturaElectronica.objects.select_related('venta__cliente')
+            .filter(pk=pk)
+            .first()
+        )
+        if factura is None:
+            return Response({'detail': 'Factura electrónica no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if factura.status != 'EN_PROCESO':
+            return Response(
+                {
+                    'detail': (
+                        f'La factura {factura.number or factura.reference_code or factura.id} '
+                        f'no está EN_PROCESO (estado actual: {factura.status}).'
+                    ),
+                    'result': 'NOT_PENDING',
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        try:
+            sincronizada = facturar_venta(factura.venta_id, triggered_by=request.user)
+            mensaje_error = str(sincronizada.mensaje_error or '').lower()
+            codigo_error = str(sincronizada.codigo_error or '').upper()
+            should_force_resend = (
+                sincronizada.status == 'EN_PROCESO'
+                and (
+                    codigo_error == 'FACTUS_DOCUMENTO_NO_ENCONTRADO'
+                    or 'no se encontró el documento' in mensaje_error
+                )
+            )
+            if should_force_resend:
+                logger.warning(
+                    'facturacion.sincronizar.reenvio_controlado factura_id=%s venta_id=%s numero=%s',
+                    factura.id,
+                    factura.venta_id,
+                    factura.number,
+                )
+                sincronizada = facturar_venta(
+                    factura.venta_id,
+                    triggered_by=request.user,
+                    force_resend_pending=True,
+                )
+        except FactusValidationError as exc:
+            logger.warning(
+                'facturacion.sincronizar.conflicto factura_id=%s venta_id=%s detail=%s',
+                factura.id,
+                factura.venta_id,
+                str(exc),
+            )
+            return Response(
+                {
+                    'detail': str(exc),
+                    'result': 'CONFLICT',
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+        except FactusConsultaError as exc:
+            return Response({'detail': str(exc), 'result': 'REMOTE_ERROR'}, status=status.HTTP_502_BAD_GATEWAY)
+        except (FactusAPIError, FactusAuthError) as exc:
+            return Response({'detail': str(exc), 'result': 'REMOTE_ERROR'}, status=status.HTTP_502_BAD_GATEWAY)
+
+        serializer = FacturaEstadoSerializer(sincronizada)
+        return Response(
+            {
+                'detail': (
+                    'Factura sincronizada y aceptada por DIAN.'
+                    if sincronizada.status == 'ACEPTADA'
+                    else 'Factura reintentada/sincronizada, pero sigue en proceso en Factus/DIAN.'
+                ),
+                'result': 'SYNCED' if sincronizada.status == 'ACEPTADA' else 'PENDING',
+                'factura': serializer.data,
+            }
+        )
 
     @action(detail=False, methods=['get'], url_path=r'(?P<number>[^/.]+)/estado')
     def estado(self, request, number=None):

@@ -100,6 +100,13 @@ export interface ProductoFavorito {
   created_at: string;
 }
 
+type BuscarPorCodigoNoEncontrado = {
+  encontrado: false;
+  codigo: string;
+  error: string;
+  detail: string;
+};
+
 // Funciones API
 export const inventarioApi = {
   // Productos
@@ -162,7 +169,16 @@ export const inventarioApi = {
       }
       throw new Error(errorMessage);
     }
-    return response.json();
+    const payload = (await response.json()) as Producto | BuscarPorCodigoNoEncontrado;
+    if (
+      payload &&
+      typeof payload === 'object' &&
+      'encontrado' in payload &&
+      payload.encontrado === false
+    ) {
+      throw new Error(payload.detail || 'Producto no encontrado');
+    }
+    return payload as Producto;
   },
 
   async createProducto(data: Partial<Producto>): Promise<Producto> {

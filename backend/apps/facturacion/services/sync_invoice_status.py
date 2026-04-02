@@ -52,7 +52,38 @@ def sync_invoice_status(numero_factura: str) -> FacturaElectronica:
     client = FactusClient()
     try:
         response_json = client.get_invoice(numero_factura)
-    except (FactusAPIError, FactusAuthError) as exc:
+    except FactusAPIError as exc:
+        if getattr(exc, 'status_code', None) == 404:
+            logger.info(
+                'consulta_factura.no_encontrada_en_factus numero=%s; se conserva estado local',
+                numero_factura,
+            )
+            with transaction.atomic():
+                factura.status = factura.status or 'EN_PROCESO'
+                factura.codigo_error = 'FACTUS_DOCUMENTO_NO_ENCONTRADO'
+                factura.mensaje_error = (
+                    'Factus aún no reporta el documento para este número; intente sincronizar nuevamente en unos minutos.'
+                )
+                existing_response = factura.response_json if isinstance(factura.response_json, dict) else {}
+                factura.response_json = {
+                    **existing_response,
+                    'sync_estado': 'REMOTE_NOT_FOUND',
+                    'sync_numero': numero_factura,
+                    'sync_error_detail': str(exc),
+                }
+                factura.save(
+                    update_fields=[
+                        'status',
+                        'codigo_error',
+                        'mensaje_error',
+                        'response_json',
+                        'updated_at',
+                    ]
+                )
+            return factura
+        logger.exception('error_consulta_factura numero=%s', numero_factura)
+        raise FactusConsultaError('No fue posible consultar el estado de la factura en Factus.') from exc
+    except FactusAuthError as exc:
         logger.exception('error_consulta_factura numero=%s', numero_factura)
         raise FactusConsultaError('No fue posible consultar el estado de la factura en Factus.') from exc
 
