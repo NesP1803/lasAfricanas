@@ -51,6 +51,7 @@ class FacturaElectronica(models.Model):
     public_url = models.URLField(max_length=2048, null=True, blank=True, verbose_name='URL pública')
     qr_data = models.TextField(null=True, blank=True, verbose_name='Contenido QR')
     qr_image_url = models.URLField(max_length=2048, null=True, blank=True, verbose_name='URL imagen QR remota')
+    qr_image_data = models.TextField(null=True, blank=True, verbose_name='Imagen QR embebida (data URL/base64)')
     xml_local_path = models.TextField(blank=True, default='', verbose_name='Ruta local XML')
     pdf_local_path = models.TextField(blank=True, default='', verbose_name='Ruta local PDF')
     qr = models.ImageField(upload_to='facturas/qr/', null=True, blank=True, verbose_name='Código QR DIAN')
