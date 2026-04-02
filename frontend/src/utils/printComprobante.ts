@@ -73,6 +73,9 @@ const getEmpresaInfo = (empresa?: ConfiguracionEmpresa | null) => ({
 const getTituloDocumento = (tipo: DocumentoTipo) =>
   tipo === 'COTIZACION' ? 'Cotización' : tipo === 'REMISION' ? 'Remisión' : 'Factura de venta';
 
+const getLogoEmpresa = (empresa?: ConfiguracionEmpresa | null) =>
+  empresa?.logo || '/logo-default-pos.svg';
+
 export const printComprobante = ({
   formato = 'POS',
   tipo,
@@ -142,10 +145,10 @@ export const printComprobante = ({
       * { box-sizing: border-box; }
       @page { size: 80mm auto; margin: 0; }
       html, body { width: var(--ticket-width); margin: 0; padding: 0; background: #fff; }
-      body { font-family: "Courier New", monospace; color: #111827; font-size: 10px; line-height: 1.25; }
+      body { font-family: Arial, sans-serif; color: #0f172a; font-size: 10px; line-height: 1.28; }
       .ticket { width: var(--ticket-width); border: 1px solid #cbd5e1; padding: 8px; }
       .content { display: flex; gap: 6px; }
-      .cufe-vertical { width: 14px; border-right: 1px dashed #94a3b8; writing-mode: vertical-rl; text-orientation: mixed; font-size: 8px; font-weight: 700; color: #475569; letter-spacing: .08em; overflow-wrap: anywhere; }
+      .cufe-vertical { width: 17px; border-right: 1px dashed #94a3b8; writing-mode: vertical-rl; text-orientation: mixed; transform: rotate(180deg); font-size: 7px; font-weight: 700; color: #475569; letter-spacing: .08em; line-height: 1.1; overflow-wrap: anywhere; padding-right: 2px; }
       .main { flex: 1; min-width: 0; }
       .center { text-align: center; }
       .line { border-top: 1px dashed #94a3b8; margin: 6px 0; }
@@ -159,6 +162,11 @@ export const printComprobante = ({
       .qr { margin-top: 6px; text-align: center; }
       .qr img { width: 94px; height: 94px; object-fit: contain; }
       .placeholder { border: 1px dashed #94a3b8; padding: 6px; font-size: 8px; color: #64748b; }
+      .logo { display: block; margin: 0 auto 4px; height: 42px; max-width: 52mm; object-fit: contain; }
+      .resolution { border: 1px dashed #94a3b8; margin-top: 4px; padding: 4px; text-align: left; }
+      .resolution-title { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #475569; }
+      .totals-box { border: 1px solid #cbd5e1; margin-top: 6px; padding: 4px; }
+      .thank-you { text-align: center; font-size: 9px; font-weight: 600; margin-top: 7px; }
     `
       : `
       * { box-sizing: border-box; }
@@ -196,12 +204,16 @@ export const printComprobante = ({
           ${cufe ? `<div class="cufe-vertical">CUFE · ${cufe}</div>` : ''}
           <div class="main">
             <div class="center">
+              <img src="${getLogoEmpresa(empresa)}" alt="Logo empresa" class="logo"/>
               <strong>${infoEmpresa.nombre}</strong>
               <div>${infoEmpresa.nit}</div>
               <div>${infoEmpresa.regimen}</div>
               <div class="break">${infoEmpresa.direccion}</div>
               ${infoEmpresa.telefono ? `<div>Tel: ${infoEmpresa.telefono}</div>` : ''}
-              ${resolucion ? `<div class="muted break">${resolucion}</div>` : ''}
+              <div class="resolution">
+                <div class="resolution-title">Resolución / Numeración</div>
+                <div class="muted break">${resolucion || 'No informada'}</div>
+              </div>
             </div>
             <div class="line"></div>
             <div class="center"><strong>${tituloDocumento}</strong><div><strong>${numero}</strong></div>${referenceCode ? `<div class="muted">Ref: ${referenceCode}</div>` : ''}<div>${fechaFormateada}</div></div>
@@ -217,19 +229,19 @@ export const printComprobante = ({
                 (d) => `<div class="item"><strong class="break">${d.descripcion}</strong>${d.codigo ? `<div class="muted">Cod: ${d.codigo}</div>` : ''}<div class="row muted"><span>${d.cantidad} x ${currencyFormatter.format(d.precioUnitario)}</span><span>${currencyFormatter.format(d.total)}</span></div></div>`
               )
               .join('')}
-            <div class="line"></div>
-            <div class="row"><span>Subtotal</span><span>${currencyFormatter.format(subtotal)}</span></div>
-            <div class="row"><span>Impuestos</span><span>${currencyFormatter.format(iva)}</span></div>
-            <div class="row"><span>Descuentos</span><span>-${currencyFormatter.format(descuento)}</span></div>
-            <div class="row total-row"><span>Total</span><span>${currencyFormatter.format(total)}</span></div>
-            ${efectivoRecibido !== undefined && cambio !== undefined ? `<div class="row"><span>Recibido</span><span>${currencyFormatter.format(efectivoRecibido)}</span></div><div class="row"><span>Cambio</span><span>${currencyFormatter.format(cambio)}</span></div>` : ''}
-            <div class="line"></div>
-            <div class="muted">${representacionGrafica || 'Representación gráfica de factura electrónica de venta.'}</div>
+            <div class="totals-box">
+              <div class="row"><span>Subtotal</span><span>${currencyFormatter.format(subtotal)}</span></div>
+              <div class="row"><span>Impuestos</span><span>${currencyFormatter.format(iva)}</span></div>
+              <div class="row"><span>Descuentos</span><span>-${currencyFormatter.format(descuento)}</span></div>
+              <div class="row total-row"><span>Total</span><span>${currencyFormatter.format(total)}</span></div>
+              ${efectivoRecibido !== undefined && cambio !== undefined ? `<div class="row"><span>Recibido</span><span>${currencyFormatter.format(efectivoRecibido)}</span></div><div class="row"><span>Cambio</span><span>${currencyFormatter.format(cambio)}</span></div>` : ''}
+            </div>
             ${notas ? `<div class="muted break">${notas}</div>` : ''}
             <div class="line"></div>
             <div class="qr">
               ${qrImageUrl ? `<img src="${qrImageUrl}" alt="QR factura electrónica"/>` : qrUrl ? `<div class="muted break">Verificación: ${qrUrl}</div>` : '<div class="placeholder">Espacio reservado para QR DIAN</div>'}
             </div>
+            <div class="thank-you">Gracias por su compra, es un placer atenderlo.</div>
           </div>
         </div>
       </div>
