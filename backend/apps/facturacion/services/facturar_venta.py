@@ -11,7 +11,7 @@ from typing import Any
 from django.db import DataError, transaction
 from django.utils import timezone
 
-from apps.facturacion.exceptions import FacturaDuplicadaError
+from apps.facturacion.exceptions import FacturaDuplicadaError, FacturaPersistenciaError
 from apps.facturacion.models import FacturaElectronica
 from apps.facturacion.services.consecutivo_service import get_next_invoice_sequence, resolve_numbering_range
 from apps.facturacion.services.download_invoice_files import download_pdf, download_xml
@@ -100,6 +100,12 @@ PERSISTABLE_FACTURA_FIELDS = {
     'status',
     'estado_factus_raw',
 }
+
+
+def _apply_qr_image_fields(instance: FacturaElectronica, raw_value: str) -> None:
+    qr_image_url, qr_image_data = normalize_qr_image_value(raw_value)
+    safe_assign_charfield(instance, 'qr_image_url', qr_image_url)
+    instance.qr_image_data = qr_image_data
 
 
 def _build_attempt_trace(
@@ -528,6 +534,52 @@ def _validate_customer_for_factus(customer: dict[str, Any], venta: Venta) -> Non
             'identification_document_id': 'El cliente seleccionado no tiene tipo de documento homologado para Factus.',
         }
         raise FactusValidationError(field_messages[missing_fields[0]])
+
+
+def _mark_factura_persistence_error(
+    *,
+    factura_id: int,
+    venta_id: int,
+    payload: dict[str, Any],
+    numero: str,
+    reference_code: str,
+    triggered_by: Usuario | None,
+    response: dict[str, Any] | None,
+    response_show: dict[str, Any] | None,
+    response_download: dict[str, Any] | None,
+    fields: dict[str, str],
+    bill_errors: list[str],
+    error_message: str,
+) -> FacturaElectronica:
+    with transaction.atomic():
+        factura = FacturaElectronica.objects.select_for_update().get(pk=factura_id)
+        factura.status = 'ERROR_PERSISTENCIA'
+        factura.estado_electronico = 'ERROR_PERSISTENCIA'
+        safe_assign_charfield(factura, 'codigo_error', 'ERROR_PERSISTENCIA_SAVE')
+        factura.mensaje_error = error_message
+        safe_assign_json(
+            factura,
+            'response_json',
+            _build_attempt_trace(
+                factura=factura,
+                payload=payload,
+                numero=numero,
+                reference_code=reference_code,
+                triggered_by=triggered_by,
+                status='ERROR_PERSISTENCIA',
+                response=response,
+                response_show=response_show,
+                response_download=response_download,
+                final_fields={**fields, 'persist_error': True},
+                bill_errors=bill_errors,
+                error={'message': error_message, 'stage': 'persist_factura'},
+            ),
+        )
+        log_model_string_overflow_diagnostics(
+            instance=factura, venta_id=venta_id, factura_id=factura.pk, stage='mark_persistence_error'
+        )
+        factura.save(update_fields=['status', 'estado_electronico', 'codigo_error', 'mensaje_error', 'response_json', 'updated_at'])
+        return factura
 
 
 def facturar_venta(

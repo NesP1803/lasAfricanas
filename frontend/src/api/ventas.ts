@@ -543,9 +543,15 @@ export const ventasApi = {
         const ventaIdRespuesta = responseData.venta_id as number | undefined;
         const seProcesoVentaLocal = Boolean(ventaIdRespuesta || (estadoLocal && estadoLocal !== 'BORRADOR'));
         if (seProcesoVentaLocal) {
+          const estadoElectronico = (responseData.estado_electronico as string) || (responseData.status as string) || '';
+          const persistenceMessage =
+            estadoElectronico === 'ERROR_PERSISTENCIA'
+              ? 'La venta fue registrada, pero ocurrió un error técnico al guardar la respuesta electrónica. Reintenta o sincroniza la factura.'
+              : null;
           return {
             ok: false,
             message:
+              persistenceMessage ||
               (responseData.message as string) ||
               (responseData.error as string) ||
               'La venta se procesó localmente, pero falló la emisión electrónica.',

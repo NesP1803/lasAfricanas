@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any
 from urllib.parse import urlparse
 
 from django.db import models
 
 logger = logging.getLogger(__name__)
+_BASE64_CHARS_RE = re.compile(r'^[A-Za-z0-9+/=\s]+$')
 
 
 def safe_truncate(value: Any, max_length: int | None) -> Any:

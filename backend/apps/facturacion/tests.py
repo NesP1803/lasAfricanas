@@ -244,6 +244,103 @@ class FacturacionPersistenciaDefensivaTests(TestCase):
         factura.refresh_from_db()
         self.assertTrue(factura.public_url.endswith('a' * 1300))
 
+    def test_normalize_qr_image_separa_data_url_y_url_remota(self):
+        data_url = f'data:image/png;base64,{"A" * 5000}'
+        qr_url, qr_data = normalize_qr_image_value(data_url)
+        self.assertEqual(qr_url, '')
+        self.assertTrue(qr_data.startswith('data:image/png;base64,'))
+
+        remote_url = 'https://factus.test/qr/FV-1001.png'
+        qr_url, qr_data = normalize_qr_image_value(remote_url)
+        self.assertEqual(qr_url, remote_url)
+        self.assertEqual(qr_data, '')
+
+
+class FacturarVentaPersistenciaCriticaTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(username='persist-critical', password='1234')
+        self.cliente = Cliente.objects.create(numero_documento='5555', nombre='Cliente QR Largo')
+        self.venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            numero_comprobante='FV9001',
+            cliente=self.cliente,
+            vendedor=self.user,
+            subtotal=Decimal('100'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('19'),
+            total=Decimal('119'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('119'),
+            cambio=Decimal('0'),
+            estado='FACTURADA',
+        )
+        DetalleVenta.objects.create(
+            venta=self.venta,
+            producto=Producto.objects.create(
+                codigo='PR-QR-LARGO',
+                nombre='Producto QR',
+                precio_costo=Decimal('50'),
+                precio_venta=Decimal('100'),
+                precio_venta_minimo=Decimal('100'),
+                stock=Decimal('10'),
+                categoria=Categoria.objects.create(nombre='General'),
+                proveedor=Proveedor.objects.create(nombre='Proveedor QR'),
+            ),
+            cantidad=1,
+            precio_unitario=Decimal('100'),
+            descuento_unitario=Decimal('0'),
+            iva_porcentaje=Decimal('19'),
+            subtotal=Decimal('100'),
+            total=Decimal('119'),
+        )
+
+    @patch('apps.facturacion.services.facturar_venta.download_xml')
+    @patch('apps.facturacion.services.facturar_venta.download_pdf')
+    @patch('apps.facturacion.services.facturar_venta.resolve_numbering_range')
+    @patch('apps.facturacion.services.facturar_venta.build_invoice_payload')
+    @patch('apps.facturacion.services.facturar_venta.FactusClient.send_invoice')
+    def test_qr_image_data_url_largo_no_desborda_qr_image_url(
+        self,
+        mocked_send_invoice,
+        mocked_build_payload,
+        mocked_resolve_range,
+        _mocked_pdf,
+        _mocked_xml,
+    ):
+        mocked_build_payload.return_value = {
+            'numbering_range_id': 1,
+            'customer': {
+                'identification': '900123123',
+                'names': 'Cliente QR Largo',
+                'identification_document_id': 3,
+            },
+            'items': [{'code_reference': 'PR-QR-LARGO', 'quantity': 1}],
+            'send_email': False,
+        }
+        mocked_resolve_range.return_value = RangoNumeracionDIAN(prefijo='FV', factus_range_id=1)
+        mocked_send_invoice.return_value = {
+            'data': {
+                'bill': {
+                    'status': 'valid',
+                    'number': 'FV9001',
+                    'reference_code': 'FV9001',
+                    'cufe': 'CUFE-9001',
+                    'uuid': 'UUID-9001',
+                    'xml_url': 'https://example.com/fv9001.xml',
+                    'pdf_url': 'https://example.com/fv9001.pdf',
+                    'qr_image': f'data:image/png;base64,{"A" * 13079}',
+                }
+            }
+        }
+
+        factura = facturar_venta(self.venta.id, triggered_by=self.user)
+        factura.refresh_from_db()
+        self.assertEqual(factura.estado_electronico, 'ACEPTADA')
+        self.assertEqual(factura.qr_image_url, '')
+        self.assertTrue(factura.qr_image_data.startswith('data:image/png;base64,'))
+
 
 class FacturaQRYPosEndpointsTests(TestCase):
     def setUp(self):

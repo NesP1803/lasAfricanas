@@ -10,7 +10,7 @@ from django.utils import timezone
 from datetime import datetime, time
 import logging
 
-from apps.facturacion.exceptions import FacturaDuplicadaError
+from apps.facturacion.exceptions import FacturaDuplicadaError, FacturaPersistenciaError
 from apps.facturacion.models import FacturaElectronica
 from apps.facturacion.serializers import FacturaElectronicaSerializer
 from apps.facturacion.services import (
@@ -102,7 +102,7 @@ def _factus_error_category(exc: Exception) -> tuple[str, str]:
 
 def _factus_http_status_and_code(exc: Exception) -> tuple[int, str]:
     detail = f'{str(exc)} {str(getattr(exc, "provider_detail", "") or "")}'.lower()
-    if isinstance(exc, DataError):
+    if isinstance(exc, (DataError, FacturaPersistenciaError)):
         return status.HTTP_200_OK, 'ERROR_PERSISTENCIA'
     if isinstance(exc, FacturaDuplicadaError):
         return status.HTTP_409_CONFLICT, 'DUPLICATE_REFERENCE_CODE'
@@ -224,7 +224,7 @@ class VentaViewSet(viewsets.ModelViewSet):
                 factura.estado_electronico or factura.status,
             )
             venta.refresh_from_db()
-        except (FactusValidationError, FactusAuthError, FactusAPIError, FacturaDuplicadaError, DataError) as exc:
+        except (FactusValidationError, FactusAuthError, FactusAPIError, FacturaDuplicadaError, DataError, FacturaPersistenciaError) as exc:
             logger.exception('ventas.facturar.factus_error venta_id=%s', venta.id)
             venta.refresh_from_db()
             factura_error = FacturaElectronica.objects.filter(venta=venta).first()
