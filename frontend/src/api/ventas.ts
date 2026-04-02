@@ -53,7 +53,7 @@ export interface DetalleVenta {
 export interface VentaCreate {
   tipo_comprobante: 'COTIZACION' | 'REMISION' | 'FACTURA';
   cliente: number;
-  vendedor: number;
+  vendedor?: number;
   subtotal: string;
   descuento_porcentaje: string;
   descuento_valor: string;
@@ -317,19 +317,27 @@ export const ventasApi = {
 
   // Ventas
   async crearVenta(data: VentaCreate): Promise<Venta> {
-    return apiRequest<Venta>({
-      url: `${API_URL}/ventas/`,
-      method: 'POST',
-      data,
-    });
+    try {
+      return await apiRequest<Venta>({
+        url: `${API_URL}/ventas/`,
+        method: 'POST',
+        data,
+      });
+    } catch (error) {
+      throw new Error(extractApiErrorMessage(error, 'Error al crear la venta'));
+    }
   },
 
   async actualizarVenta(id: number, data: Partial<VentaCreate>): Promise<Venta> {
-    return apiRequest<Venta>({
-      url: `${API_URL}/ventas/${id}/`,
-      method: 'PATCH',
-      data,
-    });
+    try {
+      return await apiRequest<Venta>({
+        url: `${API_URL}/ventas/${id}/`,
+        method: 'PATCH',
+        data,
+      });
+    } catch (error) {
+      throw new Error(extractApiErrorMessage(error, 'Error al actualizar la venta'));
+    }
   },
 
   async getVentas(params?: {
