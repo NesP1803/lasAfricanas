@@ -662,6 +662,52 @@ class FactusInvoicePayloadIVAIncluidoTests(TestCase):
     @patch('apps.facturacion.services.factus_payload_builder.get_payment_method_code', return_value='10')
     @patch('apps.facturacion.services.factus_payload_builder.get_unit_measure_id', return_value=70)
     @patch('apps.facturacion.services.factus_payload_builder.resolve_numbering_range')
+    def test_payload_customer_normaliza_identificacion(
+        self,
+        mocked_range,
+        _mocked_um,
+        _mocked_payment,
+        _mocked_municipality,
+        _mocked_doc_type,
+        _mocked_tribute,
+    ):
+        mocked_range.return_value = MagicMock(factus_range_id=99)
+        self.cliente.numero_documento = ' 1.234.567-8 '
+        self.cliente.save(update_fields=['numero_documento'])
+        venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            numero_comprobante='FAC-900000',
+            cliente=self.cliente,
+            vendedor=self.user,
+            subtotal=Decimal('2521.01'),
+            descuento_porcentaje=Decimal('0.00'),
+            descuento_valor=Decimal('0.00'),
+            iva=Decimal('478.99'),
+            total=Decimal('3000.00'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('3000.00'),
+            cambio=Decimal('0.00'),
+            estado='FACTURADA',
+        )
+        DetalleVenta.objects.create(
+            venta=venta,
+            producto=self.producto_gravado,
+            cantidad=Decimal('1.00'),
+            precio_unitario=Decimal('3000.00'),
+            descuento_unitario=Decimal('0.00'),
+            iva_porcentaje=Decimal('19.00'),
+            subtotal=Decimal('2521.01'),
+            total=Decimal('3000.00'),
+        )
+        payload = build_invoice_payload(venta)
+        self.assertEqual(payload['customer']['identification'], '12345678')
+
+    @patch('apps.facturacion.services.factus_payload_builder.get_tribute_id', return_value=1)
+    @patch('apps.facturacion.services.factus_payload_builder.get_document_type_id', return_value=3)
+    @patch('apps.facturacion.services.factus_payload_builder.get_municipality_id', return_value=149)
+    @patch('apps.facturacion.services.factus_payload_builder.get_payment_method_code', return_value='10')
+    @patch('apps.facturacion.services.factus_payload_builder.get_unit_measure_id', return_value=70)
+    @patch('apps.facturacion.services.factus_payload_builder.resolve_numbering_range')
     def test_payload_gravado_no_duplica_iva_con_precio_final(
         self,
         mocked_range,

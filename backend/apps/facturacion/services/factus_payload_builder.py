@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+import re
 
 from django.conf import settings
 
@@ -86,10 +87,45 @@ def _resolve_item_base_unit_price(detalle) -> Decimal:
     return subtotal_base / cantidad
 
 
+def _normalize_identification(value: str) -> str:
+    raw = str(value or '').strip()
+    # Factus espera el identificador del adquiriente sin separadores visibles.
+    return re.sub(r'[^0-9A-Za-z]', '', raw)
+
+
+def _build_customer_payload(cliente) -> dict:
+    identification = _normalize_identification(cliente.numero_documento)
+    names = str(cliente.nombre or '').strip()
+    if not identification:
+        raise FactusValidationError(
+            'El cliente seleccionado no tiene número de identificación configurado para facturación electrónica.'
+        )
+    if not names:
+        raise FactusValidationError(
+            'El cliente seleccionado no tiene nombre o razón social configurado para facturación electrónica.'
+        )
+
+    identification_document_id = get_document_type_id(cliente.tipo_documento, default=0)
+    if not identification_document_id:
+        raise FactusValidationError(
+            'El cliente seleccionado no tiene tipo de documento homologado para facturación electrónica.'
+        )
+
+    return {
+        'identification': identification,
+        'names': names,
+        'email': cliente.email or 'no-email@example.com',
+        'phone': cliente.telefono or '0000000000',
+        'address': cliente.direccion or 'NO REGISTRADA',
+        'municipality_id': get_municipality_id(cliente.ciudad or 'SIN_CIUDAD'),
+        'identification_document_id': identification_document_id,
+        'tribute_id': _resolve_customer_tribute_id(cliente.tipo_documento),
+    }
+
+
 def build_invoice_payload(venta: Venta) -> dict:
     cliente = venta.cliente
     rango = resolve_numbering_range(document_code='FACTURA_VENTA')
-    customer_tribute_id = _resolve_customer_tribute_id(cliente.tipo_documento)
     items = []
     for detalle in venta.detalles.select_related('producto').all():
         producto = detalle.producto
@@ -124,15 +160,6 @@ def build_invoice_payload(venta: Venta) -> dict:
         'payment_method_code': get_payment_method_code(venta.medio_pago),
         'operation_type': settings.FACTUS_OPERATION_TYPE,
         'send_email': settings.FACTUS_SEND_EMAIL_DEFAULT,
-        'customer': {
-            'identification': cliente.numero_documento,
-            'names': cliente.nombre,
-            'email': cliente.email or 'no-email@example.com',
-            'phone': cliente.telefono or '0000000000',
-            'address': cliente.direccion or 'NO REGISTRADA',
-            'municipality_id': get_municipality_id(cliente.ciudad or 'SIN_CIUDAD'),
-            'identification_document_id': get_document_type_id(cliente.tipo_documento),
-            'tribute_id': customer_tribute_id,
-        },
+        'customer': _build_customer_payload(cliente),
         'items': items,
     }
