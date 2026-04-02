@@ -9,11 +9,14 @@ import logging
 from typing import Any
 
 from django.db import transaction
+from django.utils import timezone
 
 from apps.facturacion.exceptions import FacturaDuplicadaError
 from apps.facturacion.models import FacturaElectronica
 from apps.facturacion.services.consecutivo_service import get_next_invoice_sequence, resolve_numbering_range
 from apps.facturacion.services.download_invoice_files import download_pdf, download_xml
+from apps.facturacion.services.electronic_state_machine import extract_bill_errors as _extract_bill_errors
+from apps.facturacion.services.electronic_state_machine import map_factus_status
 from apps.facturacion.services.exceptions import DescargaFacturaError
 from apps.facturacion.services.factus_client import (
     FactusAPIError,
@@ -30,47 +33,6 @@ from apps.ventas.models import Venta
 logger = logging.getLogger(__name__)
 MISMATCH_ERROR_CODE = 'MISMATCH_NUMERACION'
 LOCAL_VALIDATION_ERROR_CODE = 'ERROR_VALIDACION_LOCAL'
-
-
-def map_factus_status(response_json: dict[str, Any]) -> str:
-    """Mapea estados de Factus a estados internos DIAN."""
-    data = response_json.get('data', response_json)
-    bill = data.get('bill', data)
-    status = str(bill.get('status', data.get('status', response_json.get('status', 'error')))).strip().lower()
-    number = str(bill.get('number') or data.get('number', '')).strip()
-    cufe = str(bill.get('cufe') or data.get('cufe', '')).strip()
-    has_emission_identity = bool(number and cufe)
-    if status == 'rejected':
-        return 'RECHAZADA'
-    if status == 'valid':
-        return 'ACEPTADA'
-    if has_emission_identity:
-        # Factus puede reportar observaciones en bill.errors y aun así la factura existir.
-        return 'ACEPTADA'
-    if status == 'pending':
-        return 'EN_PROCESO'
-    return 'ERROR'
-
-
-def _extract_bill_errors(response_json: dict[str, Any]) -> list[str]:
-    data = response_json.get('data', response_json)
-    bill = data.get('bill', data)
-    errors = bill.get('errors', data.get('errors', []))
-    if isinstance(errors, str):
-        return [errors]
-    if not isinstance(errors, list):
-        return []
-    normalized: list[str] = []
-    for item in errors:
-        if isinstance(item, str) and item.strip():
-            normalized.append(item.strip())
-        elif isinstance(item, dict):
-            code = str(item.get('code', '')).strip()
-            message = str(item.get('message', '')).strip()
-            text = ' - '.join(part for part in [code, message] if part)
-            if text:
-                normalized.append(text)
-    return normalized
 
 
 def _extract_factus_data(response_json: dict[str, Any]) -> dict[str, str]:
@@ -96,7 +58,8 @@ def _extract_factus_data(response_json: dict[str, Any]) -> dict[str, str]:
         'qr_url': str(bill.get('qr_url', data.get('qr_url', ''))).strip(),
         'public_url': str(bill.get('public_url', data.get('public_url', ''))).strip(),
         'zip_key': str(bill.get('zip_key', data.get('zip_key', ''))).strip(),
-        'status': map_factus_status(response_json),
+        'status': map_factus_status(response_json)[0],
+        'estado_factus_raw': map_factus_status(response_json)[1],
     }
 
 
@@ -119,6 +82,7 @@ PERSISTABLE_FACTURA_FIELDS = {
     'qr',
     'qr_image',
     'status',
+    'estado_factus_raw',
 }
 
 
@@ -191,6 +155,16 @@ def _build_attempt_trace(
         'venta_snapshot': venta_snapshot,
         'triggered_by_user_id': triggered_by.id if triggered_by else None,
         'attempts': attempts,
+    }
+
+
+def _retry_metadata(factura: FacturaElectronica, *, pending: bool) -> dict[str, Any]:
+    retry_count = int((factura.retry_count or 0) + 1)
+    now = timezone.now()
+    return {
+        'retry_count': retry_count,
+        'last_retry_at': now,
+        'next_retry_at': now if pending else None,
     }
 
 
@@ -278,7 +252,8 @@ def _persist_local_validation_error(
         )
         return
 
-    factura.status = 'ERROR'
+    factura.status = 'RECHAZADA'
+    factura.estado_electronico = 'RECHAZADA'
     factura.codigo_error = MISMATCH_ERROR_CODE if 'devolvió number=' in str(error) else LOCAL_VALIDATION_ERROR_CODE
     factura.mensaje_error = str(error)
     factura.response_json = _build_attempt_trace(
@@ -287,7 +262,7 @@ def _persist_local_validation_error(
         numero=numero,
         reference_code=reference_code,
         triggered_by=triggered_by,
-        status='ERROR',
+        status='RECHAZADA',
         response=response,
         response_show=response_show,
         response_download=response_download,
@@ -298,7 +273,11 @@ def _persist_local_validation_error(
             'technical_status': LOCAL_VALIDATION_ERROR_CODE,
         },
     )
-    factura.save(update_fields=['status', 'codigo_error', 'mensaje_error', 'response_json', 'updated_at'])
+    metadata = _retry_metadata(factura, pending=False)
+    factura.retry_count = metadata['retry_count']
+    factura.last_retry_at = metadata['last_retry_at']
+    factura.next_retry_at = metadata['next_retry_at']
+    factura.save(update_fields=['status', 'estado_electronico', 'codigo_error', 'mensaje_error', 'response_json', 'retry_count', 'last_retry_at', 'next_retry_at', 'updated_at'])
 
 
 def _persist_remote_error(
@@ -313,7 +292,9 @@ def _persist_remote_error(
 ) -> None:
     status_code = getattr(error, 'status_code', None)
     provider_detail = getattr(error, 'provider_detail', '')
-    factura.status = 'ERROR'
+    is_validation_error = isinstance(error, FactusAPIError) and getattr(error, 'status_code', 0) in {400, 401, 403, 404, 409, 422}
+    factura.status = 'RECHAZADA' if is_validation_error else 'ERROR_INTEGRACION'
+    factura.estado_electronico = factura.status
     factura.codigo_error = str(status_code or error.__class__.__name__)
     factura.mensaje_error = provider_detail or str(error)
     factura.response_json = _build_attempt_trace(
@@ -322,7 +303,7 @@ def _persist_remote_error(
         numero=numero,
         reference_code=reference_code,
         triggered_by=triggered_by,
-        status='ERROR',
+        status=factura.status,
         error={
             'stage': stage,
             'error_type': error.__class__.__name__,
@@ -331,7 +312,11 @@ def _persist_remote_error(
             'provider_detail': provider_detail,
         },
     )
-    factura.save(update_fields=['status', 'codigo_error', 'mensaje_error', 'response_json', 'updated_at'])
+    metadata = _retry_metadata(factura, pending=not is_validation_error)
+    factura.retry_count = metadata['retry_count']
+    factura.last_retry_at = metadata['last_retry_at']
+    factura.next_retry_at = metadata['next_retry_at']
+    factura.save(update_fields=['status', 'estado_electronico', 'codigo_error', 'mensaje_error', 'response_json', 'retry_count', 'last_retry_at', 'next_retry_at', 'updated_at'])
 
 
 def _persist_pending_dian_conflict(
@@ -345,7 +330,8 @@ def _persist_pending_dian_conflict(
 ) -> None:
     provider_payload = error.provider_payload if isinstance(error.provider_payload, dict) else {}
     message = str(provider_payload.get('message') or error.provider_detail or str(error))
-    factura.status = 'EN_PROCESO'
+    factura.status = 'PENDIENTE_REINTENTO'
+    factura.estado_electronico = 'PENDIENTE_REINTENTO'
     factura.codigo_error = 'FACTUS_PENDING_DIAN_409'
     factura.mensaje_error = message
     factura.response_json = _build_attempt_trace(
@@ -354,7 +340,7 @@ def _persist_pending_dian_conflict(
         numero=numero,
         reference_code=reference_code,
         triggered_by=triggered_by,
-        status='EN_PROCESO',
+        status='PENDIENTE_REINTENTO',
         error={
             'stage': 'send_invoice',
             'error_type': error.__class__.__name__,
@@ -365,7 +351,11 @@ def _persist_pending_dian_conflict(
             'semantic_status': 'PENDIENTE_DIAN',
         },
     )
-    factura.save(update_fields=['status', 'codigo_error', 'mensaje_error', 'response_json', 'updated_at'])
+    metadata = _retry_metadata(factura, pending=True)
+    factura.retry_count = metadata['retry_count']
+    factura.last_retry_at = metadata['last_retry_at']
+    factura.next_retry_at = metadata['next_retry_at']
+    factura.save(update_fields=['status', 'estado_electronico', 'codigo_error', 'mensaje_error', 'response_json', 'retry_count', 'last_retry_at', 'next_retry_at', 'updated_at'])
 
 
 def _sync_existing_pending_invoice(
@@ -426,6 +416,8 @@ def _sync_existing_pending_invoice(
                     locked.qr_image_url = value
                 else:
                     setattr(locked, key, value)
+        locked.estado_electronico = locked.status
+        locked.emitida_en_factus = bool(locked.number and locked.cufe)
         locked.codigo_error = response.get('error_code') or locked.codigo_error
         locked.mensaje_error = '; '.join(bill_errors) if bill_errors else (response.get('error_message') or locked.mensaje_error)
         locked.response_json = _build_attempt_trace(
@@ -439,7 +431,7 @@ def _sync_existing_pending_invoice(
             final_fields={**fields, 'persisted_fields': persistable_fields, 'source': 'get_invoice_on_pending'},
             bill_errors=bill_errors,
         )
-        locked.save(update_fields=['status', 'cufe', 'uuid', 'number', 'reference_code', 'xml_url', 'pdf_url', 'public_url', 'qr_data', 'qr_image_url', 'codigo_error', 'mensaje_error', 'response_json', 'updated_at'])
+        locked.save(update_fields=['status', 'estado_electronico', 'cufe', 'uuid', 'number', 'reference_code', 'xml_url', 'pdf_url', 'public_url', 'qr_data', 'qr_image_url', 'codigo_error', 'mensaje_error', 'response_json', 'updated_at'])
         logger.info(
             'facturar_venta.pending_sync_result venta_id=%s numero=%s status=%s',
             venta.id,
@@ -527,7 +519,7 @@ def facturar_venta(
             raise FactusValidationError('La venta debe estar en estado COBRADA antes de enviarse a Factus.')
 
         factura_existente = FacturaElectronica.objects.select_for_update().filter(venta=venta).first()
-        if factura_existente and factura_existente.status == 'ACEPTADA':
+        if factura_existente and factura_existente.estado_electronico in {'ACEPTADA', 'ACEPTADA_CON_OBSERVACIONES'}:
             if venta.numero_comprobante and factura_existente.reference_code:
                 if str(factura_existente.reference_code).strip() != str(venta.numero_comprobante).strip():
                     raise FactusValidationError(
@@ -541,19 +533,19 @@ def facturar_venta(
             if not factura_existente.pdf_local_path:
                 download_pdf(factura_existente)
             return factura_existente
-        if factura_existente and factura_existente.cufe and factura_existente.status != 'ACEPTADA':
+        if factura_existente and factura_existente.cufe and factura_existente.estado_electronico not in {'ACEPTADA', 'ACEPTADA_CON_OBSERVACIONES'}:
             raise FactusValidationError(
                 f'La venta {venta.id} ya tiene CUFE persistido ({factura_existente.cufe}) en estado {factura_existente.status}. '
                 'No se permite una nueva asociación automática.'
             )
-        if factura_existente and factura_existente.status == 'EN_PROCESO' and not force_resend_pending:
+        if factura_existente and factura_existente.estado_electronico == 'PENDIENTE_REINTENTO' and not force_resend_pending:
             logger.info(
                 'facturar_venta.reutiliza_en_proceso venta_id=%s numero=%s',
                 venta.id,
                 factura_existente.number,
             )
             return _sync_existing_pending_invoice(factura=factura_existente, venta=venta, triggered_by=triggered_by)
-        if factura_existente and factura_existente.status == 'EN_PROCESO' and force_resend_pending:
+        if factura_existente and factura_existente.estado_electronico == 'PENDIENTE_REINTENTO' and force_resend_pending:
             logger.warning(
                 'facturar_venta.reenvio_forzado_en_proceso venta_id=%s numero=%s',
                 venta.id,
@@ -612,7 +604,8 @@ def facturar_venta(
         factura, _ = FacturaElectronica.objects.update_or_create(
             venta=venta,
             defaults={
-                'status': 'EN_PROCESO',
+                'status': 'PENDIENTE_REINTENTO',
+                'estado_electronico': 'PENDIENTE_REINTENTO',
                 'number': numero,
                 'reference_code': reference_code,
                 'response_json': _build_attempt_trace(
@@ -621,7 +614,7 @@ def facturar_venta(
                     numero=numero,
                     reference_code=reference_code,
                     triggered_by=triggered_by,
-                    status='EN_PROCESO',
+                    status='PENDIENTE_REINTENTO',
                 ),
                 'codigo_error': '',
                 'mensaje_error': '',
@@ -801,7 +794,8 @@ def facturar_venta(
     required_fields = ['cufe', 'number', 'uuid', 'xml_url', 'pdf_url']
     missing_fields = [field for field in required_fields if not fields[field]]
     if missing_fields:
-        factura.status = 'ERROR'
+        factura.status = 'ERROR_PERSISTENCIA'
+        factura.estado_electronico = 'ERROR_PERSISTENCIA'
         factura.codigo_error = 'RESPUESTA_INCOMPLETA'
         factura.mensaje_error = f'Factus no devolvió campos requeridos: {", ".join(missing_fields)}.'
         factura.response_json = _build_attempt_trace(
@@ -810,7 +804,7 @@ def facturar_venta(
             numero=numero,
             reference_code=reference_code,
             triggered_by=triggered_by,
-            status='ERROR',
+            status='ERROR_PERSISTENCIA',
             response=response_json,
             response_show=response_show_json,
             response_download=response_download_json,
@@ -821,7 +815,7 @@ def facturar_venta(
                 'missing_fields': missing_fields,
             },
         )
-        factura.save(update_fields=['status', 'codigo_error', 'mensaje_error', 'response_json', 'updated_at'])
+        factura.save(update_fields=['status', 'estado_electronico', 'codigo_error', 'mensaje_error', 'response_json', 'retry_count', 'last_retry_at', 'next_retry_at', 'updated_at'])
         logger.error(
             'facturar_venta.respuesta_incompleta venta_id=%s numero=%s faltantes=%s',
             venta.id,
@@ -842,6 +836,10 @@ def facturar_venta(
             else:
                 setattr(factura, key, value)
         factura.reference_code = persistable_fields.get('reference_code') or reference_code
+        factura.estado_electronico = persistable_fields.get('status', 'ERROR_INTEGRACION')
+        factura.status = factura.estado_electronico
+        factura.estado_factus_raw = persistable_fields.get('estado_factus_raw', factura.estado_factus_raw)
+        factura.emitida_en_factus = bool(factura.number and factura.cufe)
         factura.codigo_error = (
             'OBSERVACIONES_FACTUS'
             if bill_errors and persistable_fields.get('status') == 'ACEPTADA'
@@ -858,13 +856,18 @@ def facturar_venta(
             numero=numero,
             reference_code=reference_code,
             triggered_by=triggered_by,
-            status=persistable_fields.get('status', 'ERROR'),
+            status=persistable_fields.get('status', 'ERROR_INTEGRACION'),
             response=response_json,
             response_show=response_show_json,
             response_download=response_download_json,
             final_fields={**fields, 'persisted_fields': persistable_fields},
             bill_errors=bill_errors,
         )
+        factura.observaciones_json = bill_errors
+        factura.retry_count = int(factura.retry_count or 0) + 1
+        factura.last_retry_at = timezone.now()
+        factura.next_retry_at = None
+        factura.ultima_sincronizacion_at = timezone.now()
         factura.save()
 
         venta.factura_electronica_uuid = fields.get('uuid') or ''

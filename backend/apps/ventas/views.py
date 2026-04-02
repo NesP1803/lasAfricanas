@@ -219,7 +219,7 @@ class VentaViewSet(viewsets.ModelViewSet):
                 'ventas.facturar.factus_ok venta_id=%s factura_number=%s status=%s',
                 venta.id,
                 factura.number,
-                factura.status,
+                factura.estado_electronico or factura.status,
             )
             venta.refresh_from_db()
         except (FactusValidationError, FactusAuthError, FactusAPIError, FacturaDuplicadaError) as exc:
@@ -246,8 +246,8 @@ class VentaViewSet(viewsets.ModelViewSet):
                     'numero_factura': factura_error.number if factura_error else None,
                     'estado_local': venta.estado,
                     'estado_venta': venta.estado,
-                    'estado_electronico': estado_electronico_ui(factura_error) if factura_error else 'ERROR',
-                    'status': factura_error.status if factura_error else 'ERROR',
+                    'estado_electronico': estado_electronico_ui(factura_error) if factura_error else 'ERROR_INTEGRACION',
+                    'status': factura_error.status if factura_error else 'ERROR_INTEGRACION',
                     'cufe': factura_error.cufe if factura_error else '',
                     'uuid': factura_error.uuid if factura_error else '',
                     'reference_code': factura_error.reference_code if factura_error else '',
@@ -268,14 +268,14 @@ class VentaViewSet(viewsets.ModelViewSet):
                     'numero_factura': None,
                     'estado_local': venta.estado,
                     'estado_venta': venta.estado,
-                    'estado_electronico': estado_electronico_ui(factura_error) if factura_error else 'ERROR',
-                    'status': 'ERROR',
+                    'estado_electronico': estado_electronico_ui(factura_error) if factura_error else 'ERROR_INTEGRACION',
+                    'status': 'ERROR_INTEGRACION',
                     'factus_sent': False,
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        is_pending = factura.status == 'EN_PROCESO'
+        is_pending = (factura.estado_electronico or factura.status) == 'PENDIENTE_REINTENTO'
         data = {
             'ok': True,
             'message': (
@@ -291,7 +291,7 @@ class VentaViewSet(viewsets.ModelViewSet):
             'estado_local': venta.estado,
             'estado_venta': venta.estado,
             'estado_electronico': estado_electronico_ui(factura),
-            'status': factura.status,
+            'status': factura.estado_electronico or factura.estado_electronico or factura.status,
             'cufe': factura.cufe,
             'uuid': factura.uuid,
             'reference_code': factura.reference_code,
@@ -734,7 +734,7 @@ class CajaViewSet(viewsets.GenericViewSet):
                 'caja.facturar.factus_ok venta_id=%s numero=%s status=%s cufe=%s',
                 venta.id,
                 factura.number,
-                factura.status,
+                factura.estado_electronico or factura.status,
                 factura.cufe,
             )
         except ValidationError as error:
@@ -762,13 +762,13 @@ class CajaViewSet(viewsets.GenericViewSet):
                     'numero_factura': None,
                     'estado_local': venta.estado if 'venta' in locals() else 'COBRADA',
                     'estado_venta': venta.estado if 'venta' in locals() else 'COBRADA',
-                    'estado_electronico': estado_electronico_ui(factura_error) if factura_error else 'ERROR',
+                    'estado_electronico': estado_electronico_ui(factura_error) if factura_error else 'ERROR_INTEGRACION',
                     'cufe': '',
                     'uuid': '',
                     'reference_code': '',
                     'pos_ticket': None,
                     'factus_sent': False,
-                    'status': 'ERROR',
+                    'status': 'ERROR_INTEGRACION',
                 },
                 status=http_status,
             )
@@ -785,8 +785,8 @@ class CajaViewSet(viewsets.GenericViewSet):
                     'numero_factura': None,
                     'estado_local': venta.estado if 'venta' in locals() else 'COBRADA',
                     'estado_venta': venta.estado if 'venta' in locals() else 'COBRADA',
-                    'estado_electronico': estado_electronico_ui(factura_error) if factura_error else 'ERROR',
-                    'status': 'ERROR',
+                    'estado_electronico': estado_electronico_ui(factura_error) if factura_error else 'ERROR_INTEGRACION',
+                    'status': 'ERROR_INTEGRACION',
                     'factus_sent': False,
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -798,7 +798,7 @@ class CajaViewSet(viewsets.GenericViewSet):
             venta.id,
             factura.number,
             venta.estado,
-            factura.status,
+            factura.estado_electronico or factura.status,
         )
         return Response(
             {
@@ -812,7 +812,7 @@ class CajaViewSet(viewsets.GenericViewSet):
                 'estado_local': venta.estado,
                 'estado_venta': venta.estado,
                 'estado_electronico': estado_electronico_ui(factura),
-                'status': factura.status,
+                'status': factura.estado_electronico or factura.estado_electronico or factura.status,
                 'cufe': factura.cufe,
                 'uuid': factura.uuid,
                 'reference_code': factura.reference_code,

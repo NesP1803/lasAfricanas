@@ -17,6 +17,8 @@ from rest_framework.test import APIClient
 from apps.facturacion.models import DocumentoSoporteElectronico, FacturaElectronica, NotaCreditoElectronica
 from apps.facturacion_electronica.catalogos.models import DocumentoIdentificacionFactus
 from apps.facturacion.services.download_invoice_files import download_pdf, download_xml
+from apps.facturacion.services.electronic_state_machine import map_factus_status, resolve_actions
+from apps.facturacion.services.facturar_venta import facturar_venta
 from apps.facturacion.services.consecutivo_service import resolve_numbering_range
 from apps.facturacion.services.factus_catalog_lookup import (
     get_municipality_id,
@@ -1020,3 +1022,69 @@ class FactusCustomerDocumentHomologationTests(TestCase):
             'El cliente general no puede usarse para facturación electrónica sin identificación fiscal válida.',
             str(exc.exception),
         )
+
+class ElectronicStateMachineTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(username='fsm-user', password='1234')
+        self.cliente = Cliente.objects.create(numero_documento='999', nombre='Cliente FSM')
+        self.venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            numero_comprobante='FVFSM1',
+            cliente=self.cliente,
+            vendedor=self.user,
+            subtotal=Decimal('100'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('19'),
+            total=Decimal('119'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('119'),
+            cambio=Decimal('0'),
+            estado='FACTURADA',
+        )
+
+    def test_estado_aceptada(self):
+        estado, raw = map_factus_status({'data': {'bill': {'status': 'valid', 'number': 'FV1', 'cufe': 'CUFE1'}}})
+        self.assertEqual(estado, 'ACEPTADA')
+        self.assertEqual(raw, 'valid')
+
+    def test_estado_aceptada_con_observaciones(self):
+        estado, _ = map_factus_status(
+            {'data': {'bill': {'status': 'valid', 'number': 'FV1', 'cufe': 'CUFE1', 'errors': ['Obs']}}}
+        )
+        self.assertEqual(estado, 'ACEPTADA_CON_OBSERVACIONES')
+
+    def test_estado_rechazada_por_validacion(self):
+        estado, _ = map_factus_status({'data': {'bill': {'status': 'rejected', 'errors': ['campo inválido']}}})
+        self.assertEqual(estado, 'RECHAZADA')
+
+    def test_estado_pendiente_reintento(self):
+        estado, _ = map_factus_status({'data': {'bill': {'status': 'pending'}}})
+        self.assertEqual(estado, 'PENDIENTE_REINTENTO')
+
+    def test_acciones_error_integracion(self):
+        self.assertIn('reintentar_emision', resolve_actions('ERROR_INTEGRACION'))
+
+    def test_acciones_error_persistencia(self):
+        acciones = resolve_actions('ERROR_PERSISTENCIA')
+        self.assertIn('sincronizar_factus', acciones)
+        self.assertIn('reparar_persistencia', acciones)
+
+    @patch('apps.facturacion.services.facturar_venta.download_xml')
+    @patch('apps.facturacion.services.facturar_venta.download_pdf')
+    @patch('apps.facturacion.services.facturar_venta.FactusClient.send_invoice')
+    def test_no_duplicacion_al_reintentar(self, mocked_send_invoice, _mocked_pdf, _mocked_xml):
+        FacturaElectronica.objects.create(
+            venta=self.venta,
+            cufe='CUFE-EXISTENTE',
+            uuid='UUID-EXISTENTE',
+            number='FVFSM1',
+            reference_code='FVFSM1',
+            status='ACEPTADA',
+            estado_electronico='ACEPTADA',
+            response_json={'ok': True},
+        )
+        factura = facturar_venta(self.venta.id, triggered_by=self.user)
+        self.assertEqual(factura.estado_electronico, 'ACEPTADA')
+        mocked_send_invoice.assert_not_called()

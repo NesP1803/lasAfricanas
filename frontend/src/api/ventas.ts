@@ -109,6 +109,10 @@ export interface FacturaElectronicaResultado {
   number: string;
   reference_code: string;
   status: string;
+  estado_electronico?: string;
+  estado_local?: string;
+  acciones_sugeridas?: string[];
+  observaciones_json?: unknown[];
   xml_url: string;
   pdf_url: string;
   response_json: Record<string, unknown>;
