@@ -153,9 +153,10 @@ export const printComprobante = ({
   const resumenIvaArray = Array.from(
     detallesMostrar.reduce((acc, detalle) => {
       const ivaPorcentaje = Number.isFinite(detalle.ivaPorcentaje) ? detalle.ivaPorcentaje : 0;
-      const base = detalle.cantidad * detalle.precioUnitario - detalle.descuento;
-      const ivaDetalle = base * (ivaPorcentaje / 100);
-      const totalDetalle = base + ivaDetalle;
+      const totalDetalle = Number.isFinite(detalle.total) ? detalle.total : 0;
+      const divisorIva = 1 + ivaPorcentaje / 100;
+      const base = ivaPorcentaje > 0 ? totalDetalle / divisorIva : totalDetalle;
+      const ivaDetalle = totalDetalle - base;
       const item = acc.get(ivaPorcentaje) || { base: 0, iva: 0, total: 0 };
       acc.set(ivaPorcentaje, {
         base: item.base + base,
@@ -190,7 +191,7 @@ export const printComprobante = ({
       .qr { margin-top: 6px; text-align: center; }
       .qr img { width: 94px; height: 94px; object-fit: contain; }
       .placeholder { border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px; font-size: 8px; color: #64748b; }
-      .logo { display: block; margin: 0 auto 4px; height: 42px; max-width: 52mm; object-fit: contain; }
+      .logo { display: block; margin: 0 auto 4px; height: 42px; max-width: 52mm; object-fit: contain; border-radius: 3px; }
       .resolution { margin-top: 4px; padding: 2px 0; text-align: left; }
       .resolution-title { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #475569; }
       .totals-box { border: 1px solid #cbd5e1; margin-top: 6px; padding: 4px; }

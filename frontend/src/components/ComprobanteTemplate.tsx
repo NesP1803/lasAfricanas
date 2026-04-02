@@ -151,9 +151,10 @@ export default function ComprobanteTemplate({
   const resumenIvaArray = Array.from(
     detallesMostrar.reduce((acc, detalle) => {
       const ivaPorcentaje = Number.isFinite(detalle.ivaPorcentaje) ? detalle.ivaPorcentaje : 0;
-      const base = detalle.cantidad * detalle.precioUnitario - detalle.descuento;
-      const ivaDetalle = base * (ivaPorcentaje / 100);
-      const totalDetalle = base + ivaDetalle;
+      const totalDetalle = Number.isFinite(detalle.total) ? detalle.total : 0;
+      const divisorIva = 1 + ivaPorcentaje / 100;
+      const base = ivaPorcentaje > 0 ? totalDetalle / divisorIva : totalDetalle;
+      const ivaDetalle = totalDetalle - base;
       const item = acc.get(ivaPorcentaje) || { base: 0, iva: 0, total: 0 };
       acc.set(ivaPorcentaje, {
         base: item.base + base,
@@ -265,7 +266,7 @@ export default function ComprobanteTemplate({
         ) : null}
         <div className="min-w-0 flex-1">
           <div className="text-center">
-            <img src={getLogoEmpresa(empresa)} alt="Logo empresa" className="mx-auto mb-1.5 h-11 max-w-[52mm] object-contain" />
+            <img src={getLogoEmpresa(empresa)} alt="Logo empresa" className="mx-auto mb-1.5 h-11 max-w-[52mm] rounded-md object-contain" />
             <p className="text-[11px] font-bold uppercase tracking-wide">{infoEmpresa.nombre}</p>
             <p className="text-[9px]">{infoEmpresa.nit}</p>
             <p className="text-[9px]">{infoEmpresa.regimen}</p>
