@@ -465,7 +465,7 @@ export default function Facturas() {
           </div>
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center gap-4 border-b border-slate-200 pb-4">
+        <div className="app-filters-grid mt-4 border-b border-slate-200 pb-4">
           <div className="flex flex-col gap-1">
             <label className="text-xs font-semibold text-slate-500">Estado</label>
             <select
@@ -531,14 +531,14 @@ export default function Facturas() {
           </div>
         </div>
 
-        <div className="mt-3 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="app-table-shell">
           {error && (
             <div className="border-b border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-600">
               {error}
             </div>
           )}
-          <div className="overflow-auto">
-            <table className="w-full min-w-[1460px] table-fixed text-sm">
+          <div className="app-table-scroll">
+            <table className="w-full min-w-[1320px] table-fixed text-sm">
               <thead className="bg-sky-100 text-[11px] uppercase tracking-wide text-slate-700">
                 <tr>
                   <th className="w-10 px-2 py-3 text-left">
@@ -726,8 +726,9 @@ export default function Facturas() {
       </div>
 
       {documento && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4">
-          <div className="relative w-full max-w-5xl rounded-lg bg-white p-6 shadow-xl">
+        <div className="app-modal-backdrop">
+          <div className="app-modal-panel-lg relative">
+            <div className="app-modal-body">
             <button
               type="button"
               className="absolute right-4 top-4 text-slate-500 hover:text-slate-700"
@@ -873,13 +874,15 @@ export default function Facturas() {
                 </button>
               </div>
             </div>
+            </div>
           </div>
         </div>
       )}
 
       {anulacion && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4">
-          <div className="relative w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+        <div className="app-modal-backdrop">
+          <div className="app-modal-panel-md relative">
+            <div className="app-modal-body">
             <button
               type="button"
               className="absolute right-4 top-4 text-slate-500 hover:text-slate-700"
@@ -970,6 +973,7 @@ export default function Facturas() {
                     ? 'Anulando...'
                     : 'Anular'}
               </button>
+            </div>
             </div>
           </div>
         </div>
