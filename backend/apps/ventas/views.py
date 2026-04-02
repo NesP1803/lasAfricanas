@@ -100,6 +100,19 @@ def _factus_error_category(exc: Exception) -> tuple[str, str]:
     )
 
 
+def _factus_http_status_and_code(exc: Exception) -> tuple[int, str]:
+    detail = f'{str(exc)} {str(getattr(exc, "provider_detail", "") or "")}'.lower()
+    if isinstance(exc, FacturaDuplicadaError):
+        return status.HTTP_409_CONFLICT, 'DUPLICATE_REFERENCE_CODE'
+    if 'se bloquea la asociación' in detail or 'devolvió number=' in detail or 'devolvió reference_code=' in detail:
+        return status.HTTP_409_CONFLICT, 'MISMATCH_DOCUMENTAL'
+    if isinstance(exc, FactusValidationError):
+        return status.HTTP_422_UNPROCESSABLE_ENTITY, 'ERROR_VALIDACION_LOCAL'
+    if isinstance(exc, FactusAuthError):
+        return status.HTTP_502_BAD_GATEWAY, 'FACTUS_AUTH_ERROR'
+    return status.HTTP_502_BAD_GATEWAY, 'FACTUS_API_ERROR'
+
+
 
 class ClienteViewSet(viewsets.ModelViewSet):
     """ViewSet para gestionar clientes"""
@@ -212,10 +225,13 @@ class VentaViewSet(viewsets.ModelViewSet):
             venta.refresh_from_db()
             factura_error = FacturaElectronica.objects.filter(venta=venta).first()
             warning_code, warning_detail = _factus_error_category(exc)
+            http_status, codigo_error = _factus_http_status_and_code(exc)
             return Response(
                 {
                     'ok': False,
                     'message': str(exc),
+                    'codigo_error': codigo_error,
+                    'mensaje_error': str(exc),
                     'warning': warning_code,
                     'warning_detail': warning_detail,
                     'venta_id': venta.id,
@@ -236,7 +252,7 @@ class VentaViewSet(viewsets.ModelViewSet):
                     'pos_ticket': build_pos_ticket_payload(venta, factura_error) if factura_error else None,
                     'factus_sent': False,
                 },
-                status=status.HTTP_200_OK,
+                status=http_status,
             )
         except Exception as exc:
             logger.exception('ventas.facturar.error_no_controlado venta_id=%s', venta.id)
@@ -725,10 +741,13 @@ class CajaViewSet(viewsets.GenericViewSet):
             if 'venta' in locals():
                 venta.refresh_from_db()
             factura_error = FacturaElectronica.objects.filter(venta_id=pk).first()
+            http_status, codigo_error = _factus_http_status_and_code(error)
             return Response(
                 {
                     'ok': False,
                     'message': str(error),
+                    'codigo_error': codigo_error,
+                    'mensaje_error': str(error),
                     'venta_id': int(pk) if pk else None,
                     'numero_factura': None,
                     'estado_local': venta.estado if 'venta' in locals() else 'COBRADA',
@@ -741,7 +760,7 @@ class CajaViewSet(viewsets.GenericViewSet):
                     'factus_sent': False,
                     'status': 'ERROR',
                 },
-                status=status.HTTP_400_BAD_REQUEST,
+                status=http_status,
             )
         except Exception as error:
             logger.exception('caja.facturar.error_no_controlado venta_id=%s', pk)

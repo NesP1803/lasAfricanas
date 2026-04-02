@@ -93,6 +93,23 @@ const mapVentaToFacturaItem = (venta: VentaListItem): FacturaItem => {
   };
 };
 
+const mapEstadoElectronicoLabel = (factura?: FacturaElectronica): string => {
+  if (!factura) return 'Local';
+  const estado = resolveEstadoFactura(factura);
+  const codigoError = String(factura.codigo_error || '').toUpperCase();
+  if (codigoError.includes('MISMATCH') || codigoError.includes('VALIDACION')) return 'Error validación';
+  if (estado === 'ACEPTADA' || estado === 'EMITIDA_CON_OBSERVACIONES') return 'Aceptada';
+  if (estado === 'EN_PROCESO') return 'En proceso';
+  if (estado === 'RECHAZADA') return 'Rechazada';
+  return 'Error';
+};
+
+const hasValidElectronicDocument = (factura?: FacturaElectronica): boolean => {
+  if (!factura) return false;
+  const estado = resolveEstadoFactura(factura);
+  return (estado === 'ACEPTADA' || estado === 'EMITIDA_CON_OBSERVACIONES') && Boolean(factura.numero && factura.cufe);
+};
+
 export default function Facturas() {
   const { showNotification } = useNotification();
   const today = getLocalDateInputValue();
@@ -254,9 +271,16 @@ export default function Facturas() {
 
   const handleAccionElectronica = async (
     factura: FacturaItem,
-    action: 'estado' | 'xml' | 'pdf' | 'correo' | 'sincronizar'
+    action: 'estado' | 'xml' | 'pdf' | 'correo'
   ) => {
     const numero = factura.electronica?.numero;
+    if (!hasValidElectronicDocument(factura.electronica)) {
+      showNotification({
+        type: 'error',
+        message: 'La factura electrónica aún no está validada. Esta acción solo está disponible en estado Aceptada.',
+      });
+      return;
+    }
     if (!numero) {
       showNotification({
         type: 'error',
@@ -271,42 +295,6 @@ export default function Facturas() {
         showNotification({
           type: 'success',
           message: `Estado DIAN (${numero}): ${resolveEstadoFactura(data)}`,
-        });
-      } else if (action === 'sincronizar') {
-        const facturaElectronicaId = factura.electronica?.id;
-        if (!facturaElectronicaId) {
-          throw new Error('No se encontró el identificador de la factura electrónica.');
-        }
-        const data = await facturacionApi.sincronizarFactura(facturaElectronicaId);
-        setFacturas((prev) =>
-          prev.map((item) => {
-            if (item.id !== factura.id || !item.electronica) return item;
-            return {
-              ...item,
-              electronica: {
-                ...item.electronica,
-                numero: data.factura?.number || item.electronica.numero,
-                reference_code: data.factura?.reference_code || item.electronica.reference_code,
-                cufe: data.factura?.cufe || item.electronica.cufe,
-                uuid: data.factura?.uuid || item.electronica.uuid,
-                status: data.factura?.status || data.factura?.estado || item.electronica.status,
-                estado: data.factura?.estado || data.factura?.status || item.electronica.estado,
-                estado_dian:
-                  data.factura?.estado_dian ||
-                  data.factura?.estado ||
-                  data.factura?.status ||
-                  item.electronica.estado_dian,
-                observaciones: data.factura?.mensaje_error || item.electronica.observaciones,
-                codigo_error: data.factura?.codigo_error || item.electronica.codigo_error,
-                pdf_url: data.factura?.pdf_url || item.electronica.pdf_url,
-                xml_url: data.factura?.xml_url || item.electronica.xml_url,
-              },
-            };
-          })
-        );
-        showNotification({
-          type: data.result === 'SYNCED' ? 'success' : 'info',
-          message: data.detail,
         });
       } else if (action === 'xml') {
         await facturacionApi.descargarXML(numero);
@@ -522,8 +510,8 @@ export default function Facturas() {
               {error}
             </div>
           )}
-          <div className="overflow-x-auto overflow-y-visible">
-            <table className="min-w-[1560px] table-fixed border-separate border-spacing-0 text-sm">
+          <div className="overflow-auto">
+            <table className="min-w-[1460px] table-fixed text-sm">
               <thead className="bg-sky-100 text-[11px] uppercase tracking-wide text-slate-700">
                 <tr>
                   <th className="w-10 px-2 py-3 text-left">
@@ -537,25 +525,24 @@ export default function Facturas() {
                       }
                     />
                   </th>
-                  <th className="w-20 px-2 py-3 text-left">Prefijo</th>
-                  <th className="w-20 px-2 py-3 text-left">Factura</th>
-                  <th className="w-36 px-2 py-3 text-left">Fecha/Hora</th>
-                  <th className="w-24 px-2 py-3 text-left">Estado</th>
-                  <th className="w-28 px-2 py-3 text-left">Electrónica</th>
-                  <th className="w-28 px-2 py-3 text-left">Medio/Pago</th>
-                  <th className="w-28 px-2 py-3 text-right">Total</th>
-                  <th className="w-28 px-2 py-3 text-left">NIT/CC</th>
-                  <th className="w-44 px-2 py-3 text-left">Cliente</th>
-                  <th className="w-32 px-2 py-3 text-left">Usuario</th>
-                  <th className="w-[20rem] px-2 py-3 text-left">CUFE / Ref</th>
-                  <th className="w-36 px-2 py-3 text-left">Sincronizar con Dian</th>
-                  <th className="w-44 px-2 py-3 text-left">Acciones FE</th>
+                  <th className="w-20 px-2 py-2 text-left">Prefijo</th>
+                  <th className="w-20 px-2 py-2 text-left">Factura</th>
+                  <th className="w-36 px-2 py-2 text-left">Fecha/Hora</th>
+                  <th className="w-24 px-2 py-2 text-left">Estado</th>
+                  <th className="w-28 px-2 py-2 text-left">Electrónica</th>
+                  <th className="w-28 px-2 py-2 text-left">Medio/Pago</th>
+                  <th className="w-28 px-2 py-2 text-right">Total</th>
+                  <th className="w-28 px-2 py-2 text-left">NIT/CC</th>
+                  <th className="w-44 px-2 py-2 text-left">Cliente</th>
+                  <th className="w-32 px-2 py-2 text-left">Usuario</th>
+                  <th className="w-[20rem] px-2 py-2 text-left">CUFE / Ref</th>
+                  <th className="w-44 px-2 py-2 text-left">Acciones FE</th>
                 </tr>
               </thead>
               <tbody>
                 {cargando && (
                   <tr>
-                    <td colSpan={14} className="px-4 py-6 text-center text-sm text-slate-500">
+                    <td colSpan={13} className="px-4 py-6 text-center text-sm text-slate-500">
                       Cargando facturas...
                     </td>
                   </tr>
@@ -563,6 +550,10 @@ export default function Facturas() {
                 {!cargando &&
                   facturasFiltradas.map((factura) => {
                     const selected = selectedIds.includes(factura.id);
+                    const electronicaValida =
+                      factura.electronica && hasValidElectronicDocument(factura.electronica)
+                        ? factura.electronica
+                        : null;
                     return (
                       <tr
                         key={factura.id}
@@ -584,7 +575,7 @@ export default function Facturas() {
                         <td className="px-2 py-2.5 text-slate-600">{factura.fechaHora}</td>
                         <td className="px-2 py-2.5 text-slate-600">{factura.estadoDisplay}</td>
                         <td className="px-2 py-2.5 text-slate-600">
-                          {factura.electronica ? resolveEstadoFactura(factura.electronica) : 'Local'}
+                          {mapEstadoElectronicoLabel(factura.electronica)}
                         </td>
                         <td className="px-2 py-2.5 text-slate-600">{factura.medioPagoDisplay}</td>
                         <td className="px-2 py-2.5 text-right text-rose-600">
@@ -594,24 +585,24 @@ export default function Facturas() {
                         <td className="px-2 py-2.5 text-slate-600">{factura.cliente}</td>
                         <td className="px-2 py-2.5 text-slate-600">{factura.usuario}</td>
                         <td className="px-2 py-2.5 text-[11px] text-slate-600">
-                          {factura.electronica ? (
+                          {electronicaValida ? (
                             <div className="max-w-[20rem] space-y-1 whitespace-normal break-words [overflow-wrap:anywhere]">
                               <p className="leading-tight">
                                 <span className="font-semibold text-slate-700">CUFE:</span>{' '}
-                                {factura.electronica.cufe ?? 'N/D'}
+                                {electronicaValida.cufe ?? 'N/D'}
                               </p>
                               <p className="leading-tight">
                                 <span className="font-semibold text-slate-700">Ref:</span>{' '}
-                                {factura.electronica.numero}
+                                {electronicaValida.numero}
                               </p>
-                              {factura.electronica.observaciones ? (
+                              {electronicaValida.observaciones ? (
                                 <p className="leading-tight text-amber-700">
-                                  Obs: {factura.electronica.observaciones}
+                                  Obs: {electronicaValida.observaciones}
                                 </p>
                               ) : null}
-                              {factura.electronica.public_url ? (
+                              {electronicaValida.public_url ? (
                                 <a
-                                  href={factura.electronica.public_url}
+                                  href={electronicaValida.public_url}
                                   target="_blank"
                                   rel="noreferrer"
                                   className="inline-block break-all text-blue-600 underline"
@@ -625,37 +616,12 @@ export default function Facturas() {
                           )}
                         </td>
                         <td className="px-2 py-2.5">
-                          {factura.electronica &&
-                          resolveEstadoFactura(factura.electronica) === 'EN_PROCESO' ? (
-                            <button
-                              type="button"
-                              className="rounded bg-amber-600 px-2 py-1 text-[10px] font-semibold text-white disabled:opacity-50"
-                              disabled={Boolean(accionesElectronicas[factura.electronica.numero])}
-                              onClick={() => handleAccionElectronica(factura, 'sincronizar')}
-                            >
-                              Sincronizar
-                            </button>
-                          ) : (
-                            <span className="text-xs text-slate-400">N/A</span>
-                          )}
-                        </td>
-                        <td className="px-2 py-2.5">
-                          {factura.electronica ? (
+                          {electronicaValida ? (
                             <div className="flex flex-wrap gap-1">
-                              {resolveEstadoFactura(factura.electronica) === 'EN_PROCESO' ? (
-                                <button
-                                  type="button"
-                                  className="rounded bg-amber-600 px-2 py-1 text-[10px] font-semibold text-white disabled:opacity-50"
-                                  disabled={Boolean(accionesElectronicas[factura.electronica.numero])}
-                                  onClick={() => handleAccionElectronica(factura, 'sincronizar')}
-                                >
-                                  Sincronizar
-                                </button>
-                              ) : null}
                               <button
                                 type="button"
                                 className="rounded bg-blue-600 px-2 py-1 text-[10px] font-semibold text-white disabled:opacity-50"
-                                disabled={Boolean(accionesElectronicas[factura.electronica.numero])}
+                                disabled={Boolean(accionesElectronicas[electronicaValida.numero])}
                                 onClick={() => handleAccionElectronica(factura, 'estado')}
                               >
                                 Estado
@@ -663,7 +629,7 @@ export default function Facturas() {
                               <button
                                 type="button"
                                 className="rounded bg-indigo-600 px-2 py-1 text-[10px] font-semibold text-white disabled:opacity-50"
-                                disabled={Boolean(accionesElectronicas[factura.electronica.numero])}
+                                disabled={Boolean(accionesElectronicas[electronicaValida.numero])}
                                 onClick={() => handleAccionElectronica(factura, 'xml')}
                               >
                                 XML
@@ -671,7 +637,7 @@ export default function Facturas() {
                               <button
                                 type="button"
                                 className="rounded bg-violet-600 px-2 py-1 text-[10px] font-semibold text-white disabled:opacity-50"
-                                disabled={Boolean(accionesElectronicas[factura.electronica.numero])}
+                                disabled={Boolean(accionesElectronicas[electronicaValida.numero])}
                                 onClick={() => handleAccionElectronica(factura, 'pdf')}
                               >
                                 PDF
@@ -679,7 +645,7 @@ export default function Facturas() {
                               <button
                                 type="button"
                                 className="rounded bg-emerald-600 px-2 py-1 text-[10px] font-semibold text-white disabled:opacity-50"
-                                disabled={Boolean(accionesElectronicas[factura.electronica.numero])}
+                                disabled={Boolean(accionesElectronicas[electronicaValida.numero])}
                                 onClick={() => handleAccionElectronica(factura, 'correo')}
                               >
                                 Correo
@@ -694,7 +660,7 @@ export default function Facturas() {
                   })}
                 {!cargando && facturasFiltradas.length === 0 && (
                   <tr>
-                    <td colSpan={14} className="px-4 py-6 text-center text-sm text-slate-500">
+                    <td colSpan={13} className="px-4 py-6 text-center text-sm text-slate-500">
                       No hay facturas para mostrar con los filtros actuales.
                     </td>
                   </tr>
