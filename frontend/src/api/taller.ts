@@ -60,6 +60,13 @@ export interface OrdenTaller {
   total: string;
 }
 
+export interface AgregarRepuestoResponse extends OrdenTaller {
+  mensaje: string;
+  stock_anterior: string | null;
+  stock_actual: string | null;
+  stock_negativo: boolean;
+}
+
 export const tallerApi = {
   async getMecanicos(
     params?: { search?: string; page?: number; is_active?: boolean }
@@ -239,7 +246,7 @@ export const tallerApi = {
     if (!response.ok) throw new Error('Error al eliminar orden');
   },
 
-  async agregarRepuesto(ordenId: number, payload: { producto: number; cantidad: number }): Promise<OrdenTaller> {
+  async agregarRepuesto(ordenId: number, payload: { producto: number; cantidad: number }): Promise<AgregarRepuestoResponse> {
     const response = await authFetch(`${API_URL}/ordenes-taller/${ordenId}/agregar_repuesto/`, {
       method: 'POST',
       headers: {

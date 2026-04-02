@@ -24,8 +24,10 @@ import {
   normalizeModuleAccess,
 } from '../store/moduleAccess';
 
+const UNIDADES_DECIMALES = new Set(['KG', 'LT', 'MT']);
+
 const unidadPermiteDecimales = (unidadMedida?: string) =>
-  Boolean(unidadMedida && unidadMedida !== 'N/A');
+  Boolean(unidadMedida && UNIDADES_DECIMALES.has(unidadMedida));
 
 const getCantidadStep = (unidadMedida?: string) =>
   unidadPermiteDecimales(unidadMedida) ? 0.01 : 1;
@@ -285,13 +287,15 @@ export default function Taller() {
     }
     const repuesto = repuestos.find((item) => item.id === productoId);
     const min = getCantidadMin(repuesto?.unidad_medida);
-    const cantidad = Math.max(min, cantidades[productoId] ?? min);
+    const cantidadIngresada = cantidades[productoId];
+    const cantidadBase = cantidadIngresada ?? 1;
+    const cantidad = Math.max(min, cantidadBase);
     try {
       const orden = await tallerApi.agregarRepuesto(ordenActual.id, {
         producto: productoId,
         cantidad,
       });
-      let ordenFinal = orden;
+      let ordenFinal: OrdenTaller = orden;
       try {
         const data = await tallerApi.getOrdenes({ moto: orden.moto });
         const parsed = parseListado(data);
@@ -303,12 +307,19 @@ export default function Taller() {
       if (searchRepuesto) {
         await buscarRepuestos(searchRepuesto);
       }
-      setCantidades((prev) => ({ ...prev, [productoId]: min }));
+      setCantidades((prev) => ({ ...prev, [productoId]: 1 }));
       setRepuestoModalOpen(false);
-      showNotification({
-        message: 'Repuesto agregado correctamente.',
-        type: 'success',
-      });
+      if (orden.stock_negativo || (orden.stock_actual !== null && Number(orden.stock_actual) < 0)) {
+        showNotification({
+          message: `Repuesto agregado. Advertencia: stock en negativo (${orden.stock_actual}).`,
+          type: 'info',
+        });
+      } else {
+        showNotification({
+          message: orden.mensaje || 'Repuesto agregado correctamente.',
+          type: 'success',
+        });
+      }
     } catch (error) {
       console.error('Error al agregar repuesto:', error);
       showNotification({
