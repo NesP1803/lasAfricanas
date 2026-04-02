@@ -31,6 +31,24 @@ interface EstadoFacturaResponse {
   status?: EstadoDian;
 }
 
+interface SincronizarFacturaResponse {
+  detail: string;
+  result: 'SYNCED' | 'PENDING' | 'CONFLICT' | 'NOT_PENDING' | 'REMOTE_ERROR' | string;
+  factura?: {
+    number: string;
+    reference_code?: string;
+    cufe?: string;
+    uuid?: string;
+    status?: EstadoDian;
+    estado?: EstadoDian;
+    estado_dian?: EstadoDian;
+    codigo_error?: string;
+    mensaje_error?: string;
+    pdf_url?: string;
+    xml_url?: string;
+  };
+}
+
 const crearArchivoDescargable = (blob: Blob, fileName: string) => {
   const url = window.URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -70,6 +88,11 @@ export const facturacionApi = {
 
   async enviarFacturaCorreo(numero: string) {
     const response = await apiClient.post(`/facturacion/${encodeURIComponent(numero)}/enviar-correo/`);
+    return response.data;
+  },
+
+  async sincronizarFactura(facturaId: number) {
+    const response = await apiClient.post<SincronizarFacturaResponse>(`/facturacion/${facturaId}/sincronizar/`);
     return response.data;
   },
 };

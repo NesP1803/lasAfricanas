@@ -248,7 +248,7 @@ export default function Facturas() {
 
   const handleAccionElectronica = async (
     factura: FacturaItem,
-    action: 'estado' | 'xml' | 'pdf' | 'correo'
+    action: 'estado' | 'xml' | 'pdf' | 'correo' | 'sincronizar'
   ) => {
     const numero = factura.electronica?.numero;
     if (!numero) {
@@ -265,6 +265,42 @@ export default function Facturas() {
         showNotification({
           type: 'success',
           message: `Estado DIAN (${numero}): ${resolveEstadoFactura(data)}`,
+        });
+      } else if (action === 'sincronizar') {
+        const facturaElectronicaId = factura.electronica?.id;
+        if (!facturaElectronicaId) {
+          throw new Error('No se encontró el identificador de la factura electrónica.');
+        }
+        const data = await facturacionApi.sincronizarFactura(facturaElectronicaId);
+        setFacturas((prev) =>
+          prev.map((item) => {
+            if (item.id !== factura.id || !item.electronica) return item;
+            return {
+              ...item,
+              electronica: {
+                ...item.electronica,
+                numero: data.factura?.number || item.electronica.numero,
+                reference_code: data.factura?.reference_code || item.electronica.reference_code,
+                cufe: data.factura?.cufe || item.electronica.cufe,
+                uuid: data.factura?.uuid || item.electronica.uuid,
+                status: data.factura?.status || data.factura?.estado || item.electronica.status,
+                estado: data.factura?.estado || data.factura?.status || item.electronica.estado,
+                estado_dian:
+                  data.factura?.estado_dian ||
+                  data.factura?.estado ||
+                  data.factura?.status ||
+                  item.electronica.estado_dian,
+                observaciones: data.factura?.mensaje_error || item.electronica.observaciones,
+                codigo_error: data.factura?.codigo_error || item.electronica.codigo_error,
+                pdf_url: data.factura?.pdf_url || item.electronica.pdf_url,
+                xml_url: data.factura?.xml_url || item.electronica.xml_url,
+              },
+            };
+          })
+        );
+        showNotification({
+          type: data.result === 'SYNCED' ? 'success' : 'info',
+          message: data.detail,
         });
       } else if (action === 'xml') {
         await facturacionApi.descargarXML(numero);
@@ -481,7 +517,7 @@ export default function Facturas() {
             </div>
           )}
           <div className="overflow-auto">
-            <table className="min-w-[1450px] table-fixed text-sm">
+            <table className="min-w-[1560px] table-fixed text-sm">
               <thead className="bg-sky-100 text-[11px] uppercase tracking-wide text-slate-700">
                 <tr>
                   <th className="w-10 px-2 py-2 text-left">
@@ -506,13 +542,14 @@ export default function Facturas() {
                   <th className="w-44 px-2 py-2 text-left">Cliente</th>
                   <th className="w-32 px-2 py-2 text-left">Usuario</th>
                   <th className="w-[20rem] px-2 py-2 text-left">CUFE / Ref</th>
+                  <th className="w-36 px-2 py-2 text-left">Sincronizar con Dian</th>
                   <th className="w-44 px-2 py-2 text-left">Acciones FE</th>
                 </tr>
               </thead>
               <tbody>
                 {cargando && (
                   <tr>
-                    <td colSpan={13} className="px-4 py-6 text-center text-sm text-slate-500">
+                    <td colSpan={14} className="px-4 py-6 text-center text-sm text-slate-500">
                       Cargando facturas...
                     </td>
                   </tr>
@@ -582,6 +619,21 @@ export default function Facturas() {
                           )}
                         </td>
                         <td className="px-2 py-2.5">
+                          {factura.electronica &&
+                          resolveEstadoFactura(factura.electronica) === 'EN_PROCESO' ? (
+                            <button
+                              type="button"
+                              className="rounded bg-amber-600 px-2 py-1 text-[10px] font-semibold text-white disabled:opacity-50"
+                              disabled={Boolean(accionesElectronicas[factura.electronica.numero])}
+                              onClick={() => handleAccionElectronica(factura, 'sincronizar')}
+                            >
+                              Sincronizar
+                            </button>
+                          ) : (
+                            <span className="text-xs text-slate-400">N/A</span>
+                          )}
+                        </td>
+                        <td className="px-2 py-2.5">
                           {factura.electronica ? (
                             <div className="flex flex-wrap gap-1">
                               <button
@@ -626,7 +678,7 @@ export default function Facturas() {
                   })}
                 {!cargando && facturasFiltradas.length === 0 && (
                   <tr>
-                    <td colSpan={13} className="px-4 py-6 text-center text-sm text-slate-500">
+                    <td colSpan={14} className="px-4 py-6 text-center text-sm text-slate-500">
                       No hay facturas para mostrar con los filtros actuales.
                     </td>
                   </tr>
