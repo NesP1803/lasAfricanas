@@ -67,5 +67,6 @@ router.register(r'ordenes-taller', OrdenTallerViewSet, basename='orden-taller')
 
 # Registrar Facturación Electrónica
 router.register(r'facturacion', FacturaElectronicaViewSet, basename='facturacion-electronica')
+router.register(r'facturas-electronicas', FacturaElectronicaViewSet, basename='facturas-electronicas')
 router.register(r'notas-credito', NotasCreditoViewSet, basename='notas-credito')
 router.register(r'documentos-soporte', DocumentosSoporteViewSet, basename='documentos-soporte')

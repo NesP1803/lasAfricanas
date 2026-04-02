@@ -188,6 +188,44 @@ class FacturaFilesEndpointsTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn('no tiene correo configurado', response.data['detail'])
 
+    @patch('apps.facturacion.views.FactusClient.get_invoice_events')
+    def test_eventos_endpoint_por_id(self, mocked_events):
+        mocked_events.return_value = {'data': [{'event': 'acuse'}]}
+        response = self.client.get(f'/api/facturas-electronicas/{self.factura.id}/eventos/')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('data', response.data)
+        mocked_events.assert_called_once_with('FV9999')
+
+    @patch('apps.facturacion.views.FactusClient.get_invoice_email_content')
+    def test_correo_contenido_endpoint_por_id(self, mocked_email_content):
+        mocked_email_content.return_value = {'subject': 'Factura', 'body': 'Hola'}
+        response = self.client.get(f'/api/facturas-electronicas/{self.factura.id}/correo/contenido/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['subject'], 'Factura')
+        mocked_email_content.assert_called_once_with('FV9999')
+
+    @patch('apps.facturacion.views.FactusClient.send_invoice_email')
+    def test_enviar_correo_factus_endpoint_por_id(self, mocked_send_email):
+        mocked_send_email.return_value = {'success': True}
+        response = self.client.post(f'/api/facturas-electronicas/{self.factura.id}/enviar-correo/', {'email': 'cliente@example.com'}, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.factura.refresh_from_db()
+        self.assertTrue(self.factura.correo_enviado)
+        mocked_send_email.assert_called_once_with('FV9999', email='cliente@example.com')
+
+    @patch('apps.facturacion.views.FactusClient.tacit_acceptance')
+    def test_aceptacion_tacita_endpoint_por_id(self, mocked_tacit):
+        mocked_tacit.return_value = {'success': True}
+        response = self.client.post(f'/api/facturas-electronicas/{self.factura.id}/aceptacion-tacita/')
+        self.assertEqual(response.status_code, 200)
+        mocked_tacit.assert_called_once_with('FV9999')
+
+    @patch('apps.facturacion.views.FactusClient.delete_invoice')
+    def test_eliminar_restringida_para_factura_aceptada(self, mocked_delete):
+        response = self.client.post(f'/api/facturas-electronicas/{self.factura.id}/eliminar/')
+        self.assertEqual(response.status_code, 409)
+        mocked_delete.assert_not_called()
+
 
 class FacturacionPersistenciaDefensivaTests(TestCase):
     def setUp(self):
@@ -716,6 +754,8 @@ class ConfiguracionDianRangosEndpointsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.rango.refresh_from_db()
         self.assertTrue(self.rango.is_selected_local)
+        response_alias = client.post('/api/factus/rangos/seleccionar-activo/', {'range_id': self.rango.id}, format='json')
+        self.assertEqual(response_alias.status_code, 200)
 
     @patch('apps.facturacion.views.sync_numbering_ranges')
     def test_sync_rangos_requiere_admin(self, mocked_sync):
@@ -724,6 +764,13 @@ class ConfiguracionDianRangosEndpointsTests(TestCase):
         client.force_authenticate(self.vendedor)
         response = client.post('/api/configuracion/dian/rangos/sync/', {}, format='json')
         self.assertEqual(response.status_code, 403)
+
+    def test_list_rangos_alias_factus(self):
+        client = APIClient()
+        client.force_authenticate(self.admin)
+        response = client.get('/api/factus/rangos/')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('ranges', response.data)
 
 
 class DocumentosSoporteResourceEndpointsTests(TestCase):

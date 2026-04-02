@@ -144,18 +144,18 @@ export const configuracionAPI = {
         is_active_remote: boolean;
         is_selected_local: boolean;
       }>;
-    }>('/configuracion/dian/rangos/');
+    }>('/factus/rangos/');
     return response.data;
   },
   sincronizarRangosFactus: async () => {
     const response = await apiClient.post<{ message: string; count: number }>(
-      '/configuracion/dian/rangos/sync/'
+      '/factus/rangos/sincronizar/'
     );
     return response.data;
   },
   seleccionarRangoFactus: async (rangeId: number) => {
     const response = await apiClient.post<{ message: string; range_id: number }>(
-      '/configuracion/dian/rangos/select/',
+      '/factus/rangos/seleccionar-activo/',
       { range_id: rangeId }
     );
     return response.data;

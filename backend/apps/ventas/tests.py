@@ -824,6 +824,66 @@ class VentaServicesTests(TestCase):
         self.assertEqual(response.data['error_code'], 'ERROR_PERSISTENCIA')
         self.assertEqual(response.data['estado_electronico'], 'ERROR_PERSISTENCIA')
 
+    @patch('apps.ventas.views.emitir_factura_completa')
+    def test_convertir_remision_no_contamina_consecutivo_remision(self, mocked_emitir_factura_completa):
+        remision = Venta.objects.create(
+            tipo_comprobante='REMISION',
+            numero_comprobante='REM-154239',
+            cliente=self.cliente,
+            vendedor=self.vendedor,
+            subtotal=Decimal('200'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('38'),
+            total=Decimal('238'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('238'),
+            cambio=Decimal('0'),
+            estado='COBRADA',
+        )
+        DetalleVenta.objects.create(
+            venta=remision,
+            producto=self.producto,
+            cantidad=1,
+            precio_unitario=Decimal('200'),
+            descuento_unitario=Decimal('0'),
+            iva_porcentaje=Decimal('19'),
+            subtotal=Decimal('200'),
+            total=Decimal('238'),
+        )
+        factura_e = FacturaElectronica.objects.create(
+            venta=Venta.objects.create(
+                tipo_comprobante='FACTURA',
+                numero_comprobante=None,
+                cliente=self.cliente,
+                vendedor=self.vendedor,
+                subtotal=Decimal('200'),
+                descuento_porcentaje=Decimal('0'),
+                descuento_valor=Decimal('0'),
+                iva=Decimal('38'),
+                total=Decimal('238'),
+                medio_pago='EFECTIVO',
+                efectivo_recibido=Decimal('238'),
+                cambio=Decimal('0'),
+                estado='COBRADA',
+            ),
+            number='SETP000123',
+            reference_code='SETP000123',
+            status='ACEPTADA',
+            estado_electronico='ACEPTADA',
+            cufe='CUFE-123',
+            uuid='UUID-123',
+            response_json={'ok': True},
+        )
+        mocked_emitir_factura_completa.return_value = {'factura': factura_e, 'warnings': []}
+        self.client.force_authenticate(user=self.vendedor)
+        response = self.client.post(f'/api/ventas/{remision.id}/convertir_a_factura/')
+        self.assertEqual(response.status_code, 201)
+        remision.refresh_from_db()
+        self.assertEqual(remision.numero_comprobante, 'REM-154239')
+        factura_destino = Venta.objects.get(remision_origen=remision)
+        self.assertIsNone(factura_destino.numero_comprobante)
+
     @patch('apps.ventas.views.facturar_venta')
     def test_facturar_venta_retorna_advertencia_de_datos_cliente(self, mocked_facturar_venta):
         from apps.facturacion.services import FactusValidationError

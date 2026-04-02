@@ -81,8 +81,15 @@ class FactusClient:
         )
         self.numbering_ranges_path = config('FACTUS_NUMBERING_RANGES_PATH', default='/v1/numbering-ranges')
         self.invoice_show_path = config('FACTUS_INVOICE_SHOW_PATH', default='/v1/bills/show/{number}')
+        self.invoice_list_path = config('FACTUS_INVOICE_LIST_PATH', default='/v1/bills')
         self.invoice_download_xml_path = config('FACTUS_INVOICE_DOWNLOAD_XML_PATH', default='/v1/bills/download-xml/{number}')
         self.invoice_download_pdf_path = config('FACTUS_INVOICE_DOWNLOAD_PDF_PATH', default='/v1/bills/download-pdf/{number}')
+        self.invoice_events_path = config('FACTUS_INVOICE_EVENTS_PATH', default='/v1/bills/events/{number}')
+        self.invoice_tacit_acceptance_path = config(
+            'FACTUS_INVOICE_TACIT_ACCEPTANCE_PATH',
+            default='/v1/bills/acceptance-tacit/{number}',
+        )
+        self.invoice_delete_path = config('FACTUS_INVOICE_DELETE_PATH', default='/v1/bills/{number}')
         self.invoice_send_email_path = config('FACTUS_INVOICE_SEND_EMAIL_PATH', default='/v1/bills/send-email/{number}')
         self.invoice_email_template_path = config('FACTUS_INVOICE_EMAIL_TEMPLATE_PATH', default='/v1/bills/email-template/{number}')
         self.invoice_custom_pdf_upload_path = config(
@@ -316,10 +323,14 @@ class FactusClient:
             logger.exception('Error descargando recurso Factus endpoint=%s', path)
             raise FactusAPIError('No fue posible descargar el recurso en Factus.') from exc
 
-    def send_invoice(self, payload: dict[str, Any]) -> dict[str, Any]:
+    def create_and_validate_invoice(self, payload: dict[str, Any]) -> dict[str, Any]:
         if not payload.get('items'):
             raise FactusValidationError('La factura no contiene ítems para enviar a Factus.')
         return self.request('POST', self.invoice_path, json=payload)
+
+    def send_invoice(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Alias legacy: usar create_and_validate_invoice."""
+        return self.create_and_validate_invoice(payload)
 
 
     def send_credit_note(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -411,12 +422,28 @@ class FactusClient:
         content, _ = self.download_resource(path)
         return content
 
+    def list_invoices(self, *, filters: dict[str, Any] | None = None) -> dict[str, Any]:
+        return self.request('GET', self.invoice_list_path, params=filters or {})
+
+    def get_invoice_email_content(self, number: str) -> dict[str, Any]:
+        return self.request('GET', self.invoice_email_template_path.format(number=number))
+
+    def delete_invoice(self, number: str) -> dict[str, Any]:
+        return self.request('DELETE', self.invoice_delete_path.format(number=number))
+
+    def get_invoice_events(self, number: str) -> dict[str, Any]:
+        return self.request('GET', self.invoice_events_path.format(number=number))
+
+    def tacit_acceptance(self, number: str) -> dict[str, Any]:
+        return self.request('POST', self.invoice_tacit_acceptance_path.format(number=number), json={})
+
     def send_invoice_email(self, number: str, email: str | None = None) -> dict[str, Any]:
         payload = {'email': email} if email else None
         return self.request('POST', self.invoice_send_email_path.format(number=number), json=payload)
 
     def get_invoice_email_template(self, number: str) -> dict[str, Any]:
-        return self.request('GET', self.invoice_email_template_path.format(number=number))
+        """Alias legacy: usar get_invoice_email_content."""
+        return self.get_invoice_email_content(number)
 
     def upload_custom_pdf(self, number: str, pdf_bytes: bytes, filename: str | None = None) -> dict[str, Any]:
         token = self.get_valid_token()

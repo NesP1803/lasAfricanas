@@ -79,7 +79,7 @@ const crearArchivoDescargable = (blob: Blob, fileName: string) => {
 
 export const facturacionApi = {
   async getFacturas() {
-    const response = await apiClient.get<FacturaElectronica[]>('/facturacion/');
+    const response = await apiClient.get<FacturaElectronica[]>('/facturas-electronicas/');
     return response.data;
   },
 
@@ -89,26 +89,46 @@ export const facturacionApi = {
   },
 
   async descargarXMLById(id: number, numero: string) {
-    const response = await apiClient.get<Blob>(`/facturacion/facturas-electronicas/${id}/xml/`, {
+    const response = await apiClient.get<Blob>(`/facturas-electronicas/${id}/xml/`, {
       responseType: 'blob',
     });
     crearArchivoDescargable(response.data, `factura-${encodeURIComponent(numero)}.xml`);
   },
 
   async descargarPDFById(id: number, numero: string) {
-    const response = await apiClient.get<Blob>(`/facturacion/facturas-electronicas/${id}/pdf/`, {
+    const response = await apiClient.get<Blob>(`/facturas-electronicas/${id}/pdf/`, {
       responseType: 'blob',
     });
     crearArchivoDescargable(response.data, `factura-${encodeURIComponent(numero)}.pdf`);
   },
 
   async enviarFacturaCorreoById(id: number) {
-    const response = await apiClient.post(`/facturacion/facturas-electronicas/${id}/enviar_correo/`);
+    const response = await apiClient.post(`/facturas-electronicas/${id}/enviar-correo/`);
     return response.data;
   },
 
   async sincronizarFactura(facturaId: number) {
-    const response = await apiClient.post<SincronizarFacturaResponse>(`/facturacion/facturas-electronicas/${facturaId}/sincronizar/`);
+    const response = await apiClient.post<SincronizarFacturaResponse>(`/facturas-electronicas/${facturaId}/sincronizar/`);
+    return response.data;
+  },
+
+  async obtenerContenidoCorreo(facturaId: number) {
+    const response = await apiClient.get(`/facturas-electronicas/${facturaId}/correo/contenido/`);
+    return response.data;
+  },
+
+  async consultarEventos(facturaId: number) {
+    const response = await apiClient.get(`/facturas-electronicas/${facturaId}/eventos/`);
+    return response.data;
+  },
+
+  async ejecutarAceptacionTacita(facturaId: number) {
+    const response = await apiClient.post(`/facturas-electronicas/${facturaId}/aceptacion-tacita/`);
+    return response.data;
+  },
+
+  async eliminarFacturaElectronica(facturaId: number) {
+    const response = await apiClient.post(`/facturas-electronicas/${facturaId}/eliminar/`);
     return response.data;
   },
 };

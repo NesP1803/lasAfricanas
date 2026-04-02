@@ -52,7 +52,7 @@ from apps.facturacion.services import (
     sync_invoice_status,
     emitir_factura_completa,
 )
-from apps.facturacion.services.credit_note_service import build_credit_preview, create_credit_note, sync_credit_note
+from apps.facturacion.services.factus_client import FactusClient
 from apps.facturacion.services.electronic_state_machine import resolve_actions
 
 logger = logging.getLogger(__name__)
@@ -141,6 +141,16 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
         ]
         return Response(data)
 
+    def retrieve(self, request, pk=None):
+        factura = (
+            FacturaElectronica.objects.select_related('venta__cliente')
+            .filter(pk=pk)
+            .first()
+        )
+        if factura is None:
+            return Response({'detail': 'Factura electrónica no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(FacturaEstadoSerializer(factura).data)
+
     @action(detail=True, methods=['post'], url_path='sincronizar')
     def sincronizar(self, request, pk=None):
         factura = (
@@ -186,6 +196,85 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
                 'warnings': result.get('warnings', []),
             }
         )
+
+    @action(detail=True, methods=['get'], url_path='correo/contenido')
+    def correo_contenido(self, request, pk=None):
+        factura = FacturaElectronica.objects.filter(pk=pk).first()
+        if factura is None:
+            return Response({'detail': 'Factura electrónica no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+        if not factura.number:
+            return Response({'detail': 'Factura sin número electrónico aún.'}, status=status.HTTP_409_CONFLICT)
+        try:
+            payload = FactusClient().get_invoice_email_content(factura.number)
+        except (FactusAPIError, FactusAuthError) as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        return Response(payload)
+
+    @action(detail=True, methods=['post'], url_path='enviar-correo')
+    def enviar_correo_factus(self, request, pk=None):
+        factura = FacturaElectronica.objects.filter(pk=pk).first()
+        if factura is None:
+            return Response({'detail': 'Factura electrónica no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+        if not factura.number:
+            return Response({'detail': 'Factura sin número electrónico aún.'}, status=status.HTTP_409_CONFLICT)
+        email = str(request.data.get('email', '')).strip() or None
+        try:
+            payload = FactusClient().send_invoice_email(factura.number, email=email)
+        except (FactusAPIError, FactusAuthError) as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        factura.correo_enviado = True
+        factura.correo_enviado_at = timezone.now()
+        factura.ultimo_error_correo = ''
+        factura.save(update_fields=['correo_enviado', 'correo_enviado_at', 'ultimo_error_correo', 'updated_at'])
+        return Response({'detail': 'Correo enviado por Factus.', 'provider': payload})
+
+    @action(detail=True, methods=['get'], url_path='eventos')
+    def eventos(self, request, pk=None):
+        factura = FacturaElectronica.objects.filter(pk=pk).first()
+        if factura is None:
+            return Response({'detail': 'Factura electrónica no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+        if not factura.number:
+            return Response({'detail': 'Factura sin número electrónico aún.'}, status=status.HTTP_409_CONFLICT)
+        try:
+            payload = FactusClient().get_invoice_events(factura.number)
+        except (FactusAPIError, FactusAuthError) as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        return Response(payload)
+
+    @action(detail=True, methods=['post'], url_path='aceptacion-tacita')
+    def aceptacion_tacita(self, request, pk=None):
+        factura = FacturaElectronica.objects.filter(pk=pk).first()
+        if factura is None:
+            return Response({'detail': 'Factura electrónica no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+        if not factura.number:
+            return Response({'detail': 'Factura sin número electrónico aún.'}, status=status.HTTP_409_CONFLICT)
+        try:
+            payload = FactusClient().tacit_acceptance(factura.number)
+        except (FactusAPIError, FactusAuthError) as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        return Response({'detail': 'Aceptación tácita ejecutada.', 'provider': payload})
+
+    @action(detail=True, methods=['post'], url_path='eliminar')
+    def eliminar(self, request, pk=None):
+        factura = FacturaElectronica.objects.filter(pk=pk).first()
+        if factura is None:
+            return Response({'detail': 'Factura electrónica no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+        if not factura.number:
+            return Response({'detail': 'Factura sin número electrónico aún.'}, status=status.HTTP_409_CONFLICT)
+        if (factura.estado_electronico or factura.status) in {'ACEPTADA', 'ACEPTADA_CON_OBSERVACIONES'}:
+            return Response(
+                {'detail': 'No se permite eliminar localmente una factura aceptada para preservar trazabilidad.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+        try:
+            payload = FactusClient().delete_invoice(factura.number)
+        except (FactusAPIError, FactusAuthError) as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        factura.status = 'RECHAZADA'
+        factura.estado_electronico = 'RECHAZADA'
+        factura.mensaje_error = 'Documento eliminado/cancelado en Factus por acción administrativa.'
+        factura.save(update_fields=['status', 'estado_electronico', 'mensaje_error', 'updated_at'])
+        return Response({'detail': 'Eliminación solicitada en Factus.', 'provider': payload})
 
     @action(detail=False, methods=['get'], url_path=r'(?P<number>[^/.]+)/estado')
     def estado(self, request, number=None):
