@@ -15,6 +15,7 @@ from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from apps.facturacion.models import DocumentoSoporteElectronico, FacturaElectronica, NotaCreditoElectronica
+from apps.facturacion_electronica.catalogos.models import DocumentoIdentificacionFactus
 from apps.facturacion.services.download_invoice_files import download_pdf, download_xml
 from apps.facturacion.services.consecutivo_service import resolve_numbering_range
 from apps.facturacion.services.factus_payload_builder import build_invoice_payload
@@ -852,3 +853,131 @@ class FactusInvoicePayloadIVAIncluidoTests(TestCase):
         self.assertEqual(round(item['price'] * item['quantity'], 2), 504.2)
         self.assertEqual(round((item['price'] * item['quantity']) * (item['tax_rate'] / 100), 2), 95.8)
         self.assertEqual(round((item['price'] * item['quantity']) * (1 + item['tax_rate'] / 100), 2), 600.0)
+
+
+class FactusCustomerDocumentHomologationTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(username='payload-doc', password='1234')
+        self.cliente = Cliente.objects.create(
+            numero_documento='123456789',
+            nombre='Cliente Homologación',
+            tipo_documento='CC',
+        )
+        self.categoria = Categoria.objects.create(nombre='Factus Doc')
+        self.proveedor = Proveedor.objects.create(nombre='Proveedor Doc')
+        self.producto = Producto.objects.create(
+            codigo='FD-001',
+            nombre='Producto Doc',
+            categoria=self.categoria,
+            proveedor=self.proveedor,
+            precio_costo=Decimal('1000.00'),
+            precio_venta=Decimal('3000.00'),
+            precio_venta_minimo=Decimal('2500.00'),
+            stock=Decimal('20.00'),
+            stock_minimo=Decimal('1.00'),
+            iva_porcentaje=Decimal('19.00'),
+            iva_exento=False,
+        )
+        Impuesto.objects.create(
+            nombre='IVA 19',
+            porcentaje=Decimal('19.00'),
+            factus_tribute_id=1,
+            is_active=True,
+        )
+
+    def _crear_venta(self):
+        venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            numero_comprobante='FAC-910000',
+            cliente=self.cliente,
+            vendedor=self.user,
+            subtotal=Decimal('2521.01'),
+            descuento_porcentaje=Decimal('0.00'),
+            descuento_valor=Decimal('0.00'),
+            iva=Decimal('478.99'),
+            total=Decimal('3000.00'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('3000.00'),
+            cambio=Decimal('0.00'),
+            estado='FACTURADA',
+        )
+        DetalleVenta.objects.create(
+            venta=venta,
+            producto=self.producto,
+            cantidad=Decimal('1.00'),
+            precio_unitario=Decimal('3000.00'),
+            descuento_unitario=Decimal('0.00'),
+            iva_porcentaje=Decimal('19.00'),
+            subtotal=Decimal('2521.01'),
+            total=Decimal('3000.00'),
+        )
+        return venta
+
+    @patch('apps.facturacion.services.factus_payload_builder.get_tribute_id', return_value=1)
+    @patch('apps.facturacion.services.factus_payload_builder.get_municipality_id', return_value=149)
+    @patch('apps.facturacion.services.factus_payload_builder.get_payment_method_code', return_value='10')
+    @patch('apps.facturacion.services.factus_payload_builder.get_unit_measure_id', return_value=70)
+    @patch('apps.facturacion.services.factus_payload_builder.resolve_numbering_range')
+    def test_homologa_cc_en_minuscula_y_espacios_a_codigo_factus(
+        self,
+        mocked_range,
+        _mocked_um,
+        _mocked_payment,
+        _mocked_municipality,
+        _mocked_tribute,
+    ):
+        mocked_range.return_value = MagicMock(factus_range_id=99)
+        DocumentoIdentificacionFactus.objects.create(factus_id=3, codigo='13', nombre='CC', is_active=True)
+        self.cliente.tipo_documento = ' cc '
+        self.cliente.save(update_fields=['tipo_documento'])
+        venta = self._crear_venta()
+        payload = build_invoice_payload(venta)
+        self.assertEqual(payload['customer']['identification_document_id'], 3)
+
+    @patch('apps.facturacion.services.factus_payload_builder.get_tribute_id', return_value=1)
+    @patch('apps.facturacion.services.factus_payload_builder.get_municipality_id', return_value=149)
+    @patch('apps.facturacion.services.factus_payload_builder.get_payment_method_code', return_value='10')
+    @patch('apps.facturacion.services.factus_payload_builder.get_unit_measure_id', return_value=70)
+    @patch('apps.facturacion.services.factus_payload_builder.resolve_numbering_range')
+    def test_lanza_error_claro_si_tipo_documento_no_homologado(
+        self,
+        mocked_range,
+        _mocked_um,
+        _mocked_payment,
+        _mocked_municipality,
+        _mocked_tribute,
+    ):
+        mocked_range.return_value = MagicMock(factus_range_id=99)
+        self.cliente.tipo_documento = 'RUTX'
+        self.cliente.save(update_fields=['tipo_documento'])
+        venta = self._crear_venta()
+        with self.assertRaises(FactusValidationError) as exc:
+            build_invoice_payload(venta)
+        self.assertIn("El tipo de documento 'RUTX' no está homologado para Factus.", str(exc.exception))
+
+    @patch('apps.facturacion.services.factus_payload_builder.get_tribute_id', return_value=1)
+    @patch('apps.facturacion.services.factus_payload_builder.get_municipality_id', return_value=149)
+    @patch('apps.facturacion.services.factus_payload_builder.get_payment_method_code', return_value='10')
+    @patch('apps.facturacion.services.factus_payload_builder.get_unit_measure_id', return_value=70)
+    @patch('apps.facturacion.services.factus_payload_builder.resolve_numbering_range')
+    def test_rechaza_cliente_general_sin_datos_fiscales_validos(
+        self,
+        mocked_range,
+        _mocked_um,
+        _mocked_payment,
+        _mocked_municipality,
+        _mocked_tribute,
+    ):
+        mocked_range.return_value = MagicMock(factus_range_id=99)
+        self.cliente.nombre = 'Cliente General'
+        self.cliente.numero_documento = '222222222222'
+        self.cliente.tipo_documento = 'CC'
+        self.cliente.save(update_fields=['nombre', 'numero_documento', 'tipo_documento'])
+        venta = self._crear_venta()
+        with self.assertRaises(FactusValidationError) as exc:
+            build_invoice_payload(venta)
+        self.assertIn(
+            'El cliente general no puede usarse para facturación electrónica sin identificación fiscal válida.',
+            str(exc.exception),
+        )

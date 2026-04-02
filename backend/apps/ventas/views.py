@@ -76,7 +76,10 @@ def _factus_error_category(exc: Exception) -> tuple[str, str]:
     detail = f'{message} {provider_detail}'.lower()
     if (
         'cliente seleccionado no tiene número de identificación' in detail
+        or 'cliente seleccionado no tiene tipo de documento configurado' in detail
         or 'cliente seleccionado no tiene tipo de documento homologado' in detail
+        or 'no está homologado para factus' in detail
+        or 'cliente general no puede usarse para facturación electrónica' in detail
         or 'fak21' in detail
     ):
         return (

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 import re
+import logging
 
 from django.conf import settings
 
@@ -15,10 +16,13 @@ from apps.facturacion.services.factus_catalog_lookup import (
     get_payment_method_code,
     get_tribute_id,
     get_unit_measure_id,
+    normalize_document_type_code,
 )
 from apps.facturacion.services.factus_client import FactusValidationError
 from apps.facturacion_electronica.catalogos.models import TributoFactus
 from apps.ventas.models import Venta
+
+logger = logging.getLogger(__name__)
 
 
 def _to_float(value: Decimal) -> float:
@@ -33,7 +37,7 @@ def _to_decimal(value, default: str = '0') -> Decimal:
 
 def _resolve_customer_tribute_id(tipo_documento: str) -> int:
     """Resuelve tribute_id de cliente según catálogo/homologación disponible."""
-    doc = str(tipo_documento or '').strip().upper()
+    doc = normalize_document_type_code(tipo_documento)
     if doc != 'NIT':
         return 21
     preferred_codes = ['R-99-PN', 'R-99', 'NO_CAUSA']
@@ -96,20 +100,69 @@ def _normalize_identification(value: str) -> str:
 def _build_customer_payload(cliente) -> dict:
     identification = _normalize_identification(cliente.numero_documento)
     names = str(cliente.nombre or '').strip()
+    raw_tipo_documento = str(getattr(cliente, 'tipo_documento', '') or '')
+    tipo_documento = normalize_document_type_code(raw_tipo_documento)
+
     if not identification:
+        logger.warning(
+            'factus_payload.customer_invalid cliente_id=%s reason=missing_identification tipo_documento_raw=%s',
+            getattr(cliente, 'id', None),
+            raw_tipo_documento,
+        )
         raise FactusValidationError(
             'El cliente seleccionado no tiene número de identificación configurado para facturación electrónica.'
         )
     if not names:
+        logger.warning(
+            'factus_payload.customer_invalid cliente_id=%s reason=missing_names tipo_documento_raw=%s',
+            getattr(cliente, 'id', None),
+            raw_tipo_documento,
+        )
         raise FactusValidationError(
             'El cliente seleccionado no tiene nombre o razón social configurado para facturación electrónica.'
         )
-
-    identification_document_id = get_document_type_id(cliente.tipo_documento, default=0)
-    if not identification_document_id:
-        raise FactusValidationError(
-            'El cliente seleccionado no tiene tipo de documento homologado para facturación electrónica.'
+    if not tipo_documento:
+        logger.warning(
+            'factus_payload.customer_invalid cliente_id=%s reason=missing_document_type identification=%s',
+            getattr(cliente, 'id', None),
+            identification,
         )
+        raise FactusValidationError('El cliente seleccionado no tiene tipo de documento configurado.')
+
+    generic_names = {'CLIENTE GENERAL', 'CONSUMIDOR FINAL', 'PUBLICO GENERAL'}
+    generic_docs = {'0', '1', '9', '222222', '222222222', '222222222222', '999999', '999999999'}
+    if names.strip().upper() in generic_names and identification in generic_docs:
+        logger.warning(
+            'factus_payload.customer_invalid cliente_id=%s reason=generic_customer_not_allowed '
+            'identification=%s tipo_documento=%s',
+            getattr(cliente, 'id', None),
+            identification,
+            tipo_documento,
+        )
+        raise FactusValidationError(
+            'El cliente general no puede usarse para facturación electrónica sin identificación fiscal válida.'
+        )
+
+    identification_document_id = get_document_type_id(tipo_documento, default=0)
+    if not identification_document_id:
+        logger.warning(
+            'factus_payload.customer_invalid cliente_id=%s reason=document_type_not_homologated '
+            'tipo_documento_raw=%s tipo_documento_normalized=%s',
+            getattr(cliente, 'id', None),
+            raw_tipo_documento,
+            tipo_documento,
+        )
+        raise FactusValidationError(
+            f"El tipo de documento '{tipo_documento}' no está homologado para Factus."
+        )
+    logger.info(
+        'factus_payload.customer_document_homologation cliente_id=%s tipo_documento_raw=%s '
+        'tipo_documento_normalized=%s identification_document_id=%s',
+        getattr(cliente, 'id', None),
+        raw_tipo_documento,
+        tipo_documento,
+        identification_document_id,
+    )
 
     return {
         'identification': identification,
@@ -119,7 +172,7 @@ def _build_customer_payload(cliente) -> dict:
         'address': cliente.direccion or 'NO REGISTRADA',
         'municipality_id': get_municipality_id(cliente.ciudad or 'SIN_CIUDAD'),
         'identification_document_id': identification_document_id,
-        'tribute_id': _resolve_customer_tribute_id(cliente.tipo_documento),
+        'tribute_id': _resolve_customer_tribute_id(tipo_documento),
     }
 
 
