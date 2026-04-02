@@ -23,10 +23,22 @@ class FactusAuthError(Exception):
 class FactusAPIError(Exception):
     """Error de comunicación o respuesta de la API de Factus."""
 
-    def __init__(self, message: str, *, status_code: int | None = None, provider_detail: str = '') -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        provider_detail: str = '',
+        provider_payload: dict[str, Any] | None = None,
+    ) -> None:
         super().__init__(message)
         self.status_code = status_code
         self.provider_detail = provider_detail
+        self.provider_payload = provider_payload or {}
+
+
+class FactusPendingDianError(FactusAPIError):
+    """Conflicto 409 por documento pendiente de envío/validación ante DIAN."""
 
 
 class FactusValidationError(Exception):
@@ -192,9 +204,12 @@ class FactusClient:
             response = exc.response
             status_code = getattr(response, 'status_code', None)
             provider_detail = ''
+            provider_payload: dict[str, Any] | None = None
             if response is not None:
                 try:
                     parsed = response.json()
+                    if isinstance(parsed, dict):
+                        provider_payload = parsed
                     provider_detail = str(parsed)
                 except ValueError:
                     provider_detail = (response.text or '').strip()
@@ -207,10 +222,21 @@ class FactusClient:
                 provider_detail,
             )
             detail_suffix = f' Detalle: {provider_detail}' if provider_detail else ''
+            pending_message = ''
+            if provider_payload:
+                pending_message = str(provider_payload.get('message', '') or '').strip().lower()
+            if status_code == 409 and 'factura pendiente por enviar a la dian' in pending_message:
+                raise FactusPendingDianError(
+                    f'Factus reportó la factura pendiente en DIAN.{detail_suffix}',
+                    status_code=status_code,
+                    provider_detail=provider_detail,
+                    provider_payload=provider_payload,
+                ) from exc
             raise FactusAPIError(
                 f'Factus rechazó la factura.{detail_suffix}',
                 status_code=status_code,
                 provider_detail=provider_detail,
+                provider_payload=provider_payload,
             ) from exc
         except requests.RequestException as exc:
             logger.exception('Error invocando Factus endpoint=%s method=%s', path, method)

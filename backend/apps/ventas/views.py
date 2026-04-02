@@ -86,6 +86,14 @@ def _factus_error_category(exc: Exception) -> tuple[str, str]:
             'FACTURA_LOCAL_OK_DATOS_CLIENTE_INVALIDOS',
             'Validación local/proveedor: datos del cliente incompletos para facturación electrónica.',
         )
+    if (
+        'factura pendiente por enviar a la dian' in detail
+        or 'factus_pending_dian_409' in detail
+    ):
+        return (
+            'FACTURA_LOCAL_OK_PENDIENTE_DIAN',
+            'La factura quedó pendiente de procesamiento en Factus/DIAN.',
+        )
     return (
         'FACTURA_LOCAL_OK_EMISION_ELECTRONICA_FALLIDA',
         'Error al enviar la factura electrónica a Factus.',
@@ -472,9 +480,14 @@ class VentaViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
+        is_pending = factura.status == 'EN_PROCESO'
         data = {
             'ok': True,
-            'message': 'Factura electrónica generada correctamente',
+            'message': (
+                'La factura ya fue recibida por Factus y quedó pendiente de envío/validación en DIAN.'
+                if is_pending
+                else 'Factura electrónica generada correctamente'
+            ),
             'venta_id': venta.id,
             'venta': VentaDetailSerializer(venta).data,
             'factura_electronica': FacturaElectronicaSerializer(factura).data,
@@ -491,8 +504,16 @@ class VentaViewSet(viewsets.ModelViewSet):
             'factus_sent': True,
             'pdf_url': factura.pdf_url,
             'xml_url': factura.xml_url,
+            'factus_result': (
+                'PENDING_DIAN'
+                if is_pending
+                else 'SUCCESS'
+            ),
         }
-        return Response(data, status=status.HTTP_201_CREATED)
+        return Response(
+            data,
+            status=status.HTTP_202_ACCEPTED if is_pending else status.HTTP_201_CREATED,
+        )
     
     @action(detail=False, methods=['get'])
     def estadisticas(self, request):

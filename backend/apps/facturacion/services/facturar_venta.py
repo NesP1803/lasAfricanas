@@ -12,7 +12,13 @@ from apps.facturacion.models import FacturaElectronica
 from apps.facturacion.services.consecutivo_service import get_next_invoice_sequence, resolve_numbering_range
 from apps.facturacion.services.download_invoice_files import download_pdf, download_xml
 from apps.facturacion.services.exceptions import DescargaFacturaError
-from apps.facturacion.services.factus_client import FactusAPIError, FactusAuthError, FactusClient, FactusValidationError
+from apps.facturacion.services.factus_client import (
+    FactusAPIError,
+    FactusAuthError,
+    FactusClient,
+    FactusPendingDianError,
+    FactusValidationError,
+)
 from apps.facturacion.services.factus_payload_builder import build_invoice_payload
 from apps.facturacion.services.generate_qr_dian import generate_qr_dian
 from apps.usuarios.models import Usuario
@@ -181,6 +187,91 @@ def _persist_remote_error(
     factura.save(update_fields=['status', 'codigo_error', 'mensaje_error', 'response_json', 'updated_at'])
 
 
+def _persist_pending_dian_conflict(
+    *,
+    factura: FacturaElectronica,
+    payload: dict[str, Any],
+    numero: str,
+    reference_code: str,
+    triggered_by: Usuario | None,
+    error: FactusPendingDianError,
+) -> None:
+    provider_payload = error.provider_payload if isinstance(error.provider_payload, dict) else {}
+    message = str(provider_payload.get('message') or error.provider_detail or str(error))
+    factura.status = 'EN_PROCESO'
+    factura.codigo_error = 'FACTUS_PENDING_DIAN_409'
+    factura.mensaje_error = message
+    factura.response_json = _build_attempt_trace(
+        factura=factura,
+        payload=payload,
+        numero=numero,
+        reference_code=reference_code,
+        triggered_by=triggered_by,
+        status='EN_PROCESO',
+        error={
+            'stage': 'send_invoice',
+            'error_type': error.__class__.__name__,
+            'message': str(error),
+            'status_code': error.status_code,
+            'provider_detail': error.provider_detail,
+            'provider_payload': provider_payload,
+            'semantic_status': 'PENDIENTE_DIAN',
+        },
+    )
+    factura.save(update_fields=['status', 'codigo_error', 'mensaje_error', 'response_json', 'updated_at'])
+
+
+def _sync_existing_pending_invoice(
+    *,
+    factura: FacturaElectronica,
+    venta: Venta,
+    triggered_by: Usuario | None,
+) -> FacturaElectronica:
+    """Intenta sincronizar una factura EN_PROCESO existente sin reenviar."""
+    if not factura.number:
+        return factura
+    client = FactusClient()
+    try:
+        response = client.get_invoice(factura.number)
+    except (FactusAPIError, FactusAuthError):
+        logger.info(
+            'facturar_venta.pending_sync_no_disponible venta_id=%s numero=%s',
+            venta.id,
+            factura.number,
+        )
+        return factura
+
+    fields = _extract_factus_data(response)
+    bill_errors = _extract_bill_errors(response)
+    persistable_fields = {k: v for k, v in fields.items() if k in PERSISTABLE_FACTURA_FIELDS}
+    with transaction.atomic():
+        locked = FacturaElectronica.objects.select_for_update().get(pk=factura.pk)
+        for key, value in persistable_fields.items():
+            if value:
+                setattr(locked, key, value)
+        locked.codigo_error = response.get('error_code') or locked.codigo_error
+        locked.mensaje_error = '; '.join(bill_errors) if bill_errors else (response.get('error_message') or locked.mensaje_error)
+        locked.response_json = _build_attempt_trace(
+            factura=locked,
+            payload={},
+            numero=locked.number or factura.number,
+            reference_code=locked.reference_code or factura.reference_code or '',
+            triggered_by=triggered_by,
+            status=locked.status,
+            response=response,
+            final_fields={**fields, 'persisted_fields': persistable_fields, 'source': 'get_invoice_on_pending'},
+            bill_errors=bill_errors,
+        )
+        locked.save(update_fields=['status', 'cufe', 'uuid', 'number', 'reference_code', 'xml_url', 'pdf_url', 'codigo_error', 'mensaje_error', 'response_json', 'updated_at'])
+        logger.info(
+            'facturar_venta.pending_sync_result venta_id=%s numero=%s status=%s',
+            venta.id,
+            locked.number,
+            locked.status,
+        )
+        return locked
+
+
 def _validate_customer_for_factus(customer: dict[str, Any], venta: Venta) -> None:
     identification = str(customer.get('identification') or '').strip()
     names = str(customer.get('names') or '').strip()
@@ -232,7 +323,12 @@ def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> Factur
             download_pdf(factura_existente)
         return factura_existente
     if factura_existente and factura_existente.status == 'EN_PROCESO':
-        raise FactusValidationError('La factura electrónica está EN_PROCESO. No se permite reenviar todavía.')
+        logger.info(
+            'facturar_venta.reutiliza_en_proceso venta_id=%s numero=%s',
+            venta.id,
+            factura_existente.number,
+        )
+        return _sync_existing_pending_invoice(factura=factura_existente, venta=venta, triggered_by=triggered_by)
 
     payload = build_invoice_payload(venta)
     _validate_customer_for_factus(payload.get('customer', {}), venta)
@@ -300,6 +396,22 @@ def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> Factur
     client = FactusClient()
     try:
         response_json = client.send_invoice(payload)
+    except FactusPendingDianError as exc:
+        logger.warning(
+            'facturar_venta.factus_409_pendiente_dian venta_id=%s numero=%s reference_code=%s',
+            venta.id,
+            numero,
+            reference_code,
+        )
+        _persist_pending_dian_conflict(
+            factura=factura,
+            payload=payload,
+            numero=numero,
+            reference_code=reference_code,
+            triggered_by=triggered_by,
+            error=exc,
+        )
+        return factura
     except (FactusAPIError, FactusAuthError) as exc:
         _persist_remote_error(
             factura=factura,
