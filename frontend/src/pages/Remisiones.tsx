@@ -394,7 +394,7 @@ export default function Remisiones() {
           )}
           <div className="overflow-auto">
             <table className="min-w-[1150px] table-fixed text-sm">
-              <thead className="bg-slate-100 text-[11px] uppercase tracking-wide text-slate-700">
+              <thead className="bg-sky-100 text-[11px] uppercase tracking-wide text-slate-700">
                 <tr>
                   <th className="w-10 px-2 py-2 text-left">
                     <input
