@@ -24,8 +24,10 @@ import {
   normalizeModuleAccess,
 } from '../store/moduleAccess';
 
+const UNIDADES_DECIMALES = new Set(['KG', 'LT', 'MT']);
+
 const unidadPermiteDecimales = (unidadMedida?: string) =>
-  Boolean(unidadMedida && unidadMedida !== 'N/A');
+  Boolean(unidadMedida && UNIDADES_DECIMALES.has(unidadMedida));
 
 const getCantidadStep = (unidadMedida?: string) =>
   unidadPermiteDecimales(unidadMedida) ? 0.01 : 1;
@@ -305,10 +307,17 @@ export default function Taller() {
       }
       setCantidades((prev) => ({ ...prev, [productoId]: min }));
       setRepuestoModalOpen(false);
-      showNotification({
-        message: 'Repuesto agregado correctamente.',
-        type: 'success',
-      });
+      if (orden.stock_negativo || (orden.stock_actual !== null && Number(orden.stock_actual) < 0)) {
+        showNotification({
+          message: `Repuesto agregado. Advertencia: stock en negativo (${orden.stock_actual}).`,
+          type: 'info',
+        });
+      } else {
+        showNotification({
+          message: orden.mensaje || 'Repuesto agregado correctamente.',
+          type: 'success',
+        });
+      }
     } catch (error) {
       console.error('Error al agregar repuesto:', error);
       showNotification({
