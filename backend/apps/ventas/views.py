@@ -408,18 +408,26 @@ class VentaViewSet(viewsets.ModelViewSet):
                 {
                     'ok': False,
                     'message': str(exc),
+                    'warning': 'FACTURA_LOCAL_OK_EMISION_ELECTRONICA_FALLIDA',
                     'venta_id': venta.id,
-                    'numero_factura': None,
+                    'venta': VentaDetailSerializer(venta).data,
+                    'factura_electronica': (
+                        FacturaElectronicaSerializer(factura_error).data
+                        if factura_error
+                        else None
+                    ),
+                    'numero_factura': factura_error.number if factura_error else None,
                     'estado_local': venta.estado,
                     'estado_venta': venta.estado,
                     'estado_electronico': estado_electronico_ui(factura_error) if factura_error else 'ERROR',
-                    'cufe': '',
-                    'uuid': '',
-                    'reference_code': '',
-                    'pos_ticket': None,
+                    'status': factura_error.status if factura_error else 'ERROR',
+                    'cufe': factura_error.cufe if factura_error else '',
+                    'uuid': factura_error.uuid if factura_error else '',
+                    'reference_code': factura_error.reference_code if factura_error else '',
+                    'pos_ticket': build_pos_ticket_payload(venta, factura_error) if factura_error else None,
                     'factus_sent': False,
                 },
-                status=status.HTTP_400_BAD_REQUEST,
+                status=status.HTTP_200_OK,
             )
         except Exception as exc:
             logger.exception('ventas.facturar.error_no_controlado venta_id=%s', venta.id)

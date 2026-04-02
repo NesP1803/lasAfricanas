@@ -508,9 +508,15 @@ export const ventasApi = {
     if (payload?.venta && payload?.factura_electronica) {
       return payload as FacturarCajaResponse;
     }
+    const factusSent = payload.factus_sent as boolean | undefined;
+    const ok = typeof payload.ok === 'boolean' ? (payload.ok as boolean) : factusSent !== false;
     return {
-      ok: true,
-      message: (payload.message as string) || 'Factura electrónica emitida.',
+      ok,
+      message:
+        (payload.message as string) ||
+        (factusSent === false
+          ? 'La venta se procesó localmente, pero falló la emisión electrónica.'
+          : 'Factura electrónica emitida.'),
       venta_id: (payload.venta_id as number) || ventaId,
       venta: (payload.venta as Venta) ?? ({} as Venta),
       factura_electronica: (payload.factura_electronica as FacturaElectronicaResultado) ?? ({} as FacturaElectronicaResultado),
@@ -524,7 +530,7 @@ export const ventasApi = {
       reference_code: payload.reference_code as string | undefined,
       send_email: payload.send_email as boolean | undefined,
       pos_ticket: payload.pos_ticket as PosTicketData | undefined,
-      factus_sent: payload.factus_sent as boolean | undefined,
+      factus_sent: factusSent ?? (ok ? true : false),
       errores: payload.errores as string[] | undefined,
     };
   },

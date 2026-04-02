@@ -716,6 +716,45 @@ class VentaServicesTests(TestCase):
         self.assertFalse(response.data['factus_sent'])
         self.assertEqual(response.data['estado_electronico'], 'ERROR')
 
+    @patch('apps.ventas.views.facturar_venta')
+    def test_facturar_venta_retorna_200_con_advertencia_si_falla_emision_electronica(self, mocked_facturar_venta):
+        from apps.facturacion.services import FactusAPIError
+
+        mocked_facturar_venta.side_effect = FactusAPIError('Factus caído')
+        venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            cliente=self.cliente,
+            vendedor=self.vendedor,
+            subtotal=Decimal('200'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('38'),
+            total=Decimal('238'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('238'),
+            cambio=Decimal('0'),
+            estado='BORRADOR',
+        )
+        DetalleVenta.objects.create(
+            venta=venta,
+            producto=self.producto,
+            cantidad=1,
+            precio_unitario=Decimal('200'),
+            descuento_unitario=Decimal('0'),
+            iva_porcentaje=Decimal('19'),
+            subtotal=Decimal('200'),
+            total=Decimal('238'),
+        )
+
+        self.client.force_authenticate(user=self.vendedor)
+        response = self.client.post(f'/api/ventas/{venta.id}/facturar/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data['ok'])
+        self.assertFalse(response.data['factus_sent'])
+        self.assertEqual(response.data['warning'], 'FACTURA_LOCAL_OK_EMISION_ELECTRONICA_FALLIDA')
+        self.assertIn(response.data['estado_local'], {'COBRADA', 'FACTURADA'})
+
     def test_estados_cambian_correctamente(self):
         self.client.force_authenticate(user=self.vendedor)
         response = self.client.post('/api/ventas/', self._crear_payload(), format='json')
