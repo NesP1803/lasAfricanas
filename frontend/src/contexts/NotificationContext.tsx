@@ -13,6 +13,7 @@ type NotificationType = 'success' | 'error' | 'info';
 interface NotificationPayload {
   message: string;
   type?: NotificationType;
+  durationMs?: number;
 }
 
 interface NotificationState extends NotificationPayload {
@@ -50,7 +51,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     }
     timeoutRef.current = window.setTimeout(() => {
       setNotification((prev) => ({ ...prev, open: false }));
-    }, 1000);
+    }, payload.durationMs ?? 6000);
   }, []);
 
   useEffect(() => {
