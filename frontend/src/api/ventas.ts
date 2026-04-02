@@ -500,7 +500,20 @@ export const ventasApi = {
       });
     } catch (error) {
       if (axios.isAxiosError(error)) {
+        const statusCode = error.response?.status;
         const responseData = (error.response?.data ?? {}) as Record<string, unknown>;
+        const codigoError = String(responseData.codigo_error ?? '');
+        if (
+          statusCode === 409 ||
+          statusCode === 422 ||
+          codigoError === 'MISMATCH_DOCUMENTAL' ||
+          codigoError === 'MISMATCH_NUMERACION'
+        ) {
+          const estadoElectronico = String(responseData.estado_electronico ?? 'ERROR');
+          throw new Error(
+            `${(responseData.mensaje_error as string) || (responseData.message as string) || 'Error de validación documental en emisión FE.'} Estado electrónico: ${estadoElectronico}.`
+          );
+        }
         const estadoLocal = responseData.estado_local as string | undefined;
         const ventaIdRespuesta = responseData.venta_id as number | undefined;
         const seProcesoVentaLocal = Boolean(ventaIdRespuesta || (estadoLocal && estadoLocal !== 'BORRADOR'));
