@@ -3,6 +3,7 @@ import { FileText, Printer, ReceiptText } from 'lucide-react';
 import { configuracionAPI } from '../api/configuracion';
 import type { ConfiguracionEmpresa } from '../types';
 import { ventasApi, type EstadisticasVentas, type VentaListItem } from '../api/ventas';
+import { getLocalDateInputValue } from '../utils/date';
 
 const currencyFormatter = new Intl.NumberFormat('es-CO', {
   style: 'currency',
@@ -13,7 +14,7 @@ const currencyFormatter = new Intl.NumberFormat('es-CO', {
 
 const toNumber = (value?: string | null) => (value ? Number(value) : 0);
 
-const today = new Date().toISOString().split('T')[0];
+const today = getLocalDateInputValue();
 const dateTimeFormatter = new Intl.DateTimeFormat('es-CO', {
   dateStyle: 'short',
   timeStyle: 'short',

@@ -7,6 +7,7 @@ import { useNotification } from '../contexts/NotificationContext';
 import ComprobanteTemplate from '../components/ComprobanteTemplate';
 import type { ConfiguracionEmpresa, ConfiguracionFacturacion } from '../types';
 import { printComprobante } from '../utils/printComprobante';
+import { getLocalDateInputValue } from '../utils/date';
 
 type DocumentoTipo = 'POS' | 'CARTA';
 
@@ -94,7 +95,7 @@ const mapVentaToFacturaItem = (venta: VentaListItem): FacturaItem => {
 
 export default function Facturas() {
   const { showNotification } = useNotification();
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalDateInputValue();
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [facturas, setFacturas] = useState<FacturaItem[]>([]);
   const [busqueda, setBusqueda] = useState('');
