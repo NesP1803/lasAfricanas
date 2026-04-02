@@ -474,21 +474,17 @@ export default function Facturas() {
           </div>
         </div>
 
-        <div className="mt-3 rounded border border-slate-200">
+        <div className="mt-3 rounded-lg border border-slate-200 bg-white shadow-sm">
           {error && (
             <div className="border-b border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-600">
               {error}
             </div>
           )}
-          <div className="bg-yellow-100 px-3 py-2 text-xs font-semibold uppercase text-slate-600">
-            Seleccione las filas deseadas, o presione en la esquina superior izquierda para
-            seleccionar toda la tabla. Presione Ctrl + C para pegar en Excel.
-          </div>
           <div className="overflow-auto">
-            <table className="min-w-full text-sm">
-              <thead className="bg-yellow-200 text-xs uppercase text-slate-700">
+            <table className="min-w-[1450px] table-fixed text-sm">
+              <thead className="bg-sky-100 text-[11px] uppercase tracking-wide text-slate-700">
                 <tr>
-                  <th className="px-2 py-2 text-left">
+                  <th className="w-10 px-2 py-2 text-left">
                     <input
                       type="checkbox"
                       checked={selectedIds.length === facturasFiltradas.length && facturasFiltradas.length > 0}
@@ -499,18 +495,18 @@ export default function Facturas() {
                       }
                     />
                   </th>
-                  <th className="px-2 py-2 text-left">Prefijo</th>
-                  <th className="px-2 py-2 text-left">Factura</th>
-                  <th className="px-2 py-2 text-left">Fecha/Hora</th>
-                  <th className="px-2 py-2 text-left">Estado</th>
-                  <th className="px-2 py-2 text-left">Electrónica</th>
-                  <th className="px-2 py-2 text-left">Medio/Pago</th>
-                  <th className="px-2 py-2 text-right">Total</th>
-                  <th className="px-2 py-2 text-left">NIT/CC</th>
-                  <th className="px-2 py-2 text-left">Cliente</th>
-                  <th className="px-2 py-2 text-left">Usuario</th>
-                  <th className="px-2 py-2 text-left">CUFE / Ref</th>
-                  <th className="px-2 py-2 text-left">Acciones FE</th>
+                  <th className="w-20 px-2 py-2 text-left">Prefijo</th>
+                  <th className="w-20 px-2 py-2 text-left">Factura</th>
+                  <th className="w-36 px-2 py-2 text-left">Fecha/Hora</th>
+                  <th className="w-24 px-2 py-2 text-left">Estado</th>
+                  <th className="w-28 px-2 py-2 text-left">Electrónica</th>
+                  <th className="w-28 px-2 py-2 text-left">Medio/Pago</th>
+                  <th className="w-28 px-2 py-2 text-right">Total</th>
+                  <th className="w-28 px-2 py-2 text-left">NIT/CC</th>
+                  <th className="w-44 px-2 py-2 text-left">Cliente</th>
+                  <th className="w-32 px-2 py-2 text-left">Usuario</th>
+                  <th className="w-[20rem] px-2 py-2 text-left">CUFE / Ref</th>
+                  <th className="w-44 px-2 py-2 text-left">Acciones FE</th>
                 </tr>
               </thead>
               <tbody>
@@ -527,40 +523,46 @@ export default function Facturas() {
                     return (
                       <tr
                         key={factura.id}
-                        className={`border-t border-slate-200 ${
-                          selected ? 'bg-blue-100' : 'bg-white'
+                        className={`border-t border-slate-100 align-top ${
+                          selected ? 'bg-blue-50' : 'bg-white'
                         }`}
                       >
-                        <td className="px-2 py-2">
+                        <td className="px-2 py-2.5">
                           <input
                             type="checkbox"
                             checked={selected}
                             onChange={() => toggleSelect(factura.id)}
                           />
                         </td>
-                        <td className="px-2 py-2 font-semibold text-slate-700">
+                        <td className="px-2 py-2.5 font-semibold text-slate-700">
                           {factura.prefijo}
                         </td>
-                        <td className="px-2 py-2 text-slate-700">{factura.numero}</td>
-                        <td className="px-2 py-2 text-slate-600">{factura.fechaHora}</td>
-                        <td className="px-2 py-2 text-slate-600">{factura.estadoDisplay}</td>
-                        <td className="px-2 py-2 text-slate-600">
+                        <td className="px-2 py-2.5 text-slate-700">{factura.numero}</td>
+                        <td className="px-2 py-2.5 text-slate-600">{factura.fechaHora}</td>
+                        <td className="px-2 py-2.5 text-slate-600">{factura.estadoDisplay}</td>
+                        <td className="px-2 py-2.5 text-slate-600">
                           {factura.electronica ? resolveEstadoFactura(factura.electronica) : 'Local'}
                         </td>
-                        <td className="px-2 py-2 text-slate-600">{factura.medioPagoDisplay}</td>
-                        <td className="px-2 py-2 text-right text-rose-600">
+                        <td className="px-2 py-2.5 text-slate-600">{factura.medioPagoDisplay}</td>
+                        <td className="px-2 py-2.5 text-right text-rose-600">
                           {currencyFormatter.format(factura.total)}
                         </td>
-                        <td className="px-2 py-2 text-slate-600">{factura.nitCc}</td>
-                        <td className="px-2 py-2 text-slate-600">{factura.cliente}</td>
-                        <td className="px-2 py-2 text-slate-600">{factura.usuario}</td>
-                        <td className="px-2 py-2 text-[11px] text-slate-600">
+                        <td className="px-2 py-2.5 text-slate-600">{factura.nitCc}</td>
+                        <td className="px-2 py-2.5 text-slate-600">{factura.cliente}</td>
+                        <td className="px-2 py-2.5 text-slate-600">{factura.usuario}</td>
+                        <td className="px-2 py-2.5 text-[11px] text-slate-600">
                           {factura.electronica ? (
-                            <div>
-                              <p className="truncate">CUFE: {factura.electronica.cufe ?? 'N/D'}</p>
-                              <p className="truncate">Ref: {factura.electronica.numero}</p>
+                            <div className="max-w-[20rem] space-y-1 whitespace-normal break-words [overflow-wrap:anywhere]">
+                              <p className="leading-tight">
+                                <span className="font-semibold text-slate-700">CUFE:</span>{' '}
+                                {factura.electronica.cufe ?? 'N/D'}
+                              </p>
+                              <p className="leading-tight">
+                                <span className="font-semibold text-slate-700">Ref:</span>{' '}
+                                {factura.electronica.numero}
+                              </p>
                               {factura.electronica.observaciones ? (
-                                <p className="truncate text-amber-700">
+                                <p className="leading-tight text-amber-700">
                                   Obs: {factura.electronica.observaciones}
                                 </p>
                               ) : null}
@@ -569,7 +571,7 @@ export default function Facturas() {
                                   href={factura.electronica.public_url}
                                   target="_blank"
                                   rel="noreferrer"
-                                  className="truncate text-blue-600 underline"
+                                  className="inline-block break-all text-blue-600 underline"
                                 >
                                   Ver en DIAN/Factus
                                 </a>
@@ -579,7 +581,7 @@ export default function Facturas() {
                             'Sin emisión FE'
                           )}
                         </td>
-                        <td className="px-2 py-2">
+                        <td className="px-2 py-2.5">
                           {factura.electronica ? (
                             <div className="flex flex-wrap gap-1">
                               <button
