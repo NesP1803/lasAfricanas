@@ -338,110 +338,6 @@ export default function CrearNotaCreditoPage() {
         type: 'success',
         durationMs: 2200,
       });
-
-      const editable = venta.detalles.map((detail) => {
-        const facturada = toNumber(detail.cantidad);
-        const acreditada = acumulado.get(detail.id) || 0;
-        const disponible = Math.max(0, facturada - acreditada);
-        return {
-          detalleId: detail.id,
-          productoNombre: detail.producto_nombre || `Producto #${detail.producto}`,
-          codigo: detail.producto_codigo || 'N/D',
-          cantidadFacturada: facturada,
-          cantidadYaAcreditada: acreditada,
-          disponible,
-          precioUnitario: toNumber(detail.precio_unitario),
-          impuestoPorcentaje: toNumber(detail.iva_porcentaje),
-          cantidadAcreditar: disponible > 0 ? 1 : 0,
-          afectaInventario: true,
-          motivoLinea: '',
-          selected: false,
-        } as EditableLine;
-      });
-      setLineas(editable);
-    } catch {
-      setLineas([]);
-      showNotification({ message: 'No fue posible cargar productos de la factura origen.', type: 'error' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSelectFactura = (id: number) => {
-    setFacturaSeleccionadaId(id);
-    setLineas([]);
-    const factura = facturas.find((item) => item.id === id);
-    if (factura) loadVentaLines(factura);
-  };
-
-  const selectedLines = useMemo(() => lineas.filter((linea) => linea.selected && linea.disponible > 0), [lineas]);
-
-  const resumen = useMemo(() => {
-    const workingLines = tipoNota === 'TOTAL' ? lineas.filter((linea) => linea.disponible > 0).map((linea) => ({ ...linea, cantidadAcreditar: linea.disponible })) : selectedLines;
-    const subtotal = workingLines.reduce((acc, linea) => acc + linea.cantidadAcreditar * linea.precioUnitario, 0);
-    const impuestos = workingLines.reduce(
-      (acc, linea) => acc + linea.cantidadAcreditar * linea.precioUnitario * (linea.impuestoPorcentaje / 100),
-      0,
-    );
-    const unidades = workingLines.reduce((acc, linea) => acc + linea.cantidadAcreditar, 0);
-    return {
-      subtotal,
-      impuestos,
-      total: subtotal + impuestos,
-      lineas: workingLines.length,
-      unidades,
-      devuelveStock: workingLines.some((linea) => linea.afectaInventario),
-    };
-  }, [selectedLines, lineas, tipoNota]);
-
-  const currentStep = useMemo(() => {
-    if (!facturaSeleccionada) return 0;
-    if (!motivo.trim()) return 3;
-    return 4;
-  }, [facturaSeleccionada, motivo]);
-
-  const validar = () => {
-    if (!facturaSeleccionada) {
-      showNotification({ message: 'Debes seleccionar una factura origen.', type: 'error' });
-      return false;
-    }
-    if (!motivo.trim()) {
-      showNotification({ message: 'Debes registrar el motivo de la nota crédito.', type: 'error' });
-      return false;
-    }
-    if (tipoNota === 'PARCIAL') {
-      if (selectedLines.length === 0) {
-        showNotification({ message: 'Debes seleccionar al menos un producto.', type: 'error' });
-        return false;
-      }
-      const excedidas = selectedLines.some((linea) => linea.cantidadAcreditar <= 0 || linea.cantidadAcreditar > linea.disponible);
-      if (excedidas) {
-        showNotification({ message: 'La cantidad excede el saldo disponible.', type: 'error' });
-        return false;
-      }
-    }
-    return true;
-  };
-
-  const handleEmitir = async () => {
-    if (!validar() || !facturaSeleccionada) return;
-    setLoading(true);
-    try {
-      if (tipoNota === 'TOTAL') {
-        await notasCreditoApi.crearNotaCreditoTotal(facturaSeleccionada.id, motivo.trim(), resumen.devuelveStock);
-      } else {
-        const payload: CrearNotaCreditoPayload = {
-          motivo: motivo.trim(),
-          lines: selectedLines.map((linea) => ({
-            detalle_venta_original_id: linea.detalleId,
-            cantidad_a_acreditar: linea.cantidadAcreditar,
-            afecta_inventario: linea.afectaInventario,
-            motivo_linea: linea.motivoLinea || undefined,
-          })),
-        };
-        await notasCreditoApi.crearNotaCreditoParcial(facturaSeleccionada.id, payload);
-      }
-      showNotification({ message: 'Nota crédito emitida correctamente.', type: 'success' });
       navigate('/listados/notas-credito');
     } catch (error) {
       showNotification({
@@ -454,6 +350,7 @@ export default function CrearNotaCreditoPage() {
       setLoading(false);
     }
   };
+
 
   const motivoSeleccionado = motivosCredito.find((item) => item.code === motivoTipo);
 
