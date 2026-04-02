@@ -160,6 +160,8 @@ export default function Taller() {
   const [motoFormError, setMotoFormError] = useState<string | null>(null);
   const [savingMoto, setSavingMoto] = useState(false);
   const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [clientesBusqueda, setClientesBusqueda] = useState<Cliente[]>([]);
+  const [loadingClientesBusqueda, setLoadingClientesBusqueda] = useState(false);
   const [clienteSearch, setClienteSearch] = useState('');
   const [showClienteForm, setShowClienteForm] = useState(false);
   const [clienteFormData, setClienteFormData] = useState<ClienteFormData>(
@@ -215,6 +217,34 @@ export default function Taller() {
     }, 300);
     return () => clearTimeout(delay);
   }, [activeTab, searchMoto]);
+
+  useEffect(() => {
+    if (!motoModalOpen) return;
+    const term = clienteSearch.trim();
+    if (!term) {
+      setClientesBusqueda([]);
+      setLoadingClientesBusqueda(false);
+      return;
+    }
+
+    const delay = setTimeout(async () => {
+      try {
+        setLoadingClientesBusqueda(true);
+        const response = await ventasApi.getClientes({
+          search: term,
+          is_active: true,
+        });
+        setClientesBusqueda(parseListado(response).items);
+      } catch (error) {
+        console.error('Error al buscar clientes:', error);
+        setClientesBusqueda([]);
+      } finally {
+        setLoadingClientesBusqueda(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(delay);
+  }, [clienteSearch, motoModalOpen]);
 
   const loadMecanicos = async () => {
     try {
@@ -602,15 +632,22 @@ export default function Taller() {
     return Number(ordenActual.total || 0);
   }, [ordenActual]);
 
+  const clientesDisponibles = useMemo(() => {
+    const cache = new Map<number, Cliente>();
+    clientes.forEach((cliente) => cache.set(cliente.id, cliente));
+    clientesBusqueda.forEach((cliente) => cache.set(cliente.id, cliente));
+    return Array.from(cache.values());
+  }, [clientes, clientesBusqueda]);
+
   const filteredClientes = useMemo(() => {
     const term = clienteSearch.trim().toLowerCase();
-    if (!term) return clientes;
-    return clientes.filter((cliente) => {
+    if (!term) return clientesDisponibles;
+    return clientesDisponibles.filter((cliente) => {
       const nombre = cliente.nombre?.toLowerCase() ?? '';
       const documento = cliente.numero_documento?.toLowerCase() ?? '';
       return nombre.includes(term) || documento.includes(term);
     });
-  }, [clienteSearch, clientes]);
+  }, [clienteSearch, clientesDisponibles]);
 
   const clientesToShow = useMemo(() => {
     const term = clienteSearch.trim();
@@ -619,8 +656,8 @@ export default function Taller() {
   }, [clienteSearch, filteredClientes]);
 
   const selectedCliente = useMemo(
-    () => clientes.find((cliente) => String(cliente.id) === motoFormData.cliente) ?? null,
-    [clientes, motoFormData.cliente]
+    () => clientesDisponibles.find((cliente) => String(cliente.id) === motoFormData.cliente) ?? null,
+    [clientesDisponibles, motoFormData.cliente]
   );
 
   return (
@@ -1120,7 +1157,11 @@ export default function Taller() {
                     <div></div>
                   )}
                   {clienteSearch.trim() ? (
-                    clientesToShow.length === 0 ? (
+                    loadingClientesBusqueda ? (
+                      <div className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-400">
+                        Buscando clientes...
+                      </div>
+                    ) : clientesToShow.length === 0 ? (
                       <div className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-400">
                         Sin coincidencias.
                       </div>
