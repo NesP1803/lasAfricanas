@@ -67,7 +67,12 @@ const formatFechaHora = (fechaIso: string) => {
 const splitNumeroComprobante = (numeroComprobante: string) => {
   const [prefijo, ...rest] = numeroComprobante.split('-');
   if (rest.length === 0) {
-    return { prefijo: numeroComprobante.slice(0, 3), numero: numeroComprobante };
+    const compact = numeroComprobante.trim();
+    const match = compact.match(/^([A-Za-z]+)(\d+)$/);
+    if (match) {
+      return { prefijo: match[1], numero: match[2] };
+    }
+    return { prefijo: compact.slice(0, 3), numero: compact };
   }
   return { prefijo, numero: rest.join('-') };
 };
@@ -511,7 +516,7 @@ export default function Facturas() {
             </div>
           )}
           <div className="overflow-auto">
-            <table className="min-w-[1460px] table-fixed text-sm">
+            <table className="w-full min-w-[1460px] table-fixed text-sm">
               <thead className="bg-sky-100 text-[11px] uppercase tracking-wide text-slate-700">
                 <tr>
                   <th className="w-10 px-2 py-3 text-left">
@@ -592,8 +597,12 @@ export default function Facturas() {
                                 {electronicaValida.cufe ?? 'N/D'}
                               </p>
                               <p className="leading-tight">
-                                <span className="font-semibold text-slate-700">Ref:</span>{' '}
+                                <span className="font-semibold text-slate-700">FE:</span>{' '}
                                 {electronicaValida.numero}
+                              </p>
+                              <p className="leading-tight">
+                                <span className="font-semibold text-slate-700">Ref local:</span>{' '}
+                                {electronicaValida.reference_code ?? factura.numero}
                               </p>
                               {electronicaValida.observaciones ? (
                                 <p className="leading-tight text-amber-700">
