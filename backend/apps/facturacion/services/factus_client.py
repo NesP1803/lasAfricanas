@@ -52,6 +52,28 @@ class FactusClient:
         self.refresh_path = config('FACTUS_REFRESH_PATH', default='/oauth/token')
         self.invoice_path = config('FACTUS_INVOICE_PATH', default='/v1/bills/validate')
         self.credit_note_path = config('FACTUS_CREDIT_NOTE_PATH', default='/credit-notes/validate')
+        self.credit_note_list_path = config('FACTUS_CREDIT_NOTE_LIST_PATH', default='/v1/credit-notes')
+        self.credit_note_show_path = config('FACTUS_CREDIT_NOTE_SHOW_PATH', default='/v1/credit-notes/show/{number}')
+        self.credit_note_download_pdf_path = config(
+            'FACTUS_CREDIT_NOTE_DOWNLOAD_PDF_PATH',
+            default='/v1/credit-notes/download-pdf/{number}',
+        )
+        self.credit_note_download_xml_path = config(
+            'FACTUS_CREDIT_NOTE_DOWNLOAD_XML_PATH',
+            default='/v1/credit-notes/download-xml/{number}',
+        )
+        self.credit_note_email_content_path = config(
+            'FACTUS_CREDIT_NOTE_EMAIL_CONTENT_PATH',
+            default='/v1/credit-notes/email-content/{number}',
+        )
+        self.credit_note_send_email_path = config(
+            'FACTUS_CREDIT_NOTE_SEND_EMAIL_PATH',
+            default='/v1/credit-notes/send-email/{number}',
+        )
+        self.credit_note_delete_path = config(
+            'FACTUS_CREDIT_NOTE_DELETE_PATH',
+            default='/v1/credit-notes/{reference_code}',
+        )
         self.support_document_path = config('FACTUS_SUPPORT_DOCUMENT_PATH', default='/support-documents/validate')
         self.support_document_adjustment_path = config(
             'FACTUS_SUPPORT_DOCUMENT_ADJUSTMENT_PATH',
@@ -304,6 +326,32 @@ class FactusClient:
         if not payload.get('items'):
             raise FactusValidationError('La nota crédito no contiene ítems para enviar a Factus.')
         return self.request('POST', self.credit_note_path, json=payload)
+
+    def create_and_validate_credit_note(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self.send_credit_note(payload)
+
+    def list_credit_notes(self, **params: Any) -> dict[str, Any]:
+        return self.request('GET', self.credit_note_list_path, params=params or None)
+
+    def get_credit_note(self, number: str) -> dict[str, Any]:
+        return self.request('GET', self.credit_note_show_path.format(number=number))
+
+    def download_credit_note_pdf(self, number: str) -> bytes:
+        content, _ = self.download_resource(self.credit_note_download_pdf_path.format(number=number))
+        return content
+
+    def download_credit_note_xml(self, number: str) -> bytes:
+        content, _ = self.download_resource(self.credit_note_download_xml_path.format(number=number))
+        return content
+
+    def get_credit_note_email_content(self, number: str) -> dict[str, Any]:
+        return self.request('GET', self.credit_note_email_content_path.format(number=number))
+
+    def send_credit_note_email(self, number: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        return self.request('POST', self.credit_note_send_email_path.format(number=number), json=payload or {})
+
+    def delete_credit_note(self, reference_code: str) -> dict[str, Any]:
+        return self.request('DELETE', self.credit_note_delete_path.format(reference_code=reference_code))
 
     def send_support_document(self, payload: dict[str, Any]) -> dict[str, Any]:
         if not payload.get('supplier'):

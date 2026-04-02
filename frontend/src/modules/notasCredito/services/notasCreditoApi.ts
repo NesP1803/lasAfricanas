@@ -17,12 +17,12 @@ export interface NotaCredito {
 }
 
 export interface CrearNotaCreditoPayload {
-  factura_id: number;
   motivo: string;
-  items: Array<{
-    descripcion: string;
-    cantidad: number;
-    precio: number;
+  lines: Array<{
+    detalle_venta_original_id: number;
+    cantidad_a_acreditar: number;
+    afecta_inventario: boolean;
+    motivo_linea?: string;
   }>;
 }
 
@@ -44,8 +44,21 @@ export const notasCreditoApi = {
     return response.data;
   },
 
-  async crearNotaCredito(data: CrearNotaCreditoPayload) {
-    const response = await apiClient.post<NotaCredito>('/notas-credito/', data);
+  async previewNotaCredito(facturaId: number, data: CrearNotaCreditoPayload) {
+    const response = await apiClient.post(`/facturacion/facturas/${facturaId}/notas-credito/preview/`, data);
+    return response.data;
+  },
+
+  async crearNotaCreditoParcial(facturaId: number, data: CrearNotaCreditoPayload) {
+    const response = await apiClient.post<NotaCredito>(`/facturacion/facturas/${facturaId}/notas-credito/parcial/`, data);
+    return response.data;
+  },
+
+  async crearNotaCreditoTotal(facturaId: number, motivo: string, afecta_inventario = true) {
+    const response = await apiClient.post<NotaCredito>(`/facturacion/facturas/${facturaId}/notas-credito/total/`, {
+      motivo,
+      afecta_inventario,
+    });
     return response.data;
   },
 
@@ -61,5 +74,30 @@ export const notasCreditoApi = {
       responseType: 'blob',
     });
     crearArchivoDescargable(response.data, `nota-credito-${encodeURIComponent(numero)}.pdf`);
+  },
+
+  async getNotaCredito(id: number) {
+    const response = await apiClient.get<NotaCredito>(`/notas-credito/${id}/`);
+    return response.data;
+  },
+
+  async sincronizarNotaCredito(id: number) {
+    const response = await apiClient.post(`/notas-credito/${id}/sincronizar/`);
+    return response.data;
+  },
+
+  async obtenerContenidoCorreo(id: number) {
+    const response = await apiClient.get(`/notas-credito/${id}/correo/contenido/`);
+    return response.data;
+  },
+
+  async enviarCorreo(id: number, email?: string) {
+    const response = await apiClient.post(`/notas-credito/${id}/enviar-correo/`, email ? { email } : {});
+    return response.data;
+  },
+
+  async eliminarNotaCredito(id: number) {
+    const response = await apiClient.post(`/notas-credito/${id}/eliminar/`);
+    return response.data;
   },
 };
