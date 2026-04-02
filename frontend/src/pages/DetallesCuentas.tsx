@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CalendarRange, FileText, ReceiptText } from 'lucide-react';
 import { ventasApi, type EstadisticasVentas } from '../api/ventas';
+import { getLocalDateInputValue } from '../utils/date';
 
 const currencyFormatter = new Intl.NumberFormat('es-CO', {
   style: 'currency',
@@ -11,7 +12,7 @@ const currencyFormatter = new Intl.NumberFormat('es-CO', {
 
 const toNumber = (value?: string | null) => (value ? Number(value) : 0);
 
-const today = new Date().toISOString().split('T')[0];
+const today = getLocalDateInputValue();
 
 export default function DetallesCuentas() {
   const [fechaInicio, setFechaInicio] = useState(today);

@@ -5,6 +5,7 @@ import { ventasApi, type Venta, type VentaListItem } from '../api/ventas';
 import ComprobanteTemplate from '../components/ComprobanteTemplate';
 import type { ConfiguracionEmpresa, ConfiguracionFacturacion } from '../types';
 import { printComprobante } from '../utils/printComprobante';
+import { getLocalDateInputValue } from '../utils/date';
 
 type DocumentoTipo = 'POS' | 'CARTA';
 
@@ -90,7 +91,7 @@ const mapVentaToRemisionItem = (venta: VentaListItem): RemisionItem => {
 };
 
 export default function Remisiones() {
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalDateInputValue();
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [remisiones, setRemisiones] = useState<RemisionItem[]>([]);
   const [busqueda, setBusqueda] = useState('');
