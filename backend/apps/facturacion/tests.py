@@ -29,6 +29,7 @@ from apps.facturacion.services.factus_payload_builder import build_invoice_paylo
 from apps.facturacion.services.support_document_payload_builder import build_support_document_payload
 from apps.facturacion.services.exceptions import DescargaFacturaError
 from apps.facturacion.services.factus_client import FactusValidationError
+from apps.facturacion.services.persistence_safety import safe_assign_charfield, safe_assign_json
 from apps.core.models import Impuesto
 from apps.inventario.models import Categoria, Producto, Proveedor
 from apps.ventas.models import Cliente, DetalleVenta, Venta
@@ -130,6 +131,8 @@ class FacturaFilesEndpointsTests(TestCase):
             qr='qr',
             response_json={'ok': True},
         )
+
+
         (Path(self.tmpdir.name) / 'facturas/xml').mkdir(parents=True, exist_ok=True)
         (Path(self.tmpdir.name) / 'facturas/pdf').mkdir(parents=True, exist_ok=True)
         (Path(self.tmpdir.name) / 'facturas/xml/FV9999.xml').write_bytes(b'<xml>factura</xml>')
@@ -177,6 +180,64 @@ class FacturaFilesEndpointsTests(TestCase):
         response = self.client.post('/api/facturacion/FV9999/enviar-correo/')
         self.assertEqual(response.status_code, 400)
         self.assertIn('no tiene correo configurado', response.data['detail'])
+
+
+class FacturacionPersistenciaDefensivaTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(username='persist-user', password='1234')
+        self.cliente = Cliente.objects.create(numero_documento='789', nombre='Cliente Persistencia')
+        self.venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            cliente=self.cliente,
+            vendedor=self.user,
+            subtotal=Decimal('100'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('19'),
+            total=Decimal('119'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('119'),
+            cambio=Decimal('0'),
+            estado='FACTURADA',
+        )
+
+    def test_safe_assign_charfield_trunca_codigo_error_largo(self):
+        factura = FacturaElectronica.objects.create(
+            venta=self.venta,
+            status='ERROR_INTEGRACION',
+            estado_electronico='ERROR_INTEGRACION',
+            response_json={'ok': False},
+        )
+        was_truncated = safe_assign_charfield(factura, 'codigo_error', 'X' * 600)
+        self.assertTrue(was_truncated)
+        self.assertEqual(len(factura.codigo_error), 50)
+
+    def test_safe_assign_json_guarda_payload_grande_sin_charfield(self):
+        factura = FacturaElectronica.objects.create(
+            venta=self.venta,
+            status='PENDIENTE_REINTENTO',
+            estado_electronico='PENDIENTE_REINTENTO',
+            response_json={'ok': False},
+        )
+        payload_grande = {'errores': ['E' * 1000], 'observaciones': 'OBS' * 500}
+        safe_assign_json(factura, 'response_json', payload_grande)
+        factura.save(update_fields=['response_json', 'updated_at'])
+        factura.refresh_from_db()
+        self.assertIsInstance(factura.response_json, dict)
+        self.assertIn('errores', factura.response_json)
+
+    def test_public_url_larga_se_persiste_sin_overflow(self):
+        factura = FacturaElectronica.objects.create(
+            venta=self.venta,
+            status='ACEPTADA',
+            estado_electronico='ACEPTADA',
+            response_json={'ok': True},
+        )
+        factura.public_url = f'https://example.com/{"a" * 1300}'
+        factura.save(update_fields=['public_url', 'updated_at'])
+        factura.refresh_from_db()
+        self.assertTrue(factura.public_url.endswith('a' * 1300))
 
 
 class FacturaQRYPosEndpointsTests(TestCase):

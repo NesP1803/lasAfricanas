@@ -13,6 +13,10 @@ from apps.facturacion.models import FacturaElectronica
 from apps.facturacion.services.download_invoice_files import download_xml
 from apps.facturacion.services.factus_client import FactusAPIError, FactusAuthError, FactusClient
 from apps.facturacion.services.facturar_venta import facturar_venta
+from apps.facturacion.services.persistence_safety import (
+    log_model_string_overflow_diagnostics,
+    safe_assign_charfield,
+)
 from apps.facturacion.services.pdf_personalizado import generar_pdf_personalizado
 from apps.usuarios.models import Usuario
 
@@ -33,9 +37,20 @@ def emitir_factura_completa(venta_id: int, triggered_by: Usuario | None = None) 
         remota = client.get_invoice(factura.number)
         data = remota.get('data', remota)
         bill = data.get('bill', data)
-        factura.public_url = str(bill.get('public_url', factura.public_url or '') or factura.public_url or '')
+        safe_assign_charfield(
+            factura,
+            'public_url',
+            str(bill.get('public_url', factura.public_url or '') or factura.public_url or ''),
+        )
         factura.qr_data = str(bill.get('qr', factura.qr_data or '') or factura.qr_data or '')
-        factura.qr_image_url = str(bill.get('qr_image', factura.qr_image_url or '') or factura.qr_image_url or '')
+        safe_assign_charfield(
+            factura,
+            'qr_image_url',
+            str(bill.get('qr_image', factura.qr_image_url or '') or factura.qr_image_url or ''),
+        )
+        log_model_string_overflow_diagnostics(
+            instance=factura, venta_id=factura.venta_id, factura_id=factura.pk, stage='emitir_factura_completa_sync'
+        )
         factura.save(update_fields=['public_url', 'qr_data', 'qr_image_url', 'updated_at'])
     except Exception as exc:
         warnings.append({'component': 'sincronizacion', 'message': str(exc)})
