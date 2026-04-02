@@ -29,15 +29,16 @@ export default function ConfirmModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4">
-      <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-xl">
+    <div className="app-modal-backdrop z-[60] bg-black/40">
+      <div className="app-modal-panel-md border border-slate-200">
+        <div className="app-modal-body">
         <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
         {description && <p className="mt-2 text-sm text-slate-600">{description}</p>}
-        <div className="mt-6 flex justify-end gap-3">
+        <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+            className="w-full rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 sm:w-auto"
             disabled={loading}
           >
             {cancelLabel}
@@ -45,11 +46,12 @@ export default function ConfirmModal({
           <button
             type="button"
             onClick={onConfirm}
-            className={`rounded-md px-4 py-2 text-sm font-semibold transition ${confirmButtonStyles[confirmVariant]}`}
+            className={`w-full rounded-md px-4 py-2 text-sm font-semibold transition sm:w-auto ${confirmButtonStyles[confirmVariant]}`}
             disabled={loading}
           >
             {loading ? 'Procesando...' : confirmLabel}
           </button>
+        </div>
         </div>
       </div>
     </div>
