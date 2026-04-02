@@ -208,7 +208,7 @@ def _validate_customer_for_factus(customer: dict[str, Any], venta: Venta) -> Non
         field_messages = {
             'identification': 'El cliente seleccionado no tiene número de identificación configurado para facturación electrónica.',
             'names': 'El cliente seleccionado no tiene nombre o razón social configurado para facturación electrónica.',
-            'identification_document_id': 'El cliente seleccionado no tiene tipo de documento homologado.',
+            'identification_document_id': 'El cliente seleccionado no tiene tipo de documento homologado para Factus.',
         }
         raise FactusValidationError(field_messages[missing_fields[0]])
 
