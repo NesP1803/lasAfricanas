@@ -48,13 +48,14 @@ export default function FacturasTable({ facturas, loading }: FacturasTableProps)
     }
   };
 
-  const handleDescargar = async (numero: string, tipo: 'xml' | 'pdf') => {
+  const handleDescargar = async (id: number | undefined, numero: string, tipo: 'xml' | 'pdf') => {
+    if (!id) return;
     setActionLoading(numero, tipo);
     try {
       if (tipo === 'xml') {
-        await facturacionApi.descargarXML(numero);
+        await facturacionApi.descargarXMLById(id, numero);
       } else {
-        await facturacionApi.descargarPDF(numero);
+        await facturacionApi.descargarPDFById(id, numero);
       }
     } catch {
       showNotification({
@@ -66,10 +67,11 @@ export default function FacturasTable({ facturas, loading }: FacturasTableProps)
     }
   };
 
-  const handleEnviarCorreo = async (numero: string) => {
+  const handleEnviarCorreo = async (id: number | undefined, numero: string) => {
+    if (!id) return;
     setActionLoading(numero, 'correo');
     try {
-      await facturacionApi.enviarFacturaCorreo(numero);
+      await facturacionApi.enviarFacturaCorreoById(id);
       showNotification({ message: 'Factura enviada correctamente', type: 'success' });
     } catch {
       showNotification({ message: 'No fue posible enviar la factura por correo.', type: 'error' });
@@ -127,7 +129,7 @@ export default function FacturasTable({ facturas, loading }: FacturasTableProps)
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleDescargar(factura.numero, 'xml')}
+                        onClick={() => handleDescargar(factura.id, factura.numero, 'xml')}
                         className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
                         disabled={Boolean(loadingAction)}
                       >
@@ -135,7 +137,7 @@ export default function FacturasTable({ facturas, loading }: FacturasTableProps)
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleDescargar(factura.numero, 'pdf')}
+                        onClick={() => handleDescargar(factura.id, factura.numero, 'pdf')}
                         className="rounded-md bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
                         disabled={Boolean(loadingAction)}
                       >
@@ -143,7 +145,7 @@ export default function FacturasTable({ facturas, loading }: FacturasTableProps)
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleEnviarCorreo(factura.numero)}
+                        onClick={() => handleEnviarCorreo(factura.id, factura.numero)}
                         className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
                         disabled={Boolean(loadingAction)}
                       >

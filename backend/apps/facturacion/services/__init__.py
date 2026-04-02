@@ -15,6 +15,8 @@ from .download_invoice_files import download_pdf, download_xml
 from .sync_numbering_ranges import sync_numbering_ranges
 from .consecutivo_service import get_next_invoice_number
 from .download_resource_files import DownloadResourceError, download_remote_file, read_local_media_file
+from .emitir_factura_completa import emitir_factura_completa
+from .pdf_personalizado import generar_pdf_personalizado
 
 __all__ = [
     'FactusClient',
@@ -41,4 +43,6 @@ __all__ = [
     'DownloadResourceError',
     'download_remote_file',
     'read_local_media_file',
+    'emitir_factura_completa',
+    'generar_pdf_personalizado',
 ]

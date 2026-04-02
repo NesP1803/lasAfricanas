@@ -206,6 +206,12 @@ export interface FacturarCajaResponse {
   pos_ticket?: PosTicketData;
   factus_sent?: boolean;
   errores?: string[];
+  warnings?: Array<{ component: string; message: string }>;
+  xml_disponible?: boolean;
+  pdf_disponible?: boolean;
+  pdf_subido_factus?: boolean;
+  correo_enviado?: boolean;
+  correo_error?: string;
 }
 
 export interface VentaListItem {

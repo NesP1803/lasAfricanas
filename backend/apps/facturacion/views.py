@@ -48,7 +48,7 @@ from apps.facturacion.services import (
     read_local_media_file,
     sync_numbering_ranges,
     sync_invoice_status,
-    facturar_venta,
+    emitir_factura_completa,
 )
 
 logger = logging.getLogger(__name__)
@@ -112,22 +112,25 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
                     else []
                 ),
                 'public_url': (
-                    factura.response_json.get('final_fields', {}).get('public_url', '')
-                    if isinstance(factura.response_json, dict)
-                    else ''
+                    factura.public_url
+                    or (
+                        factura.response_json.get('final_fields', {}).get('public_url', '')
+                        if isinstance(factura.response_json, dict)
+                        else ''
+                    )
                 ),
-                'qr_factus': (
-                    factura.response_json.get('final_fields', {}).get('qr', '')
-                    if isinstance(factura.response_json, dict)
-                    else ''
-                ),
-                'qr_image': (
-                    factura.response_json.get('final_fields', {}).get('qr_image', '')
-                    if isinstance(factura.response_json, dict)
-                    else ''
-                ),
+                'qr_factus': factura.qr_data,
+                'qr_image': factura.qr_image_url,
                 'xml_url': factura.xml_url,
                 'pdf_url': factura.pdf_url,
+                'xml_local_path': factura.xml_local_path,
+                'pdf_local_path': factura.pdf_local_path,
+                'pdf_uploaded_to_factus': factura.pdf_uploaded_to_factus,
+                'pdf_uploaded_at': factura.pdf_uploaded_at,
+                'correo_enviado': factura.correo_enviado,
+                'correo_enviado_at': factura.correo_enviado_at,
+                'ultimo_error_correo': factura.ultimo_error_correo,
+                'ultimo_error_pdf': factura.ultimo_error_pdf,
             }
             for factura in facturas
         ]
@@ -143,41 +146,9 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
         if factura is None:
             return Response({'detail': 'Factura electrónica no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
 
-        if factura.status != 'EN_PROCESO':
-            return Response(
-                {
-                    'detail': (
-                        f'La factura {factura.number or factura.reference_code or factura.id} '
-                        f'no está EN_PROCESO (estado actual: {factura.status}).'
-                    ),
-                    'result': 'NOT_PENDING',
-                },
-                status=status.HTTP_409_CONFLICT,
-            )
-
         try:
-            sincronizada = facturar_venta(factura.venta_id, triggered_by=request.user)
-            mensaje_error = str(sincronizada.mensaje_error or '').lower()
-            codigo_error = str(sincronizada.codigo_error or '').upper()
-            should_force_resend = (
-                sincronizada.status == 'EN_PROCESO'
-                and (
-                    codigo_error == 'FACTUS_DOCUMENTO_NO_ENCONTRADO'
-                    or 'no se encontró el documento' in mensaje_error
-                )
-            )
-            if should_force_resend:
-                logger.warning(
-                    'facturacion.sincronizar.reenvio_controlado factura_id=%s venta_id=%s numero=%s',
-                    factura.id,
-                    factura.venta_id,
-                    factura.number,
-                )
-                sincronizada = facturar_venta(
-                    factura.venta_id,
-                    triggered_by=request.user,
-                    force_resend_pending=True,
-                )
+            result = emitir_factura_completa(factura.venta_id, triggered_by=request.user)
+            sincronizada = result['factura']
         except FactusValidationError as exc:
             logger.warning(
                 'facturacion.sincronizar.conflicto factura_id=%s venta_id=%s detail=%s',
@@ -207,6 +178,7 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
                 ),
                 'result': 'SYNCED' if sincronizada.status == 'ACEPTADA' else 'PENDING',
                 'factura': serializer.data,
+                'warnings': result.get('warnings', []),
             }
         )
 
@@ -349,6 +321,49 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
             )
 
         return Response({'detail': f'Factura {factura.number} enviada a {email_destino}.'})
+
+    @action(detail=True, methods=['get'], url_path='xml')
+    def xml_by_id(self, request, pk=None):
+        factura = FacturaElectronica.objects.filter(pk=pk).first()
+        if factura is None:
+            return Response({'detail': 'Factura electrónica no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            if not factura.xml_local_path and factura.xml_url:
+                download_xml(factura)
+            content = read_local_media_file(factura.xml_local_path)
+        except Exception as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        return _build_file_response(content, f'factura-{factura.number}.xml', 'application/xml')
+
+    @action(detail=True, methods=['get'], url_path='pdf')
+    def pdf_by_id(self, request, pk=None):
+        factura = FacturaElectronica.objects.filter(pk=pk).first()
+        if factura is None:
+            return Response({'detail': 'Factura electrónica no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            if not factura.pdf_local_path and factura.pdf_url:
+                download_pdf(factura)
+            content = read_local_media_file(factura.pdf_local_path)
+        except Exception as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        return _build_file_response(content, f'factura-{factura.number}.pdf', 'application/pdf')
+
+    @action(detail=True, methods=['post'], url_path='enviar_correo')
+    def enviar_correo_by_id(self, request, pk=None):
+        factura = FacturaElectronica.objects.select_related('venta__cliente').filter(pk=pk).first()
+        if factura is None:
+            return Response({'detail': 'Factura electrónica no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+        result = emitir_factura_completa(factura.venta_id, triggered_by=request.user)
+        factura.refresh_from_db()
+        return Response(
+            {
+                'detail': 'Proceso de correo ejecutado.',
+                'correo_enviado': factura.correo_enviado,
+                'correo_enviado_at': factura.correo_enviado_at,
+                'ultimo_error_correo': factura.ultimo_error_correo,
+                'warnings': result.get('warnings', []),
+            }
+        )
 
     @action(detail=False, methods=['get'], url_path=r'(?P<number>[^/.]+)/pos')
     def pos(self, request, number=None):

@@ -115,6 +115,9 @@ PERSISTABLE_FACTURA_FIELDS = {
     'reference_code',
     'xml_url',
     'pdf_url',
+    'public_url',
+    'qr',
+    'qr_image',
     'status',
 }
 
@@ -417,7 +420,12 @@ def _sync_existing_pending_invoice(
         locked = FacturaElectronica.objects.select_for_update().get(pk=factura.pk)
         for key, value in persistable_fields.items():
             if value:
-                setattr(locked, key, value)
+                if key == 'qr':
+                    locked.qr_data = value
+                elif key == 'qr_image':
+                    locked.qr_image_url = value
+                else:
+                    setattr(locked, key, value)
         locked.codigo_error = response.get('error_code') or locked.codigo_error
         locked.mensaje_error = '; '.join(bill_errors) if bill_errors else (response.get('error_message') or locked.mensaje_error)
         locked.response_json = _build_attempt_trace(
@@ -431,7 +439,7 @@ def _sync_existing_pending_invoice(
             final_fields={**fields, 'persisted_fields': persistable_fields, 'source': 'get_invoice_on_pending'},
             bill_errors=bill_errors,
         )
-        locked.save(update_fields=['status', 'cufe', 'uuid', 'number', 'reference_code', 'xml_url', 'pdf_url', 'codigo_error', 'mensaje_error', 'response_json', 'updated_at'])
+        locked.save(update_fields=['status', 'cufe', 'uuid', 'number', 'reference_code', 'xml_url', 'pdf_url', 'public_url', 'qr_data', 'qr_image_url', 'codigo_error', 'mensaje_error', 'response_json', 'updated_at'])
         logger.info(
             'facturar_venta.pending_sync_result venta_id=%s numero=%s status=%s',
             venta.id,
@@ -827,7 +835,12 @@ def facturar_venta(
     with transaction.atomic():
         factura = FacturaElectronica.objects.select_for_update().get(pk=factura.pk)
         for key, value in persistable_fields.items():
-            setattr(factura, key, value)
+            if key == 'qr':
+                factura.qr_data = value
+            elif key == 'qr_image':
+                factura.qr_image_url = value
+            else:
+                setattr(factura, key, value)
         factura.reference_code = persistable_fields.get('reference_code') or reference_code
         factura.codigo_error = (
             'OBSERVACIONES_FACTUS'
