@@ -157,6 +157,27 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
 
         try:
             sincronizada = facturar_venta(factura.venta_id, triggered_by=request.user)
+            mensaje_error = str(sincronizada.mensaje_error or '').lower()
+            codigo_error = str(sincronizada.codigo_error or '').upper()
+            should_force_resend = (
+                sincronizada.status == 'EN_PROCESO'
+                and (
+                    codigo_error == 'FACTUS_DOCUMENTO_NO_ENCONTRADO'
+                    or 'no se encontró el documento' in mensaje_error
+                )
+            )
+            if should_force_resend:
+                logger.warning(
+                    'facturacion.sincronizar.reenvio_controlado factura_id=%s venta_id=%s numero=%s',
+                    factura.id,
+                    factura.venta_id,
+                    factura.number,
+                )
+                sincronizada = facturar_venta(
+                    factura.venta_id,
+                    triggered_by=request.user,
+                    force_resend_pending=True,
+                )
         except FactusValidationError as exc:
             logger.warning(
                 'facturacion.sincronizar.conflicto factura_id=%s venta_id=%s detail=%s',
@@ -182,7 +203,7 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
                 'detail': (
                     'Factura sincronizada y aceptada por DIAN.'
                     if sincronizada.status == 'ACEPTADA'
-                    else 'Factura sigue en proceso en Factus/DIAN.'
+                    else 'Factura reintentada/sincronizada, pero sigue en proceso en Factus/DIAN.'
                 ),
                 'result': 'SYNCED' if sincronizada.status == 'ACEPTADA' else 'PENDING',
                 'factura': serializer.data,
