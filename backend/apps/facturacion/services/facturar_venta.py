@@ -11,7 +11,7 @@ from typing import Any
 from django.db import DataError, transaction
 from django.utils import timezone
 
-from apps.facturacion.exceptions import FacturaDuplicadaError
+from apps.facturacion.exceptions import FacturaDuplicadaError, FacturaPersistenciaError
 from apps.facturacion.models import FacturaElectronica
 from apps.facturacion.services.consecutivo_service import get_next_invoice_sequence, resolve_numbering_range
 from apps.facturacion.services.download_invoice_files import download_pdf, download_xml
@@ -29,6 +29,7 @@ from apps.facturacion.services.factus_payload_builder import build_invoice_paylo
 from apps.facturacion.services.generate_qr_dian import generate_qr_dian
 from apps.facturacion.services.persistence_safety import (
     log_model_string_overflow_diagnostics,
+    normalize_qr_image_value,
     safe_assign_charfield,
     safe_assign_json,
 )
@@ -89,6 +90,12 @@ PERSISTABLE_FACTURA_FIELDS = {
     'status',
     'estado_factus_raw',
 }
+
+
+def _apply_qr_image_fields(instance: FacturaElectronica, raw_value: str) -> None:
+    qr_image_url, qr_image_data = normalize_qr_image_value(raw_value)
+    safe_assign_charfield(instance, 'qr_image_url', qr_image_url)
+    instance.qr_image_data = qr_image_data
 
 
 def _build_attempt_trace(
@@ -432,7 +439,7 @@ def _sync_existing_pending_invoice(
                 if key == 'qr':
                     locked.qr_data = value
                 elif key == 'qr_image':
-                    locked.qr_image_url = value
+                    _apply_qr_image_fields(locked, value)
                 else:
                     setattr(locked, key, value)
         locked.estado_electronico = locked.status
@@ -453,7 +460,7 @@ def _sync_existing_pending_invoice(
         log_model_string_overflow_diagnostics(
             instance=locked, venta_id=venta.id, factura_id=locked.pk, stage='sync_existing_pending_invoice'
         )
-        locked.save(update_fields=['status', 'estado_electronico', 'cufe', 'uuid', 'number', 'reference_code', 'xml_url', 'pdf_url', 'public_url', 'qr_data', 'qr_image_url', 'codigo_error', 'mensaje_error', 'response_json', 'updated_at'])
+        locked.save(update_fields=['status', 'estado_electronico', 'cufe', 'uuid', 'number', 'reference_code', 'xml_url', 'pdf_url', 'public_url', 'qr_data', 'qr_image_url', 'qr_image_data', 'codigo_error', 'mensaje_error', 'response_json', 'updated_at'])
         logger.info(
             'facturar_venta.pending_sync_result venta_id=%s numero=%s status=%s',
             venta.id,
@@ -517,6 +524,52 @@ def _validate_customer_for_factus(customer: dict[str, Any], venta: Venta) -> Non
             'identification_document_id': 'El cliente seleccionado no tiene tipo de documento homologado para Factus.',
         }
         raise FactusValidationError(field_messages[missing_fields[0]])
+
+
+def _mark_factura_persistence_error(
+    *,
+    factura_id: int,
+    venta_id: int,
+    payload: dict[str, Any],
+    numero: str,
+    reference_code: str,
+    triggered_by: Usuario | None,
+    response: dict[str, Any] | None,
+    response_show: dict[str, Any] | None,
+    response_download: dict[str, Any] | None,
+    fields: dict[str, str],
+    bill_errors: list[str],
+    error_message: str,
+) -> FacturaElectronica:
+    with transaction.atomic():
+        factura = FacturaElectronica.objects.select_for_update().get(pk=factura_id)
+        factura.status = 'ERROR_PERSISTENCIA'
+        factura.estado_electronico = 'ERROR_PERSISTENCIA'
+        safe_assign_charfield(factura, 'codigo_error', 'ERROR_PERSISTENCIA_SAVE')
+        factura.mensaje_error = error_message
+        safe_assign_json(
+            factura,
+            'response_json',
+            _build_attempt_trace(
+                factura=factura,
+                payload=payload,
+                numero=numero,
+                reference_code=reference_code,
+                triggered_by=triggered_by,
+                status='ERROR_PERSISTENCIA',
+                response=response,
+                response_show=response_show,
+                response_download=response_download,
+                final_fields={**fields, 'persist_error': True},
+                bill_errors=bill_errors,
+                error={'message': error_message, 'stage': 'persist_factura'},
+            ),
+        )
+        log_model_string_overflow_diagnostics(
+            instance=factura, venta_id=venta_id, factura_id=factura.pk, stage='mark_persistence_error'
+        )
+        factura.save(update_fields=['status', 'estado_electronico', 'codigo_error', 'mensaje_error', 'response_json', 'updated_at'])
+        return factura
 
 
 def facturar_venta(
@@ -855,92 +908,93 @@ def facturar_venta(
 
     persistable_fields = {k: v for k, v in fields.items() if k in PERSISTABLE_FACTURA_FIELDS}
 
-    with transaction.atomic():
-        factura = FacturaElectronica.objects.select_for_update().get(pk=factura.pk)
-        for key, value in persistable_fields.items():
-            if key == 'qr':
-                factura.qr_data = value
-            elif key == 'qr_image':
-                factura.qr_image_url = value
-            else:
-                if key in {'xml_url', 'pdf_url', 'public_url'}:
-                    safe_assign_charfield(factura, key, value)
+    try:
+        with transaction.atomic():
+            factura = FacturaElectronica.objects.select_for_update().get(pk=factura.pk)
+            for key, value in persistable_fields.items():
+                if key == 'qr':
+                    factura.qr_data = value
+                elif key == 'qr_image':
+                    _apply_qr_image_fields(factura, value)
                 else:
-                    setattr(factura, key, value)
-        factura.reference_code = persistable_fields.get('reference_code') or reference_code
-        factura.estado_electronico = persistable_fields.get('status', 'ERROR_INTEGRACION')
-        factura.status = factura.estado_electronico
-        factura.estado_factus_raw = persistable_fields.get('estado_factus_raw', factura.estado_factus_raw)
-        factura.emitida_en_factus = bool(factura.number and factura.cufe)
-        codigo_error = (
-            'OBSERVACIONES_FACTUS'
-            if bill_errors and persistable_fields.get('status') == 'ACEPTADA'
-            else response_json.get('error_code')
-        )
-        safe_assign_charfield(factura, 'codigo_error', codigo_error)
-        factura.mensaje_error = (
-            '; '.join(bill_errors)
-            if bill_errors
-            else response_json.get('error_message')
-        )
-        safe_assign_json(
-            factura,
-            'response_json',
-            _build_attempt_trace(
-            factura=factura,
+                    if key in {'xml_url', 'pdf_url', 'public_url'}:
+                        safe_assign_charfield(factura, key, value)
+                    else:
+                        setattr(factura, key, value)
+            factura.reference_code = persistable_fields.get('reference_code') or reference_code
+            factura.estado_electronico = persistable_fields.get('status', 'ERROR_INTEGRACION')
+            factura.status = factura.estado_electronico
+            factura.estado_factus_raw = persistable_fields.get('estado_factus_raw', factura.estado_factus_raw)
+            factura.emitida_en_factus = bool(factura.number and factura.cufe)
+            codigo_error = (
+                'OBSERVACIONES_FACTUS'
+                if bill_errors and persistable_fields.get('status') == 'ACEPTADA'
+                else response_json.get('error_code')
+            )
+            safe_assign_charfield(factura, 'codigo_error', codigo_error)
+            factura.mensaje_error = (
+                '; '.join(bill_errors)
+                if bill_errors
+                else response_json.get('error_message')
+            )
+            safe_assign_json(
+                factura,
+                'response_json',
+                _build_attempt_trace(
+                    factura=factura,
+                    payload=payload,
+                    numero=numero,
+                    reference_code=reference_code,
+                    triggered_by=triggered_by,
+                    status=persistable_fields.get('status', 'ERROR_INTEGRACION'),
+                    response=response_json,
+                    response_show=response_show_json,
+                    response_download=response_download_json,
+                    final_fields={**fields, 'persisted_fields': persistable_fields},
+                    bill_errors=bill_errors,
+                ),
+            )
+            factura.observaciones_json = bill_errors
+            factura.retry_count = int(factura.retry_count or 0) + 1
+            factura.last_retry_at = timezone.now()
+            factura.next_retry_at = None
+            factura.ultima_sincronizacion_at = timezone.now()
+            log_model_string_overflow_diagnostics(
+                instance=factura, venta_id=venta.id, factura_id=factura.pk, stage='before_factura_save'
+            )
+            factura.save()
+
+            venta.factura_electronica_uuid = fields.get('uuid') or ''
+            venta.factura_electronica_cufe = fields.get('cufe') or ''
+            venta.fecha_envio_dian = factura.updated_at
+            venta.save(update_fields=['factura_electronica_uuid', 'factura_electronica_cufe', 'fecha_envio_dian', 'updated_at'])
+            logger.info(
+                'facturar_venta.persistida venta_id=%s factura=%s status=%s reference_code=%s',
+                venta.id,
+                factura.number,
+                factura.status,
+                factura.reference_code,
+            )
+            if factura.cufe and factura.number:
+                qr_file = generate_qr_dian(factura.number, factura.cufe)
+                factura.qr.save(qr_file.name, qr_file, save=False)
+                factura.save(update_fields=['qr', 'updated_at'])
+    except DataError as exc:
+        factura = _mark_factura_persistence_error(
+            factura_id=factura.pk,
+            venta_id=venta.id,
             payload=payload,
             numero=numero,
             reference_code=reference_code,
             triggered_by=triggered_by,
-            status=persistable_fields.get('status', 'ERROR_INTEGRACION'),
             response=response_json,
             response_show=response_show_json,
             response_download=response_download_json,
-            final_fields={**fields, 'persisted_fields': persistable_fields},
+            fields=fields,
             bill_errors=bill_errors,
-            ),
+            error_message='La venta fue registrada, pero ocurrió un error técnico al guardar la respuesta electrónica.',
         )
-        factura.observaciones_json = bill_errors
-        factura.retry_count = int(factura.retry_count or 0) + 1
-        factura.last_retry_at = timezone.now()
-        factura.next_retry_at = None
-        factura.ultima_sincronizacion_at = timezone.now()
-        log_model_string_overflow_diagnostics(
-            instance=factura, venta_id=venta.id, factura_id=factura.pk, stage='before_factura_save'
-        )
-        try:
-            factura.save()
-        except DataError:
-            factura.status = 'ERROR_PERSISTENCIA'
-            factura.estado_electronico = 'ERROR_PERSISTENCIA'
-            safe_assign_charfield(factura, 'codigo_error', 'ERROR_PERSISTENCIA_SAVE')
-            factura.mensaje_error = (
-                'No se pudo persistir la factura electrónica por un límite de almacenamiento. '
-                'Revise logs técnicos para detalle de campos.'
-            )
-            log_model_string_overflow_diagnostics(
-                instance=factura, venta_id=venta.id, factura_id=factura.pk, stage='dataerror_factura_save'
-            )
-            factura.save(
-                update_fields=['status', 'estado_electronico', 'codigo_error', 'mensaje_error', 'updated_at']
-            )
-            raise
-
-        venta.factura_electronica_uuid = fields.get('uuid') or ''
-        venta.factura_electronica_cufe = fields.get('cufe') or ''
-        venta.fecha_envio_dian = factura.updated_at
-        venta.save(update_fields=['factura_electronica_uuid', 'factura_electronica_cufe', 'fecha_envio_dian', 'updated_at'])
-        logger.info(
-            'facturar_venta.persistida venta_id=%s factura=%s status=%s reference_code=%s',
-            venta.id,
-            factura.number,
-            factura.status,
-            factura.reference_code,
-        )
-        if factura.cufe and factura.number:
-            qr_file = generate_qr_dian(factura.number, factura.cufe)
-            factura.qr.save(qr_file.name, qr_file, save=False)
-            factura.save(update_fields=['qr', 'updated_at'])
+        raise FacturaPersistenciaError(factura.mensaje_error) from exc
 
     try:
         if factura.xml_url:

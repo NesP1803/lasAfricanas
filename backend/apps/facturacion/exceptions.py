@@ -15,3 +15,7 @@ class DocumentoSoporteInvalido(Exception):
 
 class DocumentoSoporteNoValido(Exception):
     """Se lanza cuando un documento soporte no está en estado válido para nota de ajuste."""
+
+
+class FacturaPersistenciaError(Exception):
+    """Se lanza cuando falla la persistencia local de la factura electrónica."""

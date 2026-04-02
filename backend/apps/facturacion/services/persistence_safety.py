@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any
 
 from django.db import models
 
 logger = logging.getLogger(__name__)
+_BASE64_CHARS_RE = re.compile(r'^[A-Za-z0-9+/=\s]+$')
 
 
 def safe_truncate(value: Any, max_length: int | None) -> Any:
@@ -84,3 +86,28 @@ def log_model_string_overflow_diagnostics(
                 max_length,
             )
     return overflows
+
+
+def is_data_url(value: str) -> bool:
+    return str(value or '').strip().lower().startswith('data:')
+
+
+def looks_like_base64_blob(value: str) -> bool:
+    text = str(value or '').strip()
+    if len(text) < 256:
+        return False
+    return bool(_BASE64_CHARS_RE.match(text))
+
+
+def normalize_qr_image_value(raw_value: Any) -> tuple[str, str]:
+    """
+    Separa URL corta y contenido embebido para evitar overflows en campos URLField.
+
+    Retorna (qr_image_url, qr_image_data).
+    """
+    text = str(raw_value or '').strip()
+    if not text:
+        return '', ''
+    if is_data_url(text) or looks_like_base64_blob(text):
+        return '', text
+    return text, ''
