@@ -41,10 +41,14 @@ function App() {
               <Route path="ventas/detalles-cuentas" element={<DetallesCuentas />} />
               <Route path="facturacion/facturas" element={<Facturas />} />
               <Route path="facturacion-electronica" element={<Navigate to="/facturacion/facturas" replace />} />
-              <Route path="notas-credito" element={<NotasCreditoPage />} />
-              <Route path="notas-credito/crear" element={<CrearNotaCreditoPage />} />
-              <Route path="documentos-soporte" element={<DocumentosSoportePage />} />
-              <Route path="documentos-soporte/crear" element={<CrearDocumentoSoportePage />} />
+              <Route path="listados/notas-credito" element={<NotasCreditoPage />} />
+              <Route path="facturacion/nota-credito" element={<CrearNotaCreditoPage />} />
+              <Route path="listados/documentos-soporte" element={<DocumentosSoportePage />} />
+              <Route path="facturacion/documento-soporte" element={<CrearDocumentoSoportePage />} />
+              <Route path="notas-credito" element={<Navigate to="/listados/notas-credito" replace />} />
+              <Route path="notas-credito/crear" element={<Navigate to="/facturacion/nota-credito" replace />} />
+              <Route path="documentos-soporte" element={<Navigate to="/listados/documentos-soporte" replace />} />
+              <Route path="documentos-soporte/crear" element={<Navigate to="/facturacion/documento-soporte" replace />} />
               <Route path="facturacion/remisiones" element={<Remisiones />} />
               <Route path="facturacion/caja" element={<Caja />} />
             </Route>

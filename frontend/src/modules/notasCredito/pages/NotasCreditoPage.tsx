@@ -37,7 +37,7 @@ export default function NotasCreditoPage() {
           <p className="text-sm text-slate-500">Visualice, gestione y descargue XML/PDF de notas crédito emitidas.</p>
         </div>
         <Link
-          to="/notas-credito/crear"
+          to="/facturacion/nota-credito"
           className="inline-flex w-fit rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
         >
           Crear nota crédito
