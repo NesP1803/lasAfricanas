@@ -3,7 +3,7 @@ from decimal import Decimal
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from apps.inventario.models import Categoria, Producto, Proveedor
+from apps.inventario.models import Categoria, MovimientoInventario, Producto, Proveedor
 from apps.taller.models import Mecanico, Moto, OrdenRepuesto, OrdenTaller
 from apps.usuarios.models import Usuario
 from apps.ventas.models import Cliente
@@ -112,3 +112,75 @@ class OrdenTallerFacturacionTests(TestCase):
         self.assertEqual(venta.iva, Decimal('0.00'))
         self.assertEqual(venta.total, Decimal('2400.00'))
         self.assertEqual(venta.subtotal + venta.iva - venta.descuento_valor, venta.total)
+
+
+class OrdenTallerAgregarRepuestoTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.usuario = Usuario.objects.create_user(
+            username='tecnico_stock',
+            password='pass1234',
+            tipo_usuario='VENDEDOR',
+        )
+        self.client.force_authenticate(user=self.usuario)
+
+        self.categoria = Categoria.objects.create(nombre='General')
+        self.proveedor = Proveedor.objects.create(nombre='Proveedor')
+        self.producto = Producto.objects.create(
+            codigo='REP-NEG-001',
+            nombre='Repuesto con stock limitado',
+            categoria=self.categoria,
+            proveedor=self.proveedor,
+            precio_costo=Decimal('1000.00'),
+            precio_venta=Decimal('3000.00'),
+            precio_venta_minimo=Decimal('2500.00'),
+            stock=Decimal('0.00'),
+            stock_minimo=Decimal('1.00'),
+            iva_porcentaje=Decimal('19.00'),
+            iva_exento=False,
+        )
+        self.cliente = Cliente.objects.create(
+            tipo_documento='CC',
+            numero_documento='998877',
+            nombre='Cliente Taller',
+        )
+        self.mecanico = Mecanico.objects.create(nombre='Mecánico 1')
+        self.moto = Moto.objects.create(
+            placa='XYZ987',
+            marca='Yamaha',
+            cliente=self.cliente,
+            mecanico=self.mecanico,
+            proveedor=self.proveedor,
+        )
+        self.orden = OrdenTaller.objects.create(moto=self.moto, mecanico=self.mecanico)
+
+    def test_agregar_repuesto_permite_stock_negativo(self):
+        response = self.client.post(
+            f'/api/ordenes-taller/{self.orden.id}/agregar_repuesto/',
+            {'producto': self.producto.id, 'cantidad': '2'},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['mensaje'], 'Repuesto agregado correctamente')
+        self.assertEqual(Decimal(response.data['stock_anterior']), Decimal('0.00'))
+        self.assertEqual(Decimal(response.data['stock_actual']), Decimal('-2.00'))
+        self.assertTrue(response.data['stock_negativo'])
+
+        self.producto.refresh_from_db()
+        self.assertEqual(self.producto.stock, Decimal('-2.00'))
+
+        movimiento = MovimientoInventario.objects.get(producto=self.producto)
+        self.assertEqual(movimiento.stock_anterior, Decimal('0.00'))
+        self.assertEqual(movimiento.stock_nuevo, Decimal('-2.00'))
+        self.assertEqual(movimiento.cantidad, Decimal('-2.00'))
+
+    def test_agregar_repuesto_rechaza_cantidad_no_positiva(self):
+        response = self.client.post(
+            f'/api/ordenes-taller/{self.orden.id}/agregar_repuesto/',
+            {'producto': self.producto.id, 'cantidad': '0'},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertEqual(response.data['error'], 'Cantidad inválida')

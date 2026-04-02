@@ -151,6 +151,10 @@ class OrdenTallerViewSet(viewsets.ModelViewSet):
         except (InvalidOperation, TypeError, ValueError):
             return Response({'error': 'Cantidad inválida'}, status=status.HTTP_400_BAD_REQUEST)
 
+        stock_anterior = None
+        stock_actual = None
+        stock_negativo = False
+
         with transaction.atomic():
             try:
                 producto = Producto.objects.select_for_update().get(pk=producto_id, is_active=True)
@@ -181,12 +185,8 @@ class OrdenTallerViewSet(viewsets.ModelViewSet):
                 stock_anterior = producto.stock
                 cantidad_movimiento = -abs(cantidad)
                 stock_nuevo = stock_anterior + cantidad_movimiento
-
-                if stock_nuevo < 0:
-                    return Response(
-                        {'error': 'El stock no puede ser negativo'},
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
+                stock_actual = stock_nuevo
+                stock_negativo = stock_nuevo < 0
 
                 MovimientoInventario.objects.create(
                     producto=producto,
@@ -201,7 +201,14 @@ class OrdenTallerViewSet(viewsets.ModelViewSet):
                 )
 
         serializer = OrdenTallerSerializer(orden)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        response_data = {
+            **serializer.data,
+            'mensaje': 'Repuesto agregado correctamente',
+            'stock_anterior': stock_anterior,
+            'stock_actual': stock_actual,
+            'stock_negativo': stock_negativo,
+        }
+        return Response(response_data, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'])
     def quitar_repuesto(self, request, pk=None):

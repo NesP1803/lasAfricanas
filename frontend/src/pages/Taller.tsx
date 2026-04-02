@@ -305,10 +305,17 @@ export default function Taller() {
       }
       setCantidades((prev) => ({ ...prev, [productoId]: min }));
       setRepuestoModalOpen(false);
-      showNotification({
-        message: 'Repuesto agregado correctamente.',
-        type: 'success',
-      });
+      if (orden.stock_negativo || (orden.stock_actual !== null && Number(orden.stock_actual) < 0)) {
+        showNotification({
+          message: `Repuesto agregado. Advertencia: stock en negativo (${orden.stock_actual}).`,
+          type: 'info',
+        });
+      } else {
+        showNotification({
+          message: orden.mensaje || 'Repuesto agregado correctamente.',
+          type: 'success',
+        });
+      }
     } catch (error) {
       console.error('Error al agregar repuesto:', error);
       showNotification({
