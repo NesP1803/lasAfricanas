@@ -41,6 +41,10 @@ MISMATCH_ERROR_CODE = 'MISMATCH_NUMERACION'
 LOCAL_VALIDATION_ERROR_CODE = 'ERROR_VALIDACION_LOCAL'
 
 
+class FacturaPersistenciaError(Exception):
+    """Error de persistencia controlado para no dejar estados ambiguos."""
+
+
 def _extract_factus_data(response_json: dict[str, Any]) -> dict[str, str]:
     data = response_json.get('data', response_json)
     bill = data.get('bill', data)
@@ -75,6 +79,12 @@ def _merge_factus_fields(base: dict[str, str], extra: dict[str, str]) -> dict[st
         if value and not merged.get(key):
             merged[key] = value
     return merged
+
+
+def _assign_qr_image_fields(factura: FacturaElectronica, qr_image_value: str) -> None:
+    qr_image_url, qr_image_data = normalize_qr_image_value(qr_image_value)
+    safe_assign_charfield(factura, 'qr_image_url', qr_image_url)
+    factura.qr_image_data = qr_image_data
 
 
 PERSISTABLE_FACTURA_FIELDS = {
@@ -439,7 +449,7 @@ def _sync_existing_pending_invoice(
                 if key == 'qr':
                     locked.qr_data = value
                 elif key == 'qr_image':
-                    _apply_qr_image_fields(locked, value)
+                    _assign_qr_image_fields(locked, value)
                 else:
                     setattr(locked, key, value)
         locked.estado_electronico = locked.status
@@ -915,7 +925,7 @@ def facturar_venta(
                 if key == 'qr':
                     factura.qr_data = value
                 elif key == 'qr_image':
-                    _apply_qr_image_fields(factura, value)
+                    _assign_qr_image_fields(factura, value)
                 else:
                     if key in {'xml_url', 'pdf_url', 'public_url'}:
                         safe_assign_charfield(factura, key, value)
@@ -941,17 +951,17 @@ def facturar_venta(
                 factura,
                 'response_json',
                 _build_attempt_trace(
-                    factura=factura,
-                    payload=payload,
-                    numero=numero,
-                    reference_code=reference_code,
-                    triggered_by=triggered_by,
-                    status=persistable_fields.get('status', 'ERROR_INTEGRACION'),
-                    response=response_json,
-                    response_show=response_show_json,
-                    response_download=response_download_json,
-                    final_fields={**fields, 'persisted_fields': persistable_fields},
-                    bill_errors=bill_errors,
+                factura=factura,
+                payload=payload,
+                numero=numero,
+                reference_code=reference_code,
+                triggered_by=triggered_by,
+                status=persistable_fields.get('status', 'ERROR_INTEGRACION'),
+                response=response_json,
+                response_show=response_show_json,
+                response_download=response_download_json,
+                final_fields={**fields, 'persisted_fields': persistable_fields},
+                bill_errors=bill_errors,
                 ),
             )
             factura.observaciones_json = bill_errors
@@ -959,9 +969,11 @@ def facturar_venta(
             factura.last_retry_at = timezone.now()
             factura.next_retry_at = None
             factura.ultima_sincronizacion_at = timezone.now()
-            log_model_string_overflow_diagnostics(
+            overflows = log_model_string_overflow_diagnostics(
                 instance=factura, venta_id=venta.id, factura_id=factura.pk, stage='before_factura_save'
             )
+            if overflows:
+                raise FacturaPersistenciaError('Se detectaron campos con overflow antes de guardar la factura.')
             factura.save()
 
             venta.factura_electronica_uuid = fields.get('uuid') or ''
@@ -979,22 +991,21 @@ def facturar_venta(
                 qr_file = generate_qr_dian(factura.number, factura.cufe)
                 factura.qr.save(qr_file.name, qr_file, save=False)
                 factura.save(update_fields=['qr', 'updated_at'])
-    except DataError as exc:
-        factura = _mark_factura_persistence_error(
-            factura_id=factura.pk,
-            venta_id=venta.id,
-            payload=payload,
-            numero=numero,
-            reference_code=reference_code,
-            triggered_by=triggered_by,
-            response=response_json,
-            response_show=response_show_json,
-            response_download=response_download_json,
-            fields=fields,
-            bill_errors=bill_errors,
-            error_message='La venta fue registrada, pero ocurrió un error técnico al guardar la respuesta electrónica.',
-        )
-        raise FacturaPersistenciaError(factura.mensaje_error) from exc
+    except (DataError, FacturaPersistenciaError) as exc:
+        with transaction.atomic():
+            factura = FacturaElectronica.objects.select_for_update().get(pk=factura.pk)
+            factura.status = 'ERROR_PERSISTENCIA'
+            factura.estado_electronico = 'ERROR_PERSISTENCIA'
+            safe_assign_charfield(factura, 'codigo_error', 'ERROR_PERSISTENCIA_SAVE')
+            factura.mensaje_error = (
+                'No se pudo persistir la factura electrónica por un límite de almacenamiento. '
+                'Revise logs técnicos para detalle de campos.'
+            )
+            log_model_string_overflow_diagnostics(
+                instance=factura, venta_id=venta.id, factura_id=factura.pk, stage='dataerror_factura_save'
+            )
+            factura.save(update_fields=['status', 'estado_electronico', 'codigo_error', 'mensaje_error', 'updated_at'])
+        raise DataError(str(exc))
 
     try:
         if factura.xml_url:

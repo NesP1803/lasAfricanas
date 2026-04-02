@@ -6,6 +6,7 @@ import json
 import logging
 import re
 from typing import Any
+from urllib.parse import urlparse
 
 from django.db import models
 
@@ -88,26 +89,14 @@ def log_model_string_overflow_diagnostics(
     return overflows
 
 
-def is_data_url(value: str) -> bool:
-    return str(value or '').strip().lower().startswith('data:')
-
-
-def looks_like_base64_blob(value: str) -> bool:
-    text = str(value or '').strip()
-    if len(text) < 256:
-        return False
-    return bool(_BASE64_CHARS_RE.match(text))
-
-
-def normalize_qr_image_value(raw_value: Any) -> tuple[str, str]:
-    """
-    Separa URL corta y contenido embebido para evitar overflows en campos URLField.
-
-    Retorna (qr_image_url, qr_image_data).
-    """
-    text = str(raw_value or '').strip()
-    if not text:
+def normalize_qr_image_value(value: Any) -> tuple[str, str]:
+    """Separa URL remota corta de contenido embebido/base64 para QR."""
+    raw = str(value or '').strip()
+    if not raw:
         return '', ''
-    if is_data_url(text) or looks_like_base64_blob(text):
-        return '', text
-    return text, ''
+    if raw.startswith('data:image'):
+        return '', raw
+    parsed = urlparse(raw)
+    if parsed.scheme in {'http', 'https'} and parsed.netloc:
+        return raw, ''
+    return '', raw
