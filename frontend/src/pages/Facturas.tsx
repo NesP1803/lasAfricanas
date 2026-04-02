@@ -99,20 +99,21 @@ const mapVentaToFacturaItem = (venta: VentaListItem): FacturaItem => {
 };
 
 const mapEstadoElectronicoLabel = (factura?: FacturaElectronica): string => {
-  if (!factura) return 'Local';
+  if (!factura) return 'Sin emisión';
   const estado = resolveEstadoFactura(factura);
-  const codigoError = String(factura.codigo_error || '').toUpperCase();
-  if (codigoError.includes('MISMATCH') || codigoError.includes('VALIDACION')) return 'Error validación';
-  if (estado === 'ACEPTADA' || estado === 'EMITIDA_CON_OBSERVACIONES') return 'Aceptada';
-  if (estado === 'EN_PROCESO') return 'En proceso';
+  if (estado === 'ACEPTADA') return 'Aceptada';
+  if (estado === 'ACEPTADA_CON_OBSERVACIONES') return 'Aceptada con observaciones';
   if (estado === 'RECHAZADA') return 'Rechazada';
-  return 'Error';
+  if (estado === 'ERROR_INTEGRACION') return 'Error integración';
+  if (estado === 'ERROR_PERSISTENCIA') return 'Error persistencia';
+  if (estado === 'PENDIENTE_REINTENTO') return 'Pendiente reintento';
+  return 'Sin emisión';
 };
 
 const hasValidElectronicDocument = (factura?: FacturaElectronica): boolean => {
   if (!factura) return false;
   const estado = resolveEstadoFactura(factura);
-  return (estado === 'ACEPTADA' || estado === 'EMITIDA_CON_OBSERVACIONES') && Boolean(factura.numero && factura.cufe);
+  return (estado === 'ACEPTADA' || estado === 'ACEPTADA_CON_OBSERVACIONES') && Boolean(factura.numero && factura.cufe);
 };
 
 export default function Facturas() {
@@ -124,6 +125,7 @@ export default function Facturas() {
   const [estadoFiltro, setEstadoFiltro] = useState<'FACTURADA' | 'ANULADA' | 'TODAS'>(
     'TODAS'
   );
+  const [estadoElectronicoFiltro, setEstadoElectronicoFiltro] = useState<string>('TODAS');
   const [fechaInicio, setFechaInicio] = useState(today);
   const [fechaFin, setFechaFin] = useState(today);
   const [documento, setDocumento] = useState<DocumentoSeleccionado | null>(null);
@@ -234,9 +236,12 @@ export default function Facturas() {
             .includes(query);
       const matchesInicio = inicio ? fecha >= inicio : true;
       const matchesFin = fin ? fecha <= fin : true;
-      return matchesSearch && matchesInicio && matchesFin;
+      const estadoElectronico = item.electronica ? resolveEstadoFactura(item.electronica) : 'SIN_EMISION';
+      const matchesEstadoElectronico =
+        estadoElectronicoFiltro === 'TODAS' ? true : estadoElectronico === estadoElectronicoFiltro;
+      return matchesSearch && matchesInicio && matchesFin && matchesEstadoElectronico;
     });
-  }, [busqueda, facturas, fechaInicio, fechaFin]);
+  }, [busqueda, facturas, fechaInicio, fechaFin, estadoElectronicoFiltro]);
 
   useEffect(() => {
     cargarFacturas({
@@ -483,6 +488,22 @@ export default function Facturas() {
               onChange={(event) => setFechaInicio(event.target.value)}
               className="rounded border border-slate-300 px-2 py-1 text-sm"
             />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-semibold text-slate-500">Estado electrónico</label>
+            <select
+              value={estadoElectronicoFiltro}
+              onChange={(event) => setEstadoElectronicoFiltro(event.target.value)}
+              className="rounded border border-slate-300 px-2 py-1 text-sm"
+            >
+              <option value="TODAS">Todos</option>
+              <option value="RECHAZADA">Rechazadas</option>
+              <option value="PENDIENTE_REINTENTO">Pendientes reintento</option>
+              <option value="ERROR_INTEGRACION">Error integración</option>
+              <option value="ERROR_PERSISTENCIA">Error persistencia</option>
+              <option value="ACEPTADA_CON_OBSERVACIONES">Aceptadas con observaciones</option>
+              <option value="ACEPTADA">Aceptadas</option>
+            </select>
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-xs font-semibold text-slate-500">Fecha final</label>

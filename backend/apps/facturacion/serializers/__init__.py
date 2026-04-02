@@ -3,6 +3,7 @@
 from rest_framework import serializers
 
 from apps.facturacion.models import FacturaElectronica
+from apps.facturacion.services.electronic_state_machine import resolve_actions
 
 
 class FacturaElectronicaSerializer(serializers.ModelSerializer):
@@ -32,9 +33,17 @@ class FacturaElectronicaSerializer(serializers.ModelSerializer):
             'ultimo_error_pdf',
             'qr',
             'status',
+            'estado_electronico',
+            'estado_factus_raw',
             'codigo_error',
             'mensaje_error',
+            'observaciones_json',
             'response_json',
+            'retry_count',
+            'last_retry_at',
+            'next_retry_at',
+            'ultima_sincronizacion_at',
+            'emitida_en_factus',
             'created_at',
         ]
         read_only_fields = fields
@@ -53,8 +62,9 @@ class FacturarVentaResponseSerializer(serializers.Serializer):
 class FacturaEstadoSerializer(serializers.ModelSerializer):
     """Serializer de respuesta para consulta de estado DIAN sincronizado."""
 
-    estado = serializers.CharField(source='status', read_only=True)
-    estado_dian = serializers.CharField(source='status', read_only=True)
+    estado = serializers.CharField(source='estado_electronico', read_only=True)
+    estado_dian = serializers.CharField(source='estado_electronico', read_only=True)
+    acciones_sugeridas = serializers.SerializerMethodField()
     numero = serializers.CharField(source='number', read_only=True)
 
     class Meta:
@@ -66,10 +76,18 @@ class FacturaEstadoSerializer(serializers.ModelSerializer):
             'cufe',
             'uuid',
             'status',
+            'estado_electronico',
+            'estado_factus_raw',
             'estado',
             'estado_dian',
             'codigo_error',
             'mensaje_error',
+            'observaciones_json',
+            'retry_count',
+            'last_retry_at',
+            'next_retry_at',
+            'ultima_sincronizacion_at',
+            'emitida_en_factus',
             'pdf_url',
             'xml_url',
             'public_url',
@@ -85,8 +103,12 @@ class FacturaEstadoSerializer(serializers.ModelSerializer):
             'ultimo_error_pdf',
             'qr',
             'updated_at',
+            'acciones_sugeridas',
         ]
         read_only_fields = fields
+
+    def get_acciones_sugeridas(self, obj: FacturaElectronica):
+        return resolve_actions(obj.estado_electronico or obj.status)
 
 
 from .configuracion_dian_serializer import ConfiguracionDIANSerializer

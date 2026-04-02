@@ -6,11 +6,13 @@ from django.db import models
 class FacturaElectronica(models.Model):
     """Representa la respuesta validada de DIAN para una venta enviada a Factus."""
 
-    STATUS_CHOICES = [
-        ('ACEPTADA', 'Aceptada DIAN'),
-        ('RECHAZADA', 'Rechazada DIAN'),
-        ('ERROR', 'Error de envío'),
-        ('EN_PROCESO', 'En proceso'),
+    ELECTRONIC_STATUS_CHOICES = [
+        ('ACEPTADA', 'Aceptada'),
+        ('ACEPTADA_CON_OBSERVACIONES', 'Aceptada con observaciones'),
+        ('RECHAZADA', 'Rechazada'),
+        ('ERROR_INTEGRACION', 'Error de integración'),
+        ('ERROR_PERSISTENCIA', 'Error de persistencia'),
+        ('PENDIENTE_REINTENTO', 'Pendiente de reintento'),
     ]
 
     venta = models.OneToOneField(
@@ -29,7 +31,21 @@ class FacturaElectronica(models.Model):
         blank=True,
         verbose_name='Código de referencia',
     )
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, db_index=True, verbose_name='Estado DIAN')
+    status = models.CharField(
+        max_length=40,
+        choices=ELECTRONIC_STATUS_CHOICES,
+        db_index=True,
+        verbose_name='Estado electrónico (legacy)',
+        default='PENDIENTE_REINTENTO',
+    )
+    estado_electronico = models.CharField(
+        max_length=40,
+        choices=ELECTRONIC_STATUS_CHOICES,
+        db_index=True,
+        verbose_name='Estado electrónico Factus',
+        default='PENDIENTE_REINTENTO',
+    )
+    estado_factus_raw = models.CharField(max_length=120, blank=True, default='', verbose_name='Estado crudo Factus')
     xml_url = models.URLField(max_length=500, null=True, blank=True, verbose_name='URL XML')
     pdf_url = models.URLField(max_length=500, null=True, blank=True, verbose_name='URL PDF')
     public_url = models.URLField(max_length=500, null=True, blank=True, verbose_name='URL pública')
@@ -46,7 +62,13 @@ class FacturaElectronica(models.Model):
     ultimo_error_pdf = models.TextField(null=True, blank=True, verbose_name='Último error PDF')
     codigo_error = models.CharField(max_length=50, null=True, blank=True, verbose_name='Código de error DIAN')
     mensaje_error = models.TextField(null=True, blank=True, verbose_name='Mensaje de error DIAN')
+    observaciones_json = models.JSONField(default=list, blank=True, verbose_name='Observaciones Factus normalizadas')
     response_json = models.JSONField(verbose_name='Respuesta completa de Factus')
+    retry_count = models.PositiveIntegerField(default=0, verbose_name='Cantidad de reintentos')
+    last_retry_at = models.DateTimeField(null=True, blank=True, verbose_name='Último reintento')
+    next_retry_at = models.DateTimeField(null=True, blank=True, verbose_name='Próximo reintento')
+    ultima_sincronizacion_at = models.DateTimeField(null=True, blank=True, verbose_name='Última sincronización')
+    emitida_en_factus = models.BooleanField(default=False, db_index=True, verbose_name='Emitida en Factus')
     created_at = models.DateTimeField(auto_now_add=True, db_index=True, verbose_name='Fecha de creación')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Fecha de actualización')
 
@@ -57,6 +79,7 @@ class FacturaElectronica(models.Model):
         ordering = ['-created_at']
         indexes = [
             models.Index(fields=['status', '-created_at']),
+            models.Index(fields=['estado_electronico', '-created_at']),
             models.Index(fields=['number', '-created_at']),
             models.Index(fields=['uuid']),
         ]
@@ -76,7 +99,7 @@ class NotaCreditoElectronica(models.Model):
     number = models.CharField(max_length=50)
     uuid = models.CharField(max_length=100, null=True, blank=True)
     cufe = models.CharField(max_length=150, null=True, blank=True)
-    status = models.CharField(max_length=20, choices=FacturaElectronica.STATUS_CHOICES, db_index=True)
+    status = models.CharField(max_length=40, choices=FacturaElectronica.ELECTRONIC_STATUS_CHOICES, db_index=True)
     xml_url = models.URLField(null=True, blank=True)
     pdf_url = models.URLField(null=True, blank=True)
     response_json = models.JSONField(null=True, blank=True)
@@ -101,7 +124,7 @@ class DocumentoSoporteElectronico(models.Model):
     proveedor_tipo_documento = models.CharField(max_length=20)
     cufe = models.CharField(max_length=150, null=True, blank=True)
     uuid = models.CharField(max_length=150, null=True, blank=True)
-    status = models.CharField(max_length=20, choices=FacturaElectronica.STATUS_CHOICES, db_index=True)
+    status = models.CharField(max_length=40, choices=FacturaElectronica.ELECTRONIC_STATUS_CHOICES, db_index=True)
     xml_url = models.URLField(null=True, blank=True)
     pdf_url = models.URLField(null=True, blank=True)
     response_json = models.JSONField(null=True, blank=True)
@@ -128,7 +151,7 @@ class NotaAjusteDocumentoSoporte(models.Model):
     number = models.CharField(max_length=50)
     uuid = models.CharField(max_length=100, null=True, blank=True)
     cufe = models.CharField(max_length=150, null=True, blank=True)
-    status = models.CharField(max_length=20, choices=FacturaElectronica.STATUS_CHOICES, db_index=True)
+    status = models.CharField(max_length=40, choices=FacturaElectronica.ELECTRONIC_STATUS_CHOICES, db_index=True)
     xml_url = models.URLField(null=True, blank=True)
     pdf_url = models.URLField(null=True, blank=True)
     response_json = models.JSONField(null=True, blank=True)

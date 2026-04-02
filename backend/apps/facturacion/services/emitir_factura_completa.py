@@ -24,7 +24,8 @@ def emitir_factura_completa(venta_id: int, triggered_by: Usuario | None = None) 
     client = FactusClient()
     warnings: list[dict[str, str]] = []
 
-    if factura.status not in {'ACEPTADA', 'EN_PROCESO'}:
+    estado_electronico = factura.estado_electronico or factura.status
+    if estado_electronico not in {'ACEPTADA', 'ACEPTADA_CON_OBSERVACIONES', 'PENDIENTE_REINTENTO'}:
         return {'factura': factura, 'warnings': warnings}
 
     # 1) Sincronizar factura remota.

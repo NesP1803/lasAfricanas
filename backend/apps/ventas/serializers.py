@@ -26,13 +26,9 @@ def _build_factura_electronica_data(venta):
         'reference_code': factura.reference_code,
         'cufe': factura.cufe,
         'uuid': factura.uuid,
-        'status': factura.status,
-        'estado_dian': factura.status,
-        'estado': (
-            'EMITIDA_CON_OBSERVACIONES'
-            if factura.status == 'ACEPTADA' and factura.codigo_error == 'OBSERVACIONES_FACTUS'
-            else factura.status
-        ),
+        'status': factura.estado_electronico or factura.status,
+        'estado_dian': factura.estado_electronico or factura.status,
+        'estado': factura.estado_electronico or factura.status,
         'codigo_error': factura.codigo_error,
         'observaciones': factura.mensaje_error or '',
         'bill_errors': bill_errors if isinstance(bill_errors, list) else [],
@@ -170,9 +166,7 @@ class VentaListSerializer(serializers.ModelSerializer):
         factura = getattr(obj, 'factura_electronica_factus', None)
         if not factura:
             return None
-        if factura.status == 'ACEPTADA' and factura.codigo_error == 'OBSERVACIONES_FACTUS':
-            return 'EMITIDA_CON_OBSERVACIONES'
-        return factura.status
+        return factura.estado_electronico or factura.status
 
     def get_factura_electronica(self, obj):
         return _build_factura_electronica_data(obj)
@@ -238,9 +232,7 @@ class VentaDetailSerializer(serializers.ModelSerializer):
         factura = getattr(obj, 'factura_electronica_factus', None)
         if not factura:
             return None
-        if factura.status == 'ACEPTADA' and factura.codigo_error == 'OBSERVACIONES_FACTUS':
-            return 'EMITIDA_CON_OBSERVACIONES'
-        return factura.status
+        return factura.estado_electronico or factura.status
 
     def get_factura_electronica(self, obj):
         return _build_factura_electronica_data(obj)

@@ -6,34 +6,24 @@ import logging
 from typing import Any
 
 from django.db import transaction
+from django.utils import timezone
 
 from apps.facturacion.models import FacturaElectronica
+from apps.facturacion.services.electronic_state_machine import map_factus_status
 from apps.facturacion.services.exceptions import FacturaNoEncontrada, FactusConsultaError
 from apps.facturacion.services.factus_client import FactusAPIError, FactusAuthError, FactusClient
 
 logger = logging.getLogger(__name__)
 
-
-def map_factus_status(status: str | None) -> str:
-    """Mapea estados de Factus a estados internos."""
-    normalized = (status or '').strip().lower()
-    mapping = {
-        'valid': 'ACEPTADA',
-        'rejected': 'RECHAZADA',
-        'pending': 'EN_PROCESO',
-        'error': 'ERROR',
-    }
-    return mapping.get(normalized, 'ERROR')
-
-
 def _extract_bill_data(response_json: dict[str, Any]) -> dict[str, str]:
     data = response_json.get('data', response_json)
     bill = data.get('bill', data)
-    status = bill.get('status', data.get('status', response_json.get('status')))
+    estado_electronico, estado_factus_raw = map_factus_status(response_json)
     return {
         'cufe': str(bill.get('cufe', '')).strip(),
         'uuid': str(bill.get('uuid', '')).strip(),
-        'status': map_factus_status(str(status) if status is not None else None),
+        'status': estado_electronico,
+        'estado_factus_raw': estado_factus_raw,
         'xml_url': str(bill.get('xml_url', '')).strip(),
         'pdf_url': str(bill.get('pdf_url', '')).strip(),
         'codigo_error': str(response_json.get('error_code', '')).strip(),
@@ -59,7 +49,8 @@ def sync_invoice_status(numero_factura: str) -> FacturaElectronica:
                 numero_factura,
             )
             with transaction.atomic():
-                factura.status = factura.status or 'EN_PROCESO'
+                factura.estado_electronico = factura.estado_electronico or 'PENDIENTE_REINTENTO'
+                factura.status = factura.estado_electronico
                 factura.codigo_error = 'FACTUS_DOCUMENTO_NO_ENCONTRADO'
                 factura.mensaje_error = (
                     'Factus aún no reporta el documento para este número; intente sincronizar nuevamente en unos minutos.'
@@ -74,6 +65,7 @@ def sync_invoice_status(numero_factura: str) -> FacturaElectronica:
                 factura.save(
                     update_fields=[
                         'status',
+                        'estado_electronico',
                         'codigo_error',
                         'mensaje_error',
                         'response_json',
@@ -93,21 +85,27 @@ def sync_invoice_status(numero_factura: str) -> FacturaElectronica:
         factura.cufe = payload['cufe'] or factura.cufe
         factura.uuid = payload['uuid'] or factura.uuid
         factura.status = payload['status']
+        factura.estado_electronico = payload['status']
+        factura.estado_factus_raw = payload['estado_factus_raw']
         factura.xml_url = payload['xml_url'] or factura.xml_url
         factura.pdf_url = payload['pdf_url'] or factura.pdf_url
         factura.codigo_error = payload['codigo_error'] or None
         factura.mensaje_error = payload['mensaje_error'] or None
         factura.response_json = response_json
+        factura.ultima_sincronizacion_at = timezone.now()
         factura.save(
             update_fields=[
                 'cufe',
                 'uuid',
                 'status',
+                'estado_electronico',
+                'estado_factus_raw',
                 'xml_url',
                 'pdf_url',
                 'codigo_error',
                 'mensaje_error',
                 'response_json',
+                'ultima_sincronizacion_at',
                 'updated_at',
             ]
         )

@@ -225,6 +225,4 @@ def build_factura_ready_payload(venta, factura):
 
 
 def estado_electronico_ui(factura):
-    if factura.status == 'ACEPTADA' and factura.codigo_error == 'OBSERVACIONES_FACTUS':
-        return 'EMITIDA_CON_OBSERVACIONES'
-    return factura.status
+    return factura.estado_electronico or factura.status

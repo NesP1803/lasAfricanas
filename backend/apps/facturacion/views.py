@@ -50,6 +50,7 @@ from apps.facturacion.services import (
     sync_invoice_status,
     emitir_factura_completa,
 )
+from apps.facturacion.services.electronic_state_machine import resolve_actions
 
 logger = logging.getLogger(__name__)
 
@@ -82,10 +83,11 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
     serializer_class = FacturaEstadoSerializer
 
     def list(self, request):
-        facturas = (
-            FacturaElectronica.objects.select_related('venta__cliente')
-            .order_by('-created_at')
-        )
+        facturas = FacturaElectronica.objects.select_related('venta__cliente')
+        estado_electronico = str(request.query_params.get('estado_electronico', '')).strip()
+        if estado_electronico:
+            facturas = facturas.filter(estado_electronico=estado_electronico)
+        facturas = facturas.order_by('-created_at')
         data = [
             {
                 'id': factura.id,
@@ -97,15 +99,15 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
                 'cliente': factura.venta.cliente.nombre,
                 'fecha': factura.venta.fecha,
                 'total': factura.venta.total,
-                'estado': (
-                    'EMITIDA_CON_OBSERVACIONES'
-                    if factura.status == 'ACEPTADA' and factura.codigo_error == 'OBSERVACIONES_FACTUS'
-                    else factura.status
-                ),
-                'estado_dian': factura.status,
-                'status': factura.status,
+                'estado': factura.estado_electronico or factura.status,
+                'estado_dian': factura.estado_electronico or factura.status,
+                'status': factura.estado_electronico or factura.status,
+                'estado_local': factura.venta.estado,
+                'estado_electronico': factura.estado_electronico or factura.status,
+                'acciones_sugeridas': resolve_actions(factura.estado_electronico or factura.status),
                 'codigo_error': factura.codigo_error,
                 'observaciones': factura.mensaje_error,
+                'observaciones_json': factura.observaciones_json,
                 'bill_errors': (
                     factura.response_json.get('bill_errors', [])
                     if isinstance(factura.response_json, dict)
@@ -173,10 +175,10 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
             {
                 'detail': (
                     'Factura sincronizada y aceptada por DIAN.'
-                    if sincronizada.status == 'ACEPTADA'
+                    if (sincronizada.estado_electronico or sincronizada.status) in {'ACEPTADA', 'ACEPTADA_CON_OBSERVACIONES'}
                     else 'Factura reintentada/sincronizada, pero sigue en proceso en Factus/DIAN.'
                 ),
-                'result': 'SYNCED' if sincronizada.status == 'ACEPTADA' else 'PENDING',
+                'result': 'SYNCED' if (sincronizada.estado_electronico or sincronizada.status) in {'ACEPTADA', 'ACEPTADA_CON_OBSERVACIONES'} else 'PENDING',
                 'factura': serializer.data,
                 'warnings': result.get('warnings', []),
             }
