@@ -12,6 +12,38 @@ from apps.usuarios.models import Usuario
 from apps.ventas.services.calculo_venta import calcular_detalle_venta, recalcular_totales_venta
 
 
+def _build_factura_electronica_data(venta):
+    factura = getattr(venta, 'factura_electronica_factus', None)
+    if not factura:
+        return None
+    response_json = factura.response_json if isinstance(factura.response_json, dict) else {}
+    final_fields = response_json.get('final_fields', {}) if isinstance(response_json.get('final_fields', {}), dict) else {}
+    bill_errors = response_json.get('bill_errors', [])
+    return {
+        'id': factura.id,
+        'venta_id': factura.venta_id,
+        'numero': factura.number,
+        'reference_code': factura.reference_code,
+        'cufe': factura.cufe,
+        'uuid': factura.uuid,
+        'status': factura.status,
+        'estado_dian': factura.status,
+        'estado': (
+            'EMITIDA_CON_OBSERVACIONES'
+            if factura.status == 'ACEPTADA' and factura.codigo_error == 'OBSERVACIONES_FACTUS'
+            else factura.status
+        ),
+        'codigo_error': factura.codigo_error,
+        'observaciones': factura.mensaje_error or '',
+        'bill_errors': bill_errors if isinstance(bill_errors, list) else [],
+        'public_url': final_fields.get('public_url', ''),
+        'qr_factus': final_fields.get('qr', ''),
+        'qr_image': final_fields.get('qr_image', ''),
+        'xml_url': factura.xml_url,
+        'pdf_url': factura.pdf_url,
+    }
+
+
 class ClienteSerializer(serializers.ModelSerializer):
     """Serializer para Clientes"""
     tipo_documento_display = serializers.CharField(source='get_tipo_documento_display', read_only=True)
@@ -106,6 +138,7 @@ class VentaListSerializer(serializers.ModelSerializer):
     estado_display = serializers.CharField(source='get_estado_display', read_only=True)
     estado_venta = serializers.CharField(source='estado', read_only=True)
     estado_electronico = serializers.SerializerMethodField()
+    factura_electronica = serializers.SerializerMethodField()
     medio_pago_display = serializers.CharField(source='get_medio_pago_display', read_only=True)
     
     class Meta:
@@ -130,6 +163,7 @@ class VentaListSerializer(serializers.ModelSerializer):
             'estado_display',
             'estado_venta',
             'estado_electronico',
+            'factura_electronica',
         ]
 
     def get_estado_electronico(self, obj):
@@ -139,6 +173,9 @@ class VentaListSerializer(serializers.ModelSerializer):
         if factura.status == 'ACEPTADA' and factura.codigo_error == 'OBSERVACIONES_FACTUS':
             return 'EMITIDA_CON_OBSERVACIONES'
         return factura.status
+
+    def get_factura_electronica(self, obj):
+        return _build_factura_electronica_data(obj)
 
 
 class VentaDetailSerializer(serializers.ModelSerializer):
@@ -150,6 +187,7 @@ class VentaDetailSerializer(serializers.ModelSerializer):
     estado_display = serializers.CharField(source='get_estado_display', read_only=True)
     estado_venta = serializers.CharField(source='estado', read_only=True)
     estado_electronico = serializers.SerializerMethodField()
+    factura_electronica = serializers.SerializerMethodField()
     medio_pago_display = serializers.CharField(source='get_medio_pago_display', read_only=True)
     
     class Meta:
@@ -179,6 +217,7 @@ class VentaDetailSerializer(serializers.ModelSerializer):
             'estado_display',
             'estado_venta',
             'estado_electronico',
+            'factura_electronica',
             'creada_por',
             'enviada_a_caja_por',
             'enviada_a_caja_at',
@@ -202,6 +241,9 @@ class VentaDetailSerializer(serializers.ModelSerializer):
         if factura.status == 'ACEPTADA' and factura.codigo_error == 'OBSERVACIONES_FACTUS':
             return 'EMITIDA_CON_OBSERVACIONES'
         return factura.status
+
+    def get_factura_electronica(self, obj):
+        return _build_factura_electronica_data(obj)
 
 
 class VentaCreateSerializer(serializers.ModelSerializer):

@@ -143,8 +143,19 @@ export default function Facturas() {
         search: search ? search : undefined,
       }, { signal: controller.signal });
       const facturasElectronicas = await facturacionApi.getFacturas();
+      const porVentaId = new Map(
+        facturasElectronicas
+          .filter((item) => typeof item.venta_id === 'number')
+          .map((item) => [item.venta_id as number, item])
+      );
       const porNumero = new Map(
-        facturasElectronicas.map((item) => [String(item.numero).trim(), item])
+        facturasElectronicas.flatMap((item) => {
+          const keys = [
+            String(item.numero ?? '').trim(),
+            String(item.reference_code ?? '').trim(),
+          ].filter((value) => value.length > 0);
+          return keys.map((key) => [key, item] as const);
+        })
       );
       setFacturas(
         response.map((venta) => {
@@ -152,7 +163,12 @@ export default function Facturas() {
           const numeroCompleto = venta.numero_comprobante ?? '';
           return {
             ...mapped,
-            electronica: porNumero.get(numeroCompleto) ?? porNumero.get(mapped.numero) ?? undefined,
+            electronica:
+              (venta.factura_electronica as FacturaElectronica | null | undefined) ??
+              porVentaId.get(venta.id) ??
+              porNumero.get(numeroCompleto) ??
+              porNumero.get(mapped.numero) ??
+              undefined,
           };
         })
       );

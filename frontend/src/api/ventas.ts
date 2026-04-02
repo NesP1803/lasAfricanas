@@ -216,6 +216,26 @@ export interface VentaListItem {
   medio_pago_display: string;
   estado: string;
   estado_display: string;
+  estado_electronico?: string | null;
+  factura_electronica?: {
+    id: number;
+    venta_id: number;
+    numero: string;
+    reference_code?: string;
+    cufe?: string;
+    uuid?: string;
+    status?: string;
+    estado?: string;
+    estado_dian?: string;
+    codigo_error?: string;
+    observaciones?: string;
+    bill_errors?: string[];
+    public_url?: string;
+    qr_factus?: string;
+    qr_image?: string;
+    xml_url?: string;
+    pdf_url?: string;
+  } | null;
 }
 
 export interface CajaPendiente {
