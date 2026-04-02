@@ -1,5 +1,6 @@
 from decimal import Decimal
 from unittest.mock import patch, MagicMock
+from django.db import DataError
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -754,6 +755,40 @@ class VentaServicesTests(TestCase):
         self.assertFalse(response.data['factus_sent'])
         self.assertEqual(response.data['warning'], 'FACTURA_LOCAL_OK_EMISION_ELECTRONICA_FALLIDA')
         self.assertIn(response.data['estado_local'], {'COBRADA', 'FACTURADA'})
+
+    @patch('apps.ventas.views.emitir_factura_completa')
+    def test_facturar_venta_dataerror_retorna_respuesta_controlada(self, mocked_emitir_factura_completa):
+        mocked_emitir_factura_completa.side_effect = DataError('value too long for type character varying(500)')
+        venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            cliente=self.cliente,
+            vendedor=self.vendedor,
+            subtotal=Decimal('200'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('38'),
+            total=Decimal('238'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('238'),
+            cambio=Decimal('0'),
+            estado='BORRADOR',
+        )
+        DetalleVenta.objects.create(
+            venta=venta,
+            producto=self.producto,
+            cantidad=1,
+            precio_unitario=Decimal('200'),
+            descuento_unitario=Decimal('0'),
+            iva_porcentaje=Decimal('19'),
+            subtotal=Decimal('200'),
+            total=Decimal('238'),
+        )
+        self.client.force_authenticate(user=self.vendedor)
+        response = self.client.post(f'/api/ventas/{venta.id}/facturar/')
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data['ok'])
+        self.assertEqual(response.data['error_code'], 'ERROR_PERSISTENCIA')
+        self.assertIn('warnings', response.data)
 
     @patch('apps.ventas.views.facturar_venta')
     def test_facturar_venta_retorna_advertencia_de_datos_cliente(self, mocked_facturar_venta):

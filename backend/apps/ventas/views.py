@@ -5,7 +5,7 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Sum, Count, Q, Prefetch
-from django.db import transaction
+from django.db import DataError, transaction
 from django.utils import timezone
 from datetime import datetime, time
 import logging
@@ -102,6 +102,8 @@ def _factus_error_category(exc: Exception) -> tuple[str, str]:
 
 def _factus_http_status_and_code(exc: Exception) -> tuple[int, str]:
     detail = f'{str(exc)} {str(getattr(exc, "provider_detail", "") or "")}'.lower()
+    if isinstance(exc, DataError):
+        return status.HTTP_200_OK, 'ERROR_PERSISTENCIA'
     if isinstance(exc, FacturaDuplicadaError):
         return status.HTTP_409_CONFLICT, 'DUPLICATE_REFERENCE_CODE'
     if 'se bloquea la asociación' in detail or 'devolvió number=' in detail or 'devolvió reference_code=' in detail:
@@ -222,16 +224,18 @@ class VentaViewSet(viewsets.ModelViewSet):
                 factura.estado_electronico or factura.status,
             )
             venta.refresh_from_db()
-        except (FactusValidationError, FactusAuthError, FactusAPIError, FacturaDuplicadaError) as exc:
+        except (FactusValidationError, FactusAuthError, FactusAPIError, FacturaDuplicadaError, DataError) as exc:
             logger.exception('ventas.facturar.factus_error venta_id=%s', venta.id)
             venta.refresh_from_db()
             factura_error = FacturaElectronica.objects.filter(venta=venta).first()
             warning_code, warning_detail = _factus_error_category(exc)
             http_status, codigo_error = _factus_http_status_and_code(exc)
+            estado_electronico = estado_electronico_ui(factura_error) if factura_error else 'ERROR_PERSISTENCIA'
             return Response(
                 {
                     'ok': False,
                     'message': str(exc),
+                    'error_code': codigo_error,
                     'codigo_error': codigo_error,
                     'mensaje_error': str(exc),
                     'warning': warning_code,
@@ -244,13 +248,18 @@ class VentaViewSet(viewsets.ModelViewSet):
                         else None
                     ),
                     'numero_factura': factura_error.number if factura_error else None,
+                    'number': factura_error.number if factura_error else None,
                     'estado_local': venta.estado,
                     'estado_venta': venta.estado,
-                    'estado_electronico': estado_electronico_ui(factura_error) if factura_error else 'ERROR_INTEGRACION',
-                    'status': factura_error.status if factura_error else 'ERROR_INTEGRACION',
+                    'estado_electronico': estado_electronico,
+                    'status': factura_error.status if factura_error else estado_electronico,
                     'cufe': factura_error.cufe if factura_error else '',
                     'uuid': factura_error.uuid if factura_error else '',
                     'reference_code': factura_error.reference_code if factura_error else '',
+                    'pdf_disponible': bool(getattr(factura_error, 'pdf_local_path', '')) if factura_error else False,
+                    'xml_disponible': bool(getattr(factura_error, 'xml_local_path', '')) if factura_error else False,
+                    'correo_enviado': bool(getattr(factura_error, 'correo_enviado', False)) if factura_error else False,
+                    'warnings': [{'component': 'facturacion_electronica', 'message': str(exc)}],
                     'pos_ticket': build_pos_ticket_payload(venta, factura_error) if factura_error else None,
                     'factus_sent': False,
                 },
@@ -264,12 +273,18 @@ class VentaViewSet(viewsets.ModelViewSet):
                 {
                     'ok': False,
                     'message': f'Error interno al facturar: {exc}',
+                    'error_code': 'ERROR_INTERNO_FACTURACION',
                     'venta_id': venta.id,
                     'numero_factura': None,
+                    'number': None,
                     'estado_local': venta.estado,
                     'estado_venta': venta.estado,
                     'estado_electronico': estado_electronico_ui(factura_error) if factura_error else 'ERROR_INTEGRACION',
                     'status': 'ERROR_INTEGRACION',
+                    'pdf_disponible': bool(getattr(factura_error, 'pdf_local_path', '')) if factura_error else False,
+                    'xml_disponible': bool(getattr(factura_error, 'xml_local_path', '')) if factura_error else False,
+                    'correo_enviado': bool(getattr(factura_error, 'correo_enviado', False)) if factura_error else False,
+                    'warnings': [{'component': 'facturacion_electronica', 'message': str(exc)}],
                     'factus_sent': False,
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -288,6 +303,7 @@ class VentaViewSet(viewsets.ModelViewSet):
             'factura_electronica': FacturaElectronicaSerializer(factura).data,
             'factura_lista': build_factura_ready_payload(venta, factura),
             'numero_factura': factura.number,
+            'number': factura.number,
             'estado_local': venta.estado,
             'estado_venta': venta.estado,
             'estado_electronico': estado_electronico_ui(factura),
@@ -304,6 +320,7 @@ class VentaViewSet(viewsets.ModelViewSet):
             'pdf_subido_factus': factura.pdf_uploaded_to_factus,
             'correo_enviado': factura.correo_enviado,
             'correo_error': factura.ultimo_error_correo,
+            'error_code': factura.codigo_error,
             'warnings': warnings,
             'factus_result': (
                 'PENDING_DIAN'

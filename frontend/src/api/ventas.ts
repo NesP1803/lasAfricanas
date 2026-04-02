@@ -216,6 +216,7 @@ export interface FacturarCajaResponse {
   pdf_subido_factus?: boolean;
   correo_enviado?: boolean;
   correo_error?: string;
+  error_code?: string;
 }
 
 export interface VentaListItem {
@@ -548,6 +549,10 @@ export const ventasApi = {
               (responseData.status as string) ||
               (responseData.estado_electronico as string) ||
               'ERROR',
+            error_code:
+              (responseData.error_code as string) ||
+              (responseData.codigo_error as string) ||
+              undefined,
             cufe: responseData.cufe as string | undefined,
             uuid: responseData.uuid as string | undefined,
             reference_code: responseData.reference_code as string | undefined,
@@ -581,6 +586,7 @@ export const ventasApi = {
       estado_local: payload.estado_local as string | undefined,
       estado_electronico: payload.estado_electronico as string | undefined,
       status: (payload.status as string) || (payload.estado_electronico as string) || 'ERROR',
+      error_code: (payload.error_code as string) || (payload.codigo_error as string) || undefined,
       cufe: payload.cufe as string | undefined,
       uuid: payload.uuid as string | undefined,
       reference_code: payload.reference_code as string | undefined,

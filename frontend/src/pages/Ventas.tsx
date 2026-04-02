@@ -109,6 +109,26 @@ type CajaVentaPayload = {
   ventaId: number;
 };
 
+const estadoElectronicoMensaje = (estado?: string, fallback?: string): string => {
+  const normalized = String(estado || fallback || '').toUpperCase();
+  switch (normalized) {
+    case 'ACEPTADA':
+      return 'Factura electrónica aceptada por DIAN.';
+    case 'ACEPTADA_CON_OBSERVACIONES':
+      return 'Factura aceptada con observaciones; revisa el detalle técnico.';
+    case 'RECHAZADA':
+      return 'Factura rechazada por DIAN/Factus.';
+    case 'ERROR_INTEGRACION':
+      return 'Error de integración con Factus/DIAN.';
+    case 'ERROR_PERSISTENCIA':
+      return 'Error de persistencia interna; la venta local quedó registrada.';
+    case 'PENDIENTE_REINTENTO':
+      return 'Factura en cola de reintento; pendiente confirmación final.';
+    default:
+      return 'Estado electrónico no confirmado.';
+  }
+};
+
 const buildDocumentoPreviewFromVenta = (
   venta: Venta,
   emision?: Partial<FacturarCajaResponse>
@@ -995,7 +1015,7 @@ export default function Ventas() {
       setMensaje(
         emision.factus_sent
           ? `Factura electrónica emitida: ${emision.numero_factura} (${emision.estado_electronico || emision.status})`
-          : 'Factura local generada, pero sin confirmación de envío electrónico.'
+          : estadoElectronicoMensaje(emision.estado_electronico, emision.status)
       );
       showNotification({
         type: emision.factus_sent ? 'success' : 'error',
@@ -1429,8 +1449,10 @@ export default function Ventas() {
           <p><strong>Número factura:</strong> {resultadoFacturacion.numero_factura || 'N/D'}</p>
           <p><strong>CUFE:</strong> {resultadoFacturacion.cufe || 'N/D'}</p>
           <p><strong>Estado electrónico:</strong> {resultadoFacturacion.estado_electronico || resultadoFacturacion.status}</p>
+          <p><strong>Detalle estado:</strong> {estadoElectronicoMensaje(resultadoFacturacion.estado_electronico, resultadoFacturacion.status)}</p>
           <p><strong>Descargar PDF/XML:</strong> {resultadoFacturacion.pdf_disponible ? 'PDF OK' : 'PDF pendiente'} · {resultadoFacturacion.xml_disponible ? 'XML OK' : 'XML pendiente'}</p>
           <p><strong>Correo:</strong> {resultadoFacturacion.correo_enviado ? 'Enviado' : (resultadoFacturacion.correo_error || 'Pendiente')}</p>
+          <p><strong>Código error:</strong> {resultadoFacturacion.error_code || 'N/D'}</p>
         </div>
       )}
 
