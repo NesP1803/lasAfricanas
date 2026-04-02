@@ -181,6 +181,38 @@ def _persist_remote_error(
     factura.save(update_fields=['status', 'codigo_error', 'mensaje_error', 'response_json', 'updated_at'])
 
 
+def _validate_customer_for_factus(customer: dict[str, Any], venta: Venta) -> None:
+    identification = str(customer.get('identification') or '').strip()
+    names = str(customer.get('names') or '').strip()
+    identification_document_id = customer.get('identification_document_id')
+    missing_fields: list[str] = []
+    if not identification:
+        missing_fields.append('identification')
+    if not names:
+        missing_fields.append('names')
+    if not identification_document_id:
+        missing_fields.append('identification_document_id')
+    if missing_fields:
+        logger.warning(
+            'facturar_venta.customer_incompleto venta_id=%s cliente_id=%s faltantes=%s customer=%s',
+            venta.id,
+            venta.cliente_id,
+            missing_fields,
+            {
+                'identification': identification,
+                'names': names,
+                'identification_document_id': identification_document_id,
+                'tribute_id': customer.get('tribute_id'),
+            },
+        )
+        field_messages = {
+            'identification': 'El cliente seleccionado no tiene número de identificación configurado para facturación electrónica.',
+            'names': 'El cliente seleccionado no tiene nombre o razón social configurado para facturación electrónica.',
+            'identification_document_id': 'El cliente seleccionado no tiene tipo de documento homologado.',
+        }
+        raise FactusValidationError(field_messages[missing_fields[0]])
+
+
 def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> FacturaElectronica:
     logger.info('facturar_venta.inicio venta_id=%s user_id=%s', venta_id, getattr(triggered_by, 'id', None))
     venta = Venta.objects.select_related('cliente').prefetch_related('detalles__producto').get(pk=venta_id)
@@ -203,14 +235,19 @@ def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> Factur
         raise FactusValidationError('La factura electrónica está EN_PROCESO. No se permite reenviar todavía.')
 
     payload = build_invoice_payload(venta)
+    _validate_customer_for_factus(payload.get('customer', {}), venta)
     logger.info(
         'facturar_venta.payload venta_id=%s items=%s customer=%s numbering_range_id=%s '
-        'customer_tribute_id=%s first_discount_rate=%s first_is_excluded=%s send_email=%s',
+        'customer_tribute_id=%s customer_document_id=%s first_discount_rate=%s first_is_excluded=%s send_email=%s',
         venta.id,
         len(payload.get('items', [])),
-        payload.get('customer', {}).get('identification'),
+        {
+            'identification': payload.get('customer', {}).get('identification'),
+            'names': payload.get('customer', {}).get('names'),
+        },
         payload.get('numbering_range_id'),
         payload.get('customer', {}).get('tribute_id'),
+        payload.get('customer', {}).get('identification_document_id'),
         (payload.get('items', [{}])[0].get('discount_rate') if payload.get('items') else None),
         (payload.get('items', [{}])[0].get('is_excluded') if payload.get('items') else None),
         payload.get('send_email'),
@@ -273,6 +310,15 @@ def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> Factur
             stage='send_invoice',
             error=exc,
         )
+        if isinstance(exc, FactusAPIError):
+            rejection = str(getattr(exc, 'provider_detail', '') or '')
+            if 'FAK21' in rejection:
+                logger.warning(
+                    'facturar_venta.rechazo_cliente_sin_id venta_id=%s cliente_id=%s numero=%s resumen=FAK21',
+                    venta.id,
+                    venta.cliente_id,
+                    numero,
+                )
         logger.warning('facturar_venta.factus_rechazo venta_id=%s numero=%s', venta.id, numero)
         raise
     logger.info('facturar_venta.factus_response venta_id=%s keys=%s', venta.id, sorted(response_json.keys()))

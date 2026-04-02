@@ -70,6 +70,25 @@ def _to_bool(value, default=True):
     return default
 
 
+def _factus_error_category(exc: Exception) -> tuple[str, str]:
+    message = str(exc)
+    provider_detail = str(getattr(exc, 'provider_detail', '') or '')
+    detail = f'{message} {provider_detail}'.lower()
+    if (
+        'cliente seleccionado no tiene número de identificación' in detail
+        or 'cliente seleccionado no tiene tipo de documento homologado' in detail
+        or 'fak21' in detail
+    ):
+        return (
+            'FACTURA_LOCAL_OK_DATOS_CLIENTE_INVALIDOS',
+            'Validación local/proveedor: datos del cliente incompletos para facturación electrónica.',
+        )
+    return (
+        'FACTURA_LOCAL_OK_EMISION_ELECTRONICA_FALLIDA',
+        'Error al enviar la factura electrónica a Factus.',
+    )
+
+
 
 class ClienteViewSet(viewsets.ModelViewSet):
     """ViewSet para gestionar clientes"""
@@ -404,11 +423,13 @@ class VentaViewSet(viewsets.ModelViewSet):
             logger.exception('ventas.facturar.factus_error venta_id=%s', pk)
             venta.refresh_from_db()
             factura_error = FacturaElectronica.objects.filter(venta=venta).first()
+            warning_code, warning_detail = _factus_error_category(exc)
             return Response(
                 {
                     'ok': False,
                     'message': str(exc),
-                    'warning': 'FACTURA_LOCAL_OK_EMISION_ELECTRONICA_FALLIDA',
+                    'warning': warning_code,
+                    'warning_detail': warning_detail,
                     'venta_id': venta.id,
                     'venta': VentaDetailSerializer(venta).data,
                     'factura_electronica': (
