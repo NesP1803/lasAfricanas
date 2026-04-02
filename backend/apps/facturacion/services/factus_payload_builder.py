@@ -83,12 +83,16 @@ def _is_excluded_item(detalle) -> bool:
     return bool(getattr(producto, 'iva_exento', False) or iva_porcentaje <= Decimal('0'))
 
 
-def _resolve_item_base_unit_price(detalle) -> Decimal:
+def _resolve_item_unit_price(detalle) -> Decimal:
     cantidad = _to_decimal(detalle.cantidad)
     if cantidad <= Decimal('0'):
         raise FactusValidationError('La cantidad del item debe ser mayor a cero para facturación electrónica.')
-    subtotal_base = _to_decimal(detalle.subtotal)
-    return subtotal_base / cantidad
+    total_linea = _to_decimal(detalle.total)
+    if total_linea <= Decimal('0'):
+        precio_unitario = _to_decimal(detalle.precio_unitario)
+        descuento_unitario = _to_decimal(detalle.descuento_unitario)
+        total_linea = max(Decimal('0'), (precio_unitario - descuento_unitario) * cantidad)
+    return total_linea / cantidad
 
 
 def _normalize_identification(value: str) -> str:
@@ -196,7 +200,7 @@ def build_invoice_payload(venta: Venta) -> dict:
                 'code_reference': producto.codigo,
                 'name': producto.nombre,
                 'quantity': _to_float(detalle.cantidad),
-                'price': _to_float(_resolve_item_base_unit_price(detalle)),
+                'price': _to_float(_resolve_item_unit_price(detalle)),
                 'tax_rate': _to_float(tax_rate),
                 'unit_measure_id': get_unit_measure_id(producto.unidad_medida),
                 'standard_code_id': 1,

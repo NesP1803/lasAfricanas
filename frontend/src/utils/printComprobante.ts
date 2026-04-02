@@ -88,6 +88,15 @@ const getTituloDocumento = (tipo: DocumentoTipo) =>
 const getLogoEmpresa = (empresa?: ConfiguracionEmpresa | null) =>
   empresa?.logo || '/logo-default-pos.svg';
 
+const getEstadoVisual = (estado?: string) => {
+  const normalized = (estado || '').trim().toUpperCase();
+  if (!normalized) return 'N/D';
+  if (normalized === 'COBRADA' || normalized === 'COBRADA LOCALMENTE') {
+    return 'Facturada';
+  }
+  return estado || 'N/D';
+};
+
 const POLITICAS_CAMBIOS_GARANTIAS =
   'Para trámites de cambios y garantías, indispensable presentar la factura de venta. Tiene hasta 5 días para realizar el trámite. Las partes eléctricas NO tienen devolución. Los productos deben estar en perfecto estado y empaque original.';
 
@@ -127,6 +136,7 @@ export const printComprobante = ({
   const fechaDocumento = formatFechaDocumento(fecha);
   const horaDocumento = formatHoraDocumento(fecha);
   const tituloDocumento = getTituloDocumento(tipo);
+  const estadoVisual = getEstadoVisual(estado);
   const detallesMostrar = detalles.length
     ? detalles
     : [
@@ -143,9 +153,10 @@ export const printComprobante = ({
   const resumenIvaArray = Array.from(
     detallesMostrar.reduce((acc, detalle) => {
       const ivaPorcentaje = Number.isFinite(detalle.ivaPorcentaje) ? detalle.ivaPorcentaje : 0;
-      const base = detalle.cantidad * detalle.precioUnitario - detalle.descuento;
-      const ivaDetalle = base * (ivaPorcentaje / 100);
-      const totalDetalle = base + ivaDetalle;
+      const totalDetalle = Number.isFinite(detalle.total) ? detalle.total : 0;
+      const divisorIva = 1 + ivaPorcentaje / 100;
+      const base = ivaPorcentaje > 0 ? totalDetalle / divisorIva : totalDetalle;
+      const ivaDetalle = totalDetalle - base;
       const item = acc.get(ivaPorcentaje) || { base: 0, iva: 0, total: 0 };
       acc.set(ivaPorcentaje, {
         base: item.base + base,
@@ -180,12 +191,12 @@ export const printComprobante = ({
       .qr { margin-top: 6px; text-align: center; }
       .qr img { width: 94px; height: 94px; object-fit: contain; }
       .placeholder { border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px; font-size: 8px; color: #64748b; }
-      .logo { display: block; margin: 0 auto 4px; height: 42px; max-width: 52mm; object-fit: contain; }
-      .resolution { border: 1px solid #cbd5e1; margin-top: 4px; padding: 4px; text-align: left; border-radius: 4px; }
+      .logo { display: block; margin: 0 auto 4px; height: 42px; max-width: 52mm; object-fit: contain; border-radius: 3px; }
+      .resolution { margin-top: 4px; padding: 2px 0; text-align: left; }
       .resolution-title { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #475569; }
       .totals-box { border: 1px solid #cbd5e1; margin-top: 6px; padding: 4px; }
       .thank-you { text-align: center; font-size: 9px; font-weight: 600; margin-top: 7px; }
-      .doc-datetime { margin-top: 4px; border: 1px solid #e2e8f0; background: #f8fafc; padding: 3px 4px; font-size: 8px; border-radius: 4px; }
+      .doc-datetime { margin-top: 4px; padding: 1px 2px; font-size: 8px; }
       .doc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px 6px; align-items: center; }
       .items-header, .item-row { display: grid; grid-template-columns: 2fr 1fr .75fr; gap: 6px; }
       .items-header { font-size: 8px; font-weight: 700; text-transform: uppercase; color: #334155; }
@@ -194,7 +205,7 @@ export const printComprobante = ({
       .iva-box { border: 1px solid #cbd5e1; margin-top: 6px; padding: 4px; }
       .iva-grid { display: grid; grid-template-columns: .85fr 1fr 1fr 1fr; gap: 4px; align-items: start; }
       .right { text-align: right; }
-      .policies { margin-top: 6px; font-size: 8px; line-height: 1.4; color: #334155; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 6px; }
+      .policies { margin-top: 6px; font-size: 8px; line-height: 1.4; color: #334155; padding: 2px 4px; text-align: center; }
     `
       : `
       * { box-sizing: border-box; }
@@ -249,7 +260,7 @@ export const printComprobante = ({
             <div class="row"><span>Cliente:</span><span class="value break">${clienteNombre}</span></div>
             <div class="row"><span>NIT/CC:</span><span class="value">${clienteDocumento || 'N/D'}</span></div>
             <div class="row"><span>Pago:</span><span class="value">${medioPago || 'N/D'}</span></div>
-            <div class="row"><span>Estado:</span><span class="value">${estado || 'N/D'}</span></div>
+            <div class="row"><span>Estado:</span><span class="value">${estadoVisual}</span></div>
             <div class="line"></div>
             <div class="items-header"><span>Descripción</span><span class="right">Valor</span><span class="right">IVA %</span></div>
             ${detallesMostrar
