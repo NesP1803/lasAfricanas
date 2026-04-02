@@ -88,6 +88,9 @@ const getTituloDocumento = (tipo: DocumentoTipo) =>
 const getLogoEmpresa = (empresa?: ConfiguracionEmpresa | null) =>
   empresa?.logo || '/logo-default-pos.svg';
 
+const POLITICAS_CAMBIOS_GARANTIAS =
+  'Para trámites de cambios y garantías, indispensable presentar la factura de venta. Tiene hasta 5 días para realizar el trámite. Las partes eléctricas NO tienen devolución. Los productos deben estar en perfecto estado y empaque original.';
+
 export const printComprobante = ({
   formato = 'POS',
   tipo,
@@ -163,10 +166,10 @@ export const printComprobante = ({
       body { font-family: Arial, sans-serif; color: #0f172a; font-size: 10px; line-height: 1.28; }
       .ticket { width: var(--ticket-width); border: 1px solid #cbd5e1; padding: 8px; }
       .content { display: flex; gap: 6px; }
-      .cufe-vertical { width: 17px; border-right: 1px dashed #94a3b8; writing-mode: vertical-rl; text-orientation: mixed; transform: rotate(180deg); font-size: 7px; font-weight: 700; color: #475569; letter-spacing: .08em; line-height: 1.1; overflow-wrap: anywhere; padding-right: 2px; }
+      .cufe-vertical { width: 17px; border-right: 1px solid #cbd5e1; writing-mode: vertical-rl; text-orientation: mixed; transform: rotate(180deg); font-size: 7px; font-weight: 700; color: #475569; letter-spacing: .08em; line-height: 1.1; overflow-wrap: anywhere; padding-right: 2px; }
       .main { flex: 1; min-width: 0; }
       .center { text-align: center; }
-      .line { border-top: 1px dashed #94a3b8; margin: 6px 0; }
+      .line { border-top: 1px solid #e2e8f0; margin: 6px 0; }
       .muted { color: #64748b; font-size: 8px; }
       .row { display: flex; justify-content: space-between; gap: 6px; margin: 1px 0; }
       .row .value { text-align: right; font-weight: 700; }
@@ -176,21 +179,22 @@ export const printComprobante = ({
       .total-row { font-size: 11px; font-weight: 700; margin-top: 3px; }
       .qr { margin-top: 6px; text-align: center; }
       .qr img { width: 94px; height: 94px; object-fit: contain; }
-      .placeholder { border: 1px dashed #94a3b8; padding: 6px; font-size: 8px; color: #64748b; }
+      .placeholder { border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px; font-size: 8px; color: #64748b; }
       .logo { display: block; margin: 0 auto 4px; height: 42px; max-width: 52mm; object-fit: contain; }
-      .resolution { border: 1px dashed #94a3b8; margin-top: 4px; padding: 4px; text-align: left; }
+      .resolution { border: 1px solid #cbd5e1; margin-top: 4px; padding: 4px; text-align: left; border-radius: 4px; }
       .resolution-title { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #475569; }
       .totals-box { border: 1px solid #cbd5e1; margin-top: 6px; padding: 4px; }
       .thank-you { text-align: center; font-size: 9px; font-weight: 600; margin-top: 7px; }
-      .doc-datetime { margin-top: 4px; border: 1px dashed #cbd5e1; padding: 3px 4px; font-size: 8px; }
+      .doc-datetime { margin-top: 4px; border: 1px solid #e2e8f0; background: #f8fafc; padding: 3px 4px; font-size: 8px; border-radius: 4px; }
       .doc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px 6px; align-items: center; }
       .items-header, .item-row { display: grid; grid-template-columns: 2fr 1fr .75fr; gap: 6px; }
       .items-header { font-size: 8px; font-weight: 700; text-transform: uppercase; color: #334155; }
-      .item-row { border-top: 1px dashed #e2e8f0; padding-top: 3px; margin-top: 3px; }
+      .item-row { border-top: 1px solid #e2e8f0; padding-top: 3px; margin-top: 3px; }
       .tiny { font-size: 7px; color: #64748b; }
       .iva-box { border: 1px solid #cbd5e1; margin-top: 6px; padding: 4px; }
       .iva-grid { display: grid; grid-template-columns: .85fr 1fr 1fr 1fr; gap: 4px; align-items: start; }
       .right { text-align: right; }
+      .policies { margin-top: 6px; font-size: 8px; line-height: 1.4; color: #334155; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 6px; }
     `
       : `
       * { box-sizing: border-box; }
@@ -272,6 +276,7 @@ export const printComprobante = ({
             <div class="qr">
               ${qrImageUrl ? `<img src="${qrImageUrl}" alt="QR factura electrónica"/>` : qrUrl ? `<div class="muted break">Verificación: ${qrUrl}</div>` : '<div class="placeholder">Espacio reservado para QR DIAN</div>'}
             </div>
+            <div class="policies">${POLITICAS_CAMBIOS_GARANTIAS}</div>
             <div class="thank-you">Gracias por su compra, es un placer atenderlo.</div>
           </div>
         </div>

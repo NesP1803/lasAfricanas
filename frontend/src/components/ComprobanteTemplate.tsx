@@ -88,6 +88,9 @@ const getTituloDocumento = (tipo: DocumentoTipo) =>
 const getLogoEmpresa = (empresa?: ConfiguracionEmpresa | null) =>
   empresa?.logo || '/logo-default-pos.svg';
 
+const POLITICAS_CAMBIOS_GARANTIAS =
+  'Para trámites de cambios y garantías, indispensable presentar la factura de venta. Tiene hasta 5 días para realizar el trámite. Las partes eléctricas NO tienen devolución. Los productos deben estar en perfecto estado y empaque original.';
+
 export default function ComprobanteTemplate({
   formato = 'POS',
   tipo,
@@ -244,7 +247,7 @@ export default function ComprobanteTemplate({
     <div className="mx-auto w-full max-w-[82mm] border border-slate-300 bg-white p-2.5 font-sans text-[10px] text-slate-900">
       <div className="flex gap-2">
         {cufe ? (
-          <div className="flex w-5 items-center justify-center border-r border-dashed border-slate-400 pr-1">
+          <div className="flex w-5 items-center justify-center border-r border-slate-300 pr-1">
             <p className="break-all text-[7px] font-semibold leading-tight tracking-[0.08em] text-slate-600 [writing-mode:vertical-rl] [text-orientation:mixed] [transform:rotate(180deg)]">
               CUFE · {cufe}
             </p>
@@ -258,17 +261,17 @@ export default function ComprobanteTemplate({
             <p className="text-[9px]">{infoEmpresa.regimen}</p>
             <p className="break-words">{infoEmpresa.direccion}</p>
             {infoEmpresa.telefono ? <p className="text-[9px]">Tel: {infoEmpresa.telefono}</p> : null}
-            <div className="mt-1 rounded border border-dashed border-slate-400 px-1.5 py-1 text-left">
+            <div className="mt-1 rounded border border-slate-300 px-1.5 py-1 text-left">
               <p className="text-[8px] font-semibold uppercase tracking-wide text-slate-600">Resolución / Numeración</p>
               <p className="break-words text-[8px] text-slate-700">{resolucion || 'No informada'}</p>
             </div>
           </div>
 
-          <div className="mt-2 border-y border-dashed border-slate-400 py-2 text-center">
+          <div className="mt-2 border-y border-slate-300 py-2 text-center">
             <p className="text-[11px] font-bold uppercase">{tituloDocumento}</p>
             <p className="font-semibold">{numero}</p>
             {referenceCode ? <p className="text-[8px] text-slate-600">Ref: {referenceCode}</p> : null}
-            <div className="mx-auto mt-1 grid max-w-[50mm] grid-cols-2 gap-x-2 rounded border border-dashed border-slate-300 px-1 py-1 text-[8px]">
+            <div className="mx-auto mt-1 grid max-w-[50mm] grid-cols-2 gap-x-2 rounded border border-slate-200 bg-slate-50 px-1 py-1 text-[8px]">
               <span className="text-left text-slate-600">Fecha:</span>
               <span className="text-right font-semibold text-slate-800">{fechaDocumento}</span>
               <span className="text-left text-slate-600">Hora:</span>
@@ -283,14 +286,14 @@ export default function ComprobanteTemplate({
             <div className="flex justify-between gap-2"><span>Estado:</span><span className="font-semibold">{estado || 'N/D'}</span></div>
           </div>
 
-          <div className="mt-2 border-t border-dashed border-slate-400 pt-2">
+          <div className="mt-2 border-t border-slate-300 pt-2">
             <div className="grid grid-cols-[2fr,1fr,0.75fr] gap-2 text-[8px] font-semibold uppercase tracking-wide text-slate-700">
               <span>Descripción</span>
               <span className="text-right">Valor</span>
               <span className="text-right">IVA %</span>
             </div>
             {detallesMostrar.map((detalle, index) => (
-              <div key={`${detalle.descripcion}-${index}`} className="mt-1 border-t border-dashed border-slate-200 pt-1 text-[8px]">
+              <div key={`${detalle.descripcion}-${index}`} className="mt-1 border-t border-slate-200 pt-1 text-[8px]">
                 <div className="grid grid-cols-[2fr,1fr,0.75fr] gap-2">
                   <div className="min-w-0">
                     <p className="break-words uppercase leading-tight">{detalle.descripcion}</p>
@@ -336,19 +339,22 @@ export default function ComprobanteTemplate({
             ))}
           </div>
 
-          <div className="mt-2 border-t border-dashed border-slate-400 pt-2 text-[8px] text-slate-600">
+          <div className="mt-2 border-t border-slate-300 pt-2 text-[8px] text-slate-600">
             {notas ? <p className="break-words">{notas}</p> : null}
           </div>
 
-          <div className="mt-2 border-t border-dashed border-slate-400 pt-2 text-center">
+          <div className="mt-2 border-t border-slate-300 pt-2 text-center">
             {qrImageUrl ? (
               <img src={qrImageUrl} alt="QR factura electrónica" className="mx-auto h-24 w-24 object-contain" />
             ) : qrUrl ? (
               <p className="break-all text-[8px]">Verificación: {qrUrl}</p>
             ) : (
-              <div className="border border-dashed border-slate-400 p-2 text-[8px] text-slate-500">Espacio reservado para QR DIAN</div>
+              <div className="rounded border border-slate-300 p-2 text-[8px] text-slate-500">Espacio reservado para QR DIAN</div>
             )}
           </div>
+          <p className="mt-2 rounded bg-slate-50 px-2 py-1.5 text-[8px] leading-relaxed text-slate-700">
+            {POLITICAS_CAMBIOS_GARANTIAS}
+          </p>
           <p className="mt-2 text-center text-[9px] font-medium">
             Gracias por su compra, es un placer atenderlo.
           </p>
