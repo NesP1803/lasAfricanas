@@ -96,15 +96,10 @@ export default function Remisiones() {
   const [remisiones, setRemisiones] = useState<RemisionItem[]>([]);
   const [busqueda, setBusqueda] = useState('');
   const [estadoFiltro, setEstadoFiltro] = useState<'FACTURADA' | 'ANULADA' | 'TODAS'>(
-    'FACTURADA'
+    'TODAS'
   );
   const [fechaInicio, setFechaInicio] = useState(today);
   const [fechaFin, setFechaFin] = useState(today);
-  const [filtrosAplicados, setFiltrosAplicados] = useState({
-    estado: 'FACTURADA' as 'FACTURADA' | 'ANULADA' | 'TODAS',
-    fechaInicio: today,
-    fechaFin: today,
-  });
   const [documento, setDocumento] = useState<DocumentoSeleccionado | null>(null);
   const [detalleRemision, setDetalleRemision] = useState<Venta | null>(null);
   const [detalleCargando, setDetalleCargando] = useState(false);
@@ -182,11 +177,15 @@ export default function Remisiones() {
   }, [busqueda, remisiones, fechaInicio, fechaFin]);
 
   useEffect(() => {
-    cargarRemisiones(filtrosAplicados);
+    cargarRemisiones({
+      estado: estadoFiltro,
+      fechaInicio,
+      fechaFin,
+    });
     return () => {
       ventasAbortRef.current?.abort();
     };
-  }, [filtrosAplicados]);
+  }, [estadoFiltro, fechaInicio, fechaFin]);
 
   useEffect(() => {
     configuracionAPI
@@ -231,7 +230,9 @@ export default function Remisiones() {
         devuelve_inventario: anulacionData.devuelveInventario,
       });
       await cargarRemisiones({
-        ...filtrosAplicados,
+        estado: estadoFiltro,
+        fechaInicio,
+        fechaFin,
         search: busqueda,
       });
       setAnulacion(null);
@@ -289,12 +290,6 @@ export default function Remisiones() {
               type="button"
               onClick={() => {
                 setEstadoFiltro('ANULADA');
-                cargarRemisiones({
-                  estado: 'ANULADA',
-                  fechaInicio,
-                  fechaFin,
-                  search: busqueda,
-                });
               }}
               className="flex items-center gap-2 rounded border border-slate-300 px-3 py-1.5 text-xs font-semibold uppercase text-slate-600"
               disabled={cargando}
@@ -373,21 +368,6 @@ export default function Remisiones() {
               onChange={(event) => setFechaFin(event.target.value)}
               className="rounded border border-slate-300 px-2 py-1 text-sm"
             />
-          </div>
-          <div className="flex flex-col gap-1 self-end">
-            <button
-              type="button"
-              onClick={() =>
-                setFiltrosAplicados({
-                  estado: estadoFiltro,
-                  fechaInicio,
-                  fechaFin,
-                })
-              }
-              className="rounded bg-blue-600 px-3 py-2 text-xs font-semibold uppercase text-white hover:bg-blue-700"
-            >
-              Aplicar filtros
-            </button>
           </div>
           <div className="flex flex-1 flex-col gap-1">
             <label className="text-xs font-semibold text-slate-500">Buscar por</label>
