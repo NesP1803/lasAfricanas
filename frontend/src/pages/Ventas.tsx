@@ -933,6 +933,17 @@ export default function Ventas() {
     if (!validarVenta()) return;
     setGuardandoBorrador(true);
     try {
+      const guardarVentaParaFacturar = async () => {
+        const payloadFactura = buildVentaPayload(
+          'FACTURA',
+          ventaBorrador?.vendedor
+        );
+        if (ventaBorrador) {
+          return ventasApi.actualizarVenta(ventaBorrador.id, payloadFactura);
+        }
+        return ventasApi.crearVenta(payloadFactura);
+      };
+
       if (esCaja && ventaBorrador?.estado === 'ENVIADA_A_CAJA') {
         const ventaActualizada = await ventasApi.actualizarVenta(
           ventaBorrador.id,
@@ -963,17 +974,18 @@ export default function Ventas() {
         return;
       }
 
-      const venta = await ventasApi.crearVenta(buildVentaPayload('FACTURA'));
+      const venta = await guardarVentaParaFacturar();
       const emision = await ventasApi.facturarVentaElectronica(venta.id);
+      const ventaEmitida = emision.venta?.id ? emision.venta : venta;
       resetVentaState();
       setDocumentoGenerado({
         tipo: 'FACTURA',
-        numero: emision.numero_factura || venta.numero_comprobante || `FAC-${venta.id}`,
+        numero: emision.numero_factura || ventaEmitida.numero_comprobante || `FAC-${ventaEmitida.id}`,
         cliente: clienteNombre,
         total: formatCurrencyCOP(totals.totalCobro),
       });
       setDocumentoFormato('POS');
-      setDocumentoPreview(buildDocumentoPreviewFromVenta(venta, emision));
+      setDocumentoPreview(buildDocumentoPreviewFromVenta(ventaEmitida, emision));
       setMensaje(
         emision.factus_sent
           ? `Factura electrónica emitida: ${emision.numero_factura} (${emision.estado_electronico || emision.status})`
