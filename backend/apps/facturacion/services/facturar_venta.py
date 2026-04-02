@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import copy
+import hashlib
+import json
 import logging
 from typing import Any
 
@@ -129,6 +132,10 @@ def _build_attempt_trace(
     final_fields: dict[str, Any] | None = None,
     bill_errors: list[str] | None = None,
 ) -> dict[str, Any]:
+    payload_sent = copy.deepcopy(payload)
+    payload_hash = hashlib.sha256(
+        json.dumps(payload_sent, sort_keys=True, ensure_ascii=False, default=str).encode('utf-8')
+    ).hexdigest()
     previous = factura.response_json if factura and isinstance(factura.response_json, dict) else {}
     previous_attempts = previous.get('attempts', [])
     attempts = previous_attempts if isinstance(previous_attempts, list) else []
@@ -141,17 +148,70 @@ def _build_attempt_trace(
             'error': error or {},
         }
     )
+    venta_snapshot = None
+    if factura and factura.venta_id:
+        venta_obj = Venta.objects.filter(pk=factura.venta_id).prefetch_related('detalles__producto').first()
+        if venta_obj is not None:
+            venta_snapshot = {
+                'id': venta_obj.id,
+                'numero_comprobante': venta_obj.numero_comprobante,
+                'subtotal': str(venta_obj.subtotal),
+                'iva': str(venta_obj.iva),
+                'descuento_valor': str(venta_obj.descuento_valor),
+                'total': str(venta_obj.total),
+                'detalles': [
+                    {
+                        'producto_id': d.producto_id,
+                        'codigo': getattr(d.producto, 'codigo', ''),
+                        'nombre': getattr(d.producto, 'nombre', ''),
+                        'cantidad': str(d.cantidad),
+                        'precio_unitario': str(d.precio_unitario),
+                        'descuento_unitario': str(d.descuento_unitario),
+                        'subtotal': str(d.subtotal),
+                        'iva_porcentaje': str(d.iva_porcentaje),
+                        'total': str(d.total),
+                    }
+                    for d in venta_obj.detalles.all()
+                ],
+            }
     return {
-        'request': payload,
+        'request': payload_sent,
+        'request_sha256': payload_hash,
         'response': response,
         'response_show': response_show,
         'response_download': response_download,
         'final_fields': final_fields or {},
         'bill_errors': bill_errors or [],
         'venta_id': factura.venta_id if factura else None,
+        'venta_snapshot': venta_snapshot,
         'triggered_by_user_id': triggered_by.id if triggered_by else None,
         'attempts': attempts,
     }
+
+
+def _assert_emitted_document_matches_sale(
+    *,
+    venta: Venta,
+    fields: dict[str, str],
+    expected_number: str,
+    expected_reference_code: str,
+) -> None:
+    number = str(fields.get('number') or '').strip()
+    reference_code = str(fields.get('reference_code') or '').strip()
+    expected_number = str(expected_number or '').strip()
+    expected_reference_code = str(expected_reference_code or '').strip()
+
+    if number and expected_number and number != expected_number:
+        raise FactusValidationError(
+            f'Factus devolvió number={number} pero la venta {venta.id} esperaba {expected_number}. '
+            'Se bloquea la asociación para evitar enlazar CUFE/QR de otro documento.'
+        )
+
+    if reference_code and expected_reference_code and reference_code != expected_reference_code:
+        raise FactusValidationError(
+            f'Factus devolvió reference_code={reference_code} pero la venta {venta.id} esperaba '
+            f'{expected_reference_code}. Se bloquea la asociación para evitar cruces entre ventas.'
+        )
 
 
 def _persist_remote_error(
@@ -316,6 +376,13 @@ def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> Factur
 
     factura_existente = FacturaElectronica.objects.filter(venta=venta).first()
     if factura_existente and factura_existente.status == 'ACEPTADA':
+        if venta.numero_comprobante and factura_existente.reference_code:
+            if str(factura_existente.reference_code).strip() != str(venta.numero_comprobante).strip():
+                raise FactusValidationError(
+                    f'La venta {venta.id} tiene numero_comprobante={venta.numero_comprobante}, '
+                    f'pero la factura asociada quedó con reference_code={factura_existente.reference_code}. '
+                    'Debe revisarse la asociación antes de reutilizar CUFE/QR.'
+                )
         logger.info('facturar_venta.reutiliza_aceptada venta_id=%s factura=%s', venta.id, factura_existente.number)
         if not factura_existente.xml_local_path:
             download_xml(factura_existente)
@@ -438,6 +505,12 @@ def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> Factur
     fields = _extract_factus_data(response_json)
     fields['number'] = fields.get('number') or numero
     fields['reference_code'] = fields.get('reference_code') or reference_code
+    _assert_emitted_document_matches_sale(
+        venta=venta,
+        fields=fields,
+        expected_number=numero,
+        expected_reference_code=reference_code,
+    )
     bill_errors = _extract_bill_errors(response_json)
 
     missing_before = [field for field in ['uuid', 'xml_url', 'pdf_url'] if not fields.get(field)]
@@ -470,6 +543,12 @@ def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> Factur
             sorted(response_show_json.keys()),
         )
         fields = _merge_factus_fields(fields, _extract_factus_data(response_show_json))
+        _assert_emitted_document_matches_sale(
+            venta=venta,
+            fields=fields,
+            expected_number=numero,
+            expected_reference_code=reference_code,
+        )
         if not bill_errors:
             bill_errors = _extract_bill_errors(response_show_json)
         missing_after_show = [field for field in ['uuid', 'xml_url', 'pdf_url'] if not fields.get(field)]
@@ -483,6 +562,12 @@ def facturar_venta(venta_id: int, triggered_by: Usuario | None = None) -> Factur
                     sorted(response_download_json.keys()),
                 )
                 fields = _merge_factus_fields(fields, _extract_factus_data(response_download_json))
+                _assert_emitted_document_matches_sale(
+                    venta=venta,
+                    fields=fields,
+                    expected_number=numero,
+                    expected_reference_code=reference_code,
+                )
                 if not bill_errors:
                     bill_errors = _extract_bill_errors(response_download_json)
             except (FactusAPIError, FactusAuthError) as exc:

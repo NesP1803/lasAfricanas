@@ -6,7 +6,9 @@ export type DocumentoDetalle = {
   cantidad: number;
   precioUnitario: number;
   descuento: number;
+  subtotal?: number;
   ivaPorcentaje: number;
+  ivaValor?: number;
   total: number;
 };
 
@@ -152,9 +154,13 @@ export default function ComprobanteTemplate({
     detallesMostrar.reduce((acc, detalle) => {
       const ivaPorcentaje = Number.isFinite(detalle.ivaPorcentaje) ? detalle.ivaPorcentaje : 0;
       const totalDetalle = Number.isFinite(detalle.total) ? detalle.total : 0;
+      const subtotalDetalle = Number.isFinite(detalle.subtotal) ? Number(detalle.subtotal) : NaN;
+      const ivaDetalleExplicito = Number.isFinite(detalle.ivaValor) ? Number(detalle.ivaValor) : NaN;
       const divisorIva = 1 + ivaPorcentaje / 100;
-      const base = ivaPorcentaje > 0 ? totalDetalle / divisorIva : totalDetalle;
-      const ivaDetalle = totalDetalle - base;
+      const base = Number.isFinite(subtotalDetalle)
+        ? subtotalDetalle
+        : (ivaPorcentaje > 0 ? totalDetalle / divisorIva : totalDetalle);
+      const ivaDetalle = Number.isFinite(ivaDetalleExplicito) ? ivaDetalleExplicito : (totalDetalle - base);
       const item = acc.get(ivaPorcentaje) || { base: 0, iva: 0, total: 0 };
       acc.set(ivaPorcentaje, {
         base: item.base + base,
@@ -266,7 +272,7 @@ export default function ComprobanteTemplate({
         ) : null}
         <div className="min-w-0 flex-1">
           <div className="text-center">
-            <img src={getLogoEmpresa(empresa)} alt="Logo empresa" className="mx-auto mb-1.5 h-11 max-w-[52mm] rounded-md object-contain" />
+            <img src={getLogoEmpresa(empresa)} alt="Logo empresa" className="mx-auto mb-1.5 h-11 max-w-[52mm] rounded-lg object-contain" />
             <p className="text-[11px] font-bold uppercase tracking-wide">{infoEmpresa.nombre}</p>
             <p className="text-[9px]">{infoEmpresa.nit}</p>
             <p className="text-[9px]">{infoEmpresa.regimen}</p>
