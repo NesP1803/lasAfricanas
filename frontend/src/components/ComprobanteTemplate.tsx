@@ -88,6 +88,15 @@ const getTituloDocumento = (tipo: DocumentoTipo) =>
 const getLogoEmpresa = (empresa?: ConfiguracionEmpresa | null) =>
   empresa?.logo || '/logo-default-pos.svg';
 
+const getEstadoVisual = (estado?: string) => {
+  const normalized = (estado || '').trim().toUpperCase();
+  if (!normalized) return 'N/D';
+  if (normalized === 'COBRADA' || normalized === 'COBRADA LOCALMENTE') {
+    return 'Facturada';
+  }
+  return estado || 'N/D';
+};
+
 const POLITICAS_CAMBIOS_GARANTIAS =
   'Para trámites de cambios y garantías, indispensable presentar la factura de venta. Tiene hasta 5 días para realizar el trámite. Las partes eléctricas NO tienen devolución. Los productos deben estar en perfecto estado y empaque original.';
 
@@ -124,6 +133,7 @@ export default function ComprobanteTemplate({
   const fechaDocumento = formatFechaDocumento(fecha);
   const horaDocumento = formatHoraDocumento(fecha);
   const tituloDocumento = getTituloDocumento(tipo);
+  const estadoVisual = getEstadoVisual(estado);
   const detallesMostrar =
     detalles.length > 0
       ? detalles
@@ -261,7 +271,7 @@ export default function ComprobanteTemplate({
             <p className="text-[9px]">{infoEmpresa.regimen}</p>
             <p className="break-words">{infoEmpresa.direccion}</p>
             {infoEmpresa.telefono ? <p className="text-[9px]">Tel: {infoEmpresa.telefono}</p> : null}
-            <div className="mt-1 rounded border border-slate-300 px-1.5 py-1 text-left">
+            <div className="mt-1 px-0.5 py-1 text-left">
               <p className="text-[8px] font-semibold uppercase tracking-wide text-slate-600">Resolución / Numeración</p>
               <p className="break-words text-[8px] text-slate-700">{resolucion || 'No informada'}</p>
             </div>
@@ -271,7 +281,7 @@ export default function ComprobanteTemplate({
             <p className="text-[11px] font-bold uppercase">{tituloDocumento}</p>
             <p className="font-semibold">{numero}</p>
             {referenceCode ? <p className="text-[8px] text-slate-600">Ref: {referenceCode}</p> : null}
-            <div className="mx-auto mt-1 grid max-w-[50mm] grid-cols-2 gap-x-2 rounded border border-slate-200 bg-slate-50 px-1 py-1 text-[8px]">
+            <div className="mx-auto mt-1 grid max-w-[50mm] grid-cols-2 gap-x-2 px-1 py-0.5 text-[8px]">
               <span className="text-left text-slate-600">Fecha:</span>
               <span className="text-right font-semibold text-slate-800">{fechaDocumento}</span>
               <span className="text-left text-slate-600">Hora:</span>
@@ -283,7 +293,7 @@ export default function ComprobanteTemplate({
             <div className="flex justify-between gap-2"><span>Cliente:</span><span className="truncate font-semibold">{clienteNombre}</span></div>
             <div className="flex justify-between gap-2"><span>NIT/CC:</span><span className="font-semibold">{clienteDocumento || 'N/D'}</span></div>
             <div className="flex justify-between gap-2"><span>Pago:</span><span className="font-semibold">{medioPago || 'N/D'}</span></div>
-            <div className="flex justify-between gap-2"><span>Estado:</span><span className="font-semibold">{estado || 'N/D'}</span></div>
+            <div className="flex justify-between gap-2"><span>Estado:</span><span className="font-semibold">{estadoVisual}</span></div>
           </div>
 
           <div className="mt-2 border-t border-slate-300 pt-2">
@@ -352,7 +362,7 @@ export default function ComprobanteTemplate({
               <div className="rounded border border-slate-300 p-2 text-[8px] text-slate-500">Espacio reservado para QR DIAN</div>
             )}
           </div>
-          <p className="mt-2 rounded bg-slate-50 px-2 py-1.5 text-[8px] leading-relaxed text-slate-700">
+          <p className="mt-2 px-1 text-center text-[8px] leading-relaxed text-slate-700">
             {POLITICAS_CAMBIOS_GARANTIAS}
           </p>
           <p className="mt-2 text-center text-[9px] font-medium">
