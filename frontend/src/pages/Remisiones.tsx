@@ -386,21 +386,17 @@ export default function Remisiones() {
           </div>
         </div>
 
-        <div className="mt-3 rounded border border-slate-200">
+        <div className="mt-3 rounded-lg border border-slate-200 bg-white shadow-sm">
           {error && (
             <div className="border-b border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-600">
               {error}
             </div>
           )}
-          <div className="bg-yellow-100 px-3 py-2 text-xs font-semibold uppercase text-slate-600">
-            Seleccione las filas deseadas, o presione en la esquina superior izquierda para
-            seleccionar toda la tabla. Presione Ctrl + C para pegar en Excel.
-          </div>
           <div className="overflow-auto">
-            <table className="min-w-full text-sm">
-              <thead className="bg-yellow-200 text-xs uppercase text-slate-700">
+            <table className="min-w-[1150px] table-fixed text-sm">
+              <thead className="bg-slate-100 text-[11px] uppercase tracking-wide text-slate-700">
                 <tr>
-                  <th className="px-2 py-2 text-left">
+                  <th className="w-10 px-2 py-2 text-left">
                     <input
                       type="checkbox"
                       checked={
@@ -414,15 +410,15 @@ export default function Remisiones() {
                       }
                     />
                   </th>
-                  <th className="px-2 py-2 text-left">Prefijo</th>
-                  <th className="px-2 py-2 text-left">Remisión</th>
-                  <th className="px-2 py-2 text-left">Fecha/Hora</th>
-                  <th className="px-2 py-2 text-left">Estado</th>
-                  <th className="px-2 py-2 text-left">Medio/Pago</th>
-                  <th className="px-2 py-2 text-right">Total</th>
-                  <th className="px-2 py-2 text-left">NIT/CC</th>
-                  <th className="px-2 py-2 text-left">Cliente</th>
-                  <th className="px-2 py-2 text-left">Usuario</th>
+                  <th className="w-20 px-2 py-2 text-left">Prefijo</th>
+                  <th className="w-24 px-2 py-2 text-left">Remisión</th>
+                  <th className="w-36 px-2 py-2 text-left">Fecha/Hora</th>
+                  <th className="w-28 px-2 py-2 text-left">Estado</th>
+                  <th className="w-28 px-2 py-2 text-left">Medio/Pago</th>
+                  <th className="w-28 px-2 py-2 text-right">Total</th>
+                  <th className="w-32 px-2 py-2 text-left">NIT/CC</th>
+                  <th className="w-52 px-2 py-2 text-left">Cliente</th>
+                  <th className="w-36 px-2 py-2 text-left">Usuario</th>
                 </tr>
               </thead>
               <tbody>
@@ -439,30 +435,30 @@ export default function Remisiones() {
                     return (
                       <tr
                         key={remision.id}
-                        className={`border-t border-slate-200 ${
-                          selected ? 'bg-blue-100' : 'bg-white'
+                        className={`border-t border-slate-100 align-top ${
+                          selected ? 'bg-blue-50' : 'bg-white'
                         }`}
                       >
-                        <td className="px-2 py-2">
+                        <td className="px-2 py-2.5">
                           <input
                             type="checkbox"
                             checked={selected}
                             onChange={() => toggleSelect(remision.id)}
                           />
                         </td>
-                        <td className="px-2 py-2 font-semibold text-slate-700">
+                        <td className="px-2 py-2.5 font-semibold text-slate-700">
                           {remision.prefijo}
                         </td>
-                        <td className="px-2 py-2 text-slate-700">{remision.numero}</td>
-                        <td className="px-2 py-2 text-slate-600">{remision.fechaHora}</td>
-                        <td className="px-2 py-2 text-slate-600">{remision.estadoDisplay}</td>
-                        <td className="px-2 py-2 text-slate-600">{remision.medioPagoDisplay}</td>
-                        <td className="px-2 py-2 text-right text-rose-600">
+                        <td className="px-2 py-2.5 text-slate-700">{remision.numero}</td>
+                        <td className="px-2 py-2.5 text-slate-600">{remision.fechaHora}</td>
+                        <td className="px-2 py-2.5 text-slate-600">{remision.estadoDisplay}</td>
+                        <td className="px-2 py-2.5 text-slate-600">{remision.medioPagoDisplay}</td>
+                        <td className="px-2 py-2.5 text-right text-rose-600">
                           {currencyFormatter.format(remision.total)}
                         </td>
-                        <td className="px-2 py-2 text-slate-600">{remision.nitCc}</td>
-                        <td className="px-2 py-2 text-slate-600">{remision.cliente}</td>
-                        <td className="px-2 py-2 text-slate-600">{remision.usuario}</td>
+                        <td className="px-2 py-2.5 text-slate-600">{remision.nitCc}</td>
+                        <td className="px-2 py-2.5 text-slate-600">{remision.cliente}</td>
+                        <td className="px-2 py-2.5 text-slate-600">{remision.usuario}</td>
                       </tr>
                     );
                   })}
