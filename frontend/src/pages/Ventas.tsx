@@ -923,10 +923,7 @@ export default function Ventas() {
         return;
       }
 
-      const venta = await ventasApi.crearVenta({
-        ...buildVentaPayload('FACTURA'),
-        facturar_directo: true,
-      });
+      const venta = await ventasApi.crearVenta(buildVentaPayload('FACTURA'));
       const emision = await ventasApi.facturarVentaElectronica(venta.id);
       resetVentaState();
       setDocumentoGenerado({
