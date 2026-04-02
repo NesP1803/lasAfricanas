@@ -285,23 +285,17 @@ export default function Layout() {
         return { moduleKey: "facturacion", sectionKey: "venta_rapida" };
       }
 
-      if (pathname.startsWith("/facturacion/facturas")) {
-        return { moduleKey: "facturacion", sectionKey: "listados" };
-      }
-
-      if (pathname.startsWith("/facturacion/remisiones")) {
-        return { moduleKey: "facturacion", sectionKey: "listados" };
-      }
-
-      if (pathname.startsWith("/facturacion-electronica")) {
-        return { moduleKey: "facturacion", sectionKey: "listados" };
-      }
-
-      if (pathname.startsWith("/notas-credito")) {
-        return { moduleKey: "facturacion", sectionKey: "listados" };
-      }
-
-      if (pathname.startsWith("/documentos-soporte")) {
+      if (
+        pathname.startsWith("/facturacion/facturas") ||
+        pathname.startsWith("/facturacion/remisiones") ||
+        pathname.startsWith("/facturacion-electronica") ||
+        pathname.startsWith("/listados/notas-credito") ||
+        pathname.startsWith("/listados/documentos-soporte") ||
+        pathname.startsWith("/facturacion/nota-credito") ||
+        pathname.startsWith("/facturacion/documento-soporte") ||
+        pathname.startsWith("/notas-credito") ||
+        pathname.startsWith("/documentos-soporte")
+      ) {
         return { moduleKey: "facturacion", sectionKey: "listados" };
       }
 
@@ -316,9 +310,37 @@ export default function Layout() {
       return;
     }
 
-    const allowed = requirement.sectionKey
+    const hasFacturacionListados =
+      sectionEnabled("facturacion", "listados") ||
+      sectionEnabled("listados", "listados");
+    const hasNotasCreditoConsulta =
+      hasFacturacionListados || sectionEnabled("listados", "notas_credito");
+    const hasDocumentosSoporteConsulta =
+      hasFacturacionListados ||
+      sectionEnabled("listados", "documentos_soporte");
+    const hasFacturacionDiligenciamiento = sectionEnabled(
+      "facturacion",
+      "listados"
+    );
+
+    let allowed = requirement.sectionKey
       ? sectionEnabled(requirement.moduleKey, requirement.sectionKey)
       : moduleEnabled(requirement.moduleKey);
+
+    if (location.pathname.startsWith("/listados/notas-credito")) {
+      allowed = hasNotasCreditoConsulta;
+    }
+
+    if (location.pathname.startsWith("/listados/documentos-soporte")) {
+      allowed = hasDocumentosSoporteConsulta;
+    }
+
+    if (
+      location.pathname.startsWith("/facturacion/nota-credito") ||
+      location.pathname.startsWith("/facturacion/documento-soporte")
+    ) {
+      allowed = hasFacturacionDiligenciamiento;
+    }
 
     if (!allowed) {
       navigate("/");
@@ -398,13 +420,40 @@ export default function Layout() {
       {
         const facturacionItems: MenuItem[] = [];
         const facturacionListadosItems: MenuItem[] = [];
+        const canAccessCuentas =
+          isAdmin ||
+          sectionEnabled("facturacion", "cuentas") ||
+          sectionEnabled("listados", "cuentas");
+        const canAccessListados =
+          isAdmin ||
+          sectionEnabled("facturacion", "listados") ||
+          sectionEnabled("listados", "listados");
+        const canAccessNotasCreditoListado =
+          isAdmin ||
+          sectionEnabled("facturacion", "listados") ||
+          sectionEnabled("listados", "notas_credito");
+        const canAccessDocumentosSoporteListado =
+          isAdmin ||
+          sectionEnabled("facturacion", "listados") ||
+          sectionEnabled("listados", "documentos_soporte");
+
         if (isAdmin || sectionEnabled("facturacion", "venta_rapida")) {
           facturacionItems.push({ label: "Venta rápida", path: "/ventas" });
         }
         if (isAdmin || sectionEnabled("facturacion", "caja")) {
           facturacionItems.push({ label: "Caja", path: "/facturacion/caja" });
         }
-        if (isAdmin || sectionEnabled("facturacion", "cuentas")) {
+        if (isAdmin || sectionEnabled("facturacion", "listados")) {
+          facturacionItems.push({
+            label: "Nota crédito",
+            path: "/facturacion/nota-credito",
+          });
+          facturacionItems.push({
+            label: "Documento soporte",
+            path: "/facturacion/documento-soporte",
+          });
+        }
+        if (canAccessCuentas) {
           facturacionListadosItems.push({
             label: "Cuentas",
             items: [
@@ -416,18 +465,29 @@ export default function Layout() {
             ],
           });
         }
-        if (isAdmin || sectionEnabled("facturacion", "listados")) {
+        const listadosItems: MenuItem[] = [];
+        if (canAccessListados) {
+          listadosItems.push(
+            { label: "Facturas", path: "/facturacion/facturas" },
+            { label: "Remisiones", path: "/facturacion/remisiones" }
+          );
+        }
+        if (canAccessNotasCreditoListado) {
+          listadosItems.push({
+            label: "Notas crédito",
+            path: "/listados/notas-credito",
+          });
+        }
+        if (canAccessDocumentosSoporteListado) {
+          listadosItems.push({
+            label: "Documentos soporte",
+            path: "/listados/documentos-soporte",
+          });
+        }
+        if (listadosItems.length > 0) {
           facturacionListadosItems.push({
             label: "Listados",
-            items: [
-              { label: "Facturas", path: "/facturacion/facturas" },
-              { label: "Remisiones", path: "/facturacion/remisiones" },
-            ],
-          });
-          facturacionItems.push({ label: "Notas crédito", path: "/notas-credito" });
-          facturacionItems.push({
-            label: "Documentos soporte",
-            path: "/documentos-soporte",
+            items: listadosItems,
           });
         }
         if (facturacionListadosItems.length > 0) {
@@ -455,7 +515,7 @@ export default function Layout() {
 
       return items;
     },
-    [configuracionItems, isAdmin]
+    [configuracionItems, isAdmin, moduleAccess]
   );
 
   const actualizarNotificaciones = useCallback(async () => {
