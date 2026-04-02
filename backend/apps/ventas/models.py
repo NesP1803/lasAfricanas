@@ -384,16 +384,11 @@ class Venta(BaseModel):
         if self.estado == 'ANULADA':
             raise ValueError("No se puede facturar una remisión anulada")
         
-        # Generar número de factura
-        from django.utils import timezone
-        fecha = timezone.now()
-        nuevo_num = self.obtener_siguiente_numero('FACTURA', fecha, 'FAC', 100000)
-        numero_factura = f"FAC-{nuevo_num}"
-        
-        # Crear factura
+        # Crear venta destino tipo FACTURA sin reservar consecutivo local:
+        # el número electrónico se asigna en el flujo Factus.
         factura = Venta.objects.create(
             tipo_comprobante='FACTURA',
-            numero_comprobante=numero_factura,
+            numero_comprobante=None,
             cliente=self.cliente,
             vendedor=self.vendedor,
             subtotal=self.subtotal,
@@ -405,7 +400,8 @@ class Venta(BaseModel):
             efectivo_recibido=self.efectivo_recibido,
             cambio=self.cambio,
             remision_origen=self,
-            observaciones=f"Generada desde remisión {self.numero_comprobante}"
+            observaciones=f"Generada desde remisión {self.numero_comprobante}",
+            estado='COBRADA',
         )
         
         # Copiar detalles (sin afectar inventario de nuevo)

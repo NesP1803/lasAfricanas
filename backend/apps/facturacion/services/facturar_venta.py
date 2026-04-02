@@ -708,7 +708,7 @@ def facturar_venta(
 
     client = FactusClient()
     try:
-        response_json = client.send_invoice(payload)
+        response_json = client.create_and_validate_invoice(payload)
     except FactusPendingDianError as exc:
         logger.warning(
             'facturar_venta.factus_409_pendiente_dian venta_id=%s numero=%s reference_code=%s',
