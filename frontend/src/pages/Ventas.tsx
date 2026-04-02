@@ -293,7 +293,6 @@ export default function Ventas() {
   const [documentoPreview, setDocumentoPreview] = useState<DocumentoPreview | null>(null);
   const [documentoFormato, setDocumentoFormato] = useState<DocumentoFormato>('POS');
   const [mensaje, setMensaje] = useState<string | null>(null);
-  const [resultadoFacturacion, setResultadoFacturacion] = useState<FacturarCajaResponse | null>(null);
   const [mostrarBusqueda, setMostrarBusqueda] = useState(false);
   const [mostrarBusquedaClientes, setMostrarBusquedaClientes] = useState(false);
   const [busquedaClienteModal, setBusquedaClienteModal] = useState('');
@@ -308,6 +307,7 @@ export default function Ventas() {
   const [solicitudActivaId, setSolicitudActivaId] = useState<number | null>(null);
   const codigoInputRef = useRef<HTMLInputElement | null>(null);
   const lastSolicitudFetchRef = useRef(0);
+  const mensajeTimeoutRef = useRef<number | null>(null);
   const esAdmin = useMemo(() => user?.role === 'ADMIN', [user?.role]);
   const esCaja = useMemo(() => Boolean(user?.es_cajero || esAdmin), [user?.es_cajero, esAdmin]);
   const ventaBloqueada = Boolean(
@@ -367,6 +367,70 @@ export default function Ventas() {
     }, 250);
     return () => window.clearTimeout(timer);
   }, [busquedaClienteModal, mostrarBusquedaClientes]);
+
+  useEffect(() => {
+    if (!mensaje) return;
+    if (mensajeTimeoutRef.current) {
+      window.clearTimeout(mensajeTimeoutRef.current);
+    }
+    mensajeTimeoutRef.current = window.setTimeout(() => {
+      setMensaje(null);
+    }, 6000);
+    return () => {
+      if (mensajeTimeoutRef.current) {
+        window.clearTimeout(mensajeTimeoutRef.current);
+      }
+    };
+  }, [mensaje]);
+
+  const logResultadoFacturacion = (response: FacturarCajaResponse) => {
+    const payload = {
+      venta_id: response.venta_id ?? response.venta?.id ?? null,
+      factura_electronica: response.factura_electronica,
+      number: response.numero_factura || response.factura_electronica?.number || null,
+      cufe: response.cufe || response.factura_electronica?.cufe || null,
+      estado_electronico: response.estado_electronico || response.status || null,
+      pdf: {
+        disponible: response.pdf_disponible ?? null,
+        url: response.factura_electronica?.pdf_url ?? response.factura_lista?.pdf_url ?? null,
+      },
+      xml: {
+        disponible: response.xml_disponible ?? null,
+        url: response.factura_electronica?.xml_url ?? response.factura_lista?.xml_url ?? null,
+      },
+      correo: {
+        enviado: response.correo_enviado ?? null,
+        error: response.correo_error ?? null,
+      },
+      warnings: response.warnings ?? [],
+      errors: response.errores ?? [],
+      error_code: response.error_code ?? null,
+      raw: response,
+    };
+
+    console.info('Resultado facturación electrónica', payload);
+
+    const hasWarning =
+      (response.warnings?.length ?? 0) > 0 ||
+      Boolean(response.correo_error) ||
+      String(response.estado_electronico || response.status || '')
+        .toUpperCase()
+        .includes('OBSERVACIONES');
+
+    if (hasWarning) {
+      console.warn('Advertencias en facturación electrónica', payload);
+    }
+
+    const hasError =
+      !response.ok ||
+      (response.errores?.length ?? 0) > 0 ||
+      response.error_code === 'ERROR_INTEGRACION' ||
+      response.error_code === 'ERROR_PERSISTENCIA';
+
+    if (hasError) {
+      console.error('Error técnico en facturación electrónica', payload);
+    }
+  };
 
   useEffect(() => {
     if (!mostrarPermiso) return;
@@ -927,7 +991,6 @@ export default function Ventas() {
 
   const handleEnviarCaja = async () => {
     if (ventaBloqueada) return;
-    setResultadoFacturacion(null);
     let venta = ventaBorrador;
     if (!venta) {
       venta = await guardarBorrador();
@@ -955,7 +1018,6 @@ export default function Ventas() {
 
   const handleFacturarDirecto = async () => {
     if (!validarVenta()) return;
-    setResultadoFacturacion(null);
     setGuardandoBorrador(true);
     try {
       const guardarVentaParaFacturar = async () => {
@@ -995,8 +1057,9 @@ export default function Ventas() {
           message: emision.factus_sent
             ? `Emitida en Factus. CUFE: ${emision.cufe || 'N/D'} Ref: ${emision.reference_code || 'N/D'}`
             : emision.message || 'No se pudo confirmar emisión electrónica.',
+          durationMs: 6000,
         });
-        setResultadoFacturacion(emision);
+        logResultadoFacturacion(emision);
         return;
       }
 
@@ -1022,8 +1085,9 @@ export default function Ventas() {
         message: emision.factus_sent
           ? `Emitida en Factus. CUFE: ${emision.cufe || 'N/D'} Ref: ${emision.reference_code || 'N/D'}`
           : emision.message || 'No se pudo confirmar emisión electrónica.',
+        durationMs: 6000,
       });
-      setResultadoFacturacion(emision);
+      logResultadoFacturacion(emision);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'No se pudo facturar. Revisa la conexión.';
       setMensaje(message);
@@ -1442,17 +1506,6 @@ export default function Ventas() {
       {mensaje && (
         <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
           {mensaje}
-        </div>
-      )}
-      {resultadoFacturacion && (
-        <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-700">
-          <p><strong>Número factura:</strong> {resultadoFacturacion.numero_factura || 'No disponible (error de persistencia)'}</p>
-          <p><strong>CUFE:</strong> {resultadoFacturacion.cufe || 'No disponible (pendiente de recuperación)'}</p>
-          <p><strong>Estado electrónico:</strong> {resultadoFacturacion.estado_electronico || resultadoFacturacion.status}</p>
-          <p><strong>Detalle estado:</strong> {estadoElectronicoMensaje(resultadoFacturacion.estado_electronico, resultadoFacturacion.status)}</p>
-          <p><strong>Descargar PDF/XML:</strong> {resultadoFacturacion.pdf_disponible ? 'PDF OK' : 'PDF pendiente'} · {resultadoFacturacion.xml_disponible ? 'XML OK' : 'XML pendiente'}</p>
-          <p><strong>Correo:</strong> {resultadoFacturacion.correo_enviado ? 'Enviado' : (resultadoFacturacion.correo_error || 'Pendiente')}</p>
-          <p><strong>Código error:</strong> {resultadoFacturacion.error_code || 'N/D'}</p>
         </div>
       )}
 
