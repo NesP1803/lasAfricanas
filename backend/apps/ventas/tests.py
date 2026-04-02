@@ -9,7 +9,7 @@ from apps.usuarios.models import Usuario
 from apps.facturacion.models import FacturaElectronica
 from apps.ventas.models import Cliente, Venta, DetalleVenta
 from apps.ventas.views import _registrar_salida_inventario
-from apps.ventas.services.cerrar_venta import cerrar_venta_local
+from apps.ventas.services.cerrar_venta import build_pos_ticket_payload, cerrar_venta_local
 from apps.ventas.services.enviar_venta_a_caja import enviar_venta_a_caja
 
 
@@ -1439,3 +1439,70 @@ class VentaIVAIncluidoTests(TestCase):
         self.assertEqual(venta.subtotal, Decimal('1008.40'))
         self.assertEqual(venta.iva, Decimal('191.60'))
         self.assertEqual(venta.total, Decimal('1200.00'))
+
+
+class PosTicketDiscriminacionIvaTests(TestCase):
+    def setUp(self):
+        self.user = Usuario.objects.create_user(username='ticket-user', password='pass1234', tipo_usuario='ADMIN')
+        categoria = Categoria.objects.create(nombre='Ticket Cat')
+        proveedor = Proveedor.objects.create(nombre='Ticket Prov')
+        self.producto = Producto.objects.create(
+            codigo='TCK-1',
+            nombre='Producto Ticket',
+            categoria=categoria,
+            proveedor=proveedor,
+            precio_costo=Decimal('1000.00'),
+            precio_venta=Decimal('3000.00'),
+            precio_venta_minimo=Decimal('2500.00'),
+            stock=Decimal('10'),
+            stock_minimo=Decimal('1'),
+            iva_porcentaje=Decimal('19.00'),
+            iva_exento=False,
+        )
+        self.cliente = Cliente.objects.create(tipo_documento='CC', numero_documento='1000', nombre='Cliente Ticket')
+
+    def test_discriminacion_iva_se_construye_desde_detalles(self):
+        venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            numero_comprobante='FV-TEST-1',
+            cliente=self.cliente,
+            vendedor=self.user,
+            subtotal=Decimal('5042.02'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('957.98'),
+            total=Decimal('6000.00'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('6000.00'),
+            cambio=Decimal('0'),
+            estado='COBRADA',
+        )
+        DetalleVenta.objects.create(
+            venta=venta,
+            producto=self.producto,
+            cantidad=Decimal('2'),
+            precio_unitario=Decimal('3000.00'),
+            descuento_unitario=Decimal('0'),
+            iva_porcentaje=Decimal('19.00'),
+            subtotal=Decimal('5042.02'),
+            total=Decimal('6000.00'),
+        )
+        factura = FacturaElectronica.objects.create(
+            venta=venta,
+            cufe='CUFE-1',
+            uuid='UUID-1',
+            number='FV-TEST-1',
+            reference_code='FV-TEST-1',
+            status='ACEPTADA',
+            xml_url='https://example.com/x.xml',
+            pdf_url='https://example.com/x.pdf',
+            response_json={},
+        )
+
+        payload = build_pos_ticket_payload(venta, factura)
+        self.assertEqual(payload['items'][0]['subtotal'], 5042.02)
+        self.assertEqual(payload['items'][0]['iva_valor'], 957.98)
+        self.assertEqual(payload['discriminacion_iva'][0]['tarifa'], 19.0)
+        self.assertEqual(payload['discriminacion_iva'][0]['base_imp'], 5042.02)
+        self.assertEqual(payload['discriminacion_iva'][0]['valor_iva'], 957.98)
+        self.assertEqual(payload['discriminacion_iva'][0]['valor_compra'], 6000.0)

@@ -165,8 +165,16 @@ export interface PosTicketData {
     cantidad: number;
     precio_unitario: number;
     descuento: number;
+    subtotal?: number;
     iva_porcentaje: number;
+    iva_valor?: number;
     total: number;
+  }>;
+  discriminacion_iva?: Array<{
+    tarifa: number;
+    valor_compra: number;
+    base_imp: number;
+    valor_iva: number;
   }>;
   subtotal: number;
   impuestos: number;
@@ -175,6 +183,8 @@ export interface PosTicketData {
   cufe?: string;
   uuid?: string;
   qr_url?: string;
+  qr_image?: string;
+  factus_qr?: string;
   xml_url?: string;
 }
 

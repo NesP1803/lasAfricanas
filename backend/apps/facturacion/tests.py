@@ -753,7 +753,7 @@ class FactusInvoicePayloadIVAIncluidoTests(TestCase):
     @patch('apps.facturacion.services.factus_payload_builder.get_payment_method_code', return_value='10')
     @patch('apps.facturacion.services.factus_payload_builder.get_unit_measure_id', return_value=70)
     @patch('apps.facturacion.services.factus_payload_builder.resolve_numbering_range')
-    def test_payload_gravado_envia_precio_final_unitario(
+    def test_payload_gravado_envia_precio_base_unitario(
         self,
         mocked_range,
         _mocked_um,
@@ -791,7 +791,7 @@ class FactusInvoicePayloadIVAIncluidoTests(TestCase):
 
         payload = build_invoice_payload(venta)
         item = payload['items'][0]
-        self.assertEqual(item['price'], 3000.0)
+        self.assertEqual(item['price'], 2521.01)
         self.assertEqual(item['tax_rate'], 19.0)
         self.assertEqual(item['is_excluded'], 0)
         self.assertEqual(item['quantity'], 1.0)
@@ -850,7 +850,7 @@ class FactusInvoicePayloadIVAIncluidoTests(TestCase):
     @patch('apps.facturacion.services.factus_payload_builder.get_payment_method_code', return_value='10')
     @patch('apps.facturacion.services.factus_payload_builder.get_unit_measure_id', return_value=70)
     @patch('apps.facturacion.services.factus_payload_builder.resolve_numbering_range')
-    def test_payload_producto_0365_precio_final_600(
+    def test_payload_producto_0365_envia_precio_base_504_20(
         self,
         mocked_range,
         _mocked_um,
@@ -888,10 +888,10 @@ class FactusInvoicePayloadIVAIncluidoTests(TestCase):
 
         payload = build_invoice_payload(venta)
         item = payload['items'][0]
-        self.assertEqual(item['price'], 600.0)
+        self.assertEqual(item['price'], 504.2)
         self.assertEqual(item['tax_rate'], 19.0)
         self.assertEqual(item['is_excluded'], 0)
-        self.assertEqual(round(item['price'] * item['quantity'], 2), 600.0)
+        self.assertEqual(round(item['price'] * item['quantity'], 2), 504.2)
 
 
 class FactusCustomerDocumentHomologationTests(TestCase):
