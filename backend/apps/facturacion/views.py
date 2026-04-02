@@ -122,7 +122,7 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
                     )
                 ),
                 'qr_factus': factura.qr_data,
-                'qr_image': factura.qr_image_url,
+                'qr_image': factura.qr_image_url or factura.qr_image_data,
                 'xml_url': factura.xml_url,
                 'pdf_url': factura.pdf_url,
                 'xml_local_path': factura.xml_local_path,

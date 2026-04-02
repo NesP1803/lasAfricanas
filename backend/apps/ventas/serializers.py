@@ -34,7 +34,7 @@ def _build_factura_electronica_data(venta):
         'bill_errors': bill_errors if isinstance(bill_errors, list) else [],
         'public_url': final_fields.get('public_url', ''),
         'qr_factus': final_fields.get('qr', ''),
-        'qr_image': final_fields.get('qr_image', ''),
+        'qr_image': final_fields.get('qr_image', '') or factura.qr_image_url or factura.qr_image_data or '',
         'xml_url': factura.xml_url,
         'pdf_url': factura.pdf_url,
     }

@@ -121,7 +121,7 @@ const estadoElectronicoMensaje = (estado?: string, fallback?: string): string =>
     case 'ERROR_INTEGRACION':
       return 'Error de integración con Factus/DIAN.';
     case 'ERROR_PERSISTENCIA':
-      return 'Error de persistencia interna; la venta local quedó registrada.';
+      return 'La venta fue registrada, pero ocurrió un error técnico al guardar la respuesta electrónica. Puedes reintentar/sincronizar.';
     case 'PENDIENTE_REINTENTO':
       return 'Factura en cola de reintento; pendiente confirmación final.';
     default:
@@ -1446,8 +1446,8 @@ export default function Ventas() {
       )}
       {resultadoFacturacion && (
         <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-700">
-          <p><strong>Número factura:</strong> {resultadoFacturacion.numero_factura || 'N/D'}</p>
-          <p><strong>CUFE:</strong> {resultadoFacturacion.cufe || 'N/D'}</p>
+          <p><strong>Número factura:</strong> {resultadoFacturacion.numero_factura || 'No disponible (error de persistencia)'}</p>
+          <p><strong>CUFE:</strong> {resultadoFacturacion.cufe || 'No disponible (pendiente de recuperación)'}</p>
           <p><strong>Estado electrónico:</strong> {resultadoFacturacion.estado_electronico || resultadoFacturacion.status}</p>
           <p><strong>Detalle estado:</strong> {estadoElectronicoMensaje(resultadoFacturacion.estado_electronico, resultadoFacturacion.status)}</p>
           <p><strong>Descargar PDF/XML:</strong> {resultadoFacturacion.pdf_disponible ? 'PDF OK' : 'PDF pendiente'} · {resultadoFacturacion.xml_disponible ? 'XML OK' : 'XML pendiente'}</p>

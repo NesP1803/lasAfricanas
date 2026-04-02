@@ -15,6 +15,7 @@ from apps.facturacion.services.factus_client import FactusAPIError, FactusAuthEr
 from apps.facturacion.services.facturar_venta import facturar_venta
 from apps.facturacion.services.persistence_safety import (
     log_model_string_overflow_diagnostics,
+    normalize_qr_image_value,
     safe_assign_charfield,
 )
 from apps.facturacion.services.pdf_personalizado import generar_pdf_personalizado
@@ -43,15 +44,15 @@ def emitir_factura_completa(venta_id: int, triggered_by: Usuario | None = None) 
             str(bill.get('public_url', factura.public_url or '') or factura.public_url or ''),
         )
         factura.qr_data = str(bill.get('qr', factura.qr_data or '') or factura.qr_data or '')
-        safe_assign_charfield(
-            factura,
-            'qr_image_url',
-            str(bill.get('qr_image', factura.qr_image_url or '') or factura.qr_image_url or ''),
+        qr_image_url, qr_image_data = normalize_qr_image_value(
+            str(bill.get('qr_image', factura.qr_image_url or '') or factura.qr_image_url or '')
         )
+        safe_assign_charfield(factura, 'qr_image_url', qr_image_url)
+        factura.qr_image_data = qr_image_data
         log_model_string_overflow_diagnostics(
             instance=factura, venta_id=factura.venta_id, factura_id=factura.pk, stage='emitir_factura_completa_sync'
         )
-        factura.save(update_fields=['public_url', 'qr_data', 'qr_image_url', 'updated_at'])
+        factura.save(update_fields=['public_url', 'qr_data', 'qr_image_url', 'qr_image_data', 'updated_at'])
     except Exception as exc:
         warnings.append({'component': 'sincronizacion', 'message': str(exc)})
 
