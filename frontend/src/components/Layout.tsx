@@ -465,25 +465,29 @@ export default function Layout() {
             ],
           });
         }
+        const listadosItems: MenuItem[] = [];
         if (canAccessListados) {
-          facturacionListadosItems.push({
-            label: "Listados",
-            items: [
-              { label: "Facturas", path: "/facturacion/facturas" },
-              { label: "Remisiones", path: "/facturacion/remisiones" },
-            ],
-          });
+          listadosItems.push(
+            { label: "Facturas", path: "/facturacion/facturas" },
+            { label: "Remisiones", path: "/facturacion/remisiones" }
+          );
         }
         if (canAccessNotasCreditoListado) {
-          facturacionListadosItems.push({
+          listadosItems.push({
             label: "Notas crédito",
             path: "/listados/notas-credito",
           });
         }
         if (canAccessDocumentosSoporteListado) {
-          facturacionListadosItems.push({
+          listadosItems.push({
             label: "Documentos soporte",
             path: "/listados/documentos-soporte",
+          });
+        }
+        if (listadosItems.length > 0) {
+          facturacionListadosItems.push({
+            label: "Listados",
+            items: listadosItems,
           });
         }
         if (facturacionListadosItems.length > 0) {
