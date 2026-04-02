@@ -287,13 +287,15 @@ export default function Taller() {
     }
     const repuesto = repuestos.find((item) => item.id === productoId);
     const min = getCantidadMin(repuesto?.unidad_medida);
-    const cantidad = Math.max(min, cantidades[productoId] ?? min);
+    const cantidadIngresada = cantidades[productoId];
+    const cantidadBase = cantidadIngresada ?? 1;
+    const cantidad = Math.max(min, cantidadBase);
     try {
       const orden = await tallerApi.agregarRepuesto(ordenActual.id, {
         producto: productoId,
         cantidad,
       });
-      let ordenFinal = orden;
+      let ordenFinal: OrdenTaller = orden;
       try {
         const data = await tallerApi.getOrdenes({ moto: orden.moto });
         const parsed = parseListado(data);
@@ -305,7 +307,7 @@ export default function Taller() {
       if (searchRepuesto) {
         await buscarRepuestos(searchRepuesto);
       }
-      setCantidades((prev) => ({ ...prev, [productoId]: min }));
+      setCantidades((prev) => ({ ...prev, [productoId]: 1 }));
       setRepuestoModalOpen(false);
       if (orden.stock_negativo || (orden.stock_actual !== null && Number(orden.stock_actual) < 0)) {
         showNotification({
