@@ -73,6 +73,9 @@ const getEmpresaInfo = (empresa?: ConfiguracionEmpresa | null) => ({
 const getTituloDocumento = (tipo: DocumentoTipo) =>
   tipo === 'COTIZACION' ? 'Cotización' : tipo === 'REMISION' ? 'Remisión' : 'Factura de venta';
 
+const getLogoEmpresa = (empresa?: ConfiguracionEmpresa | null) =>
+  empresa?.logo || '/logo-default-pos.svg';
+
 export default function ComprobanteTemplate({
   formato = 'POS',
   tipo,
@@ -223,22 +226,27 @@ export default function ComprobanteTemplate({
   }
 
   return (
-    <div className="mx-auto w-full max-w-[82mm] border border-slate-300 bg-white p-3 font-mono text-[10px] text-slate-800">
+    <div className="mx-auto w-full max-w-[82mm] border border-slate-300 bg-white p-2.5 font-sans text-[10px] text-slate-900">
       <div className="flex gap-2">
         {cufe ? (
-          <div className="flex w-4 items-center justify-center border-r border-dashed border-slate-400 pr-1">
-            <p className="text-[8px] font-semibold tracking-[0.1em] text-slate-600 [writing-mode:vertical-rl] [text-orientation:mixed]">CUFE · {cufe}</p>
+          <div className="flex w-5 items-center justify-center border-r border-dashed border-slate-400 pr-1">
+            <p className="break-all text-[7px] font-semibold leading-tight tracking-[0.08em] text-slate-600 [writing-mode:vertical-rl] [text-orientation:mixed] [transform:rotate(180deg)]">
+              CUFE · {cufe}
+            </p>
           </div>
         ) : null}
         <div className="min-w-0 flex-1">
           <div className="text-center">
-            {empresa?.logo ? <img src={empresa.logo} alt="Logo empresa" className="mx-auto mb-1 h-10 object-contain" /> : null}
-            <p className="text-xs font-bold uppercase">{infoEmpresa.nombre}</p>
-            <p>{infoEmpresa.nit}</p>
-            <p>{infoEmpresa.regimen}</p>
+            <img src={getLogoEmpresa(empresa)} alt="Logo empresa" className="mx-auto mb-1.5 h-11 max-w-[52mm] object-contain" />
+            <p className="text-[11px] font-bold uppercase tracking-wide">{infoEmpresa.nombre}</p>
+            <p className="text-[9px]">{infoEmpresa.nit}</p>
+            <p className="text-[9px]">{infoEmpresa.regimen}</p>
             <p className="break-words">{infoEmpresa.direccion}</p>
-            {infoEmpresa.telefono ? <p>Tel: {infoEmpresa.telefono}</p> : null}
-            {resolucion ? <p className="mt-1 break-words text-[8px] text-slate-600">{resolucion}</p> : null}
+            {infoEmpresa.telefono ? <p className="text-[9px]">Tel: {infoEmpresa.telefono}</p> : null}
+            <div className="mt-1 rounded border border-dashed border-slate-400 px-1.5 py-1 text-left">
+              <p className="text-[8px] font-semibold uppercase tracking-wide text-slate-600">Resolución / Numeración</p>
+              <p className="break-words text-[8px] text-slate-700">{resolucion || 'No informada'}</p>
+            </div>
           </div>
 
           <div className="mt-2 border-y border-dashed border-slate-400 py-2 text-center">
@@ -256,7 +264,7 @@ export default function ComprobanteTemplate({
           </div>
 
           <div className="mt-2 border-t border-dashed border-slate-400 pt-2">
-            <div className="flex justify-between font-semibold"><span>Detalle</span><span>Total</span></div>
+            <div className="flex justify-between text-[9px] font-semibold uppercase tracking-wide"><span>Detalle</span><span>Total</span></div>
             {detallesMostrar.map((detalle, index) => (
               <div key={`${detalle.descripcion}-${index}`} className="mt-1 text-[9px]">
                 <p className="break-words uppercase">{detalle.descripcion}</p>
@@ -265,11 +273,11 @@ export default function ComprobanteTemplate({
             ))}
           </div>
 
-          <div className="mt-2 border-t border-dashed border-slate-400 pt-2 text-[9px]">
+          <div className="mt-2 rounded border border-slate-300 p-1.5 text-[9px]">
             <div className="flex justify-between"><span>Subtotal</span><span>{currencyFormatter.format(subtotal)}</span></div>
             <div className="flex justify-between"><span>Impuestos</span><span>{currencyFormatter.format(iva)}</span></div>
             <div className="flex justify-between"><span>Descuentos</span><span>-{currencyFormatter.format(descuento)}</span></div>
-            <div className="mt-1 flex justify-between text-[11px] font-bold"><span>Total</span><span>{currencyFormatter.format(total)}</span></div>
+            <div className="mt-1 flex justify-between border-t border-slate-300 pt-1 text-[11px] font-bold"><span>Total</span><span>{currencyFormatter.format(total)}</span></div>
             {efectivoRecibido !== undefined && cambio !== undefined ? (
               <>
                 <div className="flex justify-between"><span>Recibido</span><span>{currencyFormatter.format(efectivoRecibido)}</span></div>
@@ -279,8 +287,7 @@ export default function ComprobanteTemplate({
           </div>
 
           <div className="mt-2 border-t border-dashed border-slate-400 pt-2 text-[8px] text-slate-600">
-            <p>{representacionGrafica || 'Representación gráfica de factura electrónica de venta.'}</p>
-            {notas ? <p className="mt-1 break-words">{notas}</p> : null}
+            {notas ? <p className="break-words">{notas}</p> : null}
           </div>
 
           <div className="mt-2 border-t border-dashed border-slate-400 pt-2 text-center">
@@ -292,6 +299,9 @@ export default function ComprobanteTemplate({
               <div className="border border-dashed border-slate-400 p-2 text-[8px] text-slate-500">Espacio reservado para QR DIAN</div>
             )}
           </div>
+          <p className="mt-2 text-center text-[9px] font-medium">
+            Gracias por su compra, es un placer atenderlo.
+          </p>
         </div>
       </div>
     </div>
