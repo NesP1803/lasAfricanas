@@ -120,7 +120,9 @@ const buildDocumentoPreviewFromVenta = (
       cantidad: Number(detalle.cantidad),
       precioUnitario: parseMoneyCOP(detalle.precio_unitario),
       descuento: parseMoneyCOP(detalle.descuento_unitario),
+      subtotal: parseMoneyCOP(detalle.subtotal),
       ivaPorcentaje: Number(detalle.iva_porcentaje),
+      ivaValor: parseMoneyCOP(detalle.total) - parseMoneyCOP(detalle.subtotal),
       total: parseMoneyCOP(detalle.total),
     })) ?? [];
 

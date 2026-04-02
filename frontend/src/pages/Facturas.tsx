@@ -696,7 +696,9 @@ export default function Facturas() {
                       cantidad: Number(detalle.cantidad),
                       precioUnitario: Number(detalle.precio_unitario),
                       descuento: Number(detalle.descuento_unitario),
+                      subtotal: Number(detalle.subtotal),
                       ivaPorcentaje: Number(detalle.iva_porcentaje),
+                      ivaValor: Number(detalle.total) - Number(detalle.subtotal),
                       total: Number(detalle.total),
                     })) ?? []
                   }
@@ -747,7 +749,9 @@ export default function Facturas() {
                       cantidad: Number(item.cantidad),
                       precioUnitario: Number(item.precio_unitario),
                       descuento: Number(item.descuento_unitario),
+                      subtotal: Number(item.subtotal),
                       ivaPorcentaje: Number(item.iva_porcentaje),
+                      ivaValor: Number(item.total) - Number(item.subtotal),
                       total: Number(item.total),
                     }));
                     printComprobante({

@@ -117,8 +117,19 @@ def validar_para_facturar_en_caja(venta):
 
 
 def build_pos_ticket_payload(venta, factura):
+    final_fields = factura.response_json.get('final_fields', {}) if isinstance(factura.response_json, dict) else {}
     detalles = []
+    discriminacion_iva: dict[Decimal, dict[str, float]] = {}
     for detalle in venta.detalles.select_related('producto').all():
+        subtotal_linea = Decimal(detalle.subtotal or 0)
+        total_linea = Decimal(detalle.total or 0)
+        iva_linea = total_linea - subtotal_linea
+        tarifa = Decimal(detalle.iva_porcentaje or 0)
+        item_discriminacion = discriminacion_iva.get(tarifa, {'valor_compra': 0.0, 'base_imp': 0.0, 'valor_iva': 0.0})
+        item_discriminacion['valor_compra'] += float(total_linea)
+        item_discriminacion['base_imp'] += float(subtotal_linea)
+        item_discriminacion['valor_iva'] += float(iva_linea)
+        discriminacion_iva[tarifa] = item_discriminacion
         detalles.append(
             {
                 'descripcion': detalle.producto.nombre,
@@ -126,7 +137,9 @@ def build_pos_ticket_payload(venta, factura):
                 'cantidad': float(detalle.cantidad),
                 'precio_unitario': float(detalle.precio_unitario),
                 'descuento': float(detalle.descuento_unitario),
+                'subtotal': float(subtotal_linea),
                 'iva_porcentaje': float(detalle.iva_porcentaje),
+                'iva_valor': float(iva_linea),
                 'total': float(detalle.total),
             }
         )
@@ -151,8 +164,21 @@ def build_pos_ticket_payload(venta, factura):
         'total': float(venta.total),
         'cufe': factura.cufe,
         'uuid': factura.uuid,
-        'qr_url': factura.qr.url if factura.qr else '',
+        'qr_url': (final_fields.get('qr_url') or final_fields.get('public_url') or factura.qr.url) if factura.qr else (
+            final_fields.get('qr_url') or final_fields.get('public_url') or final_fields.get('qr', '')
+        ),
+        'factus_qr': final_fields.get('qr', ''),
+        'qr_image': final_fields.get('qr_image', ''),
         'xml_url': factura.xml_url,
+        'discriminacion_iva': [
+            {
+                'tarifa': float(tarifa),
+                'valor_compra': valores['valor_compra'],
+                'base_imp': valores['base_imp'],
+                'valor_iva': valores['valor_iva'],
+            }
+            for tarifa, valores in sorted(discriminacion_iva.items(), key=lambda item: item[0])
+        ],
         'items': detalles,
     }
 
