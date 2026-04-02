@@ -227,11 +227,31 @@ def _assert_emitted_document_matches_sale(
             'Se bloquea la asociación para evitar enlazar CUFE/QR de otro documento.'
         )
 
+    if number and FacturaElectronica.objects.filter(number=number).exclude(venta=venta).exists():
+        raise FactusValidationError(
+            f'Factus devolvió number={number}, pero ya está asociado a otra venta. '
+            'Se bloquea la asociación para evitar enlazar CUFE/QR de otro documento.'
+        )
+
     if reference_code and expected_reference_code and reference_code != expected_reference_code:
         raise FactusValidationError(
             f'Factus devolvió reference_code={reference_code} pero la venta {venta.id} esperaba '
             f'{expected_reference_code}. Se bloquea la asociación para evitar cruces entre ventas.'
         )
+
+    if reference_code and FacturaElectronica.objects.filter(reference_code=reference_code).exclude(venta=venta).exists():
+        raise FactusValidationError(
+            f'Factus devolvió reference_code={reference_code}, pero ya está asociado a otra venta. '
+            'Se bloquea la asociación para evitar cruces entre ventas.'
+        )
+
+
+def _number_matches_active_range(numero: str, prefijo_rango: str) -> bool:
+    numero_normalizado = str(numero or '').strip().upper()
+    prefijo_normalizado = str(prefijo_rango or '').strip().upper()
+    if not numero_normalizado or not prefijo_normalizado:
+        return False
+    return numero_normalizado.startswith(prefijo_normalizado)
 
 
 def _persist_local_validation_error(
@@ -533,6 +553,7 @@ def facturar_venta(
             )
 
         payload = build_invoice_payload(venta)
+        rango_activo = resolve_numbering_range(document_code='FACTURA_VENTA')
         _validate_customer_for_factus(payload.get('customer', {}), venta)
         logger.info(
             'facturar_venta.payload venta_id=%s items=%s customer=%s numbering_range_id=%s '
@@ -570,7 +591,11 @@ def facturar_venta(
                 )
             payload['numbering_range_id'] = int(rango.factus_range_id)
 
-        payload['number'] = numero
+        should_lock_expected_number = _number_matches_active_range(numero, rango_activo.prefijo)
+        if should_lock_expected_number:
+            payload['number'] = numero
+        else:
+            payload.pop('number', None)
         payload['reference_code'] = numero
         reference_code = numero
         if FacturaElectronica.objects.filter(reference_code=reference_code).exclude(venta=venta).exists():
@@ -644,7 +669,7 @@ def facturar_venta(
         _assert_emitted_document_matches_sale(
             venta=venta,
             fields=fields,
-            expected_number=numero,
+            expected_number=numero if should_lock_expected_number else '',
             expected_reference_code=reference_code,
         )
     except FactusValidationError as exc:
@@ -694,7 +719,7 @@ def facturar_venta(
             _assert_emitted_document_matches_sale(
                 venta=venta,
                 fields=fields,
-                expected_number=numero,
+                expected_number=numero if should_lock_expected_number else '',
                 expected_reference_code=reference_code,
             )
         except FactusValidationError as exc:
@@ -726,7 +751,7 @@ def facturar_venta(
                     _assert_emitted_document_matches_sale(
                         venta=venta,
                         fields=fields,
-                        expected_number=numero,
+                        expected_number=numero if should_lock_expected_number else '',
                         expected_reference_code=reference_code,
                     )
                 except FactusValidationError as exc:

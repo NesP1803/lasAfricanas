@@ -1016,8 +1016,8 @@ export default function Configuracion() {
                     Numeración para facturas de venta
                   </h3>
                   <p className="text-sm text-slate-500">
-                    Esta sección se sincronizará con la cantidad de facturas
-                    del sistema.
+                    Esta numeración es local/visual (POS). La numeración electrónica DIAN se toma del rango activo
+                    de Factus sincronizado abajo.
                   </p>
                 </div>
                 <button
