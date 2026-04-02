@@ -14,6 +14,11 @@ class FacturaElectronica(models.Model):
         ('ERROR_PERSISTENCIA', 'Error de persistencia'),
         ('PENDIENTE_REINTENTO', 'Pendiente de reintento'),
     ]
+    CREDIT_STATUS_CHOICES = [
+        ('ACTIVA', 'Activa'),
+        ('CREDITADA_PARCIAL', 'Creditada parcial'),
+        ('CREDITADA_TOTAL', 'Creditada total'),
+    ]
 
     venta = models.OneToOneField(
         'ventas.Venta',
@@ -70,6 +75,13 @@ class FacturaElectronica(models.Model):
     next_retry_at = models.DateTimeField(null=True, blank=True, verbose_name='Próximo reintento')
     ultima_sincronizacion_at = models.DateTimeField(null=True, blank=True, verbose_name='Última sincronización')
     emitida_en_factus = models.BooleanField(default=False, db_index=True, verbose_name='Emitida en Factus')
+    estado_acreditacion = models.CharField(
+        max_length=30,
+        choices=CREDIT_STATUS_CHOICES,
+        default='ACTIVA',
+        db_index=True,
+        verbose_name='Estado comercial de acreditación',
+    )
     created_at = models.DateTimeField(auto_now_add=True, db_index=True, verbose_name='Fecha de creación')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Fecha de actualización')
 
@@ -91,20 +103,73 @@ class FacturaElectronica(models.Model):
 
 class NotaCreditoElectronica(models.Model):
     """Representa una nota crédito electrónica emitida en Factus para una factura existente."""
+    NOTE_TYPE_CHOICES = [
+        ('PARCIAL', 'Parcial'),
+        ('TOTAL', 'Total'),
+    ]
+    LOCAL_STATUS_CHOICES = [
+        ('BORRADOR', 'Borrador'),
+        ('ENVIADA_A_FACTUS', 'Enviada a Factus'),
+        ('ACEPTADA', 'Aceptada'),
+        ('RECHAZADA', 'Rechazada'),
+        ('ERROR_INTEGRACION', 'Error de integración'),
+        ('ERROR_PERSISTENCIA', 'Error de persistencia'),
+        ('ELIMINADA_LOCAL', 'Eliminada local'),
+        ('ELIMINADA_EN_FACTUS', 'Eliminada en Factus'),
+    ]
 
     factura = models.ForeignKey(
         FacturaElectronica,
         on_delete=models.PROTECT,
         related_name='notas_credito',
     )
-    number = models.CharField(max_length=50)
+    venta_origen = models.ForeignKey(
+        'ventas.Venta',
+        on_delete=models.PROTECT,
+        related_name='notas_credito_electronicas',
+        null=True,
+        blank=True,
+    )
+    number = models.CharField(max_length=50, db_index=True)
+    prefijo = models.CharField(max_length=20, blank=True, default='')
+    consecutivo = models.CharField(max_length=30, blank=True, default='')
+    reference_code = models.CharField(max_length=120, blank=True, default='', db_index=True)
+    tipo_nota = models.CharField(max_length=20, choices=NOTE_TYPE_CHOICES, default='PARCIAL', db_index=True)
+    concepto = models.CharField(max_length=120, blank=True, default='')
+    motivo = models.TextField(blank=True, default='')
+    estado_local = models.CharField(max_length=40, choices=LOCAL_STATUS_CHOICES, default='BORRADOR', db_index=True)
+    estado_electronico = models.CharField(
+        max_length=40,
+        choices=FacturaElectronica.ELECTRONIC_STATUS_CHOICES,
+        default='PENDIENTE_REINTENTO',
+        db_index=True,
+    )
+    status_raw_factus = models.CharField(max_length=120, blank=True, default='')
     uuid = models.CharField(max_length=100, null=True, blank=True)
     cufe = models.CharField(max_length=150, null=True, blank=True)
-    status = models.CharField(max_length=40, choices=FacturaElectronica.ELECTRONIC_STATUS_CHOICES, db_index=True)
+    status = models.CharField(
+        max_length=40,
+        choices=FacturaElectronica.ELECTRONIC_STATUS_CHOICES,
+        db_index=True,
+        default='PENDIENTE_REINTENTO',
+    )
     xml_url = models.URLField(null=True, blank=True)
     pdf_url = models.URLField(null=True, blank=True)
+    public_url = models.URLField(max_length=2048, null=True, blank=True)
+    qr = models.TextField(blank=True, default='')
+    qr_image_url = models.URLField(max_length=2048, null=True, blank=True)
+    pdf_local_path = models.TextField(blank=True, default='')
+    xml_local_path = models.TextField(blank=True, default='')
+    correo_enviado = models.BooleanField(default=False)
+    correo_enviado_at = models.DateTimeField(null=True, blank=True)
+    email_content_json = models.JSONField(default=dict, blank=True)
+    codigo_error = models.CharField(max_length=50, null=True, blank=True)
+    mensaje_error = models.TextField(null=True, blank=True)
+    request_json = models.JSONField(default=dict, blank=True)
     response_json = models.JSONField(null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = 'facturacion_notas_credito_electronicas'
@@ -114,6 +179,43 @@ class NotaCreditoElectronica(models.Model):
 
     def __str__(self) -> str:
         return f'{self.number} ({self.status})'
+
+
+class NotaCreditoDetalle(models.Model):
+    """Detalle por línea acreditada para control de parciales/saldos."""
+
+    nota_credito = models.ForeignKey(
+        NotaCreditoElectronica,
+        on_delete=models.CASCADE,
+        related_name='detalles',
+    )
+    detalle_venta_original = models.ForeignKey(
+        'ventas.DetalleVenta',
+        on_delete=models.PROTECT,
+        related_name='notas_credito_detalle',
+    )
+    producto = models.ForeignKey('inventario.Producto', on_delete=models.PROTECT)
+    cantidad_original_facturada = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    cantidad_ya_acreditada = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    cantidad_a_acreditar = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    precio_unitario = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    descuento = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    base_impuesto = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    impuesto = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    total_linea = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    afecta_inventario = models.BooleanField(default=False)
+    motivo_linea = models.CharField(max_length=300, blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'facturacion_notas_credito_detalle'
+        verbose_name = 'Detalle de nota crédito'
+        verbose_name_plural = 'Detalles de nota crédito'
+        indexes = [
+            models.Index(fields=['detalle_venta_original']),
+            models.Index(fields=['producto']),
+        ]
 
 
 class DocumentoSoporteElectronico(models.Model):

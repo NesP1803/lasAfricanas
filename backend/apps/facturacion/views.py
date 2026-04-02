@@ -30,6 +30,7 @@ from apps.facturacion.serializers import (
     FacturaEstadoSerializer,
     NotaCreditoCreateSerializer,
     NotaCreditoListSerializer,
+    NotaCreditoPreviewSerializer,
 )
 from apps.facturacion.serializers.factura_pos_serializer import FacturaPOSSerializer
 from apps.facturacion.services import (
@@ -504,6 +505,63 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
             status=status.HTTP_201_CREATED,
         )
 
+    @action(detail=True, methods=['post'], url_path='notas-credito/preview')
+    def notas_credito_preview(self, request, pk=None):
+        factura = FacturaElectronica.objects.select_related('venta').filter(pk=pk).first()
+        if factura is None:
+            return Response({'detail': 'Factura electrónica no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+        serializer = NotaCreditoPreviewSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        preview = build_credit_preview(factura, serializer.validated_data['lines'])
+        return Response(preview)
+
+    @action(detail=True, methods=['post'], url_path='notas-credito/parcial')
+    def notas_credito_parcial(self, request, pk=None):
+        factura = FacturaElectronica.objects.select_related('venta').filter(pk=pk).first()
+        if factura is None:
+            return Response({'detail': 'Factura electrónica no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+        serializer = NotaCreditoCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        try:
+            nota = create_credit_note(
+                factura=factura,
+                motivo=data['motivo'],
+                lines=data['lines'],
+                is_total=False,
+                user=request.user,
+            )
+        except Exception as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(NotaCreditoListSerializer(nota).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'], url_path='notas-credito/total')
+    def notas_credito_total(self, request, pk=None):
+        factura = FacturaElectronica.objects.select_related('venta').prefetch_related('venta__detalles').filter(pk=pk).first()
+        if factura is None:
+            return Response({'detail': 'Factura electrónica no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+        motivo = str(request.data.get('motivo', 'Nota crédito total')).strip() or 'Nota crédito total'
+        lines = [
+            {
+                'detalle_venta_original_id': d.id,
+                'cantidad_a_acreditar': d.cantidad,
+                'afecta_inventario': bool(request.data.get('afecta_inventario', True)),
+                'motivo_linea': motivo,
+            }
+            for d in factura.venta.detalles.all()
+        ]
+        try:
+            nota = create_credit_note(
+                factura=factura,
+                motivo=motivo,
+                lines=lines,
+                is_total=True,
+                user=request.user,
+            )
+        except Exception as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(NotaCreditoListSerializer(nota).data, status=status.HTTP_201_CREATED)
+
 
 
     @action(detail=False, methods=['post'], url_path=r'documento-soporte/(?P<documento_soporte_id>[^/.]+)/nota-ajuste')
@@ -688,8 +746,17 @@ class NotasCreditoViewSet(viewsets.GenericViewSet):
 
     def list(self, request):
         queryset = NotaCreditoElectronica.objects.select_related('factura').order_by('-created_at')
+        factura_id = request.query_params.get('factura_id')
+        if factura_id:
+            queryset = queryset.filter(factura_id=factura_id)
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
+
+    def retrieve(self, request, pk=None):
+        nota = NotaCreditoElectronica.objects.select_related('factura').prefetch_related('detalles').filter(pk=pk).first()
+        if nota is None:
+            return Response({'detail': 'Nota crédito no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(NotaCreditoListSerializer(nota).data)
 
     def create(self, request):
         serializer = self.get_serializer(data=request.data)
@@ -755,6 +822,94 @@ class NotasCreditoViewSet(viewsets.GenericViewSet):
         except DownloadResourceError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
         return _build_file_response(content, f'nota-credito-{nota.number}.pdf', 'application/pdf')
+
+    @action(detail=True, methods=['post'], url_path='sincronizar')
+    def sincronizar(self, request, pk=None):
+        nota = NotaCreditoElectronica.objects.filter(pk=pk).first()
+        if nota is None:
+            return Response({'detail': 'Nota crédito no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            nota = sync_credit_note(nota)
+        except Exception as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        return Response(NotaCreditoListSerializer(nota).data)
+
+    @action(detail=True, methods=['get'], url_path='pdf')
+    def pdf_by_id(self, request, pk=None):
+        nota = NotaCreditoElectronica.objects.filter(pk=pk).first()
+        if nota is None:
+            return Response({'detail': 'Nota crédito no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            from apps.facturacion.services.factus_client import FactusClient
+
+            if nota.pdf_local_path:
+                content = read_local_media_file(nota.pdf_local_path)
+            else:
+                content = FactusClient().download_credit_note_pdf(nota.number)
+        except Exception as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        return _build_file_response(content, f'nota-credito-{nota.number}.pdf', 'application/pdf')
+
+    @action(detail=True, methods=['get'], url_path='xml')
+    def xml_by_id(self, request, pk=None):
+        nota = NotaCreditoElectronica.objects.filter(pk=pk).first()
+        if nota is None:
+            return Response({'detail': 'Nota crédito no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            from apps.facturacion.services.factus_client import FactusClient
+
+            if nota.xml_local_path:
+                content = read_local_media_file(nota.xml_local_path)
+            else:
+                content = FactusClient().download_credit_note_xml(nota.number)
+        except Exception as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        return _build_file_response(content, f'nota-credito-{nota.number}.xml', 'application/xml')
+
+    @action(detail=True, methods=['get'], url_path='correo/contenido')
+    def correo_contenido(self, request, pk=None):
+        nota = NotaCreditoElectronica.objects.filter(pk=pk).first()
+        if nota is None:
+            return Response({'detail': 'Nota crédito no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+        from apps.facturacion.services.factus_client import FactusClient
+
+        payload = FactusClient().get_credit_note_email_content(nota.number)
+        nota.email_content_json = payload
+        nota.save(update_fields=['email_content_json', 'updated_at'])
+        return Response(payload)
+
+    @action(detail=True, methods=['post'], url_path='enviar-correo')
+    def enviar_correo(self, request, pk=None):
+        nota = NotaCreditoElectronica.objects.select_related('factura__venta__cliente').filter(pk=pk).first()
+        if nota is None:
+            return Response({'detail': 'Nota crédito no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+        from apps.facturacion.services.factus_client import FactusClient
+
+        email = str(request.data.get('email') or nota.factura.venta.cliente.email or '').strip()
+        payload = {'email': email} if email else {}
+        result = FactusClient().send_credit_note_email(nota.number, payload=payload)
+        nota.correo_enviado = True
+        nota.correo_enviado_at = timezone.now()
+        nota.save(update_fields=['correo_enviado', 'correo_enviado_at', 'updated_at'])
+        return Response(result)
+
+    @action(detail=True, methods=['post'], url_path='eliminar')
+    def eliminar(self, request, pk=None):
+        nota = NotaCreditoElectronica.objects.filter(pk=pk).first()
+        if nota is None:
+            return Response({'detail': 'Nota crédito no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+        if nota.estado_electronico in {'ACEPTADA', 'ACEPTADA_CON_OBSERVACIONES'}:
+            return Response(
+                {'detail': 'No se permite eliminar notas crédito aceptadas fiscalmente.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+        from apps.facturacion.services.factus_client import FactusClient
+
+        result = FactusClient().delete_credit_note(nota.reference_code or nota.number)
+        nota.estado_local = 'ELIMINADA_EN_FACTUS'
+        nota.deleted_at = timezone.now()
+        nota.save(update_fields=['estado_local', 'deleted_at', 'updated_at'])
+        return Response({'result': result, 'estado_local': nota.estado_local})
 
 
 class DocumentosSoporteViewSet(viewsets.GenericViewSet):

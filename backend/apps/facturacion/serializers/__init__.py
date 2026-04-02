@@ -115,7 +115,11 @@ class FacturaEstadoSerializer(serializers.ModelSerializer):
 
 from .configuracion_dian_serializer import ConfiguracionDIANSerializer
 from .documento_soporte_serializer import DocumentoSoporteCreateSerializer, DocumentoSoporteListSerializer
-from .nota_credito_serializer import NotaCreditoCreateSerializer, NotaCreditoListSerializer
+from .nota_credito_serializer import (
+    NotaCreditoCreateSerializer,
+    NotaCreditoListSerializer,
+    NotaCreditoPreviewSerializer,
+)
 
 __all__ = [
     'FacturaElectronicaSerializer',
@@ -124,6 +128,7 @@ __all__ = [
     'ConfiguracionDIANSerializer',
     'NotaCreditoCreateSerializer',
     'NotaCreditoListSerializer',
+    'NotaCreditoPreviewSerializer',
     'DocumentoSoporteCreateSerializer',
     'DocumentoSoporteListSerializer',
 ]
