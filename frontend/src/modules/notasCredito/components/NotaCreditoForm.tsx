@@ -7,22 +7,19 @@ interface NotaCreditoFormProps {
 }
 
 export default function NotaCreditoForm({ onSubmit, loading }: NotaCreditoFormProps) {
-  const [facturaId, setFacturaId] = useState('');
   const [motivo, setMotivo] = useState('');
-  const [descripcionItem, setDescripcionItem] = useState('');
+  const [detalleVentaOriginalId, setDetalleVentaOriginalId] = useState('');
   const [cantidad, setCantidad] = useState('1');
-  const [precio, setPrecio] = useState('');
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     await onSubmit({
-      factura_id: Number(facturaId),
       motivo: motivo.trim(),
-      items: [
+      lines: [
         {
-          descripcion: descripcionItem.trim(),
-          cantidad: Number(cantidad),
-          precio: Number(precio),
+          detalle_venta_original_id: Number(detalleVentaOriginalId),
+          cantidad_a_acreditar: Number(cantidad),
+          afecta_inventario: true,
         },
       ],
     });
@@ -30,72 +27,23 @@ export default function NotaCreditoForm({ onSubmit, loading }: NotaCreditoFormPr
 
   return (
     <form onSubmit={handleSubmit} className="rounded-lg bg-white p-6 shadow">
+      <p className="mb-3 text-sm text-slate-600">Componente legado (mantenido por compatibilidad).</p>
       <div className="grid gap-4 md:grid-cols-2">
         <label className="flex flex-col gap-1 text-sm text-slate-700">
-          Factura asociada
-          <input
-            type="number"
-            min="1"
-            value={facturaId}
-            onChange={(event) => setFacturaId(event.target.value)}
-            className="rounded-md border border-slate-300 px-3 py-2 outline-none ring-blue-200 focus:ring"
-            required
-          />
+          ID detalle venta
+          <input type="number" min="1" value={detalleVentaOriginalId} onChange={(event) => setDetalleVentaOriginalId(event.target.value)} className="rounded-md border border-slate-300 px-3 py-2" required />
         </label>
-
         <label className="flex flex-col gap-1 text-sm text-slate-700">
           Cantidad
-          <input
-            type="number"
-            min="0.01"
-            step="0.01"
-            value={cantidad}
-            onChange={(event) => setCantidad(event.target.value)}
-            className="rounded-md border border-slate-300 px-3 py-2 outline-none ring-blue-200 focus:ring"
-            required
-          />
+          <input type="number" min="0.01" step="0.01" value={cantidad} onChange={(event) => setCantidad(event.target.value)} className="rounded-md border border-slate-300 px-3 py-2" required />
         </label>
-
         <label className="flex flex-col gap-1 text-sm text-slate-700 md:col-span-2">
           Motivo
-          <textarea
-            value={motivo}
-            onChange={(event) => setMotivo(event.target.value)}
-            className="min-h-24 rounded-md border border-slate-300 px-3 py-2 outline-none ring-blue-200 focus:ring"
-            required
-          />
-        </label>
-
-        <label className="flex flex-col gap-1 text-sm text-slate-700 md:col-span-2">
-          Descripción del ítem
-          <input
-            value={descripcionItem}
-            onChange={(event) => setDescripcionItem(event.target.value)}
-            className="rounded-md border border-slate-300 px-3 py-2 outline-none ring-blue-200 focus:ring"
-            required
-          />
-        </label>
-
-        <label className="flex flex-col gap-1 text-sm text-slate-700">
-          Precio
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            value={precio}
-            onChange={(event) => setPrecio(event.target.value)}
-            className="rounded-md border border-slate-300 px-3 py-2 outline-none ring-blue-200 focus:ring"
-            required
-          />
+          <textarea value={motivo} onChange={(event) => setMotivo(event.target.value)} className="min-h-24 rounded-md border border-slate-300 px-3 py-2" required />
         </label>
       </div>
-
       <div className="mt-5 flex justify-end">
-        <button
-          type="submit"
-          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-70"
-          disabled={loading}
-        >
+        <button type="submit" className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white" disabled={loading}>
           {loading ? 'Emitiendo...' : 'Emitir nota crédito'}
         </button>
       </div>

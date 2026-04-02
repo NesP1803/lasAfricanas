@@ -18,6 +18,7 @@ import Caja from './pages/Caja';
 import { NotificationProvider } from './contexts/NotificationContext';
 import NotasCreditoPage from './modules/notasCredito/pages/NotasCreditoPage';
 import CrearNotaCreditoPage from './modules/notasCredito/pages/CrearNotaCreditoPage';
+import DetalleNotaCreditoPage from './modules/notasCredito/pages/DetalleNotaCreditoPage';
 import DocumentosSoportePage from './modules/documentosSoporte/pages/DocumentosSoportePage';
 import CrearDocumentoSoportePage from './modules/documentosSoporte/pages/CrearDocumentoSoportePage';
 
@@ -47,6 +48,7 @@ function App() {
               <Route path="facturacion/documento-soporte" element={<CrearDocumentoSoportePage />} />
               <Route path="notas-credito" element={<Navigate to="/listados/notas-credito" replace />} />
               <Route path="notas-credito/crear" element={<Navigate to="/facturacion/nota-credito" replace />} />
+              <Route path="notas-credito/:id" element={<DetalleNotaCreditoPage />} />
               <Route path="documentos-soporte" element={<Navigate to="/listados/documentos-soporte" replace />} />
               <Route path="documentos-soporte/crear" element={<Navigate to="/facturacion/documento-soporte" replace />} />
               <Route path="facturacion/remisiones" element={<Remisiones />} />
