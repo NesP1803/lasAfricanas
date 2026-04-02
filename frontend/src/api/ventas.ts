@@ -565,12 +565,37 @@ export const ventasApi = {
     };
   },
 
-  async convertirAFactura(remisionId: number): Promise<Venta> {
+  async convertirAFactura(remisionId: number): Promise<FacturarCajaResponse> {
     try {
-      return await apiRequest<Venta>({
+      const data = await apiRequest<unknown>({
         url: `${API_URL}/ventas/${remisionId}/convertir_a_factura/`,
         method: 'POST',
       });
+      const payload = data as Partial<FacturarCajaResponse> & Record<string, unknown>;
+      return {
+        ok: typeof payload.ok === 'boolean' ? payload.ok : (payload.factus_sent as boolean | undefined) !== false,
+        message: (payload.message as string) || 'Factura electrónica emitida.',
+        venta_id: (payload.venta_id as number) || remisionId,
+        venta: (payload.venta as Venta) ?? ({} as Venta),
+        factura_electronica: (payload.factura_electronica as FacturaElectronicaResultado) ?? ({} as FacturaElectronicaResultado),
+        factura_lista: payload.factura_lista as FacturaLista | undefined,
+        numero_factura: (payload.numero_factura as string) || '',
+        estado_local: payload.estado_local as string | undefined,
+        estado_electronico: payload.estado_electronico as string | undefined,
+        status: (payload.status as string) || (payload.estado_electronico as string) || 'ERROR',
+        cufe: payload.cufe as string | undefined,
+        uuid: payload.uuid as string | undefined,
+        reference_code: payload.reference_code as string | undefined,
+        send_email: payload.send_email as boolean | undefined,
+        pos_ticket: payload.pos_ticket as PosTicketData | undefined,
+        factus_sent:
+          typeof payload.factus_sent === 'boolean'
+            ? payload.factus_sent
+            : typeof payload.ok === 'boolean'
+              ? payload.ok
+              : true,
+        errores: payload.errores as string[] | undefined,
+      };
     } catch (error) {
       throw new Error(extractApiErrorMessage(error, 'Error al convertir a factura'));
     }

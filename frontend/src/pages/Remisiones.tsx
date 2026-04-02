@@ -115,6 +115,9 @@ export default function Remisiones() {
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [anulando, setAnulando] = useState(false);
+  const [convirtiendoId, setConvirtiendoId] = useState<number | null>(null);
+  const [remisionesElegibles, setRemisionesElegibles] = useState<Set<number>>(new Set());
+  const [mensajeExito, setMensajeExito] = useState<string | null>(null);
   const ventasAbortRef = useRef<AbortController | null>(null);
 
   const cargarRemisiones = async (filters: {
@@ -125,6 +128,7 @@ export default function Remisiones() {
   }) => {
     setCargando(true);
     setError(null);
+    setMensajeExito(null);
     try {
       const search = filters.search?.trim();
       ventasAbortRef.current?.abort();
@@ -137,13 +141,16 @@ export default function Remisiones() {
         fechaFin: filters.fechaFin || undefined,
         search: search ? search : undefined,
       }, { signal: controller.signal });
+      const remisionesPendientes = await ventasApi.getRemisionesPendientes();
       setRemisiones(response.map(mapVentaToRemisionItem));
+      setRemisionesElegibles(new Set(remisionesPendientes.map((remision) => remision.id)));
       setSelectedIds([]);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
         return;
       }
       setRemisiones([]);
+      setRemisionesElegibles(new Set());
       setError(err instanceof Error ? err.message : 'Error al cargar remisiones');
     } finally {
       setCargando(false);
@@ -256,6 +263,34 @@ export default function Remisiones() {
       setDetalleError(err instanceof Error ? err.message : 'No se pudo cargar el detalle.');
     } finally {
       setDetalleCargando(false);
+    }
+  };
+
+  const convertirRemisionAFactura = async (remision: RemisionItem) => {
+    setConvirtiendoId(remision.id);
+    setError(null);
+    setMensajeExito(null);
+    try {
+      const resultado = await ventasApi.convertirAFactura(remision.id);
+      const numero =
+        resultado.numero_factura ||
+        resultado.factura_electronica?.number ||
+        resultado.venta?.numero_comprobante ||
+        '';
+      const estado = resultado.estado_electronico || resultado.status;
+      setMensajeExito(
+        `${resultado.message}${numero ? ` Factura: ${numero}.` : ''}${estado ? ` Estado: ${estado}.` : ''}`
+      );
+      await cargarRemisiones({
+        estado: estadoFiltro,
+        fechaInicio,
+        fechaFin,
+        search: busqueda,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo convertir la remisión.');
+    } finally {
+      setConvirtiendoId(null);
     }
   };
 
@@ -392,8 +427,13 @@ export default function Remisiones() {
               {error}
             </div>
           )}
+          {mensajeExito && (
+            <div className="border-b border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+              {mensajeExito}
+            </div>
+          )}
           <div className="overflow-auto">
-            <table className="min-w-[1150px] table-fixed text-sm">
+            <table className="min-w-[1300px] table-fixed text-sm">
               <thead className="bg-sky-100 text-[11px] uppercase tracking-wide text-slate-700">
                 <tr>
                   <th className="w-10 px-2 py-2 text-left">
@@ -419,12 +459,13 @@ export default function Remisiones() {
                   <th className="w-32 px-2 py-2 text-left">NIT/CC</th>
                   <th className="w-52 px-2 py-2 text-left">Cliente</th>
                   <th className="w-36 px-2 py-2 text-left">Usuario</th>
+                  <th className="w-48 px-2 py-2 text-left">Acciones</th>
                 </tr>
               </thead>
               <tbody>
                 {cargando && (
                   <tr>
-                    <td colSpan={10} className="px-4 py-6 text-center text-sm text-slate-500">
+                    <td colSpan={11} className="px-4 py-6 text-center text-sm text-slate-500">
                       Cargando remisiones...
                     </td>
                   </tr>
@@ -432,6 +473,9 @@ export default function Remisiones() {
                 {!cargando &&
                   remisionesFiltradas.map((remision) => {
                     const selected = selectedIds.includes(remision.id);
+                    const esElegible =
+                      remisionesElegibles.has(remision.id) &&
+                      remision.estado !== 'ANULADA';
                     return (
                       <tr
                         key={remision.id}
@@ -459,12 +503,28 @@ export default function Remisiones() {
                         <td className="px-2 py-2.5 text-slate-600">{remision.nitCc}</td>
                         <td className="px-2 py-2.5 text-slate-600">{remision.cliente}</td>
                         <td className="px-2 py-2.5 text-slate-600">{remision.usuario}</td>
+                        <td className="px-2 py-2.5">
+                          {esElegible ? (
+                            <button
+                              type="button"
+                              onClick={() => convertirRemisionAFactura(remision)}
+                              disabled={convirtiendoId === remision.id}
+                              className="rounded border border-indigo-300 px-2 py-1 text-xs font-semibold text-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {convirtiendoId === remision.id
+                                ? 'Convirtiendo...'
+                                : 'Facturar electrónicamente'}
+                            </button>
+                          ) : (
+                            <span className="text-xs text-slate-400">No elegible</span>
+                          )}
+                        </td>
                       </tr>
                     );
                   })}
                 {!cargando && remisionesFiltradas.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="px-4 py-6 text-center text-sm text-slate-500">
+                    <td colSpan={11} className="px-4 py-6 text-center text-sm text-slate-500">
                       No hay remisiones para mostrar con los filtros actuales.
                     </td>
                   </tr>
