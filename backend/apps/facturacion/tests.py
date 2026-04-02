@@ -30,6 +30,7 @@ from apps.facturacion.services.factus_payload_builder import build_invoice_paylo
 from apps.facturacion.services.support_document_payload_builder import build_support_document_payload
 from apps.facturacion.services.exceptions import DescargaFacturaError
 from apps.facturacion.services.factus_client import FactusValidationError
+from apps.facturacion.services.credit_note_service import build_credit_preview, create_credit_note
 from apps.facturacion.services.persistence_safety import (
     normalize_qr_image_value,
     safe_assign_charfield,
@@ -38,6 +39,7 @@ from apps.facturacion.services.persistence_safety import (
 from apps.core.models import Impuesto
 from apps.inventario.models import Categoria, Producto, Proveedor
 from apps.ventas.models import Cliente, DetalleVenta, Venta
+from apps.ventas.services.anular_venta import anular_venta
 from apps.facturacion.models import RangoNumeracionDIAN
 
 
@@ -319,6 +321,7 @@ class FacturarVentaPersistenciaCriticaTests(TestCase):
             'items': [{'code_reference': 'PR-QR-LARGO', 'quantity': 1}],
             'send_email': False,
         }
+
         mocked_resolve_range.return_value = RangoNumeracionDIAN(prefijo='FV', factus_range_id=1)
         mocked_send_invoice.return_value = {
             'data': {
@@ -1356,3 +1359,81 @@ class FacturarVentaPersistenciaQrTests(TestCase):
             facturar_venta(self.venta.id, triggered_by=self.user)
         factura = FacturaElectronica.objects.get(venta=self.venta)
         self.assertEqual(factura.estado_electronico, 'ERROR_PERSISTENCIA')
+
+class NotaCreditoFlujoTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(username='nc-user', password='1234')
+        self.cliente = Cliente.objects.create(numero_documento='321', nombre='Cliente NC', email='nc@example.com')
+        self.venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            numero_comprobante='FAC-500',
+            cliente=self.cliente,
+            vendedor=self.user,
+            subtotal=Decimal('200'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('38'),
+            total=Decimal('238'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('238'),
+            cambio=Decimal('0'),
+            estado='COBRADA',
+        )
+        categoria = Categoria.objects.create(nombre='NC Categoria')
+        proveedor = Proveedor.objects.create(nombre='NC Proveedor')
+        self.producto = Producto.objects.create(
+            codigo='NC-PROD',
+            nombre='Producto NC',
+            precio_costo=Decimal('20'),
+            precio_venta=Decimal('100'),
+            precio_venta_minimo=Decimal('90'),
+            stock=Decimal('4'),
+            categoria=categoria,
+            proveedor=proveedor,
+        )
+        self.detalle = DetalleVenta.objects.create(
+            venta=self.venta,
+            producto=self.producto,
+            cantidad=Decimal('2'),
+            precio_unitario=Decimal('100'),
+            descuento_unitario=Decimal('0'),
+            iva_porcentaje=Decimal('19'),
+            subtotal=Decimal('200'),
+            total=Decimal('238'),
+        )
+        self.factura = FacturaElectronica.objects.create(
+            venta=self.venta,
+            number='SETP90001',
+            reference_code='SETP90001',
+            cufe='CUFE-NC-1',
+            status='ACEPTADA',
+            estado_electronico='ACEPTADA',
+            emitida_en_factus=True,
+            response_json={'data': {'bill': {'numbering_range_id': 1}}},
+        )
+
+    def test_preview_bloquea_sobre_acreditacion(self):
+        with self.assertRaises(ValidationError):
+            build_credit_preview(
+                self.factura,
+                [{'detalle_venta_original_id': self.detalle.id, 'cantidad_a_acreditar': '3', 'afecta_inventario': False}],
+            )
+
+    @patch('apps.facturacion.services.credit_note_service.FactusClient.create_and_validate_credit_note')
+    def test_crear_nota_credito_parcial_actualiza_estado_factura(self, mocked_create):
+        mocked_create.return_value = {'data': {'credit_note': {'number': 'NC100', 'status': 'accepted', 'cufe': 'NC-CUFE'}}}
+        nota = create_credit_note(
+            factura=self.factura,
+            motivo='Devolución parcial',
+            lines=[{'detalle_venta_original_id': self.detalle.id, 'cantidad_a_acreditar': '1', 'afecta_inventario': False}],
+            is_total=False,
+            user=self.user,
+        )
+        self.factura.refresh_from_db()
+        self.assertEqual(nota.tipo_nota, 'PARCIAL')
+        self.assertEqual(self.factura.estado_acreditacion, 'CREDITADA_PARCIAL')
+
+    def test_bloquea_anulacion_directa_si_emitida(self):
+        with self.assertRaises(ValidationError):
+            anular_venta(self.venta, self.user, motivo='prueba')

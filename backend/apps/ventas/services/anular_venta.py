@@ -117,6 +117,11 @@ def revertir_inventario_venta_anulada(venta, user, descripcion=''):
 
 def anular_venta(venta, user, *, motivo, descripcion='', devuelve_inventario=True):
     validar_estado_para_anulacion(venta)
+    factura_emitida = getattr(venta, 'factura_electronica_factus', None)
+    if factura_emitida and factura_emitida.emitida_en_factus:
+        raise ValidationError(
+            'La factura ya fue emitida electrónicamente. Debe gestionar nota crédito parcial o total, no anulación directa.'
+        )
 
     nota_credito = anular_factura_electronica_con_nota_credito(venta, motivo)
 
