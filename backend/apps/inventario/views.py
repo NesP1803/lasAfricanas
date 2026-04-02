@@ -145,9 +145,16 @@ class ProductoViewSet(viewsets.ModelViewSet):
             serializer = ProductoDetailSerializer(producto)
             return Response(serializer.data)
         except Producto.DoesNotExist:
+            # Se retorna 200 para evitar confusión de "ruta 404" cuando en realidad
+            # el endpoint existe y solo no hay coincidencia por código.
             return Response(
-                {'error': 'Producto no encontrado'},
-                status=status.HTTP_404_NOT_FOUND
+                {
+                    'encontrado': False,
+                    'codigo': codigo,
+                    'error': 'PRODUCTO_NO_ENCONTRADO',
+                    'detail': f'No existe un producto activo con el código "{codigo}".',
+                },
+                status=status.HTTP_200_OK,
             )
     
     @action(detail=False, methods=['get'])
