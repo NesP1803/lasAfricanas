@@ -636,6 +636,16 @@ export default function Facturas() {
                         <td className="px-2 py-2.5">
                           {factura.electronica ? (
                             <div className="flex flex-wrap gap-1">
+                              {resolveEstadoFactura(factura.electronica) === 'EN_PROCESO' ? (
+                                <button
+                                  type="button"
+                                  className="rounded bg-amber-600 px-2 py-1 text-[10px] font-semibold text-white disabled:opacity-50"
+                                  disabled={Boolean(accionesElectronicas[factura.electronica.numero])}
+                                  onClick={() => handleAccionElectronica(factura, 'sincronizar')}
+                                >
+                                  Sincronizar
+                                </button>
+                              ) : null}
                               <button
                                 type="button"
                                 className="rounded bg-blue-600 px-2 py-1 text-[10px] font-semibold text-white disabled:opacity-50"

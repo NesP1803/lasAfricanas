@@ -196,6 +196,102 @@ class VentaViewSet(viewsets.ModelViewSet):
             return VentaCreateSerializer
         return VentaDetailSerializer
 
+    def _emitir_factura_electronica(self, venta, user):
+        try:
+            logger.info('ventas.facturar.enviando_factus venta_id=%s', venta.id)
+            factura = facturar_venta(venta.id, triggered_by=user)
+            logger.info(
+                'ventas.facturar.factus_ok venta_id=%s factura_number=%s status=%s',
+                venta.id,
+                factura.number,
+                factura.status,
+            )
+            venta.refresh_from_db()
+        except (FactusValidationError, FactusAuthError, FactusAPIError, FacturaDuplicadaError) as exc:
+            logger.exception('ventas.facturar.factus_error venta_id=%s', venta.id)
+            venta.refresh_from_db()
+            factura_error = FacturaElectronica.objects.filter(venta=venta).first()
+            warning_code, warning_detail = _factus_error_category(exc)
+            return Response(
+                {
+                    'ok': False,
+                    'message': str(exc),
+                    'warning': warning_code,
+                    'warning_detail': warning_detail,
+                    'venta_id': venta.id,
+                    'venta': VentaDetailSerializer(venta).data,
+                    'factura_electronica': (
+                        FacturaElectronicaSerializer(factura_error).data
+                        if factura_error
+                        else None
+                    ),
+                    'numero_factura': factura_error.number if factura_error else None,
+                    'estado_local': venta.estado,
+                    'estado_venta': venta.estado,
+                    'estado_electronico': estado_electronico_ui(factura_error) if factura_error else 'ERROR',
+                    'status': factura_error.status if factura_error else 'ERROR',
+                    'cufe': factura_error.cufe if factura_error else '',
+                    'uuid': factura_error.uuid if factura_error else '',
+                    'reference_code': factura_error.reference_code if factura_error else '',
+                    'pos_ticket': build_pos_ticket_payload(venta, factura_error) if factura_error else None,
+                    'factus_sent': False,
+                },
+                status=status.HTTP_200_OK,
+            )
+        except Exception as exc:
+            logger.exception('ventas.facturar.error_no_controlado venta_id=%s', venta.id)
+            venta.refresh_from_db()
+            factura_error = FacturaElectronica.objects.filter(venta=venta).first()
+            return Response(
+                {
+                    'ok': False,
+                    'message': f'Error interno al facturar: {exc}',
+                    'venta_id': venta.id,
+                    'numero_factura': None,
+                    'estado_local': venta.estado,
+                    'estado_venta': venta.estado,
+                    'estado_electronico': estado_electronico_ui(factura_error) if factura_error else 'ERROR',
+                    'status': 'ERROR',
+                    'factus_sent': False,
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        is_pending = factura.status == 'EN_PROCESO'
+        data = {
+            'ok': True,
+            'message': (
+                'La factura ya fue recibida por Factus y quedó pendiente de envío/validación en DIAN.'
+                if is_pending
+                else 'Factura electrónica generada correctamente'
+            ),
+            'venta_id': venta.id,
+            'venta': VentaDetailSerializer(venta).data,
+            'factura_electronica': FacturaElectronicaSerializer(factura).data,
+            'factura_lista': build_factura_ready_payload(venta, factura),
+            'numero_factura': factura.number,
+            'estado_local': venta.estado,
+            'estado_venta': venta.estado,
+            'estado_electronico': estado_electronico_ui(factura),
+            'status': factura.status,
+            'cufe': factura.cufe,
+            'uuid': factura.uuid,
+            'reference_code': factura.reference_code,
+            'pos_ticket': build_pos_ticket_payload(venta, factura),
+            'factus_sent': True,
+            'pdf_url': factura.pdf_url,
+            'xml_url': factura.xml_url,
+            'factus_result': (
+                'PENDING_DIAN'
+                if is_pending
+                else 'SUCCESS'
+            ),
+        }
+        return Response(
+            data,
+            status=status.HTTP_202_ACCEPTED if is_pending else status.HTTP_201_CREATED,
+        )
+
     def perform_create(self, serializer):
         user = self.request.user
         vendedor = serializer.validated_data.get('vendedor')
@@ -289,33 +385,42 @@ class VentaViewSet(viewsets.ModelViewSet):
         
         POST /api/ventas/{id}/convertir_a_factura/
         """
-        remision = self.get_object()
-        
-        if remision.tipo_comprobante != 'REMISION':
-            return Response(
-                {'error': 'Solo se pueden convertir remisiones a facturas'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        if remision.estado != 'COBRADA':
-            return Response(
-                {'error': 'Solo se pueden facturar remisiones confirmadas'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
         try:
-            factura = remision.convertir_a_factura()
-            factura.estado = 'COBRADA'
-            factura.facturada_por = request.user
-            factura.facturada_at = timezone.now()
-            factura.save()
-            serializer = VentaDetailSerializer(factura)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        except Exception as e:
-            return Response(
-                {'error': str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            with transaction.atomic():
+                remision = (
+                    Venta.objects.select_for_update()
+                    .select_related('cliente', 'vendedor')
+                    .prefetch_related('detalles', 'detalles__producto')
+                    .get(pk=pk)
+                )
+
+                if remision.tipo_comprobante != 'REMISION':
+                    raise ValidationError('Solo se pueden convertir remisiones a facturas.')
+                if remision.estado == 'ANULADA':
+                    raise ValidationError('No se puede facturar una remisión anulada.')
+                if remision.estado not in {'COBRADA', 'FACTURADA'}:
+                    raise ValidationError('Solo se pueden facturar remisiones confirmadas.')
+
+                factura_existente = (
+                    remision.facturas_generadas
+                    .filter(estado__in=['BORRADOR', 'ENVIADA_A_CAJA', 'COBRADA', 'FACTURADA'])
+                    .order_by('-id')
+                    .first()
+                )
+                if factura_existente is not None:
+                    raise ValidationError(
+                        f'La remisión ya fue convertida en la factura {factura_existente.numero_comprobante}.'
+                    )
+
+                factura = remision.convertir_a_factura()
+                if factura.estado not in {'COBRADA', 'FACTURADA'}:
+                    cerrar_venta_local(factura, request.user)
+
+            return self._emitir_factura_electronica(factura, request.user)
+        except ValidationError as exc:
+            return Response({'error': exc.detail}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as exc:
+            return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
     
     @action(detail=True, methods=['post'])
     def anular(self, request, pk=None):
@@ -422,98 +527,10 @@ class VentaViewSet(viewsets.ModelViewSet):
                     raise ValidationError('No se puede facturar una venta anulada.')
                 if venta.estado not in {'COBRADA', 'FACTURADA'}:
                     cerrar_venta_local(venta, request.user)
-
-            logger.info('ventas.facturar.enviando_factus venta_id=%s', venta.id)
-            factura = facturar_venta(venta.id, triggered_by=request.user)
-            logger.info('ventas.facturar.factus_ok venta_id=%s factura_number=%s status=%s', venta.id, factura.number, factura.status)
-            venta.refresh_from_db()
         except ValidationError as exc:
             logger.warning('ventas.facturar.validation_error venta_id=%s error=%s', pk, exc.detail)
             return Response({'error': exc.detail}, status=status.HTTP_400_BAD_REQUEST)
-        except (FactusValidationError, FactusAuthError, FactusAPIError, FacturaDuplicadaError) as exc:
-            logger.exception('ventas.facturar.factus_error venta_id=%s', pk)
-            venta.refresh_from_db()
-            factura_error = FacturaElectronica.objects.filter(venta=venta).first()
-            warning_code, warning_detail = _factus_error_category(exc)
-            return Response(
-                {
-                    'ok': False,
-                    'message': str(exc),
-                    'warning': warning_code,
-                    'warning_detail': warning_detail,
-                    'venta_id': venta.id,
-                    'venta': VentaDetailSerializer(venta).data,
-                    'factura_electronica': (
-                        FacturaElectronicaSerializer(factura_error).data
-                        if factura_error
-                        else None
-                    ),
-                    'numero_factura': factura_error.number if factura_error else None,
-                    'estado_local': venta.estado,
-                    'estado_venta': venta.estado,
-                    'estado_electronico': estado_electronico_ui(factura_error) if factura_error else 'ERROR',
-                    'status': factura_error.status if factura_error else 'ERROR',
-                    'cufe': factura_error.cufe if factura_error else '',
-                    'uuid': factura_error.uuid if factura_error else '',
-                    'reference_code': factura_error.reference_code if factura_error else '',
-                    'pos_ticket': build_pos_ticket_payload(venta, factura_error) if factura_error else None,
-                    'factus_sent': False,
-                },
-                status=status.HTTP_200_OK,
-            )
-        except Exception as exc:
-            logger.exception('ventas.facturar.error_no_controlado venta_id=%s', venta.id)
-            venta.refresh_from_db()
-            factura_error = FacturaElectronica.objects.filter(venta=venta).first()
-            return Response(
-                {
-                    'ok': False,
-                    'message': f'Error interno al facturar: {exc}',
-                    'venta_id': venta.id,
-                    'numero_factura': None,
-                    'estado_local': venta.estado,
-                    'estado_venta': venta.estado,
-                    'estado_electronico': estado_electronico_ui(factura_error) if factura_error else 'ERROR',
-                    'status': 'ERROR',
-                    'factus_sent': False,
-                },
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
-
-        is_pending = factura.status == 'EN_PROCESO'
-        data = {
-            'ok': True,
-            'message': (
-                'La factura ya fue recibida por Factus y quedó pendiente de envío/validación en DIAN.'
-                if is_pending
-                else 'Factura electrónica generada correctamente'
-            ),
-            'venta_id': venta.id,
-            'venta': VentaDetailSerializer(venta).data,
-            'factura_electronica': FacturaElectronicaSerializer(factura).data,
-            'factura_lista': build_factura_ready_payload(venta, factura),
-            'numero_factura': factura.number,
-            'estado_local': venta.estado,
-            'estado_venta': venta.estado,
-            'estado_electronico': estado_electronico_ui(factura),
-            'status': factura.status,
-            'cufe': factura.cufe,
-            'uuid': factura.uuid,
-            'reference_code': factura.reference_code,
-            'pos_ticket': build_pos_ticket_payload(venta, factura),
-            'factus_sent': True,
-            'pdf_url': factura.pdf_url,
-            'xml_url': factura.xml_url,
-            'factus_result': (
-                'PENDING_DIAN'
-                if is_pending
-                else 'SUCCESS'
-            ),
-        }
-        return Response(
-            data,
-            status=status.HTTP_202_ACCEPTED if is_pending else status.HTTP_201_CREATED,
-        )
+        return self._emitir_factura_electronica(venta, request.user)
     
     @action(detail=False, methods=['get'])
     def estadisticas(self, request):
