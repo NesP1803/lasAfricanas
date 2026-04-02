@@ -1072,7 +1072,7 @@ class VentaServicesTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn('no está disponible para cargarse en caja', response.data['error'])
 
-    def test_stock_insuficiente_no_cambia_estado_enviada_a_caja(self):
+    def test_facturar_en_caja_permite_stock_negativo_y_registra_movimiento(self):
         self.producto.stock = Decimal('1')
         self.producto.save(update_fields=['stock'])
 
@@ -1105,17 +1105,19 @@ class VentaServicesTests(TestCase):
 
         self.client.force_authenticate(user=self.cajero)
         response = self.client.post(f'/api/caja/{venta.id}/facturar/')
-        self.assertEqual(response.status_code, 400)
-        self.assertIn('Stock insuficiente', str(response.data.get('error')))
+        self.assertEqual(response.status_code, 200)
 
         venta.refresh_from_db()
         self.producto.refresh_from_db()
-        self.assertEqual(venta.estado, 'ENVIADA_A_CAJA')
-        self.assertFalse(venta.inventario_ya_afectado)
-        self.assertIsNone(venta.facturada_at)
-        self.assertIsNone(venta.facturada_por)
-        self.assertEqual(self.producto.stock, Decimal('1'))
-        self.assertEqual(MovimientoInventario.objects.count(), 0)
+        self.assertEqual(venta.estado, 'FACTURADA')
+        self.assertTrue(venta.inventario_ya_afectado)
+        self.assertIsNotNone(venta.facturada_at)
+        self.assertEqual(venta.facturada_por, self.cajero)
+        self.assertEqual(self.producto.stock, Decimal('-1'))
+        movimiento = MovimientoInventario.objects.get()
+        self.assertEqual(movimiento.stock_anterior, Decimal('1'))
+        self.assertEqual(movimiento.stock_nuevo, Decimal('-1'))
+        self.assertIn('stock negativo permitido', movimiento.observaciones.lower())
 
 
 class VentaIVAIncluidoTests(TestCase):

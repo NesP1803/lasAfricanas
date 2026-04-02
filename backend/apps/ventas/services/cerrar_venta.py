@@ -63,8 +63,12 @@ def registrar_salida_inventario(venta, user, detalles=None):
         producto = productos.get(detalle.producto_id) or detalle.producto
         stock_anterior = producto.stock
         stock_nuevo = stock_anterior - detalle.cantidad
+        observaciones = 'Facturación en caja'
         if stock_nuevo < 0:
-            raise ValidationError(f'Stock insuficiente para {producto.nombre}.')
+            observaciones = (
+                f'Facturación en caja con stock negativo permitido '
+                f'({stock_anterior} -> {stock_nuevo})'
+            )
         MovimientoInventario.objects.create(
             producto=producto,
             tipo='SALIDA',
@@ -74,7 +78,7 @@ def registrar_salida_inventario(venta, user, detalles=None):
             costo_unitario=detalle.precio_unitario,
             usuario=user,
             referencia=venta.numero_comprobante or f'VENTA-{venta.id}',
-            observaciones='Facturación en caja',
+            observaciones=observaciones,
         )
         movimientos_creados += 1
 
