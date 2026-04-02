@@ -18,6 +18,11 @@ from apps.facturacion.models import DocumentoSoporteElectronico, FacturaElectron
 from apps.facturacion_electronica.catalogos.models import DocumentoIdentificacionFactus
 from apps.facturacion.services.download_invoice_files import download_pdf, download_xml
 from apps.facturacion.services.consecutivo_service import resolve_numbering_range
+from apps.facturacion.services.factus_catalog_lookup import (
+    get_municipality_id,
+    get_payment_method_code,
+    get_unit_measure_id,
+)
 from apps.facturacion.services.factus_payload_builder import build_invoice_payload
 from apps.facturacion.services.support_document_payload_builder import build_support_document_payload
 from apps.facturacion.services.exceptions import DescargaFacturaError
@@ -243,6 +248,45 @@ class DocumentoSoporteBuilderTests(TestCase):
                     'items': [{'descripcion': 'Servicio', 'cantidad': 1, 'precio': 0}],
                 }
             )
+
+    def test_normaliza_tipo_documento_proveedor_cc_y_homologa_id(self):
+        payload = build_support_document_payload(
+            {
+                'proveedor_nombre': 'Juan Perez',
+                'proveedor_documento': '123',
+                'proveedor_tipo_documento': ' c.c ',
+                'payment_method_code': '10',
+                'items': [{'descripcion': 'Servicio', 'cantidad': 1, 'precio': 15000}],
+            }
+        )
+        self.assertEqual(payload['supplier']['identification_type'], 'CC')
+        self.assertEqual(payload['supplier']['identification_document_id'], 3)
+
+
+class FactusCatalogLookupHomologationTests(TestCase):
+    def test_lookup_prioriza_homologaciones_locales(self):
+        from apps.facturacion_electronica.models import (
+            HomologacionMedioPago,
+            HomologacionMunicipio,
+            HomologacionUnidadMedida,
+        )
+
+        HomologacionMunicipio.objects.create(codigo_interno='BOGOTA DC', municipality_id=321)
+        HomologacionUnidadMedida.objects.create(codigo_interno='UN', unit_measure_id=70)
+        HomologacionMedioPago.objects.create(codigo_interno='EFECTIVO', payment_method_code='10')
+
+        self.assertEqual(get_municipality_id('Bogotá D.C.', default=0), 321)
+        self.assertEqual(get_unit_measure_id('un', default=0), 70)
+        self.assertEqual(get_payment_method_code('efectivo', default=''), '10')
+
+
+class SyncFactusCatalogsCommandTests(TestCase):
+    def test_skip_remote_ensure_minimums_carga_catalogos_base(self):
+        out = StringIO()
+        call_command('sync_factus_catalogs', '--skip-remote', stdout=out)
+        self.assertTrue(
+            DocumentoIdentificacionFactus.objects.filter(factus_id=3, codigo='13', is_active=True).exists()
+        )
 
 
 class DocumentoSoporteEndpointTests(TestCase):

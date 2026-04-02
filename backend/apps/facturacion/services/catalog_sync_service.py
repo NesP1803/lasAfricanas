@@ -6,6 +6,7 @@ from decouple import config
 from django.db import transaction
 
 from apps.facturacion.services.factus_client import FactusAPIError, FactusClient
+from apps.facturacion.services.factus_catalog_lookup import _bootstrap_minimum_catalogs
 from apps.facturacion_electronica.catalogos.models import (
     DocumentoIdentificacionFactus,
     MetodoPagoFactus,
@@ -91,3 +92,13 @@ class CatalogSyncService:
 
     def sync_identification_documents(self) -> dict:
         return self._sync_catalog(DocumentoIdentificacionFactus, self.endpoints['identification_documents'])
+
+    def ensure_minimum_catalogs(self) -> dict:
+        _bootstrap_minimum_catalogs()
+        return {
+            'documentos_identificacion': DocumentoIdentificacionFactus.objects.filter(is_active=True).count(),
+            'metodos_pago': MetodoPagoFactus.objects.filter(is_active=True).count(),
+            'municipios': MunicipioFactus.objects.filter(is_active=True).count(),
+            'tributos': TributoFactus.objects.filter(is_active=True).count(),
+            'unidades_medida': UnidadMedidaFactus.objects.filter(is_active=True).count(),
+        }

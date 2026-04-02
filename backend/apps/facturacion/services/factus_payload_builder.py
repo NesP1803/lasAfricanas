@@ -145,6 +145,8 @@ def _build_customer_payload(cliente) -> dict:
 
     identification_document_id = get_document_type_id(tipo_documento, default=0)
     if not identification_document_id:
+        identification_document_id = get_document_type_id(tipo_documento, default=0, seed_if_missing=True)
+    if not identification_document_id:
         logger.warning(
             'factus_payload.customer_invalid cliente_id=%s reason=document_type_not_homologated '
             'tipo_documento_raw=%s tipo_documento_normalized=%s',
@@ -170,7 +172,7 @@ def _build_customer_payload(cliente) -> dict:
         'email': cliente.email or 'no-email@example.com',
         'phone': cliente.telefono or '0000000000',
         'address': cliente.direccion or 'NO REGISTRADA',
-        'municipality_id': get_municipality_id(cliente.ciudad or 'SIN_CIUDAD'),
+        'municipality_id': get_municipality_id(cliente.ciudad or 'SIN_CIUDAD', default=149),
         'identification_document_id': identification_document_id,
         'tribute_id': _resolve_customer_tribute_id(tipo_documento),
     }
