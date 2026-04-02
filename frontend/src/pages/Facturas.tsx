@@ -142,7 +142,12 @@ export default function Facturas() {
         fechaFin: filters.fechaFin || undefined,
         search: search ? search : undefined,
       }, { signal: controller.signal });
-      const facturasElectronicas = await facturacionApi.getFacturas();
+      let facturasElectronicas: FacturaElectronica[] = [];
+      try {
+        facturasElectronicas = await facturacionApi.getFacturas();
+      } catch (facturaError) {
+        console.error('No fue posible cargar el estado electrónico de facturas', facturaError);
+      }
       const porVentaId = new Map(
         facturasElectronicas
           .filter((item) => typeof item.venta_id === 'number')
@@ -177,6 +182,7 @@ export default function Facturas() {
       if (err instanceof DOMException && err.name === 'AbortError') {
         return;
       }
+      console.error('Error cargando listado de facturas', err);
       setFacturas([]);
       setError(err instanceof Error ? err.message : 'Error al cargar facturas');
     } finally {
@@ -510,17 +516,17 @@ export default function Facturas() {
           </div>
         </div>
 
-        <div className="mt-3 rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="mt-3 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           {error && (
             <div className="border-b border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-600">
               {error}
             </div>
           )}
-          <div className="overflow-auto">
-            <table className="min-w-[1560px] table-fixed text-sm">
+          <div className="overflow-x-auto overflow-y-visible">
+            <table className="min-w-[1560px] table-fixed border-separate border-spacing-0 text-sm">
               <thead className="bg-sky-100 text-[11px] uppercase tracking-wide text-slate-700">
                 <tr>
-                  <th className="w-10 px-2 py-2 text-left">
+                  <th className="w-10 px-2 py-3 text-left">
                     <input
                       type="checkbox"
                       checked={selectedIds.length === facturasFiltradas.length && facturasFiltradas.length > 0}
@@ -531,19 +537,19 @@ export default function Facturas() {
                       }
                     />
                   </th>
-                  <th className="w-20 px-2 py-2 text-left">Prefijo</th>
-                  <th className="w-20 px-2 py-2 text-left">Factura</th>
-                  <th className="w-36 px-2 py-2 text-left">Fecha/Hora</th>
-                  <th className="w-24 px-2 py-2 text-left">Estado</th>
-                  <th className="w-28 px-2 py-2 text-left">Electrónica</th>
-                  <th className="w-28 px-2 py-2 text-left">Medio/Pago</th>
-                  <th className="w-28 px-2 py-2 text-right">Total</th>
-                  <th className="w-28 px-2 py-2 text-left">NIT/CC</th>
-                  <th className="w-44 px-2 py-2 text-left">Cliente</th>
-                  <th className="w-32 px-2 py-2 text-left">Usuario</th>
-                  <th className="w-[20rem] px-2 py-2 text-left">CUFE / Ref</th>
-                  <th className="w-36 px-2 py-2 text-left">Sincronizar con Dian</th>
-                  <th className="w-44 px-2 py-2 text-left">Acciones FE</th>
+                  <th className="w-20 px-2 py-3 text-left">Prefijo</th>
+                  <th className="w-20 px-2 py-3 text-left">Factura</th>
+                  <th className="w-36 px-2 py-3 text-left">Fecha/Hora</th>
+                  <th className="w-24 px-2 py-3 text-left">Estado</th>
+                  <th className="w-28 px-2 py-3 text-left">Electrónica</th>
+                  <th className="w-28 px-2 py-3 text-left">Medio/Pago</th>
+                  <th className="w-28 px-2 py-3 text-right">Total</th>
+                  <th className="w-28 px-2 py-3 text-left">NIT/CC</th>
+                  <th className="w-44 px-2 py-3 text-left">Cliente</th>
+                  <th className="w-32 px-2 py-3 text-left">Usuario</th>
+                  <th className="w-[20rem] px-2 py-3 text-left">CUFE / Ref</th>
+                  <th className="w-36 px-2 py-3 text-left">Sincronizar con Dian</th>
+                  <th className="w-44 px-2 py-3 text-left">Acciones FE</th>
                 </tr>
               </thead>
               <tbody>

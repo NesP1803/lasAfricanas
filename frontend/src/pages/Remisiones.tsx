@@ -149,6 +149,7 @@ export default function Remisiones() {
       if (err instanceof DOMException && err.name === 'AbortError') {
         return;
       }
+      console.error('Error cargando listado de remisiones', err);
       setRemisiones([]);
       setRemisionesElegibles(new Set());
       setError(err instanceof Error ? err.message : 'Error al cargar remisiones');
@@ -421,7 +422,7 @@ export default function Remisiones() {
           </div>
         </div>
 
-        <div className="mt-3 rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="mt-3 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           {error && (
             <div className="border-b border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-600">
               {error}
@@ -432,11 +433,11 @@ export default function Remisiones() {
               {mensajeExito}
             </div>
           )}
-          <div className="overflow-auto">
-            <table className="min-w-[1300px] table-fixed text-sm">
+          <div className="overflow-x-auto overflow-y-visible">
+            <table className="min-w-[1300px] table-fixed border-separate border-spacing-0 text-sm">
               <thead className="bg-sky-100 text-[11px] uppercase tracking-wide text-slate-700">
                 <tr>
-                  <th className="w-10 px-2 py-2 text-left">
+                  <th className="w-10 px-2 py-3 text-left">
                     <input
                       type="checkbox"
                       checked={
@@ -450,16 +451,16 @@ export default function Remisiones() {
                       }
                     />
                   </th>
-                  <th className="w-20 px-2 py-2 text-left">Prefijo</th>
-                  <th className="w-24 px-2 py-2 text-left">Remisión</th>
-                  <th className="w-36 px-2 py-2 text-left">Fecha/Hora</th>
-                  <th className="w-28 px-2 py-2 text-left">Estado</th>
-                  <th className="w-28 px-2 py-2 text-left">Medio/Pago</th>
-                  <th className="w-28 px-2 py-2 text-right">Total</th>
-                  <th className="w-32 px-2 py-2 text-left">NIT/CC</th>
-                  <th className="w-52 px-2 py-2 text-left">Cliente</th>
-                  <th className="w-36 px-2 py-2 text-left">Usuario</th>
-                  <th className="w-48 px-2 py-2 text-left">Acciones</th>
+                  <th className="w-20 px-2 py-3 text-left">Prefijo</th>
+                  <th className="w-24 px-2 py-3 text-left">Remisión</th>
+                  <th className="w-36 px-2 py-3 text-left">Fecha/Hora</th>
+                  <th className="w-28 px-2 py-3 text-left">Estado</th>
+                  <th className="w-28 px-2 py-3 text-left">Medio/Pago</th>
+                  <th className="w-28 px-2 py-3 text-right">Total</th>
+                  <th className="w-32 px-2 py-3 text-left">NIT/CC</th>
+                  <th className="w-52 px-2 py-3 text-left">Cliente</th>
+                  <th className="w-36 px-2 py-3 text-left">Usuario</th>
+                  <th className="w-48 px-2 py-3 text-left">Acciones</th>
                 </tr>
               </thead>
               <tbody>
