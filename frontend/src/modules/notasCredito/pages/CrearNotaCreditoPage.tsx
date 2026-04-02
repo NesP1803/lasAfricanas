@@ -17,7 +17,7 @@ export default function CrearNotaCreditoPage() {
         message: 'Nota crédito emitida correctamente.',
         type: 'success',
       });
-      navigate('/notas-credito');
+      navigate('/listados/notas-credito');
     } catch {
       showNotification({
         message: 'No fue posible emitir la nota crédito.',
@@ -36,7 +36,7 @@ export default function CrearNotaCreditoPage() {
             <h2 className="text-xl font-semibold text-slate-800">Crear Nota Crédito</h2>
             <p className="text-sm text-slate-500">Diligencie los campos para emitir una nueva nota crédito.</p>
           </div>
-          <Link to="/notas-credito" className="text-sm font-semibold text-blue-600 hover:text-blue-700">
+          <Link to="/listados/notas-credito" className="text-sm font-semibold text-blue-600 hover:text-blue-700">
             Volver al listado
           </Link>
         </div>

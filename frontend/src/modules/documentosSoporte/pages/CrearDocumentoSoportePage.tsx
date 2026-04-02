@@ -17,7 +17,7 @@ export default function CrearDocumentoSoportePage() {
         message: 'Documento soporte emitido correctamente.',
         type: 'success',
       });
-      navigate('/documentos-soporte');
+      navigate('/listados/documentos-soporte');
     } catch {
       showNotification({
         message: 'No fue posible emitir el documento soporte.',
@@ -38,7 +38,7 @@ export default function CrearDocumentoSoportePage() {
               Registre compras a proveedores no obligados a facturar y emita el documento soporte.
             </p>
           </div>
-          <Link to="/documentos-soporte" className="text-sm font-semibold text-blue-600 hover:text-blue-700">
+          <Link to="/listados/documentos-soporte" className="text-sm font-semibold text-blue-600 hover:text-blue-700">
             Volver al listado
           </Link>
         </div>
