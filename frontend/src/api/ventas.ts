@@ -469,6 +469,39 @@ export const ventasApi = {
         method: 'POST',
       });
     } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const responseData = (error.response?.data ?? {}) as Record<string, unknown>;
+        const estadoLocal = responseData.estado_local as string | undefined;
+        const ventaIdRespuesta = responseData.venta_id as number | undefined;
+        const seProcesoVentaLocal = Boolean(ventaIdRespuesta || (estadoLocal && estadoLocal !== 'BORRADOR'));
+        if (seProcesoVentaLocal) {
+          return {
+            ok: false,
+            message:
+              (responseData.message as string) ||
+              (responseData.error as string) ||
+              'La venta se procesó localmente, pero falló la emisión electrónica.',
+            venta_id: ventaIdRespuesta ?? ventaId,
+            venta: (responseData.venta as Venta) ?? ({} as Venta),
+            factura_electronica: (responseData.factura_electronica as FacturaElectronicaResultado) ?? ({} as FacturaElectronicaResultado),
+            factura_lista: responseData.factura_lista as FacturaLista | undefined,
+            numero_factura: (responseData.numero_factura as string) || '',
+            estado_local: estadoLocal,
+            estado_electronico: responseData.estado_electronico as string | undefined,
+            status:
+              (responseData.status as string) ||
+              (responseData.estado_electronico as string) ||
+              'ERROR',
+            cufe: responseData.cufe as string | undefined,
+            uuid: responseData.uuid as string | undefined,
+            reference_code: responseData.reference_code as string | undefined,
+            send_email: responseData.send_email as boolean | undefined,
+            pos_ticket: responseData.pos_ticket as PosTicketData | undefined,
+            factus_sent: false,
+            errores: responseData.errores as string[] | undefined,
+          };
+        }
+      }
       throw new Error(extractApiErrorMessage(error, 'Error al emitir factura electrónica'));
     }
     const payload = data as Partial<FacturarCajaResponse> & Record<string, unknown>;
