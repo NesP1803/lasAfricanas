@@ -182,12 +182,26 @@ class VentaViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         payload = request.data.copy()
         facturar_directo = bool(payload.pop('facturar_directo', False))
+        logger.info(
+            'ventas.create.payload user_id=%s facturar_directo=%s payload=%s',
+            getattr(request.user, 'id', None),
+            facturar_directo,
+            payload,
+        )
         serializer = self.get_serializer(data=payload)
-        serializer.is_valid(raise_exception=True)
+        if not serializer.is_valid():
+            logger.warning(
+                'ventas.create.validation_error user_id=%s errors=%s payload=%s',
+                getattr(request.user, 'id', None),
+                serializer.errors,
+                payload,
+            )
+            raise ValidationError(serializer.errors)
         with transaction.atomic():
             self.perform_create(serializer)
             venta = serializer.instance
             if facturar_directo and venta.tipo_comprobante == 'FACTURA':
+                logger.info('ventas.create.cerrar_venta_local venta_id=%s user_id=%s', venta.id, getattr(request.user, 'id', None))
                 cerrar_venta_local(venta, request.user)
         detail_serializer = VentaDetailSerializer(venta, context=self.get_serializer_context())
         headers = self.get_success_headers(detail_serializer.data)
@@ -356,6 +370,12 @@ class VentaViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def facturar(self, request, pk=None):
         """Cierra/cobra venta local e intenta emitir factura electrónica en Factus."""
+        logger.info(
+            'ventas.facturar.inicio venta_id=%s user_id=%s ruta=/api/ventas/%s/facturar/',
+            pk,
+            getattr(request.user, 'id', None),
+            pk,
+        )
         venta = self.get_object()
 
         try:
@@ -373,11 +393,15 @@ class VentaViewSet(viewsets.ModelViewSet):
                 if venta.estado not in {'COBRADA', 'FACTURADA'}:
                     cerrar_venta_local(venta, request.user)
 
+            logger.info('ventas.facturar.enviando_factus venta_id=%s', venta.id)
             factura = facturar_venta(venta.id, triggered_by=request.user)
+            logger.info('ventas.facturar.factus_ok venta_id=%s factura_number=%s status=%s', venta.id, factura.number, factura.status)
             venta.refresh_from_db()
         except ValidationError as exc:
+            logger.warning('ventas.facturar.validation_error venta_id=%s error=%s', pk, exc.detail)
             return Response({'error': exc.detail}, status=status.HTTP_400_BAD_REQUEST)
         except (FactusValidationError, FactusAuthError, FactusAPIError, FacturaDuplicadaError) as exc:
+            logger.exception('ventas.facturar.factus_error venta_id=%s', pk)
             venta.refresh_from_db()
             factura_error = FacturaElectronica.objects.filter(venta=venta).first()
             return Response(

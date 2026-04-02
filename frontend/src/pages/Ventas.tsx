@@ -784,12 +784,14 @@ export default function Ventas() {
   ) => {
     const efectivoRecibidoNumero = Number(efectivoRecibido || '0');
     const cambioCalculado = Math.max(0, efectivoRecibidoNumero - totals.totalCobro);
-    return {
+    const porcentajeDescuentoNormalizado = descuentoAutorizado
+      ? (parsePercentToBasisPoints(descuentoGeneral) / 100).toFixed(2)
+      : '0.00';
+    const payloadBase = {
       tipo_comprobante: tipo,
       cliente: clienteId ?? 0,
-      vendedor: vendedorId,
       subtotal: String(totals.subtotal),
-      descuento_porcentaje: descuentoAutorizado ? descuentoGeneral : '0',
+      descuento_porcentaje: porcentajeDescuentoNormalizado,
       descuento_valor: String(descuentoAutorizado ? totals.descuentoGeneralValor : 0),
       iva: String(totals.iva),
       total: String(totals.totalFiscal),
@@ -815,6 +817,13 @@ export default function Ventas() {
           ? Number(aprobadorId)
           : undefined,
     };
+    if (vendedorId > 0) {
+      return {
+        ...payloadBase,
+        vendedor: vendedorId,
+      };
+    }
+    return payloadBase;
   };
 
   const validarVenta = () => {
@@ -845,7 +854,9 @@ export default function Ventas() {
       setMensaje('Venta guardada como borrador.');
       return venta;
     } catch (error) {
-      setMensaje('No se pudo guardar el borrador. Revisa la conexión.');
+      const errorMessage =
+        error instanceof Error ? error.message : 'No se pudo guardar el borrador. Revisa la conexión.';
+      setMensaje(errorMessage);
       return null;
     } finally {
       setGuardandoBorrador(false);

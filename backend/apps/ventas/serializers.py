@@ -232,6 +232,9 @@ class VentaCreateSerializer(serializers.ModelSerializer):
             'inventario_ya_afectado',
             'detalles'
         ]
+        extra_kwargs = {
+            'vendedor': {'required': False},
+        }
 
 
     def _calcular_detalle(self, detalle):
