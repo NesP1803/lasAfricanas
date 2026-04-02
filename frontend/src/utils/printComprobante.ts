@@ -58,6 +58,18 @@ const formatFechaHora = (fecha: string) => {
   }).format(date);
 };
 
+const formatFechaDocumento = (fecha: string) => {
+  const date = new Date(fecha);
+  if (Number.isNaN(date.getTime())) return fecha;
+  return new Intl.DateTimeFormat('es-CO', { dateStyle: 'short' }).format(date);
+};
+
+const formatHoraDocumento = (fecha: string) => {
+  const date = new Date(fecha);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat('es-CO', { timeStyle: 'short' }).format(date);
+};
+
 const getEmpresaInfo = (empresa?: ConfiguracionEmpresa | null) => ({
   nombre: empresa?.razon_social || 'MOTOREPUESTOS LAS AFRICANAS',
   nit: empresa
@@ -75,6 +87,9 @@ const getTituloDocumento = (tipo: DocumentoTipo) =>
 
 const getLogoEmpresa = (empresa?: ConfiguracionEmpresa | null) =>
   empresa?.logo || '/logo-default-pos.svg';
+
+const POLITICAS_CAMBIOS_GARANTIAS =
+  'Para trámites de cambios y garantías, indispensable presentar la factura de venta. Tiene hasta 5 días para realizar el trámite. Las partes eléctricas NO tienen devolución. Los productos deben estar en perfecto estado y empaque original.';
 
 export const printComprobante = ({
   formato = 'POS',
@@ -109,6 +124,8 @@ export const printComprobante = ({
 
   const infoEmpresa = getEmpresaInfo(empresa);
   const fechaFormateada = formatFechaHora(fecha);
+  const fechaDocumento = formatFechaDocumento(fecha);
+  const horaDocumento = formatHoraDocumento(fecha);
   const tituloDocumento = getTituloDocumento(tipo);
   const detallesMostrar = detalles.length
     ? detalles
@@ -125,11 +142,12 @@ export const printComprobante = ({
 
   const resumenIvaArray = Array.from(
     detallesMostrar.reduce((acc, detalle) => {
+      const ivaPorcentaje = Number.isFinite(detalle.ivaPorcentaje) ? detalle.ivaPorcentaje : 0;
       const base = detalle.cantidad * detalle.precioUnitario - detalle.descuento;
-      const ivaDetalle = base * (detalle.ivaPorcentaje / 100);
+      const ivaDetalle = base * (ivaPorcentaje / 100);
       const totalDetalle = base + ivaDetalle;
-      const item = acc.get(detalle.ivaPorcentaje) || { base: 0, iva: 0, total: 0 };
-      acc.set(detalle.ivaPorcentaje, {
+      const item = acc.get(ivaPorcentaje) || { base: 0, iva: 0, total: 0 };
+      acc.set(ivaPorcentaje, {
         base: item.base + base,
         iva: item.iva + ivaDetalle,
         total: item.total + totalDetalle,
@@ -148,10 +166,10 @@ export const printComprobante = ({
       body { font-family: Arial, sans-serif; color: #0f172a; font-size: 10px; line-height: 1.28; }
       .ticket { width: var(--ticket-width); border: 1px solid #cbd5e1; padding: 8px; }
       .content { display: flex; gap: 6px; }
-      .cufe-vertical { width: 17px; border-right: 1px dashed #94a3b8; writing-mode: vertical-rl; text-orientation: mixed; transform: rotate(180deg); font-size: 7px; font-weight: 700; color: #475569; letter-spacing: .08em; line-height: 1.1; overflow-wrap: anywhere; padding-right: 2px; }
+      .cufe-vertical { width: 17px; border-right: 1px solid #cbd5e1; writing-mode: vertical-rl; text-orientation: mixed; transform: rotate(180deg); font-size: 7px; font-weight: 700; color: #475569; letter-spacing: .08em; line-height: 1.1; overflow-wrap: anywhere; padding-right: 2px; }
       .main { flex: 1; min-width: 0; }
       .center { text-align: center; }
-      .line { border-top: 1px dashed #94a3b8; margin: 6px 0; }
+      .line { border-top: 1px solid #e2e8f0; margin: 6px 0; }
       .muted { color: #64748b; font-size: 8px; }
       .row { display: flex; justify-content: space-between; gap: 6px; margin: 1px 0; }
       .row .value { text-align: right; font-weight: 700; }
@@ -161,12 +179,22 @@ export const printComprobante = ({
       .total-row { font-size: 11px; font-weight: 700; margin-top: 3px; }
       .qr { margin-top: 6px; text-align: center; }
       .qr img { width: 94px; height: 94px; object-fit: contain; }
-      .placeholder { border: 1px dashed #94a3b8; padding: 6px; font-size: 8px; color: #64748b; }
+      .placeholder { border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px; font-size: 8px; color: #64748b; }
       .logo { display: block; margin: 0 auto 4px; height: 42px; max-width: 52mm; object-fit: contain; }
-      .resolution { border: 1px dashed #94a3b8; margin-top: 4px; padding: 4px; text-align: left; }
+      .resolution { border: 1px solid #cbd5e1; margin-top: 4px; padding: 4px; text-align: left; border-radius: 4px; }
       .resolution-title { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #475569; }
       .totals-box { border: 1px solid #cbd5e1; margin-top: 6px; padding: 4px; }
       .thank-you { text-align: center; font-size: 9px; font-weight: 600; margin-top: 7px; }
+      .doc-datetime { margin-top: 4px; border: 1px solid #e2e8f0; background: #f8fafc; padding: 3px 4px; font-size: 8px; border-radius: 4px; }
+      .doc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px 6px; align-items: center; }
+      .items-header, .item-row { display: grid; grid-template-columns: 2fr 1fr .75fr; gap: 6px; }
+      .items-header { font-size: 8px; font-weight: 700; text-transform: uppercase; color: #334155; }
+      .item-row { border-top: 1px solid #e2e8f0; padding-top: 3px; margin-top: 3px; }
+      .tiny { font-size: 7px; color: #64748b; }
+      .iva-box { border: 1px solid #cbd5e1; margin-top: 6px; padding: 4px; }
+      .iva-grid { display: grid; grid-template-columns: .85fr 1fr 1fr 1fr; gap: 4px; align-items: start; }
+      .right { text-align: right; }
+      .policies { margin-top: 6px; font-size: 8px; line-height: 1.4; color: #334155; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 6px; }
     `
       : `
       * { box-sizing: border-box; }
@@ -216,31 +244,39 @@ export const printComprobante = ({
               </div>
             </div>
             <div class="line"></div>
-            <div class="center"><strong>${tituloDocumento}</strong><div><strong>${numero}</strong></div>${referenceCode ? `<div class="muted">Ref: ${referenceCode}</div>` : ''}<div>${fechaFormateada}</div></div>
+            <div class="center"><strong>${tituloDocumento}</strong><div><strong>${numero}</strong></div>${referenceCode ? `<div class="muted">Ref: ${referenceCode}</div>` : ''}<div class="doc-datetime"><div class="doc-grid"><span class="muted" style="text-align:left">Fecha:</span><strong style="text-align:right">${fechaDocumento}</strong><span class="muted" style="text-align:left">Hora:</span><strong style="text-align:right">${horaDocumento || fechaFormateada}</strong></div></div></div>
             <div class="line"></div>
             <div class="row"><span>Cliente:</span><span class="value break">${clienteNombre}</span></div>
-            <div class="row"><span>ID:</span><span class="value">${clienteDocumento || 'N/D'}</span></div>
+            <div class="row"><span>NIT/CC:</span><span class="value">${clienteDocumento || 'N/D'}</span></div>
             <div class="row"><span>Pago:</span><span class="value">${medioPago || 'N/D'}</span></div>
             <div class="row"><span>Estado:</span><span class="value">${estado || 'N/D'}</span></div>
             <div class="line"></div>
-            <div class="row"><strong>Detalle</strong><strong>Total</strong></div>
+            <div class="items-header"><span>Descripción</span><span class="right">Valor</span><span class="right">IVA %</span></div>
             ${detallesMostrar
               .map(
-                (d) => `<div class="item"><strong class="break">${d.descripcion}</strong>${d.codigo ? `<div class="muted">Cod: ${d.codigo}</div>` : ''}<div class="row muted"><span>${d.cantidad} x ${currencyFormatter.format(d.precioUnitario)}</span><span>${currencyFormatter.format(d.total)}</span></div></div>`
+                (d) => `<div class="item-row"><div><strong class="break">${d.descripcion}</strong>${d.codigo ? `<div class="tiny">Cod: ${d.codigo}</div>` : ''}<div class="tiny">${d.cantidad} x ${currencyFormatter.format(d.precioUnitario)}</div></div><strong class="right">${currencyFormatter.format(d.total)}</strong><span class="right">${Number.isFinite(d.ivaPorcentaje) ? d.ivaPorcentaje : 0}%</span></div>`
               )
               .join('')}
             <div class="totals-box">
               <div class="row"><span>Subtotal</span><span>${currencyFormatter.format(subtotal)}</span></div>
               <div class="row"><span>Impuestos</span><span>${currencyFormatter.format(iva)}</span></div>
               <div class="row"><span>Descuentos</span><span>-${currencyFormatter.format(descuento)}</span></div>
-              <div class="row total-row"><span>Total</span><span>${currencyFormatter.format(total)}</span></div>
+              <div class="row total-row"><span>Total a pagar</span><span>${currencyFormatter.format(total)}</span></div>
               ${efectivoRecibido !== undefined && cambio !== undefined ? `<div class="row"><span>Recibido</span><span>${currencyFormatter.format(efectivoRecibido)}</span></div><div class="row"><span>Cambio</span><span>${currencyFormatter.format(cambio)}</span></div>` : ''}
+            </div>
+            <div class="iva-box">
+              <div style="font-size:8px;font-weight:700;text-transform:uppercase;color:#334155;">Discriminación IVA</div>
+              <div class="iva-grid muted" style="font-size:7px;font-weight:700;text-transform:uppercase;margin-top:2px;">
+                <span>Tarifa</span><span class="right">Valor compra</span><span class="right">Base/Imp</span><span class="right">Valor IVA</span>
+              </div>
+              ${resumenIvaArray.map((item) => `<div class="iva-grid" style="margin-top:2px;"><span>${item.porcentaje}%</span><span class="right">${currencyFormatter.format(item.total)}</span><span class="right">${currencyFormatter.format(item.base)}</span><span class="right">${currencyFormatter.format(item.iva)}</span></div>`).join('')}
             </div>
             ${notas ? `<div class="muted break">${notas}</div>` : ''}
             <div class="line"></div>
             <div class="qr">
               ${qrImageUrl ? `<img src="${qrImageUrl}" alt="QR factura electrónica"/>` : qrUrl ? `<div class="muted break">Verificación: ${qrUrl}</div>` : '<div class="placeholder">Espacio reservado para QR DIAN</div>'}
             </div>
+            <div class="policies">${POLITICAS_CAMBIOS_GARANTIAS}</div>
             <div class="thank-you">Gracias por su compra, es un placer atenderlo.</div>
           </div>
         </div>
@@ -269,7 +305,7 @@ export const printComprobante = ({
           <div class="box">
             <p class="muted" style="text-transform:uppercase;margin:0;">Datos cliente</p>
             <p><strong>${clienteNombre}</strong></p>
-            <p>ID: ${clienteDocumento || 'N/D'}</p>
+            <p>NIT/CC: ${clienteDocumento || 'N/D'}</p>
             ${clienteDireccion ? `<p class="break">Dir: ${clienteDireccion}</p>` : ''}
             ${clienteTelefono ? `<p>Tel: ${clienteTelefono}</p>` : ''}
             ${clienteEmail ? `<p class="break">Email: ${clienteEmail}</p>` : ''}
@@ -281,7 +317,7 @@ export const printComprobante = ({
           </div>
         </div>
         <table class="table">
-          <thead><tr><th>Detalle</th><th class="right">Cant.</th><th class="right">Vlr U.</th><th class="right">Desc.</th><th class="right">Total</th><th class="right">IVA</th></tr></thead>
+          <thead><tr><th>Descripción</th><th class="right">Cant.</th><th class="right">Vlr U.</th><th class="right">Desc.</th><th class="right">Total</th><th class="right">IVA</th></tr></thead>
           <tbody>
             ${detallesMostrar.map((d) => `<tr><td><strong class="break">${d.descripcion}</strong>${d.codigo ? `<div class="muted">Cod. ${d.codigo}</div>` : ''}</td><td class="right">${d.cantidad}</td><td class="right">${currencyFormatter.format(d.precioUnitario)}</td><td class="right">${currencyFormatter.format(d.descuento)}</td><td class="right">${currencyFormatter.format(d.total)}</td><td class="right">${d.ivaPorcentaje}%</td></tr>`).join('')}
           </tbody>
@@ -296,11 +332,11 @@ export const printComprobante = ({
             <div class="row"><span>Subtotal</span><strong>${currencyFormatter.format(subtotal)}</strong></div>
             <div class="row"><span>Impuestos</span><strong>${currencyFormatter.format(iva)}</strong></div>
             <div class="row"><span>Descuento</span><strong>-${currencyFormatter.format(descuento)}</strong></div>
-            <div class="row total"><span>Total</span><span>${currencyFormatter.format(total)}</span></div>
+            <div class="row total"><span>Total a pagar</span><span>${currencyFormatter.format(total)}</span></div>
             ${efectivoRecibido !== undefined && cambio !== undefined ? `<div class="row"><span>Recibido</span><span>${currencyFormatter.format(efectivoRecibido)}</span></div><div class="row"><span>Cambio</span><span>${currencyFormatter.format(cambio)}</span></div>` : ''}
           </div>
         </div>
-        <div class="footer">${representacionGrafica || 'Representación gráfica de factura electrónica de venta.'}<br/>${qrUrl ? `Verificación DIAN: ${qrUrl}<br/>` : ''}${notas || 'Gracias por su compra. Presentar factura para garantías y devoluciones.'}</div>
+        <div class="footer">${representacionGrafica ? `${representacionGrafica}<br/>` : ''}${qrUrl ? `Verificación DIAN: ${qrUrl}<br/>` : ''}${notas || 'Gracias por su compra. Presentar factura para garantías y devoluciones.'}</div>
       </div>
     `;
 

@@ -58,6 +58,18 @@ const formatFechaHora = (fecha: string) => {
   }).format(date);
 };
 
+const formatFechaDocumento = (fecha: string) => {
+  const date = new Date(fecha);
+  if (Number.isNaN(date.getTime())) return fecha;
+  return new Intl.DateTimeFormat('es-CO', { dateStyle: 'short' }).format(date);
+};
+
+const formatHoraDocumento = (fecha: string) => {
+  const date = new Date(fecha);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat('es-CO', { timeStyle: 'short' }).format(date);
+};
+
 const getEmpresaInfo = (empresa?: ConfiguracionEmpresa | null) => ({
   nombre: empresa?.razon_social || 'MOTOREPUESTOS LAS AFRICANAS',
   nit: empresa
@@ -75,6 +87,9 @@ const getTituloDocumento = (tipo: DocumentoTipo) =>
 
 const getLogoEmpresa = (empresa?: ConfiguracionEmpresa | null) =>
   empresa?.logo || '/logo-default-pos.svg';
+
+const POLITICAS_CAMBIOS_GARANTIAS =
+  'Para trámites de cambios y garantías, indispensable presentar la factura de venta. Tiene hasta 5 días para realizar el trámite. Las partes eléctricas NO tienen devolución. Los productos deben estar en perfecto estado y empaque original.';
 
 export default function ComprobanteTemplate({
   formato = 'POS',
@@ -106,6 +121,8 @@ export default function ComprobanteTemplate({
 }: DocumentoTemplateProps) {
   const infoEmpresa = getEmpresaInfo(empresa);
   const fechaFormateada = formatFechaHora(fecha);
+  const fechaDocumento = formatFechaDocumento(fecha);
+  const horaDocumento = formatHoraDocumento(fecha);
   const tituloDocumento = getTituloDocumento(tipo);
   const detallesMostrar =
     detalles.length > 0
@@ -123,11 +140,12 @@ export default function ComprobanteTemplate({
 
   const resumenIvaArray = Array.from(
     detallesMostrar.reduce((acc, detalle) => {
+      const ivaPorcentaje = Number.isFinite(detalle.ivaPorcentaje) ? detalle.ivaPorcentaje : 0;
       const base = detalle.cantidad * detalle.precioUnitario - detalle.descuento;
-      const ivaDetalle = base * (detalle.ivaPorcentaje / 100);
+      const ivaDetalle = base * (ivaPorcentaje / 100);
       const totalDetalle = base + ivaDetalle;
-      const item = acc.get(detalle.ivaPorcentaje) || { base: 0, iva: 0, total: 0 };
-      acc.set(detalle.ivaPorcentaje, {
+      const item = acc.get(ivaPorcentaje) || { base: 0, iva: 0, total: 0 };
+      acc.set(ivaPorcentaje, {
         base: item.base + base,
         iva: item.iva + ivaDetalle,
         total: item.total + totalDetalle,
@@ -166,7 +184,7 @@ export default function ComprobanteTemplate({
           <div className="rounded border border-slate-200 p-3">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Datos cliente</p>
             <p className="mt-1 font-semibold">{clienteNombre}</p>
-            <p>ID: {clienteDocumento || 'N/D'}</p>
+            <p>NIT/CC: {clienteDocumento || 'N/D'}</p>
             {clienteDireccion ? <p className="break-words">Dir: {clienteDireccion}</p> : null}
             {clienteTelefono ? <p>Tel: {clienteTelefono}</p> : null}
             {clienteEmail ? <p className="break-all">Email: {clienteEmail}</p> : null}
@@ -180,7 +198,7 @@ export default function ComprobanteTemplate({
 
         <section className="mt-4 overflow-hidden border border-slate-200">
           <div className="grid grid-cols-[2.6fr,0.6fr,1fr,0.9fr,1fr,0.6fr] gap-2 bg-slate-100 px-3 py-2 text-[10px] font-semibold uppercase text-slate-600">
-            <span>Detalle</span><span className="text-center">Cant.</span><span className="text-right">Vlr U.</span><span className="text-right">Desc.</span><span className="text-right">Total</span><span className="text-right">IVA</span>
+            <span>Descripción</span><span className="text-center">Cant.</span><span className="text-right">Vlr U.</span><span className="text-right">Desc.</span><span className="text-right">Total</span><span className="text-right">IVA</span>
           </div>
           {detallesMostrar.map((detalle, index) => (
             <div key={`${detalle.descripcion}-${index}`} className="grid break-inside-avoid grid-cols-[2.6fr,0.6fr,1fr,0.9fr,1fr,0.6fr] gap-2 border-t border-slate-200 px-3 py-2 text-[10px]">
@@ -206,7 +224,7 @@ export default function ComprobanteTemplate({
             <div className="flex justify-between"><span>Subtotal</span><span className="font-semibold">{currencyFormatter.format(subtotal)}</span></div>
             <div className="mt-1 flex justify-between"><span>Impuestos</span><span className="font-semibold">{currencyFormatter.format(iva)}</span></div>
             <div className="mt-1 flex justify-between"><span>Descuento</span><span className="font-semibold">-{currencyFormatter.format(descuento)}</span></div>
-            <div className="mt-2 flex justify-between border-t border-slate-200 pt-2 text-sm font-bold"><span>Total</span><span>{currencyFormatter.format(total)}</span></div>
+            <div className="mt-2 flex justify-between border-t border-slate-200 pt-2 text-sm font-bold"><span>Total a pagar</span><span>{currencyFormatter.format(total)}</span></div>
             {efectivoRecibido !== undefined && cambio !== undefined ? (
               <>
                 <div className="mt-1 flex justify-between"><span>Recibido</span><span>{currencyFormatter.format(efectivoRecibido)}</span></div>
@@ -217,7 +235,7 @@ export default function ComprobanteTemplate({
         </section>
 
         <footer className="mt-4 rounded border border-slate-200 bg-slate-50 p-3 text-[10px] text-slate-600">
-          <p>{representacionGrafica || 'Representación gráfica de factura electrónica de venta.'}</p>
+            {representacionGrafica ? <p>{representacionGrafica}</p> : null}
           {qrUrl ? <p className="mt-1 break-all">Verificación DIAN: {qrUrl}</p> : null}
           <p className="mt-1">{notas || 'Gracias por su compra. Presentar factura para garantías y devoluciones.'}</p>
         </footer>
@@ -229,7 +247,7 @@ export default function ComprobanteTemplate({
     <div className="mx-auto w-full max-w-[82mm] border border-slate-300 bg-white p-2.5 font-sans text-[10px] text-slate-900">
       <div className="flex gap-2">
         {cufe ? (
-          <div className="flex w-5 items-center justify-center border-r border-dashed border-slate-400 pr-1">
+          <div className="flex w-5 items-center justify-center border-r border-slate-300 pr-1">
             <p className="break-all text-[7px] font-semibold leading-tight tracking-[0.08em] text-slate-600 [writing-mode:vertical-rl] [text-orientation:mixed] [transform:rotate(180deg)]">
               CUFE · {cufe}
             </p>
@@ -243,32 +261,49 @@ export default function ComprobanteTemplate({
             <p className="text-[9px]">{infoEmpresa.regimen}</p>
             <p className="break-words">{infoEmpresa.direccion}</p>
             {infoEmpresa.telefono ? <p className="text-[9px]">Tel: {infoEmpresa.telefono}</p> : null}
-            <div className="mt-1 rounded border border-dashed border-slate-400 px-1.5 py-1 text-left">
+            <div className="mt-1 rounded border border-slate-300 px-1.5 py-1 text-left">
               <p className="text-[8px] font-semibold uppercase tracking-wide text-slate-600">Resolución / Numeración</p>
               <p className="break-words text-[8px] text-slate-700">{resolucion || 'No informada'}</p>
             </div>
           </div>
 
-          <div className="mt-2 border-y border-dashed border-slate-400 py-2 text-center">
+          <div className="mt-2 border-y border-slate-300 py-2 text-center">
             <p className="text-[11px] font-bold uppercase">{tituloDocumento}</p>
             <p className="font-semibold">{numero}</p>
             {referenceCode ? <p className="text-[8px] text-slate-600">Ref: {referenceCode}</p> : null}
-            <p className="text-[9px]">{fechaFormateada}</p>
+            <div className="mx-auto mt-1 grid max-w-[50mm] grid-cols-2 gap-x-2 rounded border border-slate-200 bg-slate-50 px-1 py-1 text-[8px]">
+              <span className="text-left text-slate-600">Fecha:</span>
+              <span className="text-right font-semibold text-slate-800">{fechaDocumento}</span>
+              <span className="text-left text-slate-600">Hora:</span>
+              <span className="text-right font-semibold text-slate-800">{horaDocumento || fechaFormateada}</span>
+            </div>
           </div>
 
           <div className="mt-2 space-y-1 text-[9px]">
             <div className="flex justify-between gap-2"><span>Cliente:</span><span className="truncate font-semibold">{clienteNombre}</span></div>
-            <div className="flex justify-between gap-2"><span>ID:</span><span className="font-semibold">{clienteDocumento || 'N/D'}</span></div>
+            <div className="flex justify-between gap-2"><span>NIT/CC:</span><span className="font-semibold">{clienteDocumento || 'N/D'}</span></div>
             <div className="flex justify-between gap-2"><span>Pago:</span><span className="font-semibold">{medioPago || 'N/D'}</span></div>
             <div className="flex justify-between gap-2"><span>Estado:</span><span className="font-semibold">{estado || 'N/D'}</span></div>
           </div>
 
-          <div className="mt-2 border-t border-dashed border-slate-400 pt-2">
-            <div className="flex justify-between text-[9px] font-semibold uppercase tracking-wide"><span>Detalle</span><span>Total</span></div>
+          <div className="mt-2 border-t border-slate-300 pt-2">
+            <div className="grid grid-cols-[2fr,1fr,0.75fr] gap-2 text-[8px] font-semibold uppercase tracking-wide text-slate-700">
+              <span>Descripción</span>
+              <span className="text-right">Valor</span>
+              <span className="text-right">IVA %</span>
+            </div>
             {detallesMostrar.map((detalle, index) => (
-              <div key={`${detalle.descripcion}-${index}`} className="mt-1 text-[9px]">
-                <p className="break-words uppercase">{detalle.descripcion}</p>
-                <div className="flex justify-between text-[8px] text-slate-600"><span>{detalle.cantidad} x {currencyFormatter.format(detalle.precioUnitario)}</span><span>{currencyFormatter.format(detalle.total)}</span></div>
+              <div key={`${detalle.descripcion}-${index}`} className="mt-1 border-t border-slate-200 pt-1 text-[8px]">
+                <div className="grid grid-cols-[2fr,1fr,0.75fr] gap-2">
+                  <div className="min-w-0">
+                    <p className="break-words uppercase leading-tight">{detalle.descripcion}</p>
+                    <p className="text-[7px] text-slate-600">
+                      {detalle.cantidad} x {currencyFormatter.format(detalle.precioUnitario)}
+                    </p>
+                  </div>
+                  <span className="text-right font-semibold">{currencyFormatter.format(detalle.total)}</span>
+                  <span className="text-right">{Number.isFinite(detalle.ivaPorcentaje) ? detalle.ivaPorcentaje : 0}%</span>
+                </div>
               </div>
             ))}
           </div>
@@ -277,7 +312,7 @@ export default function ComprobanteTemplate({
             <div className="flex justify-between"><span>Subtotal</span><span>{currencyFormatter.format(subtotal)}</span></div>
             <div className="flex justify-between"><span>Impuestos</span><span>{currencyFormatter.format(iva)}</span></div>
             <div className="flex justify-between"><span>Descuentos</span><span>-{currencyFormatter.format(descuento)}</span></div>
-            <div className="mt-1 flex justify-between border-t border-slate-300 pt-1 text-[11px] font-bold"><span>Total</span><span>{currencyFormatter.format(total)}</span></div>
+            <div className="mt-1 flex justify-between border-t border-slate-300 pt-1 text-[11px] font-bold"><span>Total a pagar</span><span>{currencyFormatter.format(total)}</span></div>
             {efectivoRecibido !== undefined && cambio !== undefined ? (
               <>
                 <div className="flex justify-between"><span>Recibido</span><span>{currencyFormatter.format(efectivoRecibido)}</span></div>
@@ -286,19 +321,40 @@ export default function ComprobanteTemplate({
             ) : null}
           </div>
 
-          <div className="mt-2 border-t border-dashed border-slate-400 pt-2 text-[8px] text-slate-600">
+          <div className="mt-2 rounded border border-slate-300 p-1.5 text-[8px]">
+            <p className="font-semibold uppercase tracking-wide text-slate-700">Discriminación IVA</p>
+            <div className="mt-1 grid grid-cols-[0.85fr,1fr,1fr,1fr] gap-1 text-[7px] font-semibold uppercase text-slate-600">
+              <span>Tarifa</span>
+              <span className="text-right">Valor compra</span>
+              <span className="text-right">Base/Imp</span>
+              <span className="text-right">Valor IVA</span>
+            </div>
+            {resumenIvaArray.map((item) => (
+              <div key={`iva-pos-${item.porcentaje}`} className="mt-0.5 grid grid-cols-[0.85fr,1fr,1fr,1fr] gap-1 text-[8px]">
+                <span>{item.porcentaje}%</span>
+                <span className="text-right">{currencyFormatter.format(item.total)}</span>
+                <span className="text-right">{currencyFormatter.format(item.base)}</span>
+                <span className="text-right">{currencyFormatter.format(item.iva)}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-2 border-t border-slate-300 pt-2 text-[8px] text-slate-600">
             {notas ? <p className="break-words">{notas}</p> : null}
           </div>
 
-          <div className="mt-2 border-t border-dashed border-slate-400 pt-2 text-center">
+          <div className="mt-2 border-t border-slate-300 pt-2 text-center">
             {qrImageUrl ? (
               <img src={qrImageUrl} alt="QR factura electrónica" className="mx-auto h-24 w-24 object-contain" />
             ) : qrUrl ? (
               <p className="break-all text-[8px]">Verificación: {qrUrl}</p>
             ) : (
-              <div className="border border-dashed border-slate-400 p-2 text-[8px] text-slate-500">Espacio reservado para QR DIAN</div>
+              <div className="rounded border border-slate-300 p-2 text-[8px] text-slate-500">Espacio reservado para QR DIAN</div>
             )}
           </div>
+          <p className="mt-2 rounded bg-slate-50 px-2 py-1.5 text-[8px] leading-relaxed text-slate-700">
+            {POLITICAS_CAMBIOS_GARANTIAS}
+          </p>
           <p className="mt-2 text-center text-[9px] font-medium">
             Gracias por su compra, es un placer atenderlo.
           </p>
