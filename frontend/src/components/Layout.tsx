@@ -808,7 +808,7 @@ export default function Layout() {
           </div>
         </div>
 
-        <nav className="hidden flex-wrap items-center justify-center gap-2 border-t border-white/10 px-4 py-2 xl:px-6 lg:flex">
+        <nav className="hidden flex-wrap items-center justify-center gap-2 border-t border-white/10 px-6 py-2 lg:flex">
           {menuItems.map((item) => {
             const hasChildren = Boolean(item.items && item.items.length > 0);
             const isActive = isItemActive(item);
@@ -861,14 +861,14 @@ export default function Layout() {
         </nav>
 
         {mobileMenuOpen && (
-          <div className="max-h-[70dvh] overflow-y-auto border-t border-white/10 bg-blue-700 px-4 py-4 lg:hidden">
+          <div className="border-t border-white/10 bg-blue-700 px-4 py-4 lg:hidden">
             {renderMobileItems(menuItems)}
           </div>
         )}
       </header>
 
       <main className="flex-1 overflow-auto">
-        <div className="app-shell-main">
+        <div className="p-4 sm:p-6 lg:p-8">
           <Outlet />
         </div>
       </main>
