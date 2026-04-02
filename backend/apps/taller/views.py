@@ -44,6 +44,8 @@ class MotoViewSet(viewsets.ModelViewSet):
 
 
 class OrdenTallerViewSet(viewsets.ModelViewSet):
+    UNIDADES_DECIMALES = {'KG', 'LT', 'MT'}
+
     queryset = OrdenTaller.objects.all()
     serializer_class = OrdenTallerSerializer
     permission_classes = [IsAuthenticated]
@@ -161,9 +163,10 @@ class OrdenTallerViewSet(viewsets.ModelViewSet):
             except Producto.DoesNotExist:
                 return Response({'error': 'Producto no encontrado'}, status=status.HTTP_404_NOT_FOUND)
 
-            if producto.unidad_medida == 'N/A' and cantidad != cantidad.quantize(Decimal('1')):
+            permite_decimales = producto.unidad_medida in self.UNIDADES_DECIMALES
+            if not permite_decimales and cantidad != cantidad.quantize(Decimal('1')):
                 return Response(
-                    {'error': 'Para unidad N/A solo se permiten enteros'},
+                    {'error': 'Para esta unidad de medida solo se permiten enteros'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
 

@@ -184,3 +184,28 @@ class OrdenTallerAgregarRepuestoTests(TestCase):
 
         self.assertEqual(response.status_code, 400, response.data)
         self.assertEqual(response.data['error'], 'Cantidad inválida')
+
+    def test_agregar_repuesto_unidad_no_decimal_rechaza_fraccion(self):
+        producto_entero = Producto.objects.create(
+            codigo='REP-UND-001',
+            nombre='Repuesto unitario',
+            categoria=self.categoria,
+            proveedor=self.proveedor,
+            precio_costo=Decimal('1000.00'),
+            precio_venta=Decimal('3000.00'),
+            precio_venta_minimo=Decimal('2500.00'),
+            stock=Decimal('10.00'),
+            stock_minimo=Decimal('1.00'),
+            iva_porcentaje=Decimal('19.00'),
+            unidad_medida='UND',
+            iva_exento=False,
+        )
+
+        response = self.client.post(
+            f'/api/ordenes-taller/{self.orden.id}/agregar_repuesto/',
+            {'producto': producto_entero.id, 'cantidad': '0.5'},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertEqual(response.data['error'], 'Para esta unidad de medida solo se permiten enteros')

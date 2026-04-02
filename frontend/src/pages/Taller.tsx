@@ -24,8 +24,10 @@ import {
   normalizeModuleAccess,
 } from '../store/moduleAccess';
 
+const UNIDADES_DECIMALES = new Set(['KG', 'LT', 'MT']);
+
 const unidadPermiteDecimales = (unidadMedida?: string) =>
-  Boolean(unidadMedida && unidadMedida !== 'N/A');
+  Boolean(unidadMedida && UNIDADES_DECIMALES.has(unidadMedida));
 
 const getCantidadStep = (unidadMedida?: string) =>
   unidadPermiteDecimales(unidadMedida) ? 0.01 : 1;
