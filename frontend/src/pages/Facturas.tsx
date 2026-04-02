@@ -159,7 +159,12 @@ export default function Facturas() {
         fechaFin: filters.fechaFin || undefined,
         search: search ? search : undefined,
       }, { signal: controller.signal });
-      const facturasElectronicas = await facturacionApi.getFacturas();
+      let facturasElectronicas: FacturaElectronica[] = [];
+      try {
+        facturasElectronicas = await facturacionApi.getFacturas();
+      } catch (facturaError) {
+        console.error('No fue posible cargar el estado electrónico de facturas', facturaError);
+      }
       const porVentaId = new Map(
         facturasElectronicas
           .filter((item) => typeof item.venta_id === 'number')
@@ -194,6 +199,7 @@ export default function Facturas() {
       if (err instanceof DOMException && err.name === 'AbortError') {
         return;
       }
+      console.error('Error cargando listado de facturas', err);
       setFacturas([]);
       setError(err instanceof Error ? err.message : 'Error al cargar facturas');
     } finally {
@@ -498,7 +504,7 @@ export default function Facturas() {
           </div>
         </div>
 
-        <div className="mt-3 rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="mt-3 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           {error && (
             <div className="border-b border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-600">
               {error}
@@ -508,7 +514,7 @@ export default function Facturas() {
             <table className="min-w-[1460px] table-fixed text-sm">
               <thead className="bg-sky-100 text-[11px] uppercase tracking-wide text-slate-700">
                 <tr>
-                  <th className="w-10 px-2 py-2 text-left">
+                  <th className="w-10 px-2 py-3 text-left">
                     <input
                       type="checkbox"
                       checked={selectedIds.length === facturasFiltradas.length && facturasFiltradas.length > 0}

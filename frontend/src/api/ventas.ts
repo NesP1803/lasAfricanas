@@ -392,8 +392,11 @@ export const ventasApi = {
         url: `${API_URL}/ventas/${query ? `?${query}` : ''}`,
         signal: options?.signal,
       });
-    } catch {
-      throw new Error('Error al obtener ventas');
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.code === 'ERR_CANCELED') {
+        throw new DOMException('Solicitud cancelada', 'AbortError');
+      }
+      throw new Error(extractApiErrorMessage(error, 'Error al obtener ventas'));
     }
 
     if (Array.isArray(data)) {
