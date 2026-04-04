@@ -497,7 +497,7 @@ class VentaViewSet(viewsets.ModelViewSet):
                 .get(pk=pk)
             )
             try:
-                nota_credito = anular_venta(
+                anulacion_result = anular_venta(
                     venta,
                     request.user,
                     motivo=motivo,
@@ -521,13 +521,23 @@ class VentaViewSet(viewsets.ModelViewSet):
 
         serializer = VentaDetailSerializer(venta)
         data = serializer.data
+        nota_credito = anulacion_result.get('nota_credito')
+        meta = anulacion_result.get('flow_meta', {})
         if nota_credito is not None:
             data['nota_credito_emitida'] = {
                 'id': nota_credito.id,
                 'number': nota_credito.number,
-                'status': nota_credito.status,
+                'status': nota_credito.estado_local,
             }
-        return Response(data)
+        data.update(
+            {
+                'ok': bool(meta.get('ok', True)),
+                'result': meta.get('result', 'accepted'),
+                'finalized': bool(meta.get('finalized', True)),
+                'business_effects_applied': bool(meta.get('business_effects_applied', False)),
+            }
+        )
+        return Response(data, status=status.HTTP_202_ACCEPTED if meta.get('result') == 'pending_dian' else status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'], url_path='enviar-a-caja')
     def enviar_a_caja(self, request, pk=None):

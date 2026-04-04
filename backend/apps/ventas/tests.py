@@ -268,8 +268,8 @@ class CajaVentaFlowTests(TestCase):
         self.assertEqual(venta.estado, 'ANULADA')
         self.assertEqual(self.producto.stock, Decimal('10'))
 
-    @patch('apps.ventas.services.anular_venta.emitir_nota_credito')
-    def test_anular_factura_electronica_aceptada_exige_nota_credito(self, mocked_emitir_nota_credito):
+    @patch('apps.ventas.services.anular_venta.create_credit_note')
+    def test_anular_factura_electronica_aceptada_exige_nota_credito(self, mocked_create_credit_note):
         venta = Venta.objects.create(
             tipo_comprobante='FACTURA',
             cliente=self.cliente,
@@ -308,7 +308,7 @@ class CajaVentaFlowTests(TestCase):
             pdf_url='https://example.com/invoice.pdf',
             response_json={},
         )
-        mocked_emitir_nota_credito.return_value = MagicMock(id=10, number='NC-001', status='ACEPTADA')
+        mocked_create_credit_note.return_value = (MagicMock(id=10, number='NC-001', estado_local='ACEPTADA'), {'result': 'accepted', 'ok': True, 'finalized': True, 'business_effects_applied': True})
 
         self.client.force_authenticate(user=self.cajero)
         response = self.client.post(
@@ -317,7 +317,7 @@ class CajaVentaFlowTests(TestCase):
             format='json',
         )
         self.assertEqual(response.status_code, 200)
-        mocked_emitir_nota_credito.assert_called_once()
+        mocked_create_credit_note.assert_called_once()
         venta.refresh_from_db()
         self.assertEqual(venta.estado, 'ANULADA')
 
@@ -394,8 +394,8 @@ class VentaServicesTests(TestCase):
         self.assertTrue(venta.inventario_ya_afectado)
         self.assertEqual(self.producto.stock, Decimal('9'))
 
-    @patch('apps.ventas.services.anular_venta.emitir_nota_credito')
-    def test_anular_factura_electronica_si_factus_falla_no_anula_ni_restituye_stock(self, mocked_emitir_nota_credito):
+    @patch('apps.ventas.services.anular_venta.create_credit_note')
+    def test_anular_factura_electronica_si_factus_falla_no_anula_ni_restituye_stock(self, mocked_create_credit_note):
         from apps.facturacion.services import FactusAPIError
 
         venta = Venta.objects.create(
@@ -436,7 +436,7 @@ class VentaServicesTests(TestCase):
             pdf_url='https://example.com/invoice.pdf',
             response_json={},
         )
-        mocked_emitir_nota_credito.side_effect = FactusAPIError('timeout')
+        mocked_create_credit_note.side_effect = FactusAPIError('timeout')
         stock_inicial = self.producto.stock
 
         self.client.force_authenticate(user=self.cajero)
@@ -451,8 +451,8 @@ class VentaServicesTests(TestCase):
         self.assertEqual(venta.estado, 'FACTURADA')
         self.assertEqual(self.producto.stock, stock_inicial)
 
-    @patch('apps.ventas.services.anular_venta.emitir_nota_credito')
-    def test_anular_factura_electronica_no_aceptada_no_anula_venta(self, mocked_emitir_nota_credito):
+    @patch('apps.ventas.services.anular_venta.create_credit_note')
+    def test_anular_factura_electronica_no_aceptada_no_anula_venta(self, mocked_create_credit_note):
         venta = Venta.objects.create(
             tipo_comprobante='FACTURA',
             cliente=self.cliente,
@@ -491,7 +491,7 @@ class VentaServicesTests(TestCase):
             pdf_url='https://example.com/invoice.pdf',
             response_json={},
         )
-        mocked_emitir_nota_credito.return_value = MagicMock(id=11, number='NC-002', status='RECHAZADA')
+        mocked_create_credit_note.return_value = (MagicMock(id=11, number='NC-002', estado_local='PENDIENTE_DIAN'), {'result': 'pending_dian', 'ok': True, 'finalized': False, 'business_effects_applied': False})
         stock_inicial = self.producto.stock
 
         self.client.force_authenticate(user=self.cajero)
@@ -500,14 +500,14 @@ class VentaServicesTests(TestCase):
             {'motivo': 'DEVOLUCION_TOTAL', 'descripcion': 'test'},
             format='json',
         )
-        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.status_code, 202)
         venta.refresh_from_db()
         self.producto.refresh_from_db()
         self.assertEqual(venta.estado, 'FACTURADA')
         self.assertEqual(self.producto.stock, stock_inicial)
 
-    @patch('apps.ventas.services.anular_venta.emitir_nota_credito')
-    def test_anular_factura_sin_electronica_aceptada_se_anula_local(self, mocked_emitir_nota_credito):
+    @patch('apps.ventas.services.anular_venta.create_credit_note')
+    def test_anular_factura_sin_electronica_aceptada_se_anula_local(self, mocked_create_credit_note):
         venta = Venta.objects.create(
             tipo_comprobante='FACTURA',
             cliente=self.cliente,
@@ -542,7 +542,7 @@ class VentaServicesTests(TestCase):
             format='json',
         )
         self.assertEqual(response.status_code, 200)
-        mocked_emitir_nota_credito.assert_not_called()
+        mocked_create_credit_note.assert_not_called()
         venta.refresh_from_db()
         self.assertEqual(venta.estado, 'ANULADA')
 

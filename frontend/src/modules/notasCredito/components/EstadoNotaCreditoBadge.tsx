@@ -4,7 +4,7 @@ const estadoStyles: Record<string, string> = {
   ACEPTADA: 'bg-emerald-100 text-emerald-700',
   ACEPTADA_CON_OBSERVACIONES: 'bg-emerald-100 text-emerald-700',
   PENDIENTE_ENVIO: 'bg-blue-100 text-blue-700',
-  EN_PROCESO: 'bg-amber-100 text-amber-700',
+  PENDIENTE_DIAN: 'bg-amber-100 text-amber-700',
   CONFLICTO_FACTUS: 'bg-orange-100 text-orange-700',
   PENDIENTE_REINTENTO: 'bg-amber-100 text-amber-700',
   RECHAZADA: 'bg-rose-100 text-rose-700',
@@ -23,8 +23,8 @@ export default function EstadoNotaCreditoBadge({ estado }: { estado: EstadoDian 
   const style = estadoStyles[normalizedEstado] ?? estadoStyles.ERROR;
   const label = normalizedEstado === 'CONFLICTO_FACTUS'
     ? 'CONFLICTO FACTUS (SIN CONFIRMACIÓN)'
-    : normalizedEstado === 'EN_PROCESO'
-      ? 'EN PROCESO (CONFIRMADO)'
+    : normalizedEstado === 'PENDIENTE_DIAN'
+      ? 'PENDIENTE DIAN'
       : normalizedEstado.replaceAll('_', ' ');
 
   return (

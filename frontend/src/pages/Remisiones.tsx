@@ -232,11 +232,14 @@ export default function Remisiones() {
       const descripcion = anulacionData.numeroNuevaRemision
         ? `Nueva remisión: ${anulacionData.numeroNuevaRemision}`
         : 'Anulación sin remisión de reemplazo.';
-      await ventasApi.anularVenta(anulacion.id, {
+      const response = await ventasApi.anularVenta(anulacion.id, {
         motivo: anulacionData.motivo,
         descripcion,
         devuelve_inventario: anulacionData.devuelveInventario,
       });
+      if (response?.finalized === false || response?.result === 'pending_dian') {
+        setMensajeExito('Se emitió nota crédito pendiente DIAN. La venta asociada aún no queda anulada.');
+      }
       await cargarRemisiones({
         estado: estadoFiltro,
         fechaInicio,

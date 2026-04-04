@@ -67,7 +67,7 @@ class NotaCreditoListSerializer(serializers.ModelSerializer):
     detalles = NotaCreditoDetalleSerializer(many=True, read_only=True)
 
     def get_can_sync(self, obj: NotaCreditoElectronica) -> bool:
-        return obj.estado_local in {'PENDIENTE_ENVIO', 'EN_PROCESO', 'CONFLICTO_FACTUS'}
+        return obj.estado_local in {'PENDIENTE_ENVIO', 'PENDIENTE_DIAN', 'CONFLICTO_FACTUS'}
 
     def get_estado_ui_mensaje(self, obj: NotaCreditoElectronica) -> str:
         if obj.estado_local == 'CONFLICTO_FACTUS':
@@ -75,8 +75,8 @@ class NotaCreditoListSerializer(serializers.ModelSerializer):
                 'Factus no confirmó el documento remoto. '
                 'Use Sincronizar para conciliar el estado real antes de continuar.'
             )
-        if obj.estado_local == 'EN_PROCESO':
-            return 'Documento confirmado en Factus y en trámite ante DIAN.'
+        if obj.estado_local == 'PENDIENTE_DIAN':
+            return 'Documento creado en Factus, pendiente de resultado final DIAN.'
         if obj.estado_local == 'ACEPTADA':
             return 'Documento aceptado electrónicamente.'
         if obj.estado_local == 'RECHAZADA':

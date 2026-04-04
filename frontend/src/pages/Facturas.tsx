@@ -380,11 +380,14 @@ export default function Facturas() {
         devuelve_inventario: anulacionData.devuelveInventario,
       });
       const numeroNotaCredito = ventaAnulada?.nota_credito_emitida?.number;
+      const anulacionPendiente = ventaAnulada?.finalized === false || ventaAnulada?.result === 'pending_dian';
       showNotification({
-        type: 'success',
-        message: numeroNotaCredito
-          ? `Factura anulada. Nota crédito emitida: ${numeroNotaCredito}.`
-          : 'Factura anulada correctamente.',
+        type: anulacionPendiente ? 'warning' : 'success',
+        message: anulacionPendiente
+          ? `Nota crédito ${numeroNotaCredito || ''} creada y pendiente DIAN. La venta aún no queda anulada.`
+          : (numeroNotaCredito
+              ? `Factura anulada. Nota crédito emitida: ${numeroNotaCredito}.`
+              : 'Factura anulada correctamente.'),
       });
       await cargarFacturas({
         estado: estadoFiltro,

@@ -131,6 +131,9 @@ export interface Venta {
     number: string;
     status: string;
   };
+  result?: 'accepted' | 'pending_dian' | 'rejected' | 'conflict' | 'error' | string;
+  finalized?: boolean;
+  business_effects_applied?: boolean;
 }
 
 export interface FacturaElectronicaResultado {
