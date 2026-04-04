@@ -195,13 +195,17 @@ def build_factus_item(document_detail: dict[str, Any]) -> dict[str, Any]:
         'price': _to_float(price_for_factus),
         'tax_rate': _to_float(tax_rate),
         'discount_rate': _to_float(document_detail['discount_rate']),
-        'is_excluded': is_excluded,
+        'is_excluded': int(1 if is_excluded else 0),
         'tribute_id': int(document_detail['tribute_id']),
         'unit_measure_id': int(document_detail['unit_measure_id']),
         'standard_code_id': int(document_detail['standard_code_id']),
         'withholding_taxes': document_detail.get('withholding_taxes', []),
     }
-    logger.info('factus_payload.item_built payload=%s', item_payload)
+    logger.info(
+        'factus_payload.item_built payload=%s is_excluded_type=%s',
+        item_payload,
+        type(item_payload['is_excluded']).__name__,
+    )
     return item_payload
 
 
