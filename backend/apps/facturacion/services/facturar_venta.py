@@ -810,10 +810,26 @@ def facturar_venta(
                         'Debe revisarse la asociación antes de reutilizar CUFE/QR.'
                     )
             logger.info('facturar_venta.reutiliza_aceptada venta_id=%s factura=%s', venta.id, factura_existente.number)
-            if not factura_existente.xml_local_path:
-                download_xml(factura_existente)
-            if not factura_existente.pdf_local_path:
-                download_pdf(factura_existente)
+            try:
+                if not factura_existente.xml_local_path:
+                    download_xml(factura_existente)
+            except DescargaFacturaError:
+                logger.warning(
+                    'facturar_venta.reutiliza_aceptada_xml_descarga_error venta_id=%s factura=%s',
+                    venta.id,
+                    factura_existente.number,
+                    exc_info=True,
+                )
+            try:
+                if not factura_existente.pdf_local_path:
+                    download_pdf(factura_existente)
+            except DescargaFacturaError:
+                logger.warning(
+                    'facturar_venta.reutiliza_aceptada_pdf_descarga_error venta_id=%s factura=%s',
+                    venta.id,
+                    factura_existente.number,
+                    exc_info=True,
+                )
             return factura_existente
         if factura_existente and factura_existente.cufe and factura_existente.estado_electronico not in {'ACEPTADA', 'ACEPTADA_CON_OBSERVACIONES'}:
             raise FactusValidationError(

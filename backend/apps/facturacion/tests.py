@@ -42,6 +42,11 @@ from apps.facturacion.services.credit_note_workflow import (
     sincronizar_nota_credito,
 )
 from apps.facturacion.services.credit_note_service import build_credit_preview, create_credit_note
+from apps.facturacion.services.invoice_email_delete_service import (
+    delete_invoice_in_factus,
+    get_invoice_email_content,
+    send_invoice_email,
+)
 from apps.facturacion.services.persistence_safety import (
     normalize_qr_image_value,
     safe_assign_charfield,
@@ -92,10 +97,15 @@ class FacturaDownloadFilesTests(TestCase):
 
     def test_download_xml(self):
         with override_settings(MEDIA_ROOT=self.tmpdir.name):
-            mocked = MagicMock()
-            mocked.content = b'<xml>ok</xml>'
-            mocked.raise_for_status.return_value = None
-            with patch('apps.facturacion.services.download_invoice_files.requests.get', return_value=mocked):
+            with patch(
+                'apps.facturacion.services.download_invoice_files.FactusClient.get_invoice_xml_payload',
+                return_value={
+                    'data': {
+                        'file_name': 'FV1234.xml',
+                        'xml_base_64_encoded': 'PHhtbD5vazwveG1sPg==',
+                    }
+                },
+            ):
                 result = download_xml(self.factura)
 
             self.assertEqual(result, 'facturas/xml/FV1234.xml')
@@ -103,10 +113,27 @@ class FacturaDownloadFilesTests(TestCase):
             self.assertEqual(self.factura.xml_local_path, 'facturas/xml/FV1234.xml')
             self.assertTrue((Path(self.tmpdir.name) / result).exists())
 
-    def test_download_pdf_url_vacia_lanza_error(self):
-        self.factura.pdf_url = ''
-        self.factura.save(update_fields=['pdf_url'])
+    def test_download_pdf(self):
+        with override_settings(MEDIA_ROOT=self.tmpdir.name):
+            with patch(
+                'apps.facturacion.services.download_invoice_files.FactusClient.get_invoice_pdf_payload',
+                return_value={
+                    'data': {
+                        'file_name': 'FV1234.pdf',
+                        'pdf_base_64_encoded': 'JVBERi0xLjQK',
+                    }
+                },
+            ):
+                result = download_pdf(self.factura)
 
+            self.assertEqual(result, 'facturas/pdf/FV1234.pdf')
+            self.factura.refresh_from_db()
+            self.assertEqual(self.factura.pdf_local_path, 'facturas/pdf/FV1234.pdf')
+            self.assertTrue((Path(self.tmpdir.name) / result).exists())
+
+    def test_download_pdf_sin_numero_lanza_error(self):
+        self.factura.number = ''
+        self.factura.save(update_fields=['number'])
         with self.assertRaises(DescargaFacturaError):
             download_pdf(self.factura)
 
@@ -306,7 +333,7 @@ class FacturaFilesEndpointsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.factura.refresh_from_db()
         self.assertTrue(self.factura.correo_enviado)
-        mocked_send_email.assert_called_once_with('FV9999', email='cliente@example.com')
+        mocked_send_email.assert_called_once_with('FV9999', email='cliente@example.com', pdf_base_64_encoded=None)
 
     @patch('apps.facturacion.views.FactusClient.tacit_acceptance')
     def test_aceptacion_tacita_endpoint_por_id(self, mocked_tacit):
@@ -319,6 +346,73 @@ class FacturaFilesEndpointsTests(TestCase):
     def test_eliminar_restringida_para_factura_aceptada(self, mocked_delete):
         response = self.client.post(f'/api/facturas-electronicas/{self.factura.id}/eliminar/')
         self.assertEqual(response.status_code, 409)
+        mocked_delete.assert_not_called()
+
+
+class FacturaFactusOperationsTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(username='ops-user', password='1234')
+        self.cliente = Cliente.objects.create(numero_documento='999', nombre='Cliente Ops', email='ops@example.com')
+        self.venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            cliente=self.cliente,
+            vendedor=self.user,
+            subtotal=Decimal('100'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('19'),
+            total=Decimal('119'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('119'),
+            cambio=Decimal('0'),
+            estado='FACTURADA',
+        )
+        self.factura = FacturaElectronica.objects.create(
+            venta=self.venta,
+            cufe='CUFE-OPS',
+            uuid='UUID-OPS',
+            number='FV-OPS-1',
+            reference_code='REF-OPS-1',
+            status='PENDIENTE_REINTENTO',
+            estado_electronico='PENDIENTE_REINTENTO',
+            response_json={'ok': True},
+        )
+
+    @patch('apps.facturacion.services.invoice_email_delete_service.FactusClient.send_invoice_email')
+    def test_send_invoice_email_without_custom_pdf(self, mocked_send):
+        mocked_send.return_value = {'ok': True}
+        payload = send_invoice_email(factura=self.factura)
+        self.assertEqual(payload['ok'], True)
+        mocked_send.assert_called_once_with('FV-OPS-1', email='ops@example.com', pdf_base_64_encoded=None)
+
+    @patch('apps.facturacion.services.invoice_email_delete_service.FactusClient.send_invoice_email')
+    def test_send_invoice_email_with_custom_pdf(self, mocked_send):
+        mocked_send.return_value = {'ok': True}
+        send_invoice_email(factura=self.factura, pdf_base_64_encoded='JVBERi0xLjQK')
+        mocked_send.assert_called_once_with('FV-OPS-1', email='ops@example.com', pdf_base_64_encoded='JVBERi0xLjQK')
+
+    @patch('apps.facturacion.services.invoice_email_delete_service.FactusClient.get_invoice_email_content')
+    def test_get_invoice_email_content(self, mocked_content):
+        mocked_content.return_value = {'data': {'subject': 'Factura', 'zip_base_64_encoded': 'UEsDBAo='}}
+        payload = get_invoice_email_content(factura=self.factura, save_zip=False)
+        self.assertEqual(payload['data']['subject'], 'Factura')
+
+    @patch('apps.facturacion.services.invoice_email_delete_service.FactusClient.delete_invoice')
+    def test_delete_invoice_permitted_uses_reference_code(self, mocked_delete):
+        mocked_delete.return_value = {'ok': True}
+        payload = delete_invoice_in_factus(factura=self.factura)
+        self.assertEqual(payload['ok'], True)
+        mocked_delete.assert_called_once_with('REF-OPS-1')
+        self.factura.refresh_from_db()
+        self.assertEqual(self.factura.estado_electronico, 'RECHAZADA')
+
+    @patch('apps.facturacion.services.invoice_email_delete_service.FactusClient.delete_invoice')
+    def test_delete_invoice_rejected_when_dian_accepted(self, mocked_delete):
+        self.factura.estado_electronico = 'ACEPTADA'
+        self.factura.save(update_fields=['estado_electronico'])
+        with self.assertRaises(FactusValidationError):
+            delete_invoice_in_factus(factura=self.factura)
         mocked_delete.assert_not_called()
 
 
@@ -593,6 +687,91 @@ class FacturarVentaPersistenciaCriticaTests(TestCase):
         factura = FacturaElectronica.objects.get(venta=self.venta)
         self.assertEqual(factura.estado_electronico, 'RECHAZADA')
         self.assertEqual(factura.codigo_error, 'ERROR_CONCILIACION_DOCUMENTAL')
+
+    @patch('apps.facturacion.services.facturar_venta.send_invoice_email_via_factus')
+    @patch('apps.facturacion.services.facturar_venta.upload_custom_pdf_to_factus')
+    @patch('apps.facturacion.services.facturar_venta.download_xml')
+    @patch('apps.facturacion.services.facturar_venta.download_pdf')
+    @patch('apps.facturacion.services.facturar_venta.resolve_numbering_range')
+    @patch('apps.facturacion.services.facturar_venta.build_invoice_payload')
+    @patch('apps.facturacion.services.facturar_venta.FactusClient.create_and_validate_invoice')
+    def test_facturar_venta_intenta_descargar_xml_y_pdf_despues_de_emitir(
+        self,
+        mocked_create_validate,
+        mocked_build_payload,
+        mocked_resolve_range,
+        mocked_download_pdf,
+        mocked_download_xml,
+        _mocked_upload_pdf,
+        _mocked_send_email,
+    ):
+        mocked_build_payload.return_value = {
+            'numbering_range_id': 1,
+            'customer': {'identification': '5555', 'names': 'Cliente QR Largo', 'identification_document_id': 3},
+            'items': [{'code_reference': 'PR-QR-LARGO', 'quantity': 1}],
+            'send_email': False,
+        }
+        mocked_resolve_range.return_value = RangoNumeracionDIAN(prefijo='FV', factus_range_id=1)
+        mocked_create_validate.return_value = {
+            'data': {
+                'bill': {
+                    'status': 'valid',
+                    'number': 'FV9001',
+                    'reference_code': 'FV9001',
+                    'cufe': 'CUFE-9001',
+                    'uuid': 'UUID-9001',
+                    'xml_url': 'https://example.com/fv9001.xml',
+                    'pdf_url': 'https://example.com/fv9001.pdf',
+                }
+            }
+        }
+
+        factura = facturar_venta(self.venta.id, triggered_by=self.user)
+        self.assertEqual(factura.estado_electronico, 'ACEPTADA')
+        mocked_download_xml.assert_called()
+        mocked_download_pdf.assert_called()
+
+    @patch('apps.facturacion.services.facturar_venta.send_invoice_email_via_factus')
+    @patch('apps.facturacion.services.facturar_venta.upload_custom_pdf_to_factus')
+    @patch('apps.facturacion.services.facturar_venta.download_xml', side_effect=DescargaFacturaError('xml fail'))
+    @patch('apps.facturacion.services.facturar_venta.download_pdf', side_effect=DescargaFacturaError('pdf fail'))
+    @patch('apps.facturacion.services.facturar_venta.resolve_numbering_range')
+    @patch('apps.facturacion.services.facturar_venta.build_invoice_payload')
+    @patch('apps.facturacion.services.facturar_venta.FactusClient.create_and_validate_invoice')
+    def test_facturar_venta_tolera_fallo_descargas_post_emision(
+        self,
+        mocked_create_validate,
+        mocked_build_payload,
+        mocked_resolve_range,
+        _mocked_download_pdf,
+        _mocked_download_xml,
+        _mocked_upload_pdf,
+        _mocked_send_email,
+    ):
+        mocked_build_payload.return_value = {
+            'numbering_range_id': 1,
+            'customer': {'identification': '5555', 'names': 'Cliente QR Largo', 'identification_document_id': 3},
+            'items': [{'code_reference': 'PR-QR-LARGO', 'quantity': 1}],
+            'send_email': False,
+        }
+        mocked_resolve_range.return_value = RangoNumeracionDIAN(prefijo='FV', factus_range_id=1)
+        mocked_create_validate.return_value = {
+            'data': {
+                'bill': {
+                    'status': 'valid',
+                    'number': 'FV9001',
+                    'reference_code': 'FV9001',
+                    'cufe': 'CUFE-9001',
+                    'uuid': 'UUID-9001',
+                    'xml_url': 'https://example.com/fv9001.xml',
+                    'pdf_url': 'https://example.com/fv9001.pdf',
+                }
+            }
+        }
+
+        factura = facturar_venta(self.venta.id, triggered_by=self.user)
+        self.assertEqual(factura.estado_electronico, 'ACEPTADA')
+        self.assertEqual(factura.status, 'ACEPTADA')
 
 
 class FacturaQRYPosEndpointsTests(TestCase):
