@@ -5,6 +5,7 @@ export type EstadoDian =
   | 'ACEPTADA_CON_OBSERVACIONES'
   | 'RECHAZADA'
   | 'EN_PROCESO'
+  | 'CONFLICTO_FACTUS'
   | 'ERROR_INTEGRACION'
   | 'ERROR_PERSISTENCIA'
   | 'PENDIENTE_REINTENTO'
@@ -49,6 +50,8 @@ export interface NotaCredito {
   codigo_error?: string;
   mensaje_error?: string;
   synchronized_at?: string;
+  can_sync?: boolean;
+  estado_ui_mensaje?: string;
   detail?: string;
   detalles?: NotaCreditoDetalle[];
 }
