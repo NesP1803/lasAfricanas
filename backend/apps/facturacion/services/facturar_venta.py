@@ -863,17 +863,13 @@ def facturar_venta(
     fields = _extract_factus_data(response_json)
     fields['number'] = fields.get('number') or numero
     fields['reference_code'] = fields.get('reference_code') or reference_code
+    pending_conciliation_error: FactusValidationError | None = None
     try:
         _assert_emitted_document_matches_sale(
             venta=venta,
             fields=fields,
             expected_number=numero if should_lock_expected_number else '',
             expected_reference_code=reference_code,
-        )
-        _assert_document_conciliation(
-            venta=venta,
-            payload=response_json,
-            logger_context=fields,
         )
     except FactusValidationError as exc:
         _persist_local_validation_error(
@@ -886,6 +882,14 @@ def facturar_venta(
             response=response_json,
         )
         raise
+    try:
+        _assert_document_conciliation(
+            venta=venta,
+            payload=response_json,
+            logger_context=fields,
+        )
+    except FactusValidationError as exc:
+        pending_conciliation_error = exc
     bill_errors = _extract_bill_errors(response_json)
 
     remote_snapshot_before = _extract_remote_document_snapshot(response_json)
@@ -895,7 +899,7 @@ def facturar_venta(
     missing_before = [field for field in ['uuid', 'xml_url', 'pdf_url'] if not fields.get(field)]
     response_show_json: dict[str, Any] | None = None
     response_download_json: dict[str, Any] | None = None
-    if missing_before or needs_conciliation_enrichment:
+    if missing_before or needs_conciliation_enrichment or pending_conciliation_error is not None:
         logger.info(
             'facturar_venta.factus_complemento_inicio venta_id=%s numero=%s faltantes=%s',
             venta.id,
@@ -997,6 +1001,17 @@ def facturar_venta(
                     error=exc,
                 )
                 raise
+    elif pending_conciliation_error is not None:
+        _persist_local_validation_error(
+            factura=factura,
+            payload=payload,
+            numero=numero,
+            reference_code=reference_code,
+            triggered_by=triggered_by,
+            error=pending_conciliation_error,
+            response=response_json,
+        )
+        raise pending_conciliation_error
 
     # Factus puede no devolver uuid/xml/pdf en validate; se completa con show/download
     # y, como último recurso, se genera URL directa de descarga para no abortar el flujo.

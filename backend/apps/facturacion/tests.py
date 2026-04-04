@@ -479,6 +479,64 @@ class FacturarVentaPersistenciaCriticaTests(TestCase):
     @patch('apps.facturacion.services.facturar_venta.build_invoice_payload')
     @patch('apps.facturacion.services.facturar_venta.FactusClient.create_and_validate_invoice')
     @patch('apps.facturacion.services.facturar_venta.FactusClient.get_invoice')
+    def test_facturar_venta_concilia_con_show_si_validate_llega_con_totales_incompletos(
+        self,
+        mocked_get_invoice,
+        mocked_create_validate,
+        mocked_build_payload,
+        mocked_resolve_range,
+        _mocked_pdf,
+        _mocked_xml,
+    ):
+        mocked_build_payload.return_value = {
+            'numbering_range_id': 1,
+            'customer': {
+                'identification': '5555',
+                'names': 'Cliente QR Largo',
+                'identification_document_id': 3,
+            },
+            'items': [{'code_reference': 'PR-QR-LARGO', 'quantity': 1}],
+            'send_email': False,
+        }
+        mocked_resolve_range.return_value = RangoNumeracionDIAN(prefijo='FV', factus_range_id=1)
+        mocked_create_validate.return_value = {
+            'data': {
+                'bill': {
+                    'status': 'valid',
+                    'number': 'FV9001',
+                    'reference_code': 'FV9001',
+                    'cufe': 'CUFE-9001',
+                    'uuid': 'UUID-9001',
+                    'xml_url': 'https://example.com/fv9001.xml',
+                    'pdf_url': 'https://example.com/fv9001.pdf',
+                    'totals': {'total': '10.00', 'tax_amount': '0.00', 'taxable_amount': '10.00'},
+                }
+            }
+        }
+        mocked_get_invoice.return_value = {
+            'data': {
+                'bill': {
+                    'status': 'valid',
+                    'number': 'FV9001',
+                    'reference_code': 'FV9001',
+                    'customer': {'identification': '5555'},
+                    'items': [{'code_reference': 'PR-QR-LARGO'}],
+                    'totals': {'total': '119.00', 'tax_amount': '19.00', 'taxable_amount': '100.00'},
+                }
+            }
+        }
+
+        factura = facturar_venta(self.venta.id, triggered_by=self.user)
+        factura.refresh_from_db()
+        self.assertEqual(factura.estado_electronico, 'ACEPTADA')
+        self.assertEqual(factura.codigo_error, '')
+
+    @patch('apps.facturacion.services.facturar_venta.download_xml')
+    @patch('apps.facturacion.services.facturar_venta.download_pdf')
+    @patch('apps.facturacion.services.facturar_venta.resolve_numbering_range')
+    @patch('apps.facturacion.services.facturar_venta.build_invoice_payload')
+    @patch('apps.facturacion.services.facturar_venta.FactusClient.create_and_validate_invoice')
+    @patch('apps.facturacion.services.facturar_venta.FactusClient.get_invoice')
     def test_facturar_venta_rechaza_inconsistencia_economica_documental(
         self,
         mocked_get_invoice,
