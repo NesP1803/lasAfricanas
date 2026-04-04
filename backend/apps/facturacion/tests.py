@@ -29,7 +29,12 @@ from apps.facturacion.services.factus_catalog_lookup import (
 from apps.facturacion.services.factus_payload_builder import build_invoice_payload
 from apps.facturacion.services.support_document_payload_builder import build_support_document_payload
 from apps.facturacion.services.exceptions import DescargaFacturaError
-from apps.facturacion.services.factus_client import FactusValidationError
+from apps.facturacion.services.factus_client import (
+    FactusAPIError,
+    FactusClient,
+    FactusPendingCreditNoteError,
+    FactusValidationError,
+)
 from apps.facturacion.services.credit_note_service import build_credit_preview, create_credit_note
 from apps.facturacion.services.persistence_safety import (
     normalize_qr_image_value,
@@ -1457,7 +1462,12 @@ class NotaCreditoFlujoTests(TestCase):
             status='ACEPTADA',
             estado_electronico='ACEPTADA',
             emitida_en_factus=True,
-            response_json={'data': {'bill': {'numbering_range_id': 1}}},
+            response_json={
+                'data': {
+                    'bill': {'id': 90001, 'numbering_range_id': 1},
+                    'customer': {'identification': '321', 'names': 'Cliente NC'},
+                }
+            },
         )
 
     def test_preview_bloquea_sobre_acreditacion(self):
@@ -1484,3 +1494,236 @@ class NotaCreditoFlujoTests(TestCase):
     def test_bloquea_anulacion_directa_si_emitida(self):
         with self.assertRaises(ValidationError):
             anular_venta(self.venta, self.user, motivo='prueba')
+
+
+class NotaCreditoWorkflowCoverageTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(username='nc-api-user', password='1234')
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+
+        self.cliente = Cliente.objects.create(numero_documento='909', nombre='Cliente workflow', email='wf@example.com')
+        self.venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            numero_comprobante='FAC-909',
+            cliente=self.cliente,
+            vendedor=self.user,
+            subtotal=Decimal('300'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('57'),
+            total=Decimal('357'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('357'),
+            cambio=Decimal('0'),
+            estado='COBRADA',
+        )
+        categoria = Categoria.objects.create(nombre='NC Cov Cat')
+        proveedor = Proveedor.objects.create(nombre='NC Cov Prov')
+        self.producto1 = Producto.objects.create(
+            codigo='NC-COV-1',
+            nombre='Producto 1',
+            precio_costo=Decimal('10'),
+            precio_venta=Decimal('100'),
+            precio_venta_minimo=Decimal('90'),
+            stock=Decimal('1'),
+            categoria=categoria,
+            proveedor=proveedor,
+        )
+        self.producto2 = Producto.objects.create(
+            codigo='NC-COV-2',
+            nombre='Producto 2',
+            precio_costo=Decimal('20'),
+            precio_venta=Decimal('100'),
+            precio_venta_minimo=Decimal('90'),
+            stock=Decimal('1'),
+            categoria=categoria,
+            proveedor=proveedor,
+        )
+        self.detalle1 = DetalleVenta.objects.create(
+            venta=self.venta,
+            producto=self.producto1,
+            cantidad=Decimal('2'),
+            precio_unitario=Decimal('100'),
+            descuento_unitario=Decimal('0'),
+            iva_porcentaje=Decimal('19'),
+            subtotal=Decimal('200'),
+            total=Decimal('238'),
+        )
+        self.detalle2 = DetalleVenta.objects.create(
+            venta=self.venta,
+            producto=self.producto2,
+            cantidad=Decimal('1'),
+            precio_unitario=Decimal('100'),
+            descuento_unitario=Decimal('0'),
+            iva_porcentaje=Decimal('19'),
+            subtotal=Decimal('100'),
+            total=Decimal('119'),
+        )
+        self.factura = FacturaElectronica.objects.create(
+            venta=self.venta,
+            number='SETP90901',
+            reference_code='SETP90901',
+            cufe='CUFE-WF-1',
+            status='ACEPTADA',
+            estado_electronico='ACEPTADA',
+            emitida_en_factus=True,
+            response_json={
+                'data': {
+                    'bill': {'id': 90901, 'numbering_range_id': 1},
+                    'customer': {'identification': '909', 'names': 'Cliente workflow'},
+                }
+            },
+        )
+
+    @patch('apps.facturacion.services.credit_note_workflow.FactusClient.create_and_validate_credit_note')
+    def test_preview_and_partial_total_and_sync(self, mocked_create):
+        mocked_create.return_value = {'data': {'credit_note': {'number': 'NC909', 'status': 'accepted', 'cufe': 'CUFE-NC909'}}}
+
+        preview_resp = self.client.post(
+            f'/api/facturacion/facturas/{self.factura.id}/notas-credito/preview/',
+            {'motivo': 'preview', 'lines': [{'detalle_venta_original_id': self.detalle1.id, 'cantidad_a_acreditar': '1'}]},
+            format='json',
+        )
+        self.assertEqual(preview_resp.status_code, 200)
+        self.assertEqual(preview_resp.data['total'], '119.00')
+
+        parcial_resp = self.client.post(
+            f'/api/facturacion/facturas/{self.factura.id}/notas-credito/parcial/',
+            {
+                'motivo': 'parcial',
+                'lines': [
+                    {
+                        'detalle_venta_original_id': self.detalle1.id,
+                        'cantidad_a_acreditar': '1',
+                        'afecta_inventario': False,
+                    }
+                ],
+            },
+            format='json',
+        )
+        self.assertEqual(parcial_resp.status_code, 201)
+        self.factura.refresh_from_db()
+        self.assertEqual(self.factura.estado_acreditacion, 'CREDITADA_PARCIAL')
+
+        mocked_create.return_value = {'data': {'credit_note': {'number': 'NC910', 'status': 'accepted', 'cufe': 'CUFE-NC910'}}}
+        total_resp = self.client.post(
+            f'/api/facturacion/facturas/{self.factura.id}/notas-credito/total/',
+            {'motivo': 'cerrar saldo'},
+            format='json',
+        )
+        self.assertEqual(total_resp.status_code, 201)
+        payload = mocked_create.call_args.args[0]
+        self.assertIn('bill_id', payload)
+        self.assertIn('customer', payload)
+        self.assertTrue(payload.get('items'))
+        self.assertIn('unit_measure_id', payload['items'][0])
+        self.assertIn('standard_code_id', payload['items'][0])
+        self.assertIn('tribute_id', payload['items'][0])
+        self.assertIn('is_excluded', payload['items'][0])
+        self.factura.refresh_from_db()
+        self.assertEqual(self.factura.estado_acreditacion, 'CREDITADA_TOTAL')
+
+        nota = NotaCreditoElectronica.objects.get(number='NC910')
+        with patch('apps.facturacion.services.credit_note_workflow.FactusClient.get_credit_note') as mocked_sync:
+            mocked_sync.return_value = {'data': {'credit_note': {'number': 'NC910', 'status': 'accepted'}}}
+            sync_resp = self.client.post(f'/api/notas-credito/{nota.id}/sincronizar/', {}, format='json')
+        self.assertEqual(sync_resp.status_code, 200)
+
+    @patch('apps.facturacion.services.credit_note_workflow.FactusClient.create_and_validate_credit_note')
+    def test_validaciones_rechazos(self, mocked_create):
+        mocked_create.return_value = {'data': {'credit_note': {'number': 'NC920', 'status': 'accepted', 'cufe': 'CUFE-NC920'}}}
+
+        excedida = self.client.post(
+            f'/api/facturacion/facturas/{self.factura.id}/notas-credito/parcial/',
+            {'motivo': 'bad', 'lines': [{'detalle_venta_original_id': self.detalle1.id, 'cantidad_a_acreditar': '9'}]},
+            format='json',
+        )
+        self.assertEqual(excedida.status_code, 400)
+
+        otra_venta = Venta.objects.create(
+            tipo_comprobante='FACTURA', numero_comprobante='FAC-X', cliente=self.cliente, vendedor=self.user,
+            subtotal=Decimal('1'), descuento_porcentaje=Decimal('0'), descuento_valor=Decimal('0'), iva=Decimal('0.19'),
+            total=Decimal('1.19'), medio_pago='EFECTIVO', efectivo_recibido=Decimal('1.19'), cambio=Decimal('0'), estado='COBRADA',
+        )
+        detalle_ajeno = DetalleVenta.objects.create(
+            venta=otra_venta, producto=self.producto1, cantidad=Decimal('1'), precio_unitario=Decimal('1'), descuento_unitario=Decimal('0'),
+            iva_porcentaje=Decimal('19'), subtotal=Decimal('1'), total=Decimal('1.19')
+        )
+        ajena = self.client.post(
+            f'/api/facturacion/facturas/{self.factura.id}/notas-credito/parcial/',
+            {'motivo': 'bad', 'lines': [{'detalle_venta_original_id': detalle_ajeno.id, 'cantidad_a_acreditar': '1'}]},
+            format='json',
+        )
+        self.assertEqual(ajena.status_code, 400)
+
+        self.factura.estado_electronico = 'RECHAZADA'
+        self.factura.save(update_fields=['estado_electronico'])
+        estado_invalido = self.client.post(
+            f'/api/facturacion/facturas/{self.factura.id}/notas-credito/parcial/',
+            {'motivo': 'bad', 'lines': [{'detalle_venta_original_id': self.detalle1.id, 'cantidad_a_acreditar': '1'}]},
+            format='json',
+        )
+        self.assertEqual(estado_invalido.status_code, 400)
+
+    def test_error_inesperado_no_se_convierte_400(self):
+        with patch('apps.facturacion.views.create_credit_note', side_effect=RuntimeError('boom')):
+            resp = self.client.post(
+                f'/api/facturacion/facturas/{self.factura.id}/notas-credito/parcial/',
+                {'motivo': 'x', 'lines': [{'detalle_venta_original_id': self.detalle1.id, 'cantidad_a_acreditar': '1'}]},
+                format='json',
+            )
+        self.assertEqual(resp.status_code, 500)
+
+    def test_error_factus_retorna_502_en_total(self):
+        with patch(
+            'apps.facturacion.views.create_credit_note',
+            side_effect=FactusAPIError(
+                "Factus rechazó la factura. Detalle: {'message': 'The route credit-notes/validate could not be found.'}",
+                status_code=404,
+                provider_detail="{'message': 'The route credit-notes/validate could not be found.'}",
+            ),
+        ):
+            resp = self.client.post(
+                f'/api/facturacion/facturas/{self.factura.id}/notas-credito/total/',
+                {'motivo': 'x'},
+                format='json',
+            )
+        self.assertEqual(resp.status_code, 502)
+
+    def test_conflicto_nota_pendiente_en_dian_retorna_409(self):
+        with patch(
+            'apps.facturacion.views.create_credit_note',
+            side_effect=FactusPendingCreditNoteError(
+                "Factus reportó una nota crédito pendiente en DIAN.",
+                status_code=409,
+                provider_detail="{'message': 'Se encontró una nota crédito pendiente por enviar a la DIAN'}",
+            ),
+        ):
+            resp = self.client.post(
+                f'/api/facturacion/facturas/{self.factura.id}/notas-credito/total/',
+                {'motivo': 'x'},
+                format='json',
+            )
+        self.assertEqual(resp.status_code, 409)
+
+
+class FactusClientCreditNoteFallbackTests(TestCase):
+    @patch('apps.facturacion.services.factus_client.FactusClient.send_credit_note')
+    def test_retry_credit_note_endpoint_with_v1_when_route_not_found(self, mocked_send):
+        client = FactusClient()
+        client.credit_note_path = '/credit-notes/validate'
+        mocked_send.side_effect = [
+            FactusAPIError(
+                "Factus rechazó la factura. Detalle: {'message': 'The route credit-notes/validate could not be found.'}",
+                status_code=404,
+                provider_detail="{'message': 'The route credit-notes/validate could not be found.'}",
+            ),
+            {'data': {'credit_note': {'number': 'NC-OK'}}},
+        ]
+
+        response = client.create_and_validate_credit_note({'items': [{'name': 'x'}]})
+
+        self.assertEqual(response['data']['credit_note']['number'], 'NC-OK')
+        self.assertEqual(mocked_send.call_count, 2)

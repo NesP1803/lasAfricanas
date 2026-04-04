@@ -17,7 +17,15 @@ class CreditNoteLineInputSerializer(serializers.Serializer):
 class NotaCreditoCreateSerializer(serializers.Serializer):
     factura_id = serializers.IntegerField(required=False)
     motivo = serializers.CharField()
-    lines = CreditNoteLineInputSerializer(many=True, allow_empty=False)
+    lines = CreditNoteLineInputSerializer(many=True, allow_empty=False, required=False)
+    items = CreditNoteLineInputSerializer(many=True, allow_empty=False, required=False, write_only=True)
+
+    def validate(self, attrs):
+        lines = attrs.get('lines') or attrs.get('items')
+        if not lines:
+            raise serializers.ValidationError({'lines': 'Debe enviar al menos una línea en "lines".'})
+        attrs['lines'] = lines
+        return attrs
 
 
 class NotaCreditoPreviewSerializer(serializers.Serializer):

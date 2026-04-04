@@ -41,6 +41,10 @@ class FactusPendingDianError(FactusAPIError):
     """Conflicto 409 por documento pendiente de envío/validación ante DIAN."""
 
 
+class FactusPendingCreditNoteError(FactusAPIError):
+    """Conflicto 409 por nota crédito pendiente de envío/validación ante DIAN."""
+
+
 class FactusValidationError(Exception):
     """Error de validación de datos para emitir una factura."""
 
@@ -51,7 +55,7 @@ class FactusClient:
         self.auth_path = config('FACTUS_AUTH_PATH', default='/oauth/token')
         self.refresh_path = config('FACTUS_REFRESH_PATH', default='/oauth/token')
         self.invoice_path = config('FACTUS_INVOICE_PATH', default='/v1/bills/validate')
-        self.credit_note_path = config('FACTUS_CREDIT_NOTE_PATH', default='/credit-notes/validate')
+        self.credit_note_path = config('FACTUS_CREDIT_NOTE_PATH', default='/v1/credit-notes/validate')
         self.credit_note_list_path = config('FACTUS_CREDIT_NOTE_LIST_PATH', default='/v1/credit-notes')
         self.credit_note_show_path = config('FACTUS_CREDIT_NOTE_SHOW_PATH', default='/v1/credit-notes/show/{number}')
         self.credit_note_download_pdf_path = config(
@@ -270,6 +274,16 @@ class FactusClient:
                     provider_detail=provider_detail,
                     provider_payload=provider_payload,
                 ) from exc
+            if status_code == 409 and (
+                'nota crédito pendiente por enviar a la dian' in pending_message
+                or 'nota credito pendiente por enviar a la dian' in pending_message
+            ):
+                raise FactusPendingCreditNoteError(
+                    f'Factus reportó una nota crédito pendiente en DIAN.{detail_suffix}',
+                    status_code=status_code,
+                    provider_detail=provider_detail,
+                    provider_payload=provider_payload,
+                ) from exc
             raise FactusAPIError(
                 f'Factus rechazó la factura.{detail_suffix}',
                 status_code=status_code,
@@ -339,7 +353,29 @@ class FactusClient:
         return self.request('POST', self.credit_note_path, json=payload)
 
     def create_and_validate_credit_note(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return self.send_credit_note(payload)
+        try:
+            return self.send_credit_note(payload)
+        except FactusAPIError as exc:
+            detail = (exc.provider_detail or '').lower()
+            should_retry_with_v1 = (
+                exc.status_code == 404
+                and 'route' in detail
+                and 'credit-notes/validate' in detail
+                and self.credit_note_path != '/v1/credit-notes/validate'
+            )
+            if not should_retry_with_v1:
+                raise
+
+            logger.warning(
+                'Factus credit_note_path=%s no encontrado; reintentando con endpoint /v1/credit-notes/validate',
+                self.credit_note_path,
+            )
+            original_path = self.credit_note_path
+            try:
+                self.credit_note_path = '/v1/credit-notes/validate'
+                return self.send_credit_note(payload)
+            finally:
+                self.credit_note_path = original_path
 
     def list_credit_notes(self, **params: Any) -> dict[str, Any]:
         return self.request('GET', self.credit_note_list_path, params=params or None)
