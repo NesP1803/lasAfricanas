@@ -70,7 +70,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       {notification.open && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 px-4">
           <div
-            className={`w-full max-w-sm rounded-lg border px-4 py-3 text-sm font-semibold shadow-lg ${typeStyles[notification.type ?? 'info']}`}
+            className={`w-full max-w-sm rounded-lg border px-4 py-3 text-sm font-semibold shadow-lg break-words whitespace-pre-wrap [overflow-wrap:anywhere] ${typeStyles[notification.type ?? 'info']}`}
           >
             {notification.message}
           </div>
