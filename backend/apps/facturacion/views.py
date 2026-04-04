@@ -553,7 +553,9 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
             logger.exception('Error inesperado creando nota crédito parcial para factura %s', factura.id)
             return Response({'detail': 'Error interno al crear nota crédito parcial.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         payload = NotaCreditoListSerializer(nota).data
-        if meta.get('result') != 'created':
+        if meta.get('result') == 'factus_pending_manual_sync':
+            payload['detail'] = 'Factus reportó nota pendiente en DIAN; se registró en proceso y debe sincronizarse.'
+        elif meta.get('result') != 'created':
             payload['detail'] = 'Se detectó una nota crédito pendiente en Factus y se reconcilió automáticamente.'
         return Response(payload, status=int(meta.get('http_status', status.HTTP_201_CREATED)))
 
@@ -590,7 +592,9 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
             logger.exception('Error inesperado creando nota crédito total para factura %s', factura.id)
             return Response({'detail': 'Error interno al crear nota crédito total.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         payload = NotaCreditoListSerializer(nota).data
-        if meta.get('result') != 'created':
+        if meta.get('result') == 'factus_pending_manual_sync':
+            payload['detail'] = 'Factus reportó nota pendiente en DIAN; se registró en proceso y debe sincronizarse.'
+        elif meta.get('result') != 'created':
             payload['detail'] = 'Se detectó una nota crédito pendiente en Factus y se reconcilió automáticamente.'
         return Response(payload, status=int(meta.get('http_status', status.HTTP_201_CREATED)))
 
@@ -819,7 +823,9 @@ class NotasCreditoViewSet(viewsets.GenericViewSet):
             return Response({'detail': 'Error interno al crear nota crédito.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         output = NotaCreditoListSerializer(nota).data
-        if meta.get('result') != 'created':
+        if meta.get('result') == 'factus_pending_manual_sync':
+            output['detail'] = 'Factus reportó nota pendiente en DIAN; se registró en proceso y debe sincronizarse.'
+        elif meta.get('result') != 'created':
             output['detail'] = 'Se detectó una nota crédito pendiente en Factus y se reconcilió automáticamente.'
         return Response(output, status=int(meta.get('http_status', status.HTTP_201_CREATED)))
 

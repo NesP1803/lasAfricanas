@@ -452,18 +452,22 @@ def create_credit_note(*, factura: FacturaElectronica, motivo: str, lines: list[
         response = client.create_and_validate_credit_note(payload)
         nota = _update_note_from_remote(nota, response)
     except FactusPendingCreditNoteError:
-        reconciled = _find_existing_open_note(factura, tipo=tipo_nota)
-        if reconciled:
-            reconciled = sync_credit_note(reconciled)
-            return reconciled, {'result': 'factus_pending_reconciled', 'http_status': 200}
         recovered = _try_reconcile_from_remote(factura, reference_code=reference_code, tipo_nota=tipo_nota)
         if recovered:
             return recovered, {'result': 'factus_pending_recovered', 'http_status': 200}
-        nota.estado_local = 'ERROR_INTEGRACION'
-        nota.mensaje_error = 'Conflicto 409 en Factus sin evidencia recuperable de nota crédito remota.'
-        nota.codigo_error = 'FACTUS_409_UNRECOVERABLE'
-        nota.save(update_fields=['estado_local', 'mensaje_error', 'codigo_error', 'updated_at'])
-        raise
+        reconciled = _find_existing_open_note(factura, tipo=tipo_nota)
+        if reconciled and reconciled.number and not reconciled.number.startswith('NC-PEND-'):
+            try:
+                reconciled = sync_credit_note(reconciled)
+                return reconciled, {'result': 'factus_pending_reconciled', 'http_status': 200}
+            except Exception:
+                pass
+        nota.estado_local = 'EN_PROCESO'
+        nota.mensaje_error = 'Factus reportó una nota crédito pendiente por envío a DIAN. Quedó pendiente de sincronización.'
+        nota.codigo_error = 'FACTUS_409_PENDING_DIAN'
+        nota.synchronized_at = timezone.now()
+        nota.save(update_fields=['estado_local', 'mensaje_error', 'codigo_error', 'synchronized_at', 'updated_at'])
+        return nota, {'result': 'factus_pending_manual_sync', 'http_status': 202}
     except Exception as exc:
         nota.estado_local = 'ERROR_INTEGRACION'
         nota.mensaje_error = str(exc)
@@ -477,5 +481,10 @@ def create_credit_note(*, factura: FacturaElectronica, motivo: str, lines: list[
 
 
 def sync_credit_note(nota: NotaCreditoElectronica) -> NotaCreditoElectronica:
+    if not nota.number or nota.number.startswith('NC-PEND-'):
+        nota.estado_local = 'EN_PROCESO'
+        nota.synchronized_at = timezone.now()
+        nota.save(update_fields=['estado_local', 'synchronized_at', 'updated_at'])
+        return nota
     remote = FactusClient().get_credit_note(nota.number)
     return _update_note_from_remote(nota, remote)
