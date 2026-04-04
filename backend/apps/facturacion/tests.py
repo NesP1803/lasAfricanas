@@ -1750,6 +1750,31 @@ class NotaCreditoWorkflowCoverageTests(TestCase):
         self.assertEqual(resp.data['estado_local'], 'CONFLICTO_FACTUS')
         self.assertEqual(resp.data['codigo_error'], 'FACTUS_SYNC_SIN_EVIDENCIA')
 
+    @patch('apps.facturacion.services.credit_note_workflow.FactusClient.list_credit_notes')
+    @patch('apps.facturacion.services.credit_note_workflow.FactusClient.get_credit_note')
+    def test_creacion_con_nota_abierta_en_proceso_y_sin_evidencia_retorna_202(self, mocked_get, mocked_list):
+        NotaCreditoElectronica.objects.create(
+            factura=self.factura,
+            venta_origen=self.venta,
+            number='NC1073',
+            tipo_nota='TOTAL',
+            estado_local='EN_PROCESO',
+            estado_electronico='PENDIENTE_REINTENTO',
+            status='PENDIENTE_REINTENTO',
+            request_json={},
+            response_json={},
+        )
+        mocked_get.side_effect = FactusAPIError('Not found', status_code=404)
+        mocked_list.return_value = {'data': []}
+
+        resp = self.client.post(
+            f'/api/facturacion/facturas/{self.factura.id}/notas-credito/total/',
+            {'motivo': 'x'},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, 202)
+        self.assertEqual(resp.data['estado_local'], 'CONFLICTO_FACTUS')
+
 
 class FactusClientCreditNoteFallbackTests(TestCase):
     @patch('apps.facturacion.services.factus_client.FactusClient.send_credit_note')

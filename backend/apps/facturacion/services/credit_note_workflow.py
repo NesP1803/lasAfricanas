@@ -411,8 +411,10 @@ def create_credit_note(*, factura: FacturaElectronica, motivo: str, lines: list[
 
     tipo_nota = 'TOTAL' if is_total else 'PARCIAL'
     existing_open = _find_existing_open_note(factura, tipo=tipo_nota)
-    if existing_open and existing_open.estado_local in {'EN_PROCESO', 'ACEPTADA'}:
+    if existing_open and existing_open.estado_local in {'EN_PROCESO', 'CONFLICTO_FACTUS', 'ACEPTADA'}:
         synced = sync_credit_note(existing_open)
+        if synced.estado_local == 'CONFLICTO_FACTUS':
+            return synced, {'result': 'factus_pending_manual_sync', 'http_status': 202}
         return synced, {'result': 'already_exists_reconciled', 'http_status': 200}
 
     client = FactusClient()

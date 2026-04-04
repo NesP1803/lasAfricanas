@@ -62,7 +62,26 @@ class NotaCreditoListSerializer(serializers.ModelSerializer):
     fecha = serializers.DateTimeField(source='created_at', read_only=True)
     estado = serializers.CharField(source='estado_local', read_only=True)
     estado_dian = serializers.CharField(source='estado_electronico', read_only=True)
+    can_sync = serializers.SerializerMethodField()
+    estado_ui_mensaje = serializers.SerializerMethodField()
     detalles = NotaCreditoDetalleSerializer(many=True, read_only=True)
+
+    def get_can_sync(self, obj: NotaCreditoElectronica) -> bool:
+        return obj.estado_local in {'PENDIENTE_ENVIO', 'EN_PROCESO', 'CONFLICTO_FACTUS'}
+
+    def get_estado_ui_mensaje(self, obj: NotaCreditoElectronica) -> str:
+        if obj.estado_local == 'CONFLICTO_FACTUS':
+            return (
+                'Factus no confirmó el documento remoto. '
+                'Use Sincronizar para conciliar el estado real antes de continuar.'
+            )
+        if obj.estado_local == 'EN_PROCESO':
+            return 'Documento confirmado en Factus y en trámite ante DIAN.'
+        if obj.estado_local == 'ACEPTADA':
+            return 'Documento aceptado electrónicamente.'
+        if obj.estado_local == 'RECHAZADA':
+            return 'Documento rechazado electrónicamente.'
+        return ''
 
     class Meta:
         model = NotaCreditoElectronica
@@ -91,6 +110,8 @@ class NotaCreditoListSerializer(serializers.ModelSerializer):
             'status_raw_factus',
             'remote_status_raw',
             'synchronized_at',
+            'can_sync',
+            'estado_ui_mensaje',
             'detalles',
         ]
         read_only_fields = fields

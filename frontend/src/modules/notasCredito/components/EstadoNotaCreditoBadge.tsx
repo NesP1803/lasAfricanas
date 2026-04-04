@@ -23,7 +23,9 @@ export default function EstadoNotaCreditoBadge({ estado }: { estado: EstadoDian 
   const style = estadoStyles[normalizedEstado] ?? estadoStyles.ERROR;
   const label = normalizedEstado === 'CONFLICTO_FACTUS'
     ? 'CONFLICTO FACTUS (SIN CONFIRMACIÓN)'
-    : normalizedEstado.replaceAll('_', ' ');
+    : normalizedEstado === 'EN_PROCESO'
+      ? 'EN PROCESO (CONFIRMADO)'
+      : normalizedEstado.replaceAll('_', ' ');
 
   return (
     <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${style}`}>

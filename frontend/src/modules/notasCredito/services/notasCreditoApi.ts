@@ -50,6 +50,8 @@ export interface NotaCredito {
   codigo_error?: string;
   mensaje_error?: string;
   synchronized_at?: string;
+  can_sync?: boolean;
+  estado_ui_mensaje?: string;
   detail?: string;
   detalles?: NotaCreditoDetalle[];
 }
