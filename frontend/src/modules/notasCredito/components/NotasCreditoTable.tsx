@@ -127,6 +127,7 @@ export default function NotasCreditoTable({ notasCredito, loading, onRefresh }: 
             <option value="BORRADOR">Borrador</option>
             <option value="PENDIENTE_ENVIO">Pendiente envío</option>
             <option value="EN_PROCESO">En proceso</option>
+            <option value="CONFLICTO_FACTUS">Conflicto Factus</option>
             <option value="ACEPTADA">Aceptada</option>
             <option value="RECHAZADA">Rechazada</option>
             <option value="ERROR_INTEGRACION">Error integración</option>
@@ -146,7 +147,7 @@ export default function NotasCreditoTable({ notasCredito, loading, onRefresh }: 
               <th className="px-4 py-3">Fecha</th>
               <th className="px-4 py-3">Tipo</th>
               <th className="px-4 py-3">Total acreditado</th>
-              <th className="px-4 py-3">Estado Factus</th>
+              <th className="px-4 py-3">Estado de conciliación</th>
               <th className="px-4 py-3">Correo</th>
               <th className="px-4 py-3">Acciones</th>
             </tr>
@@ -169,7 +170,14 @@ export default function NotasCreditoTable({ notasCredito, loading, onRefresh }: 
                     <td className="px-4 py-3 text-slate-600">{formatFecha(nota.fecha)}</td>
                     <td className="px-4 py-3 text-slate-700">{(nota.tipo_nota || 'PARCIAL').replaceAll('_', ' ')}</td>
                     <td className="px-4 py-3 text-slate-700">{currencyFormatter.format(total)}</td>
-                    <td className="px-4 py-3"><EstadoNotaCreditoBadge estado={estado} /></td>
+                    <td className="px-4 py-3">
+                      <EstadoNotaCreditoBadge estado={estado} />
+                      {estado === 'CONFLICTO_FACTUS' && (
+                        <p className="mt-1 text-xs text-orange-700">
+                          {nota.mensaje_error || 'Factus no confirmó el documento remoto; requiere sincronización manual.'}
+                        </p>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-slate-700">{nota.correo_enviado ? 'Enviado' : 'Pendiente'}</td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-2">

@@ -1708,6 +1708,48 @@ class NotaCreditoWorkflowCoverageTests(TestCase):
             )
         self.assertEqual(resp.status_code, 409)
 
+    @patch('apps.facturacion.services.credit_note_workflow.FactusClient.list_credit_notes')
+    @patch('apps.facturacion.services.credit_note_workflow.FactusClient.create_and_validate_credit_note')
+    def test_409_sin_evidencia_remota_queda_en_conflicto_factus(self, mocked_create, mocked_list):
+        mocked_create.side_effect = FactusPendingCreditNoteError(
+            "Factus reportó una nota crédito pendiente en DIAN.",
+            status_code=409,
+            provider_detail="{'message': 'Se encontró una nota crédito pendiente por enviar a la DIAN'}",
+        )
+        mocked_list.return_value = {'data': []}
+
+        resp = self.client.post(
+            f'/api/facturacion/facturas/{self.factura.id}/notas-credito/total/',
+            {'motivo': 'x'},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, 202)
+        self.assertEqual(resp.data['estado_local'], 'CONFLICTO_FACTUS')
+        self.assertEqual(resp.data['codigo_error'], 'FACTUS_409_SIN_EVIDENCIA_REMOTA')
+        self.assertIn('Sincronizar', resp.data['detail'])
+
+    @patch('apps.facturacion.services.credit_note_workflow.FactusClient.list_credit_notes')
+    @patch('apps.facturacion.services.credit_note_workflow.FactusClient.get_credit_note')
+    def test_sync_404_show_y_sin_listado_queda_conflicto_factus(self, mocked_get, mocked_list):
+        nota = NotaCreditoElectronica.objects.create(
+            factura=self.factura,
+            venta_origen=self.venta,
+            number='NC1073',
+            tipo_nota='TOTAL',
+            estado_local='EN_PROCESO',
+            estado_electronico='PENDIENTE_REINTENTO',
+            status='PENDIENTE_REINTENTO',
+            request_json={},
+            response_json={},
+        )
+        mocked_get.side_effect = FactusAPIError('Not found', status_code=404)
+        mocked_list.return_value = {'data': []}
+
+        resp = self.client.post(f'/api/notas-credito/{nota.id}/sincronizar/', {}, format='json')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data['estado_local'], 'CONFLICTO_FACTUS')
+        self.assertEqual(resp.data['codigo_error'], 'FACTUS_SYNC_SIN_EVIDENCIA')
+
 
 class FactusClientCreditNoteFallbackTests(TestCase):
     @patch('apps.facturacion.services.factus_client.FactusClient.send_credit_note')
