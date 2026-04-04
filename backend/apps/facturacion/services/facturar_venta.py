@@ -16,6 +16,7 @@ from apps.facturacion.exceptions import FacturaDuplicadaError, FacturaPersistenc
 from apps.facturacion.models import FacturaElectronica
 from apps.facturacion.services.consecutivo_service import get_next_invoice_sequence, resolve_numbering_range
 from apps.facturacion.services.document_totals import (
+    calculate_document_detail_totals,
     q_money,
 )
 from apps.facturacion.services.download_invoice_files import download_pdf, download_xml
@@ -303,23 +304,15 @@ def _extract_request_document_snapshot(payload: dict[str, Any]) -> dict[str, Any
         tax_rate = _to_decimal_or_none(item.get('tax_rate')) or Decimal('0')
         is_excluded = _to_bool(item.get('is_excluded'))
 
-        gross_line = _quantize_money(quantity * unit_price)
-        discount_amount = _quantize_money((gross_line * discount_rate) / Decimal('100'))
-        if discount_amount > gross_line:
-            discount_amount = gross_line
-
-        line_total = _quantize_money(gross_line - discount_amount)
-        if is_excluded or tax_rate <= Decimal('0'):
-            line_base = line_total
-            line_tax = Decimal('0.00')
-        else:
-            divisor_iva = Decimal('1') + (tax_rate / Decimal('100'))
-            line_base = _quantize_money(line_total / divisor_iva)
-            line_tax = _quantize_money(line_total - line_base)
-
-        total += line_total
-        base_total += line_base
-        tax_total += line_tax
+        line = calculate_document_detail_totals(
+            quantity=quantity,
+            unit_gross_price=unit_price,
+            discount_pct=discount_rate,
+            tax_pct=Decimal('0.00') if is_excluded else tax_rate,
+        )
+        total += line['total']
+        base_total += line['base']
+        tax_total += line['impuesto']
 
     return {
         'customer_identification': _normalize_identification(
@@ -338,12 +331,37 @@ def _calculate_sale_document_totals_from_details(venta: Venta) -> dict[str, Deci
     total = Decimal('0.00')
 
     for detalle in venta.detalles.all():
-        line_base = q_money(detalle.subtotal)
-        line_total_value = q_money(detalle.total)
-        line_tax = q_money(line_total_value - line_base)
-        base_total += line_base
-        tax_total += line_tax
-        total += line_total_value
+        line_total_bruto = q_money(q_money(detalle.cantidad) * q_money(detalle.precio_unitario))
+        descuento_pct = Decimal('0.00')
+        if line_total_bruto > Decimal('0.00'):
+            descuento_linea = q_money(q_money(detalle.cantidad) * max(q_money(detalle.descuento_unitario), Decimal('0.00')))
+            descuento_pct = q_money((descuento_linea / line_total_bruto) * Decimal('100'))
+        tax_pct = q_money(detalle.iva_porcentaje) if q_money(detalle.iva_porcentaje) > Decimal('0.00') else Decimal('0.00')
+        line = calculate_document_detail_totals(
+            quantity=detalle.cantidad,
+            unit_gross_price=detalle.precio_unitario,
+            discount_pct=descuento_pct,
+            tax_pct=tax_pct,
+        )
+        if q_money(detalle.subtotal) != line['base'] or q_money(detalle.total) != line['total']:
+            detalle.subtotal = line['base']
+            detalle.total = line['total']
+            detalle.save(update_fields=['subtotal', 'total', 'updated_at'])
+        logger.info(
+            'facturar_venta.detalle_documental venta_id=%s detalle_id=%s cantidad=%s precio_bruto=%s descuento_pct=%s '
+            'base=%s impuesto=%s total=%s',
+            venta.id,
+            detalle.id,
+            detalle.cantidad,
+            detalle.precio_unitario,
+            descuento_pct,
+            line['base'],
+            line['impuesto'],
+            line['total'],
+        )
+        base_total += line['base']
+        tax_total += line['impuesto']
+        total += line['total']
 
     return {
         'base_total': q_money(base_total),
@@ -403,24 +421,18 @@ def _extract_totals_from_items(items: list[Any]) -> dict[str, Decimal]:
         tax_rate = _to_decimal_or_none(item.get('tax_rate') or item.get('tax_percentage')) or Decimal('0')
         is_excluded = _to_bool(item.get('is_excluded'))
 
-        gross_line = _quantize_money(quantity * unit_price)
-        discount_amount = _quantize_money((gross_line * discount_rate) / Decimal('100'))
-        discount_amount = max(discount_amount, _quantize_money(discount_amount_field))
-        if discount_amount > gross_line:
-            discount_amount = gross_line
-
-        line_total = _quantize_money(gross_line - discount_amount)
-        if is_excluded or tax_rate <= Decimal('0'):
-            line_base = line_total
-            line_tax = Decimal('0.00')
-        else:
-            divisor_iva = Decimal('1') + (tax_rate / Decimal('100'))
-            line_base = _quantize_money(line_total / divisor_iva)
-            line_tax = _quantize_money(line_total - line_base)
-
-        total += line_total
-        base_total += line_base
-        tax_total += line_tax
+        if discount_amount_field > Decimal('0.00'):
+            gross_line = _quantize_money(quantity * unit_price)
+            discount_rate = _quantize_money((discount_amount_field / gross_line) * Decimal('100')) if gross_line > Decimal('0.00') else Decimal('0.00')
+        line = calculate_document_detail_totals(
+            quantity=quantity,
+            unit_gross_price=unit_price,
+            discount_pct=discount_rate,
+            tax_pct=Decimal('0.00') if is_excluded else tax_rate,
+        )
+        total += line['total']
+        base_total += line['base']
+        tax_total += line['impuesto']
 
     return {
         'total': _quantize_money(total),
@@ -544,7 +556,8 @@ def _assert_document_conciliation(
     response_payload: dict[str, Any],
     logger_context: dict[str, Any],
 ) -> None:
-    expected = _extract_request_document_snapshot(request_payload)
+    expected_snapshot = _extract_request_document_snapshot(request_payload)
+    expected = _calculate_sale_document_totals_from_details(venta)
     remote = _extract_remote_document_snapshot(response_payload)
 
     raw_local_total = _to_decimal_or_none(venta.total) or Decimal('0')
@@ -554,8 +567,8 @@ def _assert_document_conciliation(
     expected_total = expected.get('total') or Decimal('0')
     expected_tax = expected.get('tax_total') or Decimal('0')
     expected_base = expected.get('base_total') or Decimal('0')
-    expected_customer = _normalize_identification(expected.get('customer_identification') or '')
-    expected_items_count = int(expected.get('items_count') or 0)
+    expected_customer = _normalize_identification(expected_snapshot.get('customer_identification') or '')
+    expected_items_count = int(expected_snapshot.get('items_count') or 0)
     remote_is_inconclusive = _is_remote_snapshot_inconclusive(remote=remote, expected_tax=expected_tax)
 
     mismatches: list[str] = []
@@ -1137,6 +1150,7 @@ def facturar_venta(
 
     client = FactusClient()
     try:
+        logger.info('facturar_venta.payload_final venta_id=%s payload=%s', venta.id, payload)
         response_json = client.create_and_validate_invoice(payload)
     except FactusPendingDianError as exc:
         logger.warning(
