@@ -39,6 +39,7 @@ export interface FacturaElectronica {
   correo_enviado?: boolean;
   correo_enviado_at?: string;
   ultimo_error_correo?: string;
+  response_json?: Record<string, unknown>;
 }
 
 interface EstadoFacturaResponse {
