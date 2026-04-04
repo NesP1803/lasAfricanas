@@ -1397,6 +1397,8 @@ class FactusInvoicePayloadIVAIncluidoTests(TestCase):
         item = payload['items'][0]
         self.assertEqual(item['price'], 2521.01)
         self.assertEqual(item['tax_rate'], 19.0)
+        self.assertGreater(item['tax_rate'], 0.0)
+        self.assertIsNotNone(item['tribute_id'])
         self.assertEqual(item['is_excluded'], 0)
         self.assertEqual(item['quantity'], 1.0)
 

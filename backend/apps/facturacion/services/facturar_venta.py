@@ -15,6 +15,9 @@ from django.utils import timezone
 from apps.facturacion.exceptions import FacturaDuplicadaError, FacturaPersistenciaError
 from apps.facturacion.models import FacturaElectronica
 from apps.facturacion.services.consecutivo_service import get_next_invoice_sequence, resolve_numbering_range
+from apps.facturacion.services.document_totals import (
+    q_money,
+)
 from apps.facturacion.services.download_invoice_files import download_pdf, download_xml
 from apps.facturacion.services.electronic_state_machine import extract_bill_errors as _extract_bill_errors
 from apps.facturacion.services.electronic_state_machine import map_factus_status
@@ -329,6 +332,57 @@ def _extract_request_document_snapshot(payload: dict[str, Any]) -> dict[str, Any
     }
 
 
+def _calculate_sale_document_totals_from_details(venta: Venta) -> dict[str, Decimal]:
+    base_total = Decimal('0.00')
+    tax_total = Decimal('0.00')
+    total = Decimal('0.00')
+
+    for detalle in venta.detalles.all():
+        line_base = q_money(detalle.subtotal)
+        line_total_value = q_money(detalle.total)
+        line_tax = q_money(line_total_value - line_base)
+        base_total += line_base
+        tax_total += line_tax
+        total += line_total_value
+
+    return {
+        'base_total': q_money(base_total),
+        'tax_total': q_money(tax_total),
+        'total': q_money(total),
+    }
+
+
+def _sync_sale_totals_before_emit(venta: Venta) -> dict[str, Decimal]:
+    calculated = _calculate_sale_document_totals_from_details(venta)
+    current_base = q_money(venta.subtotal)
+    current_tax = q_money(venta.iva)
+    current_total = q_money(venta.total)
+    changed_fields: list[str] = []
+    if current_base != calculated['base_total']:
+        venta.subtotal = calculated['base_total']
+        changed_fields.append('subtotal')
+    if current_tax != calculated['tax_total']:
+        venta.iva = calculated['tax_total']
+        changed_fields.append('iva')
+    if current_total != calculated['total']:
+        venta.total = calculated['total']
+        changed_fields.append('total')
+    if changed_fields:
+        venta.save(update_fields=[*changed_fields, 'updated_at'])
+        logger.warning(
+            'facturar_venta.totales_recalculados venta_id=%s changed=%s before=(%s,%s,%s) after=(%s,%s,%s)',
+            venta.id,
+            changed_fields,
+            current_base,
+            current_tax,
+            current_total,
+            calculated['base_total'],
+            calculated['tax_total'],
+            calculated['total'],
+        )
+    return calculated
+
+
 def _extract_totals_from_items(items: list[Any]) -> dict[str, Decimal]:
     total = Decimal('0.00')
     tax_total = Decimal('0.00')
@@ -559,6 +613,23 @@ def _assert_document_conciliation(
         expected_customer,
         'OK' if not mismatches else 'MISMATCH',
     )
+    if mismatches:
+        logger.error(
+            'facturar_venta.conciliacion_error venta_id=%s items_enviados=%s totales_locales=%s totales_factus=%s response_json=%s',
+            venta.id,
+            request_payload.get('items', []),
+            {
+                'base': str(expected_base),
+                'impuesto': str(expected_tax),
+                'total': str(expected_total),
+            },
+            {
+                'base': str(remote_base),
+                'impuesto': str(remote_tax),
+                'total': str(remote_total),
+            },
+            response_payload,
+        )
     if remote_is_inconclusive:
         logger.warning(
             'facturar_venta.conciliacion_inconclusa venta_id=%s factura_number=%s reference_code=%s '
@@ -994,6 +1065,7 @@ def facturar_venta(
                 factura_existente.number,
             )
 
+        _sync_sale_totals_before_emit(venta)
         payload = build_invoice_payload(venta)
         rango_activo = resolve_numbering_range(document_code='FACTURA_VENTA')
         _validate_customer_for_factus(payload.get('customer', {}), venta)
