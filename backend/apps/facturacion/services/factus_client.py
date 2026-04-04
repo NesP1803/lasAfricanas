@@ -401,6 +401,12 @@ class FactusClient:
             filters['bill_number'] = bill_number
         return self.list_credit_notes(**filters)
 
+    def get_credit_note_by_reference_code(self, reference_code: str, *, bill_number: str | None = None) -> dict[str, Any]:
+        filters: dict[str, Any] = {'reference_code': reference_code}
+        if bill_number:
+            filters['bill_number'] = bill_number
+        return self.list_credit_notes(**filters)
+
     def get_credit_note(self, number: str) -> dict[str, Any]:
         return self.request('GET', self.credit_note_show_path.format(number=number))
 
