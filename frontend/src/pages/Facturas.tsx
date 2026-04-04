@@ -116,6 +116,34 @@ const hasValidElectronicDocument = (factura?: FacturaElectronica): boolean => {
   return (estado === 'ACEPTADA' || estado === 'ACEPTADA_CON_OBSERVACIONES') && Boolean(factura.numero && factura.cufe);
 };
 
+const resolveFacturaPublicUrl = (factura?: FacturaElectronica): string => {
+  if (!factura) return '';
+  if (factura.public_url) return factura.public_url;
+  const responseJson =
+    factura.response_json && typeof factura.response_json === 'object'
+      ? (factura.response_json as Record<string, unknown>)
+      : {};
+  const finalFields =
+    responseJson.final_fields && typeof responseJson.final_fields === 'object'
+      ? (responseJson.final_fields as Record<string, unknown>)
+      : {};
+  if (typeof finalFields.public_url === 'string' && finalFields.public_url.trim()) {
+    return finalFields.public_url;
+  }
+  const data =
+    responseJson.data && typeof responseJson.data === 'object'
+      ? (responseJson.data as Record<string, unknown>)
+      : {};
+  const bill =
+    data.bill && typeof data.bill === 'object'
+      ? (data.bill as Record<string, unknown>)
+      : {};
+  if (typeof bill.public_url === 'string' && bill.public_url.trim()) {
+    return bill.public_url;
+  }
+  return typeof data.public_url === 'string' ? data.public_url : '';
+};
+
 export default function Facturas() {
   const { showNotification } = useNotification();
   const today = getLocalDateInputValue();
@@ -584,6 +612,7 @@ export default function Facturas() {
                       factura.electronica && hasValidElectronicDocument(factura.electronica)
                         ? factura.electronica
                         : null;
+                    const publicUrl = resolveFacturaPublicUrl(electronicaValida ?? undefined);
                     return (
                       <tr
                         key={factura.id}
@@ -634,12 +663,13 @@ export default function Facturas() {
                                   Obs: {electronicaValida.observaciones}
                                 </p>
                               ) : null}
-                              {electronicaValida.public_url ? (
+                              {publicUrl ? (
                                 <a
-                                  href={electronicaValida.public_url}
+                                  href={publicUrl}
                                   target="_blank"
                                   rel="noreferrer"
                                   className="inline-block break-all text-blue-600 underline"
+                                  onClick={(e) => e.stopPropagation()}
                                 >
                                   Ver en DIAN/Factus
                                 </a>
