@@ -61,6 +61,7 @@ from apps.facturacion.services import (
 )
 from apps.facturacion.services.factus_client import FactusClient
 from apps.facturacion.services.electronic_state_machine import resolve_actions
+from apps.facturacion.services.public_invoice_url import has_documental_inconsistency
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +136,10 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
                 ),
                 'public_url': resolve_public_invoice_url(factura),
                 'factus_public_url': resolve_public_invoice_url(factura),
+                'documento_inconsistente': has_documental_inconsistency(factura),
+                'mensaje_inconsistencia_documental': (
+                    factura.mensaje_error if has_documental_inconsistency(factura) else ''
+                ),
                 'qr_factus': factura.qr_data,
                 'qr_image': factura.qr_image_url or factura.qr_image_data,
                 'xml_url': factura.xml_url,
