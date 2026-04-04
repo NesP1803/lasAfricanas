@@ -329,6 +329,52 @@ def _extract_request_document_snapshot(payload: dict[str, Any]) -> dict[str, Any
     }
 
 
+def _extract_totals_from_items(items: list[Any]) -> dict[str, Decimal]:
+    total = Decimal('0.00')
+    tax_total = Decimal('0.00')
+    base_total = Decimal('0.00')
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        quantity = _to_decimal_or_none(item.get('quantity') or item.get('qty')) or Decimal('0')
+        unit_price = _to_decimal_or_none(
+            item.get('price') or item.get('unit_price') or item.get('price_amount')
+        ) or Decimal('0')
+        discount_rate = _to_decimal_or_none(
+            item.get('discount_rate') or item.get('discount_percentage')
+        ) or Decimal('0')
+        discount_amount_field = _to_decimal_or_none(
+            item.get('discount_amount') or item.get('discount')
+        ) or Decimal('0')
+        tax_rate = _to_decimal_or_none(item.get('tax_rate') or item.get('tax_percentage')) or Decimal('0')
+        is_excluded = _to_bool(item.get('is_excluded'))
+
+        gross_line = _quantize_money(quantity * unit_price)
+        discount_amount = _quantize_money((gross_line * discount_rate) / Decimal('100'))
+        discount_amount = max(discount_amount, _quantize_money(discount_amount_field))
+        if discount_amount > gross_line:
+            discount_amount = gross_line
+
+        line_total = _quantize_money(gross_line - discount_amount)
+        if is_excluded or tax_rate <= Decimal('0'):
+            line_base = line_total
+            line_tax = Decimal('0.00')
+        else:
+            divisor_iva = Decimal('1') + (tax_rate / Decimal('100'))
+            line_base = _quantize_money(line_total / divisor_iva)
+            line_tax = _quantize_money(line_total - line_base)
+
+        total += line_total
+        base_total += line_base
+        tax_total += line_tax
+
+    return {
+        'total': _quantize_money(total),
+        'base_total': _quantize_money(base_total),
+        'tax_total': _quantize_money(tax_total),
+    }
+
+
 def _extract_remote_document_snapshot(payload: dict[str, Any]) -> dict[str, Any]:
     data = payload.get('data', payload) if isinstance(payload, dict) else {}
     bill = data.get('bill', data) if isinstance(data, dict) else {}
@@ -349,22 +395,50 @@ def _extract_remote_document_snapshot(payload: dict[str, Any]) -> dict[str, Any]
     if tax_total is None:
         collected = [_to_decimal_or_none((t.get('tax_amount') if isinstance(t, dict) else None)) for t in taxes]
         tax_total = sum((val for val in collected if val is not None), Decimal('0')) if collected else None
+    items_totals = _extract_totals_from_items(items)
+
+    total_candidates = [
+        _to_decimal_or_none(totals.get('payable_amount')),
+        _to_decimal_or_none(totals.get('total_payable')),
+        _to_decimal_or_none(totals.get('total')),
+        _to_decimal_or_none(bill.get('total')),
+        _to_decimal_or_none(data.get('total')),
+        items_totals['total'],
+    ]
+    base_candidates = [
+        _to_decimal_or_none(totals.get('taxable_amount')),
+        _to_decimal_or_none(totals.get('subtotal')),
+        _to_decimal_or_none(totals.get('line_extension_amount')),
+        _to_decimal_or_none(totals.get('gross_value')),
+        _to_decimal_or_none(bill.get('gross_value')),
+        _to_decimal_or_none(data.get('gross_value')),
+        items_totals['base_total'],
+    ]
+    tax_candidates = [
+        tax_total,
+        items_totals['tax_total'],
+    ]
 
     return {
         'customer_identification': _normalize_identification(
             customer.get('identification') or customer.get('identification_number') or customer.get('nit')
         ),
-        'total': _to_decimal_or_none(totals.get('total') or totals.get('payable_amount') or bill.get('total') or data.get('total')),
-        'tax_total': tax_total,
-        'base_total': _to_decimal_or_none(
-            totals.get('taxable_amount')
-            or totals.get('gross_value')
-            or totals.get('subtotal')
-            or bill.get('gross_value')
-            or data.get('gross_value')
-        ),
+        'total': next((v for v in total_candidates if v is not None), None),
+        'tax_total': next((v for v in tax_candidates if v is not None), None),
+        'base_total': next((v for v in base_candidates if v is not None), None),
+        'total_candidates': [v for v in total_candidates if v is not None],
+        'tax_total_candidates': [v for v in tax_candidates if v is not None],
+        'base_total_candidates': [v for v in base_candidates if v is not None],
         'items_count': len(items),
     }
+
+
+def _nearest_expected(candidates: list[Any], expected_value: Decimal) -> Decimal | None:
+    normalized = [_to_decimal_or_none(value) for value in candidates]
+    valid = [value for value in normalized if value is not None]
+    if not valid:
+        return None
+    return min(valid, key=lambda current: abs(current - expected_value))
 
 
 def _assert_document_conciliation(
@@ -388,15 +462,15 @@ def _assert_document_conciliation(
     expected_items_count = int(expected.get('items_count') or 0)
 
     mismatches: list[str] = []
-    remote_total = remote.get('total')
+    remote_total = _nearest_expected(remote.get('total_candidates', []), expected_total) or remote.get('total')
     if remote_total is not None and abs(remote_total - expected_total) > MONEY_TOLERANCE:
         mismatches.append(f'total_remoto={remote_total} total_esperado={expected_total}')
 
-    remote_tax = remote.get('tax_total')
+    remote_tax = _nearest_expected(remote.get('tax_total_candidates', []), expected_tax) or remote.get('tax_total')
     if remote_tax is not None and abs(remote_tax - expected_tax) > MONEY_TOLERANCE:
         mismatches.append(f'impuesto_remoto={remote_tax} impuesto_esperado={expected_tax}')
 
-    remote_base = remote.get('base_total')
+    remote_base = _nearest_expected(remote.get('base_total_candidates', []), expected_base) or remote.get('base_total')
     if remote_base is not None and abs(remote_base - expected_base) > MONEY_TOLERANCE:
         mismatches.append(f'base_remota={remote_base} base_esperada={expected_base}')
 
@@ -1262,3 +1336,9 @@ def facturar_venta(
     send_invoice_email_via_factus(factura)
     logger.info('facturar_venta.fin_ok venta_id=%s factura=%s', venta.id, factura.number)
     return factura
+    def _nearest_expected(candidates: list[Any], expected_value: Decimal) -> Decimal | None:
+        normalized = [_to_decimal_or_none(value) for value in candidates]
+        valid = [value for value in normalized if value is not None]
+        if not valid:
+            return None
+        return min(valid, key=lambda current: abs(current - expected_value))
