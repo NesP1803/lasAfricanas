@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-
+from apps.facturacion.services.document_totals import calculate_document_detail_totals, q_money
 CENT = Decimal('0.01')
 
 
@@ -13,7 +13,7 @@ def to_decimal(value, default='0'):
 
 
 def q(value):
-    return Decimal(value).quantize(CENT)
+    return q_money(value)
 
 
 def detalle_es_exento(detalle, iva_porcentaje):
@@ -36,17 +36,21 @@ def calcular_detalle_venta(detalle):
     descuento_unitario = to_decimal(detalle.get('descuento_unitario', 0))
     iva_porcentaje = to_decimal(detalle.get('iva_porcentaje', 0))
 
-    total_bruto_linea = cantidad * precio_unitario
-    descuento_linea = min(total_bruto_linea, cantidad * max(descuento_unitario, Decimal('0')))
-    total_neto_linea_q = q(total_bruto_linea - descuento_linea)
-
-    if detalle_es_exento(detalle, iva_porcentaje):
-        base_linea_q = total_neto_linea_q
-        iva_linea_q = Decimal('0.00')
-    else:
-        divisor_iva = Decimal('1') + (iva_porcentaje / Decimal('100'))
-        base_linea_q = q(total_neto_linea_q / divisor_iva)
-        iva_linea_q = q(total_neto_linea_q - base_linea_q)
+    total_bruto_linea = q(cantidad * precio_unitario)
+    descuento_linea = q(min(total_bruto_linea, cantidad * max(descuento_unitario, Decimal('0'))))
+    descuento_pct = Decimal('0.00')
+    if total_bruto_linea > Decimal('0.00'):
+        descuento_pct = q((descuento_linea / total_bruto_linea) * Decimal('100'))
+    tax_pct = Decimal('0.00') if detalle_es_exento(detalle, iva_porcentaje) else iva_porcentaje
+    calculo_doc = calculate_document_detail_totals(
+        quantity=cantidad,
+        unit_gross_price=precio_unitario,
+        discount_pct=descuento_pct,
+        tax_pct=tax_pct,
+    )
+    total_neto_linea_q = calculo_doc['total']
+    base_linea_q = calculo_doc['base']
+    iva_linea_q = calculo_doc['impuesto']
 
     detalle['subtotal'] = base_linea_q
     detalle['total'] = total_neto_linea_q
@@ -69,21 +73,19 @@ def recalcular_totales_venta(detalles_data, descuento_porcentaje=0, descuento_va
         iva += calculo['iva_linea']
         total_detalles += calculo['total_linea']
 
-    descuento_porcentaje = to_decimal(descuento_porcentaje)
-    descuento_valor = to_decimal(descuento_valor)
-    if descuento_porcentaje < 0 or descuento_valor < 0:
-        raise ValueError('El descuento no puede ser negativo.')
+    descuento_porcentaje = max(Decimal('0.00'), to_decimal(descuento_porcentaje))
+    descuento_valor = max(Decimal('0.00'), to_decimal(descuento_valor))
+    if descuento_porcentaje > Decimal('0.00') or descuento_valor > Decimal('0.00'):
+        # El descuento documental ya se refleja por detalle (descuento_unitario).
+        # Se conserva el campo por compatibilidad, sin volver a afectar los totales.
+        descuento_valor = Decimal('0.00')
 
-    descuento_porcentaje_valor = (total_detalles * descuento_porcentaje) / Decimal('100')
-    descuento_total = descuento_valor if descuento_valor > 0 else descuento_porcentaje_valor
-    descuento_total = min(descuento_total, total_detalles)
-
-    total = total_detalles - descuento_total
+    total = total_detalles
 
     resultado = {
         'subtotal': q(subtotal),
         'iva': q(iva),
-        'descuento_valor': q(descuento_total),
+        'descuento_valor': q(descuento_valor),
         'total': q(total),
     }
 

@@ -19,7 +19,12 @@ from apps.facturacion.services.factus_catalog_lookup import (
     normalize_document_type_code,
 )
 from apps.facturacion.services.factus_client import FactusValidationError
-from apps.facturacion.services.document_totals import q_money, to_decimal, unit_base_without_tax
+from apps.facturacion.services.document_totals import (
+    calculate_document_detail_totals,
+    q_money,
+    to_decimal,
+    unit_base_without_tax,
+)
 from apps.facturacion_electronica.catalogos.models import TributoFactus
 from apps.ventas.models import Venta
 
@@ -102,41 +107,7 @@ def _line_own_discount_total(detalle) -> Decimal:
     return min(gross_total, q_money(cantidad * descuento_unitario))
 
 
-def _allocate_global_discount_totals(venta: Venta, detalles: list) -> list[Decimal]:
-    descuento_global = q_money(to_decimal(getattr(venta, 'descuento_valor', 0)))
-    if descuento_global <= Decimal('0.00') or not detalles:
-        return [Decimal('0.00')] * len(detalles)
-
-    bases = []
-    for detalle in detalles:
-        gross_total = _line_gross_total(detalle)
-        own_discount = _line_own_discount_total(detalle)
-        base = max(Decimal('0.00'), q_money(gross_total - own_discount))
-        bases.append(base)
-
-    total_base = sum(bases, Decimal('0.00'))
-    if total_base <= Decimal('0.00'):
-        return [Decimal('0.00')] * len(detalles)
-
-    allocations: list[Decimal] = []
-    remaining = descuento_global
-    for idx, base in enumerate(bases):
-        if remaining <= Decimal('0.00'):
-            allocations.append(Decimal('0.00'))
-            continue
-
-        if idx == len(bases) - 1:
-            allocated = min(base, q_money(remaining))
-        else:
-            allocated = min(base, q_money((base / total_base) * descuento_global))
-            remaining = q_money(remaining - allocated)
-
-        allocations.append(max(Decimal('0.00'), allocated))
-
-    return allocations
-
-
-def _resolve_item_discount_rate(detalle, allocated_global_discount: Decimal) -> Decimal:
+def _resolve_item_discount_rate(detalle) -> Decimal:
     gross_total = _line_gross_total(detalle)
     if gross_total <= Decimal('0.00'):
         return Decimal('0.00')
@@ -144,7 +115,7 @@ def _resolve_item_discount_rate(detalle, allocated_global_discount: Decimal) -> 
     own_discount = _line_own_discount_total(detalle)
     total_discount = min(
         gross_total,
-        q_money(own_discount + (allocated_global_discount or Decimal('0.00'))),
+        q_money(own_discount),
     )
     if total_discount <= Decimal('0.00'):
         return Decimal('0.00')
@@ -244,9 +215,8 @@ def build_invoice_payload(venta: Venta) -> dict:
     cliente = venta.cliente
     rango = resolve_numbering_range(document_code='FACTURA_VENTA')
     detalles = list(venta.detalles.select_related('producto').all())
-    global_discount_allocations = _allocate_global_discount_totals(venta, detalles)
     items = []
-    for idx, detalle in enumerate(detalles):
+    for detalle in detalles:
         producto = detalle.producto
         is_excluded = _is_excluded_item(detalle)
         tax_rate = Decimal('0.00') if is_excluded else to_decimal(detalle.iva_porcentaje)
@@ -255,11 +225,27 @@ def build_invoice_payload(venta: Venta) -> dict:
             if is_excluded
             else _resolve_item_tribute_id(tax_rate)
         )
-        discount_rate = _resolve_item_discount_rate(detalle, global_discount_allocations[idx])
+        discount_rate = _resolve_item_discount_rate(detalle)
+        doc_line = calculate_document_detail_totals(
+            quantity=detalle.cantidad,
+            unit_gross_price=detalle.precio_unitario,
+            discount_pct=discount_rate,
+            tax_pct=tax_rate,
+        )
         unit_base_price = unit_base_without_tax(
             unit_final_price=detalle.precio_unitario,
             tax_rate=tax_rate,
             is_excluded=is_excluded,
+        )
+        logger.info(
+            'factus_payload.item code=%s qty=%s price_gross=%s discount_pct=%s base=%s tax=%s total=%s',
+            producto.codigo,
+            detalle.cantidad,
+            detalle.precio_unitario,
+            discount_rate,
+            doc_line['base'],
+            doc_line['impuesto'],
+            doc_line['total'],
         )
         items.append(
             {

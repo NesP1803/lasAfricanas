@@ -114,6 +114,10 @@ class DetalleVentaSerializer(serializers.ModelSerializer):
             'subtotal',
             'total'
         ]
+        extra_kwargs = {
+            'subtotal': {'read_only': True},
+            'total': {'read_only': True},
+        }
 
     def validate(self, attrs):
         producto = attrs.get('producto')
@@ -276,6 +280,10 @@ class VentaCreateSerializer(serializers.ModelSerializer):
         ]
         extra_kwargs = {
             'vendedor': {'required': False},
+            'subtotal': {'read_only': True},
+            'iva': {'read_only': True},
+            'total': {'read_only': True},
+            'cambio': {'read_only': True},
         }
 
 

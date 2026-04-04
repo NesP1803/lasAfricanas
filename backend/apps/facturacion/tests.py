@@ -745,6 +745,86 @@ class FacturarVentaPersistenciaCriticaTests(TestCase):
         self.assertEqual(factura.estado_electronico, 'ACEPTADA')
         self.assertEqual(factura.codigo_error, '')
 
+    @patch('apps.facturacion.services.facturar_venta.download_xml')
+    @patch('apps.facturacion.services.facturar_venta.download_pdf')
+    @patch('apps.facturacion.services.facturar_venta.resolve_numbering_range')
+    @patch('apps.facturacion.services.facturar_venta.build_invoice_payload')
+    @patch('apps.facturacion.services.facturar_venta.FactusClient.create_and_validate_invoice')
+    @patch('apps.facturacion.services.facturar_venta.FactusClient.get_invoice')
+    def test_facturar_venta_descuento_iva_documental_mantiene_9300(
+        self,
+        mocked_get_invoice,
+        mocked_create_validate,
+        mocked_build_payload,
+        mocked_resolve_range,
+        _mocked_pdf,
+        _mocked_xml,
+    ):
+        self.venta.subtotal = Decimal('0.00')
+        self.venta.iva = Decimal('0.00')
+        self.venta.total = Decimal('10000.00')
+        self.venta.save(update_fields=['subtotal', 'iva', 'total', 'updated_at'])
+        detalle = self.venta.detalles.first()
+        detalle.cantidad = Decimal('1.00')
+        detalle.precio_unitario = Decimal('10000.00')
+        detalle.descuento_unitario = Decimal('700.00')
+        detalle.iva_porcentaje = Decimal('19.00')
+        detalle.subtotal = Decimal('0.00')
+        detalle.total = Decimal('10000.00')
+        detalle.save(
+            update_fields=[
+                'cantidad',
+                'precio_unitario',
+                'descuento_unitario',
+                'iva_porcentaje',
+                'subtotal',
+                'total',
+                'updated_at',
+            ]
+        )
+
+        mocked_build_payload.return_value = {
+            'numbering_range_id': 1,
+            'customer': {'identification': '5555', 'names': 'Cliente QR Largo', 'identification_document_id': 3},
+            'items': [
+                {
+                    'code_reference': 'PR-QR-LARGO',
+                    'quantity': 1,
+                    'price': 8403.36,
+                    'discount_rate': 7,
+                    'tax_rate': 19,
+                    'is_excluded': 0,
+                }
+            ],
+            'send_email': False,
+        }
+        mocked_resolve_range.return_value = RangoNumeracionDIAN(prefijo='FV', factus_range_id=1)
+        response_ok = {
+            'data': {
+                'bill': {
+                    'status': 'valid',
+                    'number': 'FV9001',
+                    'reference_code': 'FV9001',
+                    'cufe': 'CUFE-9300',
+                    'uuid': 'UUID-9300',
+                    'xml_url': 'https://example.com/fv9001.xml',
+                    'pdf_url': 'https://example.com/fv9001.pdf',
+                    'customer': {'identification': '5555'},
+                    'totals': {'total': '9300.00', 'tax_amount': '1484.87', 'taxable_amount': '7815.13'},
+                    'items': [{'code_reference': 'PR-QR-LARGO'}],
+                }
+            }
+        }
+        mocked_create_validate.return_value = response_ok
+        mocked_get_invoice.return_value = response_ok
+
+        factura = facturar_venta(self.venta.id, triggered_by=self.user)
+        self.venta.refresh_from_db()
+        self.assertEqual(factura.estado_electronico, 'ACEPTADA')
+        self.assertEqual(self.venta.total, Decimal('9300.00'))
+        self.assertEqual(self.venta.subtotal, Decimal('7815.13'))
+        self.assertEqual(self.venta.iva, Decimal('1484.87'))
+
 
 class FacturaQRYPosEndpointsTests(TestCase):
     def setUp(self):
