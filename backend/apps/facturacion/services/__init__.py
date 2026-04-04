@@ -7,6 +7,13 @@ from .exceptions import DescargaFacturaError, FacturaNoEncontrada, FactusConsult
 from .factus_payload_builder import build_invoice_payload
 from .credit_note_payload_builder import build_credit_note_payload
 from .emitir_nota_credito import emitir_nota_credito
+from .credit_note_workflow import (
+    CreditNoteStateError,
+    CreditNoteValidationError,
+    build_credit_preview,
+    create_credit_note,
+    sync_credit_note,
+)
 from .support_document_payload_builder import build_support_document_payload
 from .emitir_documento_soporte import emitir_documento_soporte
 from .support_document_adjustment_payload_builder import build_adjustment_payload
@@ -31,6 +38,11 @@ __all__ = [
     'build_invoice_payload',
     'build_credit_note_payload',
     'emitir_nota_credito',
+    'CreditNoteValidationError',
+    'CreditNoteStateError',
+    'build_credit_preview',
+    'create_credit_note',
+    'sync_credit_note',
     'build_support_document_payload',
     'emitir_documento_soporte',
     'build_adjustment_payload',
