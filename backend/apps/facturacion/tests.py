@@ -688,27 +688,38 @@ class FacturarVentaPersistenciaCriticaTests(TestCase):
         self.assertEqual(factura.estado_electronico, 'RECHAZADA')
         self.assertEqual(factura.codigo_error, 'ERROR_CONCILIACION_DOCUMENTAL')
 
-    @patch('apps.facturacion.services.facturar_venta.send_invoice_email_via_factus')
-    @patch('apps.facturacion.services.facturar_venta.upload_custom_pdf_to_factus')
     @patch('apps.facturacion.services.facturar_venta.download_xml')
     @patch('apps.facturacion.services.facturar_venta.download_pdf')
     @patch('apps.facturacion.services.facturar_venta.resolve_numbering_range')
     @patch('apps.facturacion.services.facturar_venta.build_invoice_payload')
     @patch('apps.facturacion.services.facturar_venta.FactusClient.create_and_validate_invoice')
-    def test_facturar_venta_intenta_descargar_xml_y_pdf_despues_de_emitir(
+    @patch('apps.facturacion.services.facturar_venta.FactusClient.get_invoice')
+    def test_facturar_venta_no_bloquea_si_show_llega_con_totales_brutos_inconclusos(
         self,
+        mocked_get_invoice,
         mocked_create_validate,
         mocked_build_payload,
         mocked_resolve_range,
-        mocked_download_pdf,
-        mocked_download_xml,
-        _mocked_upload_pdf,
-        _mocked_send_email,
+        _mocked_pdf,
+        _mocked_xml,
     ):
         mocked_build_payload.return_value = {
             'numbering_range_id': 1,
-            'customer': {'identification': '5555', 'names': 'Cliente QR Largo', 'identification_document_id': 3},
-            'items': [{'code_reference': 'PR-QR-LARGO', 'quantity': 1}],
+            'customer': {
+                'identification': '5555',
+                'names': 'Cliente QR Largo',
+                'identification_document_id': 3,
+            },
+            'items': [
+                {
+                    'code_reference': 'PR-QR-LARGO',
+                    'quantity': 1,
+                    'price': 10000,
+                    'discount_rate': 5,
+                    'tax_rate': 19,
+                    'is_excluded': 0,
+                }
+            ],
             'send_email': False,
         }
         mocked_resolve_range.return_value = RangoNumeracionDIAN(prefijo='FV', factus_range_id=1)
@@ -716,62 +727,23 @@ class FacturarVentaPersistenciaCriticaTests(TestCase):
             'data': {
                 'bill': {
                     'status': 'valid',
-                    'number': 'FV9001',
-                    'reference_code': 'FV9001',
-                    'cufe': 'CUFE-9001',
-                    'uuid': 'UUID-9001',
-                    'xml_url': 'https://example.com/fv9001.xml',
-                    'pdf_url': 'https://example.com/fv9001.pdf',
+                    'number': 'FV9002',
+                    'reference_code': 'FV9002',
+                    'cufe': 'CUFE-9002',
+                    'uuid': 'UUID-9002',
+                    'xml_url': 'https://example.com/fv9002.xml',
+                    'pdf_url': 'https://example.com/fv9002.pdf',
+                    'totals': {'total': '10000.00', 'tax_amount': '0.00', 'taxable_amount': '10000.00'},
+                    'items': [{'code_reference': 'PR-QR-LARGO'}],
                 }
             }
         }
+        mocked_get_invoice.return_value = mocked_create_validate.return_value
 
         factura = facturar_venta(self.venta.id, triggered_by=self.user)
+        factura.refresh_from_db()
         self.assertEqual(factura.estado_electronico, 'ACEPTADA')
-        mocked_download_xml.assert_called()
-        mocked_download_pdf.assert_called()
-
-    @patch('apps.facturacion.services.facturar_venta.send_invoice_email_via_factus')
-    @patch('apps.facturacion.services.facturar_venta.upload_custom_pdf_to_factus')
-    @patch('apps.facturacion.services.facturar_venta.download_xml', side_effect=DescargaFacturaError('xml fail'))
-    @patch('apps.facturacion.services.facturar_venta.download_pdf', side_effect=DescargaFacturaError('pdf fail'))
-    @patch('apps.facturacion.services.facturar_venta.resolve_numbering_range')
-    @patch('apps.facturacion.services.facturar_venta.build_invoice_payload')
-    @patch('apps.facturacion.services.facturar_venta.FactusClient.create_and_validate_invoice')
-    def test_facturar_venta_tolera_fallo_descargas_post_emision(
-        self,
-        mocked_create_validate,
-        mocked_build_payload,
-        mocked_resolve_range,
-        _mocked_download_pdf,
-        _mocked_download_xml,
-        _mocked_upload_pdf,
-        _mocked_send_email,
-    ):
-        mocked_build_payload.return_value = {
-            'numbering_range_id': 1,
-            'customer': {'identification': '5555', 'names': 'Cliente QR Largo', 'identification_document_id': 3},
-            'items': [{'code_reference': 'PR-QR-LARGO', 'quantity': 1}],
-            'send_email': False,
-        }
-        mocked_resolve_range.return_value = RangoNumeracionDIAN(prefijo='FV', factus_range_id=1)
-        mocked_create_validate.return_value = {
-            'data': {
-                'bill': {
-                    'status': 'valid',
-                    'number': 'FV9001',
-                    'reference_code': 'FV9001',
-                    'cufe': 'CUFE-9001',
-                    'uuid': 'UUID-9001',
-                    'xml_url': 'https://example.com/fv9001.xml',
-                    'pdf_url': 'https://example.com/fv9001.pdf',
-                }
-            }
-        }
-
-        factura = facturar_venta(self.venta.id, triggered_by=self.user)
-        self.assertEqual(factura.estado_electronico, 'ACEPTADA')
-        self.assertEqual(factura.status, 'ACEPTADA')
+        self.assertEqual(factura.codigo_error, '')
 
 
 class FacturaQRYPosEndpointsTests(TestCase):

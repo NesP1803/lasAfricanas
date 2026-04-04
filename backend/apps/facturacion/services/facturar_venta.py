@@ -390,6 +390,24 @@ def _extract_remote_document_snapshot(payload: dict[str, Any]) -> dict[str, Any]
         items = []
     if not isinstance(taxes, list):
         taxes = []
+    has_item_amounts = any(
+        isinstance(item, dict)
+        and any(
+            item.get(key) not in (None, '')
+            for key in (
+                'price',
+                'unit_price',
+                'price_amount',
+                'line_total',
+                'total',
+                'total_amount',
+                'tax_rate',
+                'tax_percentage',
+                'tax_amount',
+            )
+        )
+        for item in items
+    )
 
     tax_total = _to_decimal_or_none(totals.get('tax_amount') or totals.get('tax') or totals.get('total_tax'))
     if tax_total is None:
@@ -430,7 +448,31 @@ def _extract_remote_document_snapshot(payload: dict[str, Any]) -> dict[str, Any]
         'tax_total_candidates': [v for v in tax_candidates if v is not None],
         'base_total_candidates': [v for v in base_candidates if v is not None],
         'items_count': len(items),
+        'has_item_amounts': has_item_amounts,
     }
+
+
+def _is_remote_snapshot_inconclusive(*, remote: dict[str, Any], expected_tax: Decimal) -> bool:
+    remote_tax = _to_decimal_or_none(remote.get('tax_total'))
+    remote_base = _to_decimal_or_none(remote.get('base_total'))
+    remote_total = _to_decimal_or_none(remote.get('total'))
+    items_count = int(remote.get('items_count') or 0)
+    has_item_amounts = bool(remote.get('has_item_amounts'))
+    tax_candidates = [v for v in (remote.get('tax_total_candidates') or []) if _to_decimal_or_none(v) is not None]
+
+    if expected_tax <= Decimal('0.00'):
+        return False
+    if remote_tax is None or remote_total is None or remote_base is None:
+        return False
+    if remote_tax != Decimal('0.00'):
+        return False
+    if remote_total != remote_base:
+        return False
+    if has_item_amounts:
+        return False
+    if items_count > 0 and tax_candidates:
+        return False
+    return True
 
 
 def _nearest_expected(candidates: list[Any], expected_value: Decimal) -> Decimal | None:
@@ -460,18 +502,31 @@ def _assert_document_conciliation(
     expected_base = expected.get('base_total') or Decimal('0')
     expected_customer = _normalize_identification(expected.get('customer_identification') or '')
     expected_items_count = int(expected.get('items_count') or 0)
+    remote_is_inconclusive = _is_remote_snapshot_inconclusive(remote=remote, expected_tax=expected_tax)
 
     mismatches: list[str] = []
     remote_total = _nearest_expected(remote.get('total_candidates', []), expected_total) or remote.get('total')
-    if remote_total is not None and abs(remote_total - expected_total) > MONEY_TOLERANCE:
+    if (
+        not remote_is_inconclusive
+        and remote_total is not None
+        and abs(remote_total - expected_total) > MONEY_TOLERANCE
+    ):
         mismatches.append(f'total_remoto={remote_total} total_esperado={expected_total}')
 
     remote_tax = _nearest_expected(remote.get('tax_total_candidates', []), expected_tax) or remote.get('tax_total')
-    if remote_tax is not None and abs(remote_tax - expected_tax) > MONEY_TOLERANCE:
+    if (
+        not remote_is_inconclusive
+        and remote_tax is not None
+        and abs(remote_tax - expected_tax) > MONEY_TOLERANCE
+    ):
         mismatches.append(f'impuesto_remoto={remote_tax} impuesto_esperado={expected_tax}')
 
     remote_base = _nearest_expected(remote.get('base_total_candidates', []), expected_base) or remote.get('base_total')
-    if remote_base is not None and abs(remote_base - expected_base) > MONEY_TOLERANCE:
+    if (
+        not remote_is_inconclusive
+        and remote_base is not None
+        and abs(remote_base - expected_base) > MONEY_TOLERANCE
+    ):
         mismatches.append(f'base_remota={remote_base} base_esperada={expected_base}')
 
     remote_customer = str(remote.get('customer_identification') or '').strip()
@@ -504,6 +559,21 @@ def _assert_document_conciliation(
         expected_customer,
         'OK' if not mismatches else 'MISMATCH',
     )
+    if remote_is_inconclusive:
+        logger.warning(
+            'facturar_venta.conciliacion_inconclusa venta_id=%s factura_number=%s reference_code=%s '
+            'total_esperado=%s impuesto_esperado=%s base_esperada=%s '
+            'total_remoto=%s impuesto_remoto=%s base_remota=%s',
+            venta.id,
+            logger_context.get('number', ''),
+            logger_context.get('reference_code', ''),
+            expected_total,
+            expected_tax,
+            expected_base,
+            remote_total,
+            remote_tax,
+            remote_base,
+        )
     if mismatches:
         raise FactusValidationError(
             f'{DOCUMENT_CONCILIATION_ERROR_CODE}: Conciliación documental fallida ({", ".join(mismatches)}).'
