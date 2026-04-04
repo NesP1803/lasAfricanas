@@ -54,6 +54,7 @@ from apps.facturacion.services import (
     emitir_factura_completa,
     build_credit_preview,
     create_credit_note,
+    sincronizar_nota_credito,
     sync_credit_note,
     sync_credit_note_with_effects,
     CreditNoteValidationError,
@@ -891,6 +892,58 @@ class NotasCreditoViewSet(viewsets.GenericViewSet):
         except Exception:
             logger.exception('Error inesperado sincronizando nota crédito %s', nota.id)
             return Response({'detail': 'Error interno al sincronizar la nota crédito.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(_credit_note_api_payload(nota, meta), status=_credit_note_http_status(meta))
+
+    @action(detail=True, methods=['get'], url_path='estado-remoto')
+    def estado_remoto(self, request, pk=None):
+        nota = NotaCreditoElectronica.objects.filter(pk=pk).first()
+        if nota is None:
+            return Response({'detail': 'Nota crédito no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+        remote = nota.response_json if isinstance(nota.response_json, dict) else {}
+        return Response(
+            {
+                'id': nota.id,
+                'estado_local': nota.estado_local,
+                'estado_electronico': nota.estado_electronico,
+                'reference_code': nota.reference_code,
+                'number': nota.number,
+                'remote_identifier': nota.remote_identifier,
+                'last_sync_at': nota.last_sync_at or nota.synchronized_at,
+                'last_remote_error': nota.last_remote_error,
+                'sync_metadata': nota.sync_metadata or {},
+                'remote_response': remote,
+                'detail': 'Estado remoto consultado. Use sincronizar para refrescar conciliación.',
+            }
+        )
+
+    @action(detail=True, methods=['post'], url_path='reintentar-conciliacion')
+    def reintentar_conciliacion(self, request, pk=None):
+        nota = NotaCreditoElectronica.objects.filter(pk=pk).first()
+        if nota is None:
+            return Response({'detail': 'Nota crédito no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            nota = sincronizar_nota_credito(nota.id, user=request.user, force_retry=True)
+            effects = False
+            if nota.estado_local == 'ACEPTADA':
+                nota, effects = sync_credit_note_with_effects(nota, user=request.user)
+            meta = {
+                'ok': nota.estado_local in {'ACEPTADA', 'PENDIENTE_DIAN'},
+                'result': 'accepted' if nota.estado_local == 'ACEPTADA' else ('pending_dian' if nota.estado_local == 'PENDIENTE_DIAN' else ('rejected' if nota.estado_local == 'RECHAZADA' else ('conflict' if nota.estado_local == 'CONFLICTO_FACTUS' else 'error'))),
+                'finalized': nota.estado_local in {'ACEPTADA', 'RECHAZADA'},
+                'business_effects_applied': effects,
+                'note_id': nota.id,
+                'number': nota.number,
+                'estado_local': nota.estado_local,
+                'estado_electronico': nota.estado_electronico,
+                'codigo_error': nota.codigo_error,
+                'mensaje_error': nota.mensaje_error,
+                'can_sync': nota.estado_local in {'PENDIENTE_ENVIO', 'PENDIENTE_DIAN', 'CONFLICTO_FACTUS'},
+                'can_retry': nota.estado_local in {'ERROR_INTEGRACION', 'CONFLICTO_FACTUS'},
+                'warnings': [],
+                'http_status': 202 if nota.estado_local in {'PENDIENTE_DIAN', 'CONFLICTO_FACTUS'} else 200,
+            }
+        except (FactusValidationError, FactusAPIError, FactusAuthError) as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
         return Response(_credit_note_api_payload(nota, meta), status=_credit_note_http_status(meta))
 
     @action(detail=True, methods=['get'], url_path='pdf')
