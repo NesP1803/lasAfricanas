@@ -136,7 +136,6 @@ export default function ComprobanteTemplate({
   const horaDocumento = formatHoraDocumento(fecha);
   const tituloDocumento = getTituloDocumento(tipo);
   const estadoVisual = getEstadoVisual(estado);
-  const referenciaFactura = referenceCode || numero || 'N/D';
   const detallesMostrar =
     detalles.length > 0
       ? detalles
@@ -186,21 +185,8 @@ export default function ComprobanteTemplate({
           <div className="space-y-1 text-right">
             <p className="text-[10px] uppercase tracking-wider text-slate-500">{tituloDocumento}</p>
             <p className="text-xl font-bold leading-tight">{numero}</p>
-            {(cufe || referenceCode) ? (
-              <div className="ml-auto mt-2 max-w-full overflow-hidden rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-left text-[10px] text-emerald-900">
-                <p className="font-semibold">Emitida en Factus.</p>
-                <div className="mt-1 grid grid-cols-[auto,minmax(0,1fr)] gap-x-2 gap-y-1">
-                  <span className="font-semibold">CUFE:</span>
-                  <span className="min-w-0 max-w-full overflow-hidden break-all whitespace-normal leading-5">
-                    {cufe || 'N/D'}
-                  </span>
-                  <span className="font-semibold">Ref:</span>
-                  <span className="min-w-0 max-w-full overflow-hidden break-all whitespace-normal leading-5">
-                    {referenciaFactura}
-                  </span>
-                </div>
-              </div>
-            ) : null}
+            {referenceCode ? <p className="text-[10px] text-slate-500">Doc. Ref: {referenceCode}</p> : null}
+            {cufe ? <p className="break-all text-[10px]"><span className="font-semibold">CUFE:</span> {cufe}</p> : null}
             {qrImageUrl ? (
               <img src={qrImageUrl} alt="QR factura electrónica" className="ml-auto mt-2 h-20 w-20 border border-slate-200 p-1" />
             ) : qrUrl ? (
@@ -301,21 +287,7 @@ export default function ComprobanteTemplate({
           <div className="mt-2 border-y border-slate-300 py-2 text-center">
             <p className="text-[11px] font-bold uppercase">{tituloDocumento}</p>
             <p className="font-semibold">{numero}</p>
-            {(cufe || referenceCode) ? (
-              <div className="mx-auto mt-1 max-w-full overflow-hidden rounded border border-emerald-200 bg-emerald-50 px-1.5 py-1 text-left text-[8px] text-emerald-900">
-                <p className="font-semibold">Emitida en Factus.</p>
-                <div className="mt-0.5 grid grid-cols-[auto,minmax(0,1fr)] gap-x-1 gap-y-0.5">
-                  <span className="font-semibold">CUFE:</span>
-                  <span className="min-w-0 max-w-full overflow-hidden break-all whitespace-normal leading-5">
-                    {cufe || 'N/D'}
-                  </span>
-                  <span className="font-semibold">Ref:</span>
-                  <span className="min-w-0 max-w-full overflow-hidden break-all whitespace-normal leading-5">
-                    {referenciaFactura}
-                  </span>
-                </div>
-              </div>
-            ) : null}
+            {referenceCode ? <p className="text-[8px] text-slate-600">Ref: {referenceCode}</p> : null}
             <div className="mx-auto mt-1 grid max-w-[50mm] grid-cols-2 gap-x-2 px-1 py-0.5 text-[8px]">
               <span className="text-left text-slate-600">Fecha:</span>
               <span className="text-right font-semibold text-slate-800">{fechaDocumento}</span>
