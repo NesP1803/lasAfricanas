@@ -118,30 +118,8 @@ const hasValidElectronicDocument = (factura?: FacturaElectronica): boolean => {
 
 const resolveFacturaPublicUrl = (factura?: FacturaElectronica): string => {
   if (!factura) return '';
-  if (factura.public_url) return factura.public_url;
-  const responseJson =
-    factura.response_json && typeof factura.response_json === 'object'
-      ? (factura.response_json as Record<string, unknown>)
-      : {};
-  const finalFields =
-    responseJson.final_fields && typeof responseJson.final_fields === 'object'
-      ? (responseJson.final_fields as Record<string, unknown>)
-      : {};
-  if (typeof finalFields.public_url === 'string' && finalFields.public_url.trim()) {
-    return finalFields.public_url;
-  }
-  const data =
-    responseJson.data && typeof responseJson.data === 'object'
-      ? (responseJson.data as Record<string, unknown>)
-      : {};
-  const bill =
-    data.bill && typeof data.bill === 'object'
-      ? (data.bill as Record<string, unknown>)
-      : {};
-  if (typeof bill.public_url === 'string' && bill.public_url.trim()) {
-    return bill.public_url;
-  }
-  return typeof data.public_url === 'string' ? data.public_url : '';
+  if (factura.factus_public_url && factura.factus_public_url.trim()) return factura.factus_public_url;
+  return factura.public_url?.trim() || '';
 };
 
 export default function Facturas() {

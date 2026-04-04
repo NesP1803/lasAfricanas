@@ -56,10 +56,16 @@ def _build_pdf_bytes(factura: FacturaElectronica) -> bytes:
     return buffer.getvalue()
 
 
-def generar_pdf_personalizado(factura: FacturaElectronica) -> str:
-    """Genera el PDF local usando el diseño del sistema (representación gráfica local)."""
+def build_pdf_personalizado_payload(factura: FacturaElectronica) -> tuple[bytes, str]:
+    """Retorna bytes + nombre de archivo del PDF Carta usado localmente."""
     content = _build_pdf_bytes(factura)
     filename = f'{factura.number or factura.reference_code or factura.id}.pdf'
+    return content, filename
+
+
+def generar_pdf_personalizado(factura: FacturaElectronica) -> str:
+    """Genera el PDF local usando el diseño del sistema (representación gráfica local)."""
+    content, filename = build_pdf_personalizado_payload(factura)
     relative_path = Path('facturas/pdf_personalizado') / filename
     absolute_path = Path(settings.MEDIA_ROOT) / relative_path
     absolute_path.parent.mkdir(parents=True, exist_ok=True)

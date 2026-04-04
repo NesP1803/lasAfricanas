@@ -48,6 +48,7 @@ from apps.facturacion.services import (
     emitir_documento_soporte,
     emitir_nota_ajuste_documento_soporte,
     read_local_media_file,
+    resolve_public_invoice_url,
     sync_numbering_ranges,
     sync_invoice_status,
     emitir_factura_completa,
@@ -132,14 +133,8 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
                     if isinstance(factura.response_json, dict)
                     else []
                 ),
-                'public_url': (
-                    factura.public_url
-                    or (
-                        factura.response_json.get('final_fields', {}).get('public_url', '')
-                        if isinstance(factura.response_json, dict)
-                        else ''
-                    )
-                ),
+                'public_url': resolve_public_invoice_url(factura),
+                'factus_public_url': resolve_public_invoice_url(factura),
                 'qr_factus': factura.qr_data,
                 'qr_image': factura.qr_image_url or factura.qr_image_data,
                 'xml_url': factura.xml_url,

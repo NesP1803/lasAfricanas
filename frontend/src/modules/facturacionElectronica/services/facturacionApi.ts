@@ -29,6 +29,7 @@ export interface FacturaElectronica {
   observaciones?: string;
   bill_errors?: string[];
   public_url?: string;
+  factus_public_url?: string;
   qr_factus?: string;
   qr_image?: string;
   xml_url?: string;
