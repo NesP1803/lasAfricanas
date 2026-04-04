@@ -298,12 +298,12 @@ export default function ComprobanteTemplate({
             <p className="text-[11px] font-bold uppercase">{tituloDocumento}</p>
             <p className="font-semibold">{numero}</p>
             {referenceCode ? <p className="text-[8px] text-slate-600">Ref: {referenceCode}</p> : null}
-            <div className="mx-auto mt-1 grid max-w-[50mm] grid-cols-2 gap-x-2 px-1 py-0.5 text-[8px]">
-              <span className="text-left text-slate-600">Fecha:</span>
-              <span className="text-right font-semibold text-slate-800">{fechaDocumento}</span>
-              <span className="text-left text-slate-600">Hora:</span>
-              <span className="text-right font-semibold text-slate-800">{horaDocumento || fechaFormateada}</span>
-            </div>
+            <div className="mt-1 grid grid-cols-[auto,1fr] gap-x-1 gap-y-0.5 px-0 py-0 text-[8px]">
+            <span className="text-left text-slate-600">Fecha:</span>
+            <span className="text-left font-semibold text-slate-800">{fechaDocumento}</span>
+            <span className="text-left text-slate-600">Hora:</span>
+            <span className="text-left font-semibold text-slate-800">{horaDocumento || fechaFormateada}</span>
+          </div>
           </div>
 
           <div className="mt-2 space-y-1 text-[9px]">
