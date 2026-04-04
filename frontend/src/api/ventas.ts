@@ -106,6 +106,26 @@ export interface Venta {
   facturada_por?: number | null;
   facturada_at?: string | null;
   detalles: DetalleVenta[];
+  factura_electronica?: {
+    id: number;
+    venta_id: number;
+    numero: string;
+    reference_code?: string;
+    cufe?: string;
+    uuid?: string;
+    status?: string;
+    estado?: string;
+    estado_dian?: string;
+    codigo_error?: string;
+    observaciones?: string;
+    bill_errors?: string[];
+    public_url?: string;
+    qr_factus?: string;
+    qr_image?: string;
+    xml_url?: string;
+    pdf_url?: string;
+    response_json?: Record<string, unknown>;
+  } | null;
   nota_credito_emitida?: {
     id: number;
     number: string;
@@ -126,6 +146,7 @@ export interface FacturaElectronicaResultado {
   observaciones_json?: unknown[];
   xml_url: string;
   pdf_url: string;
+  public_url?: string;
   response_json: Record<string, unknown>;
 }
 
