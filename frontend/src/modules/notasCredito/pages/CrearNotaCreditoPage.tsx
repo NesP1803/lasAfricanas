@@ -163,7 +163,7 @@ export default function CrearNotaCreditoPage() {
       notasPreviasFactura.some(
         (nota) =>
           (nota.tipo_nota || '').toUpperCase() === 'PARCIAL' &&
-          ['ACEPTADA', 'EN_PROCESO', 'PENDIENTE_ENVIO'].includes((nota.estado_local || '').toUpperCase()),
+          ['ACEPTADA', 'EN_PROCESO', 'PENDIENTE_ENVIO', 'CONFLICTO_FACTUS'].includes((nota.estado_local || '').toUpperCase()),
       ),
     [notasPreviasFactura],
   );
@@ -190,7 +190,7 @@ export default function CrearNotaCreditoPage() {
       notasExistentes.forEach((nota) => {
         const aplica =
           nota.factura_asociada === factura.numero &&
-          ['ACEPTADA', 'EN_PROCESO', 'PENDIENTE_ENVIO'].includes((nota.estado_local || '').toUpperCase());
+          ['ACEPTADA', 'EN_PROCESO', 'PENDIENTE_ENVIO', 'CONFLICTO_FACTUS'].includes((nota.estado_local || '').toUpperCase());
         if (!aplica) return;
         (nota.detalles || []).forEach((linea) => {
           acumulado.set(
