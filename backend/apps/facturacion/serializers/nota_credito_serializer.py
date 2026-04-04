@@ -85,8 +85,12 @@ class NotaCreditoListSerializer(serializers.ModelSerializer):
             'public_url',
             'correo_enviado',
             'correo_enviado_at',
+            'email_status',
             'codigo_error',
             'mensaje_error',
+            'status_raw_factus',
+            'remote_status_raw',
+            'synchronized_at',
             'detalles',
         ]
         read_only_fields = fields

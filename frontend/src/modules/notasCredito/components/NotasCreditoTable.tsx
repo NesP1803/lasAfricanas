@@ -54,15 +54,15 @@ export default function NotasCreditoTable({ notasCredito, loading, onRefresh }: 
     setRowLoading((prev) => ({ ...prev, [numero]: action }));
   };
 
-  const handleDescargar = async (numero: string, tipo: 'xml' | 'pdf') => {
-    setActionLoading(numero, tipo);
+  const handleDescargar = async (nota: NotaCredito, tipo: 'xml' | 'pdf') => {
+    setActionLoading(nota.numero, tipo);
     try {
-      if (tipo === 'xml') await notasCreditoApi.descargarXML(numero);
-      else await notasCreditoApi.descargarPDF(numero);
+      if (tipo === 'xml') await notasCreditoApi.descargarXML(nota.id, nota.numero);
+      else await notasCreditoApi.descargarPDF(nota.id, nota.numero);
     } catch {
-      showNotification({ message: `No fue posible descargar ${tipo.toUpperCase()} de ${numero}.`, type: 'error' });
+      showNotification({ message: `No fue posible descargar ${tipo.toUpperCase()} de ${nota.numero}. Intente sincronizar primero.`, type: 'error' });
     } finally {
-      setActionLoading(numero, null);
+      setActionLoading(nota.numero, null);
     }
   };
 
@@ -125,7 +125,8 @@ export default function NotasCreditoTable({ notasCredito, loading, onRefresh }: 
           >
             <option value="TODOS">Todos los estados</option>
             <option value="BORRADOR">Borrador</option>
-            <option value="ENVIADA_A_FACTUS">Enviada a Factus</option>
+            <option value="PENDIENTE_ENVIO">Pendiente envío</option>
+            <option value="EN_PROCESO">En proceso</option>
             <option value="ACEPTADA">Aceptada</option>
             <option value="RECHAZADA">Rechazada</option>
             <option value="ERROR_INTEGRACION">Error integración</option>
@@ -173,11 +174,11 @@ export default function NotasCreditoTable({ notasCredito, loading, onRefresh }: 
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-2">
                         <Link to={`/notas-credito/${nota.id}`} className="rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100">Ver</Link>
-                        <button type="button" onClick={() => handleDescargar(nota.numero, 'xml')} disabled={Boolean(loadingAction)} className="rounded-md bg-indigo-600 px-2 py-1 text-xs font-semibold text-white disabled:opacity-60">XML</button>
-                        <button type="button" onClick={() => handleDescargar(nota.numero, 'pdf')} disabled={Boolean(loadingAction)} className="rounded-md bg-violet-600 px-2 py-1 text-xs font-semibold text-white disabled:opacity-60">PDF</button>
+                        <button type="button" onClick={() => handleDescargar(nota, 'xml')} disabled={Boolean(loadingAction)} className="rounded-md bg-indigo-600 px-2 py-1 text-xs font-semibold text-white disabled:opacity-60">XML</button>
+                        <button type="button" onClick={() => handleDescargar(nota, 'pdf')} disabled={Boolean(loadingAction)} className="rounded-md bg-violet-600 px-2 py-1 text-xs font-semibold text-white disabled:opacity-60">PDF</button>
                         <button type="button" onClick={() => handleCorreo(nota)} disabled={Boolean(loadingAction)} className="rounded-md bg-emerald-600 px-2 py-1 text-xs font-semibold text-white disabled:opacity-60">Correo</button>
                         <button type="button" onClick={() => handleSync(nota)} disabled={Boolean(loadingAction)} className="rounded-md bg-blue-600 px-2 py-1 text-xs font-semibold text-white disabled:opacity-60">Sincronizar</button>
-                        {(estado === 'BORRADOR' || estado.startsWith('ERROR')) && (
+                        {(estado === 'BORRADOR' || estado.startsWith('ERROR') || estado === 'PENDIENTE_ENVIO') && (
                           <button type="button" onClick={() => handleEliminar(nota)} disabled={Boolean(loadingAction)} className="rounded-md bg-rose-600 px-2 py-1 text-xs font-semibold text-white disabled:opacity-60">Eliminar</button>
                         )}
                       </div>

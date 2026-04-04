@@ -3,13 +3,14 @@ import type { EstadoDian } from '../services/notasCreditoApi';
 const estadoStyles: Record<string, string> = {
   ACEPTADA: 'bg-emerald-100 text-emerald-700',
   ACEPTADA_CON_OBSERVACIONES: 'bg-emerald-100 text-emerald-700',
-  ENVIADA_A_FACTUS: 'bg-blue-100 text-blue-700',
+  PENDIENTE_ENVIO: 'bg-blue-100 text-blue-700',
   EN_PROCESO: 'bg-amber-100 text-amber-700',
   PENDIENTE_REINTENTO: 'bg-amber-100 text-amber-700',
   RECHAZADA: 'bg-rose-100 text-rose-700',
   ERROR_INTEGRACION: 'bg-rose-100 text-rose-700',
   ERROR_PERSISTENCIA: 'bg-rose-100 text-rose-700',
   BORRADOR: 'bg-slate-100 text-slate-700',
+  ANULADA_LOCAL: 'bg-slate-200 text-slate-700',
   ERROR: 'bg-slate-200 text-slate-700',
 };
 

@@ -8,14 +8,14 @@ from django.utils import timezone
 
 from apps.facturacion.models import FacturaElectronica, NotaCreditoDetalle, NotaCreditoElectronica
 from apps.facturacion.services.factus_payload_builder import build_invoice_payload
-from apps.facturacion.services.facturar_venta import map_factus_status
-from apps.facturacion.services.factus_client import FactusClient
+from apps.facturacion.services.electronic_state_machine import map_factus_status
+from apps.facturacion.services.factus_client import FactusClient, FactusPendingCreditNoteError
 from apps.facturacion.services.factus_catalog_lookup import get_tribute_id, get_unit_measure_id
 from apps.inventario.models import MovimientoInventario, Producto
 from apps.ventas.models import DetalleVenta
 
 
-ACTIVE_CREDIT_LOCAL_STATES = {'BORRADOR', 'ENVIADA_A_FACTUS', 'ACEPTADA'}
+ACTIVE_CREDIT_LOCAL_STATES = {'BORRADOR', 'PENDIENTE_ENVIO', 'EN_PROCESO', 'ACEPTADA'}
 ALLOWED_INVOICE_STATES = {'ACEPTADA', 'ACEPTADA_CON_OBSERVACIONES'}
 
 
@@ -217,6 +217,11 @@ def _resolve_bill_id_and_customer(
     return int(bill_id), local_customer
 
 
+def _build_reference_code(factura: FacturaElectronica, *, is_total: bool) -> str:
+    tipo = 'TOTAL' if is_total else 'PARCIAL'
+    return f'NC-{factura.id}-{tipo}'
+
+
 def _map_payload_for_factus(
     factura: FacturaElectronica,
     motivo: str,
@@ -256,7 +261,7 @@ def _map_payload_for_factus(
         'bill_id': bill_id,
         'customer': customer,
         'numbering_range_id': factura.response_json.get('data', {}).get('bill', {}).get('numbering_range_id'),
-        'reference_code': f'NC-{factura.number}-{timezone.now().strftime("%Y%m%d%H%M%S")}',
+        'reference_code': _build_reference_code(factura, is_total=is_total),
         'correction_concept_code': 1 if is_total else 2,
         'credit_note_reason': motivo,
         'bill_number': factura.number,
@@ -282,7 +287,104 @@ def _refresh_invoice_credit_status(factura: FacturaElectronica) -> None:
         factura.save(update_fields=['estado_acreditacion', 'updated_at'])
 
 
-def create_credit_note(*, factura: FacturaElectronica, motivo: str, lines: list[dict[str, Any]], is_total: bool, user) -> NotaCreditoElectronica:
+def _update_note_from_remote(nota: NotaCreditoElectronica, remote: dict[str, Any]) -> NotaCreditoElectronica:
+    data = remote.get('data', remote)
+    current = data.get('credit_note', data)
+    estado_electronico, estado_raw = map_factus_status(remote)
+    nota.number = str(current.get('number') or nota.number)
+    nota.uuid = str(current.get('uuid') or '') or None
+    nota.cufe = str(current.get('cufe') or '') or None
+    nota.pdf_url = str(current.get('pdf_url') or '') or nota.pdf_url
+    nota.xml_url = str(current.get('xml_url') or '') or nota.xml_url
+    nota.public_url = str(current.get('public_url') or '') or nota.public_url
+    nota.status_raw_factus = estado_raw
+    nota.remote_status_raw = estado_raw
+    nota.estado_electronico = estado_electronico
+    nota.status = estado_electronico
+    nota.response_json = remote
+    nota.synchronized_at = timezone.now()
+    if estado_electronico in {'ACEPTADA', 'ACEPTADA_CON_OBSERVACIONES'}:
+        nota.estado_local = 'ACEPTADA'
+    elif estado_electronico == 'RECHAZADA':
+        nota.estado_local = 'RECHAZADA'
+    else:
+        nota.estado_local = 'EN_PROCESO'
+    nota.save(
+        update_fields=[
+            'number', 'uuid', 'cufe', 'pdf_url', 'xml_url', 'public_url',
+            'status_raw_factus', 'remote_status_raw', 'estado_electronico', 'status',
+            'response_json', 'synchronized_at', 'estado_local', 'updated_at'
+        ]
+    )
+    _refresh_invoice_credit_status(nota.factura)
+    return nota
+
+
+def _find_existing_open_note(factura: FacturaElectronica, *, tipo: str) -> NotaCreditoElectronica | None:
+    return (
+        NotaCreditoElectronica.objects
+        .filter(factura=factura, tipo_nota=tipo, estado_local__in=['BORRADOR', 'PENDIENTE_ENVIO', 'EN_PROCESO', 'ACEPTADA'])
+        .order_by('-created_at')
+        .first()
+    )
+
+
+def _try_reconcile_from_remote(factura: FacturaElectronica, *, reference_code: str, tipo_nota: str) -> NotaCreditoElectronica | None:
+    client = FactusClient()
+    try:
+        remote_list = client.list_credit_notes(reference_code=reference_code, bill_number=factura.number)
+    except Exception:
+        remote_list = {}
+    data = remote_list.get('data', remote_list)
+    candidates = []
+    if isinstance(data, list):
+        candidates = data
+    elif isinstance(data, dict):
+        for key in ('credit_notes', 'data', 'items'):
+            value = data.get(key)
+            if isinstance(value, list):
+                candidates = value
+                break
+    if not candidates:
+        return None
+
+    matched = None
+    for item in candidates:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get('reference_code') or '') == reference_code or str(item.get('bill_number') or '') == str(factura.number):
+            matched = item
+            break
+    if matched is None:
+        matched = candidates[0]
+
+    number = str(matched.get('number') or '').strip()
+    if not number:
+        return None
+
+    nota = _find_existing_open_note(factura, tipo=tipo_nota)
+    if nota is None:
+        nota = NotaCreditoElectronica.objects.create(
+            factura=factura,
+            venta_origen=factura.venta,
+            number=number,
+            tipo_nota=tipo_nota,
+            concepto='ANULACION_TOTAL' if tipo_nota == 'TOTAL' else 'DEVOLUCION_PARCIAL',
+            motivo='Nota reconciliada automáticamente desde Factus',
+            estado_local='EN_PROCESO',
+            estado_electronico='PENDIENTE_REINTENTO',
+            status='PENDIENTE_REINTENTO',
+            request_json={},
+            response_json={},
+            reference_code=reference_code,
+        )
+    nota.number = number
+    nota.reference_code = reference_code
+    nota.save(update_fields=['number', 'reference_code', 'updated_at'])
+    return sync_credit_note(nota)
+
+
+def create_credit_note(*, factura: FacturaElectronica, motivo: str, lines: list[dict[str, Any]], is_total: bool, user) -> tuple[NotaCreditoElectronica, dict[str, Any]]:
     if not factura.emitida_en_factus:
         raise CreditNoteStateError('La factura no está emitida electrónicamente; use anulación local.')
 
@@ -292,89 +394,88 @@ def create_credit_note(*, factura: FacturaElectronica, motivo: str, lines: list[
             f'La factura está en estado {estado_factura} y no admite nota crédito electrónica.'
         )
 
+    tipo_nota = 'TOTAL' if is_total else 'PARCIAL'
+    existing_open = _find_existing_open_note(factura, tipo=tipo_nota)
+    if existing_open and existing_open.estado_local in {'EN_PROCESO', 'ACEPTADA'}:
+        synced = sync_credit_note(existing_open)
+        return synced, {'result': 'already_exists_reconciled', 'http_status': 200}
+
     client = FactusClient()
     preview = build_credit_preview(factura, lines, is_total=is_total)
     payload = _map_payload_for_factus(factura, motivo, preview['lineas'], is_total=is_total, client=client)
+    reference_code = str(payload.get('reference_code') or '')
 
     with transaction.atomic():
-        nota = NotaCreditoElectronica.objects.create(
-            factura=factura,
-            venta_origen=factura.venta,
-            number=f'NC-PEND-{factura.id}-{int(timezone.now().timestamp())}',
-            tipo_nota='TOTAL' if is_total else 'PARCIAL',
-            concepto='ANULACION_TOTAL' if is_total else 'DEVOLUCION_PARCIAL',
-            motivo=motivo,
-            estado_local='BORRADOR',
-            estado_electronico='PENDIENTE_REINTENTO',
-            status='PENDIENTE_REINTENTO',
-            request_json=payload,
-            response_json={},
-            reference_code=str(payload.get('reference_code') or ''),
-        )
-        for line in preview['lineas']:
-            detalle = DetalleVenta.objects.get(pk=line['detalle_venta_original_id'])
-            NotaCreditoDetalle.objects.create(
-                nota_credito=nota,
-                detalle_venta_original=detalle,
-                producto_id=line['producto_id'],
-                cantidad_original_facturada=_to_decimal(line['cantidad_original_facturada']),
-                cantidad_ya_acreditada=_to_decimal(line['cantidad_ya_acreditada']),
-                cantidad_a_acreditar=_to_decimal(line['cantidad_a_acreditar']),
-                precio_unitario=_to_decimal(line['precio_unitario']),
-                descuento=_to_decimal(line['descuento']),
-                base_impuesto=_to_decimal(line['base_impuesto']),
-                impuesto=_to_decimal(line['impuesto']),
-                total_linea=_to_decimal(line['total_linea']),
-                afecta_inventario=bool(line['afecta_inventario']),
-                motivo_linea=str(line['motivo_linea']),
+        nota = existing_open
+        if nota is None:
+            nota = NotaCreditoElectronica.objects.create(
+                factura=factura,
+                venta_origen=factura.venta,
+                number=f'NC-PEND-{factura.id}-{int(timezone.now().timestamp())}',
+                tipo_nota=tipo_nota,
+                concepto='ANULACION_TOTAL' if is_total else 'DEVOLUCION_PARCIAL',
+                motivo=motivo,
+                estado_local='PENDIENTE_ENVIO',
+                estado_electronico='PENDIENTE_REINTENTO',
+                status='PENDIENTE_REINTENTO',
+                request_json=payload,
+                response_json={},
+                reference_code=reference_code,
             )
+        else:
+            nota.motivo = motivo
+            nota.request_json = payload
+            nota.reference_code = reference_code
+            nota.estado_local = 'PENDIENTE_ENVIO'
+            nota.save(update_fields=['motivo', 'request_json', 'reference_code', 'estado_local', 'updated_at'])
+
+        if not nota.detalles.exists():
+            for line in preview['lineas']:
+                detalle = DetalleVenta.objects.get(pk=line['detalle_venta_original_id'])
+                NotaCreditoDetalle.objects.create(
+                    nota_credito=nota,
+                    detalle_venta_original=detalle,
+                    producto_id=line['producto_id'],
+                    cantidad_original_facturada=_to_decimal(line['cantidad_original_facturada']),
+                    cantidad_ya_acreditada=_to_decimal(line['cantidad_ya_acreditada']),
+                    cantidad_a_acreditar=_to_decimal(line['cantidad_a_acreditar']),
+                    precio_unitario=_to_decimal(line['precio_unitario']),
+                    descuento=_to_decimal(line['descuento']),
+                    base_impuesto=_to_decimal(line['base_impuesto']),
+                    impuesto=_to_decimal(line['impuesto']),
+                    total_linea=_to_decimal(line['total_linea']),
+                    afecta_inventario=bool(line['afecta_inventario']),
+                    motivo_linea=str(line['motivo_linea']),
+                )
 
     try:
         response = client.create_and_validate_credit_note(payload)
-        data = response.get('data', response)
-        credit_note = data.get('credit_note', data)
-        nota.number = str(credit_note.get('number') or nota.number)
-        nota.uuid = str(credit_note.get('uuid') or '') or None
-        nota.cufe = str(credit_note.get('cufe') or '') or None
-        nota.pdf_url = str(credit_note.get('pdf_url') or '') or None
-        nota.xml_url = str(credit_note.get('xml_url') or '') or None
-        nota.public_url = str(credit_note.get('public_url') or '') or None
-        nota.status_raw_factus = str(credit_note.get('status') or data.get('status') or '')
-        nota.estado_electronico = map_factus_status(response)
-        nota.status = nota.estado_electronico
-        has_emission_artifacts = bool(nota.number and nota.cufe)
-        if nota.estado_electronico in {'ACEPTADA', 'ACEPTADA_CON_OBSERVACIONES'} or has_emission_artifacts:
-            nota.estado_local = 'ACEPTADA'
-        else:
-            nota.estado_local = 'ENVIADA_A_FACTUS'
-        nota.response_json = response
-        nota.save()
+        nota = _update_note_from_remote(nota, response)
+    except FactusPendingCreditNoteError:
+        reconciled = _find_existing_open_note(factura, tipo=tipo_nota)
+        if reconciled:
+            reconciled = sync_credit_note(reconciled)
+            return reconciled, {'result': 'factus_pending_reconciled', 'http_status': 200}
+        recovered = _try_reconcile_from_remote(factura, reference_code=reference_code, tipo_nota=tipo_nota)
+        if recovered:
+            return recovered, {'result': 'factus_pending_recovered', 'http_status': 200}
+        nota.estado_local = 'ERROR_INTEGRACION'
+        nota.mensaje_error = 'Conflicto 409 en Factus sin evidencia recuperable de nota crédito remota.'
+        nota.codigo_error = 'FACTUS_409_UNRECOVERABLE'
+        nota.save(update_fields=['estado_local', 'mensaje_error', 'codigo_error', 'updated_at'])
+        raise
     except Exception as exc:
         nota.estado_local = 'ERROR_INTEGRACION'
         nota.mensaje_error = str(exc)
         nota.save(update_fields=['estado_local', 'mensaje_error', 'updated_at'])
         raise
 
-    if nota.estado_local in {'ACEPTADA', 'ENVIADA_A_FACTUS'}:
+    if nota.estado_local in {'ACEPTADA', 'EN_PROCESO'}:
         _apply_inventory_return(nota, user)
     _refresh_invoice_credit_status(factura)
-    return nota
+    return nota, {'result': 'created', 'http_status': 201}
 
 
 def sync_credit_note(nota: NotaCreditoElectronica) -> NotaCreditoElectronica:
     remote = FactusClient().get_credit_note(nota.number)
-    data = remote.get('data', remote)
-    current = data.get('credit_note', data)
-    nota.status_raw_factus = str(current.get('status') or '')
-    nota.estado_electronico = map_factus_status(remote)
-    nota.status = nota.estado_electronico
-    nota.response_json = remote
-    if nota.estado_electronico in {'ACEPTADA', 'ACEPTADA_CON_OBSERVACIONES'}:
-        nota.estado_local = 'ACEPTADA'
-    elif nota.estado_electronico == 'RECHAZADA':
-        nota.estado_local = 'RECHAZADA'
-    else:
-        nota.estado_local = 'ENVIADA_A_FACTUS'
-    nota.save(update_fields=['status_raw_factus', 'estado_electronico', 'status', 'response_json', 'estado_local', 'updated_at'])
-    _refresh_invoice_credit_status(nota.factura)
-    return nota
+    return _update_note_from_remote(nota, remote)
