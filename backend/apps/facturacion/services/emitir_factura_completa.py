@@ -7,18 +7,20 @@ from pathlib import Path
 from typing import Any
 
 from django.conf import settings
-from django.utils import timezone
 
 from apps.facturacion.models import FacturaElectronica
 from apps.facturacion.services.download_invoice_files import download_xml
-from apps.facturacion.services.factus_client import FactusAPIError, FactusAuthError, FactusClient
+from apps.facturacion.services.factus_client import FactusClient
 from apps.facturacion.services.facturar_venta import facturar_venta
 from apps.facturacion.services.persistence_safety import (
     log_model_string_overflow_diagnostics,
     normalize_qr_image_value,
     safe_assign_charfield,
 )
-from apps.facturacion.services.pdf_personalizado import generar_pdf_personalizado
+from apps.facturacion.services.upload_custom_pdf_to_factus import (
+    send_invoice_email_via_factus,
+    upload_custom_pdf_to_factus,
+)
 from apps.usuarios.models import Usuario
 
 logger = logging.getLogger(__name__)
@@ -72,42 +74,12 @@ def emitir_factura_completa(venta_id: int, triggered_by: Usuario | None = None) 
     except Exception as exc:
         warnings.append({'component': 'xml', 'message': str(exc)})
 
-    # 3) PDF personalizado local.
-    try:
-        generar_pdf_personalizado(factura)
-    except Exception as exc:
-        factura.ultimo_error_pdf = str(exc)
-        factura.save(update_fields=['ultimo_error_pdf', 'updated_at'])
-        warnings.append({'component': 'pdf_local', 'message': str(exc)})
-
-    # 4) Subida de PDF personalizado a Factus.
-    try:
-        if factura.pdf_local_path:
-            local_pdf = (Path(settings.MEDIA_ROOT) / factura.pdf_local_path).read_bytes()
-            client.upload_custom_pdf(factura.number, local_pdf, filename=f'{factura.number}.pdf')
-            factura.pdf_uploaded_to_factus = True
-            factura.pdf_uploaded_at = timezone.now()
-            factura.ultimo_error_pdf = ''
-            factura.save(update_fields=['pdf_uploaded_to_factus', 'pdf_uploaded_at', 'ultimo_error_pdf', 'updated_at'])
-    except (OSError, FactusAPIError, FactusAuthError) as exc:
-        factura.pdf_uploaded_to_factus = False
-        factura.ultimo_error_pdf = str(exc)
-        factura.save(update_fields=['pdf_uploaded_to_factus', 'ultimo_error_pdf', 'updated_at'])
-        warnings.append({'component': 'pdf_factus', 'message': str(exc)})
-
-    # 5) Envío de correo por Factus.
-    email = str(factura.venta.cliente.email or '').strip()
-    if email:
-        try:
-            client.send_invoice_email(factura.number, email=email)
-            factura.correo_enviado = True
-            factura.correo_enviado_at = timezone.now()
-            factura.ultimo_error_correo = ''
-            factura.save(update_fields=['correo_enviado', 'correo_enviado_at', 'ultimo_error_correo', 'updated_at'])
-        except (FactusAPIError, FactusAuthError) as exc:
-            factura.correo_enviado = False
-            factura.ultimo_error_correo = str(exc)
-            factura.save(update_fields=['correo_enviado', 'ultimo_error_correo', 'updated_at'])
-            warnings.append({'component': 'correo', 'message': str(exc)})
+    # 3-5) Flujo híbrido: PDF carta personalizado + correo Factus.
+    if not upload_custom_pdf_to_factus(factura):
+        warnings.append({'component': 'pdf_factus', 'message': factura.ultimo_error_pdf or 'Error cargando PDF personalizado.'})
+    if not send_invoice_email_via_factus(factura):
+        email = str(factura.venta.cliente.email or '').strip()
+        if email:
+            warnings.append({'component': 'correo', 'message': factura.ultimo_error_correo or 'Error enviando correo por Factus.'})
 
     return {'factura': factura, 'warnings': warnings}

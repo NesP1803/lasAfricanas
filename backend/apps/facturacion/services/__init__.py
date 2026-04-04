@@ -31,6 +31,8 @@ from .consecutivo_service import get_next_invoice_number
 from .download_resource_files import DownloadResourceError, download_remote_file, read_local_media_file
 from .emitir_factura_completa import emitir_factura_completa
 from .pdf_personalizado import generar_pdf_personalizado
+from .upload_custom_pdf_to_factus import send_invoice_email_via_factus, upload_custom_pdf_to_factus
+from .public_invoice_url import resolve_public_invoice_url
 
 __all__ = [
     'FactusClient',
@@ -66,4 +68,7 @@ __all__ = [
     'read_local_media_file',
     'emitir_factura_completa',
     'generar_pdf_personalizado',
+    'upload_custom_pdf_to_factus',
+    'send_invoice_email_via_factus',
+    'resolve_public_invoice_url',
 ]

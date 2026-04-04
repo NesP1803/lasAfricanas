@@ -120,6 +120,7 @@ export interface Venta {
     observaciones?: string;
     bill_errors?: string[];
     public_url?: string;
+    factus_public_url?: string;
     qr_factus?: string;
     qr_image?: string;
     xml_url?: string;
@@ -150,6 +151,7 @@ export interface FacturaElectronicaResultado {
   xml_url: string;
   pdf_url: string;
   public_url?: string;
+  factus_public_url?: string;
   response_json: Record<string, unknown>;
 }
 
@@ -287,6 +289,7 @@ export interface VentaListItem {
     observaciones?: string;
     bill_errors?: string[];
     public_url?: string;
+    factus_public_url?: string;
     qr_factus?: string;
     qr_image?: string;
     xml_url?: string;

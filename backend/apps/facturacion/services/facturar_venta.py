@@ -33,6 +33,10 @@ from apps.facturacion.services.persistence_safety import (
     safe_assign_charfield,
     safe_assign_json,
 )
+from apps.facturacion.services.upload_custom_pdf_to_factus import (
+    send_invoice_email_via_factus,
+    upload_custom_pdf_to_factus,
+)
 from apps.usuarios.models import Usuario
 from apps.ventas.models import Venta
 
@@ -1017,5 +1021,14 @@ def facturar_venta(
             download_pdf(factura)
     except DescargaFacturaError:
         logger.warning('facturar_venta.pdf_descarga_error venta_id=%s factura=%s', venta.id, factura.number, exc_info=True)
+    logger.info(
+        'facturar_venta.emitida_ok venta_id=%s factura_id=%s numero=%s estado=%s',
+        venta.id,
+        factura.pk,
+        factura.number,
+        factura.estado_electronico or factura.status,
+    )
+    upload_custom_pdf_to_factus(factura)
+    send_invoice_email_via_factus(factura)
     logger.info('facturar_venta.fin_ok venta_id=%s factura=%s', venta.id, factura.number)
     return factura

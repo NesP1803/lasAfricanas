@@ -20,6 +20,7 @@ from apps.facturacion_electronica.catalogos.models import DocumentoIdentificacio
 from apps.facturacion.services.download_invoice_files import download_pdf, download_xml
 from apps.facturacion.services.electronic_state_machine import map_factus_status, resolve_actions
 from apps.facturacion.services.facturar_venta import facturar_venta
+from apps.facturacion.services.upload_custom_pdf_to_factus import upload_custom_pdf_to_factus
 from apps.facturacion.services.consecutivo_service import resolve_numbering_range
 from apps.facturacion.services.factus_catalog_lookup import (
     get_municipality_id,
@@ -46,6 +47,7 @@ from apps.inventario.models import Categoria, Producto, Proveedor
 from apps.ventas.models import Cliente, DetalleVenta, Venta
 from apps.ventas.services.anular_venta import anular_venta
 from apps.facturacion.models import RangoNumeracionDIAN
+from apps.ventas.serializers import VentaListSerializer
 
 
 class FacturaDownloadFilesTests(TestCase):
@@ -102,6 +104,79 @@ class FacturaDownloadFilesTests(TestCase):
 
         with self.assertRaises(DescargaFacturaError):
             download_pdf(self.factura)
+
+
+class FacturaHybridPdfFlowTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(username='hybrid', password='1234')
+        self.cliente = Cliente.objects.create(
+            numero_documento='9001',
+            nombre='Cliente Híbrido',
+            email='hybrid@example.com',
+        )
+        self.venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            cliente=self.cliente,
+            vendedor=self.user,
+            subtotal=Decimal('100'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('19'),
+            total=Decimal('119'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('119'),
+            cambio=Decimal('0'),
+            estado='FACTURADA',
+            numero_comprobante='FAC-HYB-1',
+        )
+        self.factura = FacturaElectronica.objects.create(
+            venta=self.venta,
+            cufe='CUFE-HYB',
+            uuid='UUID-HYB',
+            number='FAC-HYB-1',
+            reference_code='FAC-HYB-1',
+            status='ACEPTADA',
+            estado_electronico='ACEPTADA',
+            response_json={'ok': True, 'final_fields': {'public_url': 'https://factus.test/public/FAC-HYB-1'}},
+        )
+
+    @patch('apps.facturacion.services.upload_custom_pdf_to_factus.FactusClient.upload_custom_pdf')
+    def test_upload_custom_pdf_ok(self, mocked_upload):
+        mocked_upload.return_value = {'ok': True}
+
+        result = upload_custom_pdf_to_factus(self.factura)
+
+        self.assertTrue(result)
+        self.factura.refresh_from_db()
+        self.assertTrue(self.factura.pdf_uploaded_to_factus)
+        self.assertIsNotNone(self.factura.pdf_uploaded_at)
+        self.assertEqual(self.factura.ultimo_error_pdf, '')
+        mocked_upload.assert_called_once()
+
+    @patch('apps.facturacion.services.upload_custom_pdf_to_factus.FactusClient.upload_custom_pdf')
+    def test_upload_custom_pdf_error_no_rompe_estado_emitido(self, mocked_upload):
+        mocked_upload.side_effect = FactusAPIError('timeout upload')
+        estado_original = self.factura.estado_electronico
+
+        result = upload_custom_pdf_to_factus(self.factura)
+
+        self.assertFalse(result)
+        self.factura.refresh_from_db()
+        self.assertEqual(self.factura.estado_electronico, estado_original)
+        self.assertIn('timeout upload', self.factura.ultimo_error_pdf)
+
+    def test_serializer_venta_exhibe_public_url_estable(self):
+        self.factura.public_url = ''
+        self.factura.qr_data = 'Verifica aquí https://dian.example/consulta/FAC-HYB-1'
+        self.factura.save(update_fields=['public_url', 'qr_data', 'updated_at'])
+
+        payload = VentaListSerializer(instance=self.venta).data
+        factura_data = payload['factura_electronica']
+        self.assertEqual(
+            factura_data['factus_public_url'],
+            'https://factus.test/public/FAC-HYB-1',
+        )
 
 
 class FacturaFilesEndpointsTests(TestCase):
