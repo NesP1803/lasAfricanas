@@ -46,6 +46,7 @@ MISMATCH_ERROR_CODE = 'MISMATCH_NUMERACION'
 LOCAL_VALIDATION_ERROR_CODE = 'ERROR_VALIDACION_LOCAL'
 DOCUMENT_CONCILIATION_ERROR_CODE = 'ERROR_CONCILIACION_DOCUMENTAL'
 MONEY_TOLERANCE = Decimal('0.05')
+MONEY_QUANT = Decimal('0.01')
 
 
 class FacturaPersistenciaError(Exception):
@@ -265,6 +266,69 @@ def _normalize_identification(value: Any) -> str:
     return ''.join(char for char in str(value or '').strip() if char.isalnum()).upper()
 
 
+def _quantize_money(value: Decimal | None) -> Decimal:
+    normalized = Decimal(str(value if value is not None else '0'))
+    return normalized.quantize(MONEY_QUANT)
+
+
+def _to_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value or '').strip().lower() in {'1', 'true', 'si', 'sí', 'yes', 'y', 'on'}
+
+
+def _extract_request_document_snapshot(payload: dict[str, Any]) -> dict[str, Any]:
+    data = payload.get('data', payload) if isinstance(payload, dict) else {}
+    bill = data.get('bill', data) if isinstance(data, dict) else {}
+    customer = bill.get('customer', data.get('customer', {})) if isinstance(bill, dict) else {}
+    items = bill.get('items', data.get('items', [])) if isinstance(bill, dict) else []
+    if not isinstance(customer, dict):
+        customer = {}
+    if not isinstance(items, list):
+        items = []
+
+    total = Decimal('0.00')
+    tax_total = Decimal('0.00')
+    base_total = Decimal('0.00')
+
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        quantity = _to_decimal_or_none(item.get('quantity')) or Decimal('0')
+        unit_price = _to_decimal_or_none(item.get('price')) or Decimal('0')
+        discount_rate = _to_decimal_or_none(item.get('discount_rate')) or Decimal('0')
+        tax_rate = _to_decimal_or_none(item.get('tax_rate')) or Decimal('0')
+        is_excluded = _to_bool(item.get('is_excluded'))
+
+        gross_line = _quantize_money(quantity * unit_price)
+        discount_amount = _quantize_money((gross_line * discount_rate) / Decimal('100'))
+        if discount_amount > gross_line:
+            discount_amount = gross_line
+
+        line_total = _quantize_money(gross_line - discount_amount)
+        if is_excluded or tax_rate <= Decimal('0'):
+            line_base = line_total
+            line_tax = Decimal('0.00')
+        else:
+            divisor_iva = Decimal('1') + (tax_rate / Decimal('100'))
+            line_base = _quantize_money(line_total / divisor_iva)
+            line_tax = _quantize_money(line_total - line_base)
+
+        total += line_total
+        base_total += line_base
+        tax_total += line_tax
+
+    return {
+        'customer_identification': _normalize_identification(
+            customer.get('identification') or customer.get('identification_number') or customer.get('nit')
+        ),
+        'total': _quantize_money(total),
+        'tax_total': _quantize_money(tax_total),
+        'base_total': _quantize_money(base_total),
+        'items_count': len(items),
+    }
+
+
 def _extract_remote_document_snapshot(payload: dict[str, Any]) -> dict[str, Any]:
     data = payload.get('data', payload) if isinstance(payload, dict) else {}
     bill = data.get('bill', data) if isinstance(data, dict) else {}
@@ -306,43 +370,64 @@ def _extract_remote_document_snapshot(payload: dict[str, Any]) -> dict[str, Any]
 def _assert_document_conciliation(
     *,
     venta: Venta,
-    payload: dict[str, Any],
+    request_payload: dict[str, Any],
+    response_payload: dict[str, Any],
     logger_context: dict[str, Any],
 ) -> None:
-    remote = _extract_remote_document_snapshot(payload)
-    local_total = _to_decimal_or_none(venta.total) or Decimal('0')
-    local_tax = _to_decimal_or_none(venta.iva) or Decimal('0')
-    local_base = _to_decimal_or_none(venta.subtotal) or Decimal('0')
-    local_customer = _normalize_identification(getattr(venta.cliente, 'numero_documento', ''))
-    local_items_count = venta.detalles.count()
+    expected = _extract_request_document_snapshot(request_payload)
+    remote = _extract_remote_document_snapshot(response_payload)
+
+    raw_local_total = _to_decimal_or_none(venta.total) or Decimal('0')
+    raw_local_tax = _to_decimal_or_none(venta.iva) or Decimal('0')
+    raw_local_base = _to_decimal_or_none(venta.subtotal) or Decimal('0')
+
+    expected_total = expected.get('total') or Decimal('0')
+    expected_tax = expected.get('tax_total') or Decimal('0')
+    expected_base = expected.get('base_total') or Decimal('0')
+    expected_customer = _normalize_identification(expected.get('customer_identification') or '')
+    expected_items_count = int(expected.get('items_count') or 0)
 
     mismatches: list[str] = []
     remote_total = remote.get('total')
-    if remote_total is not None and abs(remote_total - local_total) > MONEY_TOLERANCE:
-        mismatches.append(f'total_remoto={remote_total} total_local={local_total}')
+    if remote_total is not None and abs(remote_total - expected_total) > MONEY_TOLERANCE:
+        mismatches.append(f'total_remoto={remote_total} total_esperado={expected_total}')
+
     remote_tax = remote.get('tax_total')
-    if remote_tax is not None and abs(remote_tax - local_tax) > MONEY_TOLERANCE:
-        mismatches.append(f'impuesto_remoto={remote_tax} impuesto_local={local_tax}')
+    if remote_tax is not None and abs(remote_tax - expected_tax) > MONEY_TOLERANCE:
+        mismatches.append(f'impuesto_remoto={remote_tax} impuesto_esperado={expected_tax}')
+
     remote_base = remote.get('base_total')
-    if remote_base is not None and abs(remote_base - local_base) > MONEY_TOLERANCE:
-        mismatches.append(f'base_remota={remote_base} base_local={local_base}')
+    if remote_base is not None and abs(remote_base - expected_base) > MONEY_TOLERANCE:
+        mismatches.append(f'base_remota={remote_base} base_esperada={expected_base}')
+
     remote_customer = str(remote.get('customer_identification') or '').strip()
-    if remote_customer and local_customer and remote_customer != local_customer:
-        mismatches.append(f'cliente_remoto={remote_customer} cliente_local={local_customer}')
-    remote_items_count = remote.get('items_count')
-    if remote_items_count and local_items_count and int(remote_items_count) != int(local_items_count):
-        mismatches.append(f'items_remotos={remote_items_count} items_locales={local_items_count}')
+    if remote_customer and expected_customer and remote_customer != expected_customer:
+        mismatches.append(f'cliente_remoto={remote_customer} cliente_esperado={expected_customer}')
+
+    remote_items_count = int(remote.get('items_count') or 0)
+    if remote_items_count and expected_items_count and remote_items_count != expected_items_count:
+        mismatches.append(f'items_remotos={remote_items_count} items_esperados={expected_items_count}')
 
     logger.info(
-        'facturar_venta.conciliacion venta_id=%s venta_total=%s factura_number=%s reference_code=%s '
-        'total_remoto=%s cliente_remoto=%s cliente_local=%s resultado=%s',
+        'facturar_venta.conciliacion venta_id=%s factura_number=%s reference_code=%s '
+        'total_local=%s total_esperado=%s total_remoto=%s '
+        'base_local=%s base_esperada=%s base_remota=%s '
+        'impuesto_local=%s impuesto_esperado=%s impuesto_remoto=%s '
+        'cliente_remoto=%s cliente_esperado=%s resultado=%s',
         venta.id,
-        local_total,
         logger_context.get('number', ''),
         logger_context.get('reference_code', ''),
+        raw_local_total,
+        expected_total,
         remote_total,
+        raw_local_base,
+        expected_base,
+        remote_base,
+        raw_local_tax,
+        expected_tax,
+        remote_tax,
         remote_customer,
-        local_customer,
+        expected_customer,
         'OK' if not mismatches else 'MISMATCH',
     )
     if mismatches:
@@ -885,7 +970,8 @@ def facturar_venta(
     try:
         _assert_document_conciliation(
             venta=venta,
-            payload=response_json,
+            request_payload=payload,
+            response_payload=response_json,
             logger_context=fields,
         )
     except FactusValidationError as exc:
@@ -935,7 +1021,8 @@ def facturar_venta(
             )
             _assert_document_conciliation(
                 venta=venta,
-                payload=response_show_json,
+                request_payload=payload,
+                response_payload=response_show_json,
                 logger_context=fields,
             )
         except FactusValidationError as exc:
@@ -972,7 +1059,8 @@ def facturar_venta(
                     )
                     _assert_document_conciliation(
                         venta=venta,
-                        payload=response_download_json,
+                        request_payload=payload,
+                        response_payload=response_download_json,
                         logger_context=fields,
                     )
                 except FactusValidationError as exc:
