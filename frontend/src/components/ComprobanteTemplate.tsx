@@ -270,14 +270,15 @@ export default function ComprobanteTemplate({
   }
 
   return (
-    <div className="mx-auto w-full max-w-[82mm] border border-slate-300 bg-white p-2.5 font-sans text-[10px] text-slate-900">
-      <div className="flex gap-2">
+    <div className="mx-auto w-full max-w-[82mm] border border-slate-300 bg-white px-1.5 py-2 font-sans text-[10px] text-slate-900">
+      <div className={`flex items-stretch ${cufe ? 'gap-1.5' : ''}`}>
         {cufe ? (
-          <div className="relative w-5 shrink-0 border-r border-slate-300 pr-1">
-            <p className="absolute left-1/2 top-1/2 max-h-[calc(100%-8px)] min-w-0 max-w-full -translate-x-1/2 -translate-y-1/2 overflow-hidden whitespace-normal break-all text-[7px] font-semibold leading-tight tracking-[0.08em] text-slate-600 [writing-mode:vertical-rl] [text-orientation:mixed] [transform:rotate(180deg)]">
+          <aside className="relative flex w-[14px] shrink-0 items-center justify-center pl-0.5">
+            <span className="absolute inset-y-0 left-[3px] w-px bg-slate-300" aria-hidden="true" />
+            <p className="max-h-[calc(100%-6px)] overflow-hidden whitespace-normal break-all text-[7px] font-semibold leading-tight tracking-[0.08em] text-slate-600 [writing-mode:vertical-rl] [text-orientation:mixed] [transform:rotate(180deg)]">
               CUFE · {cufe}
             </p>
-          </div>
+          </aside>
         ) : null}
         <div className="min-w-0 flex-1">
           <div className="text-center">
