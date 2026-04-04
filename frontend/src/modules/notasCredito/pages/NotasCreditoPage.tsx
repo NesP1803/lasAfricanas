@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useNotification } from '../../../contexts/NotificationContext';
 import NotasCreditoTable from '../components/NotasCreditoTable';
@@ -7,6 +7,7 @@ import { notasCreditoApi, type NotaCredito } from '../services/notasCreditoApi';
 export default function NotasCreditoPage() {
   const [notasCredito, setNotasCredito] = useState<NotaCredito[]>([]);
   const [loading, setLoading] = useState(false);
+  const loadedOnceRef = useRef(false);
   const { showNotification } = useNotification();
 
   const cargarNotasCredito = useCallback(async () => {
@@ -23,6 +24,8 @@ export default function NotasCreditoPage() {
   }, [showNotification]);
 
   useEffect(() => {
+    if (loadedOnceRef.current) return;
+    loadedOnceRef.current = true;
     cargarNotasCredito();
   }, [cargarNotasCredito]);
 

@@ -87,6 +87,15 @@ const extractErrorMessage = (error: unknown, fallback: string) => {
   return fallback;
 };
 
+const extractStatusCode = (error: unknown): number | null => {
+  if (error && typeof error === 'object') {
+    const payload = error as { response?: { status?: number } };
+    const code = payload.response?.status;
+    return typeof code === 'number' ? code : null;
+  }
+  return null;
+};
+
 export default function CrearNotaCreditoPage() {
   const navigate = useNavigate();
   const { showNotification } = useNotification();
@@ -154,7 +163,7 @@ export default function CrearNotaCreditoPage() {
       notasPreviasFactura.some(
         (nota) =>
           (nota.tipo_nota || '').toUpperCase() === 'PARCIAL' &&
-          ['ACEPTADA', 'ENVIADA_A_FACTUS'].includes((nota.estado_local || '').toUpperCase()),
+          ['ACEPTADA', 'EN_PROCESO', 'PENDIENTE_ENVIO'].includes((nota.estado_local || '').toUpperCase()),
       ),
     [notasPreviasFactura],
   );
@@ -181,7 +190,7 @@ export default function CrearNotaCreditoPage() {
       notasExistentes.forEach((nota) => {
         const aplica =
           nota.factura_asociada === factura.numero &&
-          ['ACEPTADA', 'ENVIADA_A_FACTUS'].includes((nota.estado_local || '').toUpperCase());
+          ['ACEPTADA', 'EN_PROCESO', 'PENDIENTE_ENVIO'].includes((nota.estado_local || '').toUpperCase());
         if (!aplica) return;
         (nota.detalles || []).forEach((linea) => {
           acumulado.set(
@@ -312,11 +321,13 @@ export default function CrearNotaCreditoPage() {
   };
 
   const handleEmitir = async () => {
+    if (loading) return;
     if (!validar() || !facturaSeleccionada) return;
     setLoading(true);
     try {
+      let response: NotaCredito;
       if (tipoNota === 'TOTAL') {
-        await notasCreditoApi.crearNotaCreditoTotal(
+        response = await notasCreditoApi.crearNotaCreditoTotal(
           facturaSeleccionada.id,
           motivoCompuesto,
           resumen.devuelveStock,
@@ -331,15 +342,27 @@ export default function CrearNotaCreditoPage() {
             motivo_linea: linea.motivoLinea || undefined,
           })),
         };
-        await notasCreditoApi.crearNotaCreditoParcial(facturaSeleccionada.id, payload);
+        response = await notasCreditoApi.crearNotaCreditoParcial(facturaSeleccionada.id, payload);
       }
       showNotification({
-        message: 'Nota crédito emitida correctamente.',
+        message: response.detail || 'Nota crédito emitida correctamente.',
         type: 'success',
         durationMs: 2200,
       });
       navigate('/listados/notas-credito');
     } catch (error) {
+      const statusCode = extractStatusCode(error);
+      if (statusCode === 409) {
+        showNotification({
+          message: extractErrorMessage(
+            error,
+            'Factus reportó una nota crédito pendiente. Use sincronizar para reconciliar el estado real.',
+          ),
+          type: 'error',
+          durationMs: 4200,
+        });
+        return;
+      }
       showNotification({
         message: extractErrorMessage(error, 'No fue posible emitir la nota crédito.'),
         type: 'error',

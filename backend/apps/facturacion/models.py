@@ -109,12 +109,13 @@ class NotaCreditoElectronica(models.Model):
     ]
     LOCAL_STATUS_CHOICES = [
         ('BORRADOR', 'Borrador'),
-        ('ENVIADA_A_FACTUS', 'Enviada a Factus'),
+        ('PENDIENTE_ENVIO', 'Pendiente de envío'),
+        ('EN_PROCESO', 'En proceso DIAN'),
         ('ACEPTADA', 'Aceptada'),
         ('RECHAZADA', 'Rechazada'),
         ('ERROR_INTEGRACION', 'Error de integración'),
         ('ERROR_PERSISTENCIA', 'Error de persistencia'),
-        ('ELIMINADA_LOCAL', 'Eliminada local'),
+        ('ANULADA_LOCAL', 'Anulada local'),
         ('ELIMINADA_EN_FACTUS', 'Eliminada en Factus'),
     ]
 
@@ -163,10 +164,13 @@ class NotaCreditoElectronica(models.Model):
     correo_enviado = models.BooleanField(default=False)
     correo_enviado_at = models.DateTimeField(null=True, blank=True)
     email_content_json = models.JSONField(default=dict, blank=True)
+    email_status = models.CharField(max_length=40, blank=True, default='')
     codigo_error = models.CharField(max_length=50, null=True, blank=True)
     mensaje_error = models.TextField(null=True, blank=True)
     request_json = models.JSONField(default=dict, blank=True)
     response_json = models.JSONField(null=True, blank=True)
+    synchronized_at = models.DateTimeField(null=True, blank=True)
+    remote_status_raw = models.CharField(max_length=200, blank=True, default='')
     deleted_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -176,6 +180,15 @@ class NotaCreditoElectronica(models.Model):
         verbose_name = 'Nota Crédito Electrónica'
         verbose_name_plural = 'Notas Crédito Electrónicas'
         ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['factura', 'tipo_nota'],
+                condition=models.Q(
+                    estado_local__in=['BORRADOR', 'PENDIENTE_ENVIO', 'EN_PROCESO', 'ACEPTADA']
+                ),
+                name='uq_nota_credito_abierta_factura_tipo',
+            ),
+        ]
 
     def __str__(self) -> str:
         return f'{self.number} ({self.status})'
