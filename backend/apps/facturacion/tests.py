@@ -29,7 +29,7 @@ from apps.facturacion.services.factus_catalog_lookup import (
 from apps.facturacion.services.factus_payload_builder import build_invoice_payload
 from apps.facturacion.services.support_document_payload_builder import build_support_document_payload
 from apps.facturacion.services.exceptions import DescargaFacturaError
-from apps.facturacion.services.factus_client import FactusValidationError
+from apps.facturacion.services.factus_client import FactusAPIError, FactusClient, FactusValidationError
 from apps.facturacion.services.credit_note_service import build_credit_preview, create_credit_note
 from apps.facturacion.services.persistence_safety import (
     normalize_qr_image_value,
@@ -1652,3 +1652,39 @@ class NotaCreditoWorkflowCoverageTests(TestCase):
                 format='json',
             )
         self.assertEqual(resp.status_code, 500)
+
+    def test_error_factus_retorna_502_en_total(self):
+        with patch(
+            'apps.facturacion.views.create_credit_note',
+            side_effect=FactusAPIError(
+                "Factus rechazó la factura. Detalle: {'message': 'The route credit-notes/validate could not be found.'}",
+                status_code=404,
+                provider_detail="{'message': 'The route credit-notes/validate could not be found.'}",
+            ),
+        ):
+            resp = self.client.post(
+                f'/api/facturacion/facturas/{self.factura.id}/notas-credito/total/',
+                {'motivo': 'x'},
+                format='json',
+            )
+        self.assertEqual(resp.status_code, 502)
+
+
+class FactusClientCreditNoteFallbackTests(TestCase):
+    @patch('apps.facturacion.services.factus_client.FactusClient.send_credit_note')
+    def test_retry_credit_note_endpoint_with_v1_when_route_not_found(self, mocked_send):
+        client = FactusClient()
+        client.credit_note_path = '/credit-notes/validate'
+        mocked_send.side_effect = [
+            FactusAPIError(
+                "Factus rechazó la factura. Detalle: {'message': 'The route credit-notes/validate could not be found.'}",
+                status_code=404,
+                provider_detail="{'message': 'The route credit-notes/validate could not be found.'}",
+            ),
+            {'data': {'credit_note': {'number': 'NC-OK'}}},
+        ]
+
+        response = client.create_and_validate_credit_note({'items': [{'name': 'x'}]})
+
+        self.assertEqual(response['data']['credit_note']['number'], 'NC-OK')
+        self.assertEqual(mocked_send.call_count, 2)

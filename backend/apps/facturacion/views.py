@@ -544,6 +544,8 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
             )
         except (CreditNoteValidationError, CreditNoteStateError) as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except (FactusValidationError, FactusAPIError, FactusAuthError) as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
         except Exception:
             logger.exception('Error inesperado creando nota crédito parcial para factura %s', factura.id)
             return Response({'detail': 'Error interno al crear nota crédito parcial.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -574,6 +576,8 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
             )
         except (CreditNoteValidationError, CreditNoteStateError) as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except (FactusValidationError, FactusAPIError, FactusAuthError) as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
         except Exception:
             logger.exception('Error inesperado creando nota crédito total para factura %s', factura.id)
             return Response({'detail': 'Error interno al crear nota crédito total.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -795,6 +799,8 @@ class NotasCreditoViewSet(viewsets.GenericViewSet):
             )
         except (CreditNoteValidationError, CreditNoteStateError) as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except (FactusValidationError, FactusAPIError, FactusAuthError) as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
         except Exception:
             logger.exception('Error inesperado creando nota crédito (endpoint legacy) para factura %s', factura.id)
             return Response({'detail': 'Error interno al crear nota crédito.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -855,6 +861,8 @@ class NotasCreditoViewSet(viewsets.GenericViewSet):
             nota = sync_credit_note(nota)
         except (CreditNoteValidationError, CreditNoteStateError) as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except (FactusValidationError, FactusAPIError, FactusAuthError) as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
         except Exception:
             logger.exception('Error inesperado sincronizando nota crédito %s', nota.id)
             return Response({'detail': 'Error interno al sincronizar la nota crédito.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
