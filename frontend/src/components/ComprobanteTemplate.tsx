@@ -370,7 +370,7 @@ export default function ComprobanteTemplate({
             {notas ? <p className="break-words">{notas}</p> : null}
           </div>
 
-          <div className="mt-2 border-t border-slate-300 pt-2 text-center">
+          <div className="mt-1 text-center">
             {qrImageUrl ? (
               <img src={qrImageUrl} alt="QR factura electrónica" className="mx-auto h-24 w-24 object-contain" />
             ) : qrUrl ? (

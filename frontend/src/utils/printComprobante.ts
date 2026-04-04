@@ -196,7 +196,7 @@ export const printComprobante = ({
       .item { margin: 4px 0; }
       .item strong { display: block; text-transform: uppercase; }
       .total-row { font-size: 11px; font-weight: 700; margin-top: 3px; }
-      .qr { margin-top: 6px; text-align: center; }
+      .qr { margin-top: 2px; text-align: center; }
       .qr img { width: 94px; height: 94px; object-fit: contain; }
       .placeholder { border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px; font-size: 8px; color: #64748b; }
       .logo { display: block; margin: 0 auto 4px; height: 42px; max-width: 52mm; object-fit: contain; border-radius: 5px; }
