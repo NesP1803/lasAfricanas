@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import time
 from decimal import Decimal
+from uuid import uuid4
 from typing import Any
 
 from django.db import transaction
@@ -12,6 +13,8 @@ from apps.facturacion.models import FacturaElectronica, NotaCreditoDetalle, Nota
 from apps.facturacion.services.electronic_state_machine import extract_bill_errors
 from apps.facturacion.services.factus_client import FactusAPIError, FactusClient, FactusPendingCreditNoteError
 from apps.facturacion.services.factus_catalog_lookup import get_tribute_id, get_unit_measure_id
+from apps.facturacion.services.factus_catalog_lookup import get_payment_method_code
+from apps.facturacion.services.consecutivo_service import resolve_numbering_range
 from apps.facturacion.services.factus_payload_builder import build_invoice_payload
 from apps.inventario.models import MovimientoInventario, Producto
 from apps.ventas.models import DetalleVenta
@@ -22,6 +25,11 @@ FINAL_ACCEPTED_ELECTRONIC_STATES = {'ACEPTADA', 'ACEPTADA_CON_OBSERVACIONES'}
 ACTIVE_CREDIT_LOCAL_STATES = {'BORRADOR', 'PENDIENTE_ENVIO', 'PENDIENTE_DIAN', 'CONFLICTO_FACTUS'}
 APPLIED_EFFECTS_STATES = {'ACEPTADA'}
 ALLOWED_INVOICE_STATES = {'ACEPTADA', 'ACEPTADA_CON_OBSERVACIONES'}
+CREDIT_NOTE_CUSTOMIZATION_ID = 20
+CREDIT_NOTE_CONCEPT_CODE_MAP = {
+    'ANULACION_TOTAL': 1,
+    'DEVOLUCION_PARCIAL': 2,
+}
 
 
 class CreditNoteValidationError(Exception):
@@ -49,7 +57,13 @@ def extract_credit_note_remote_fields(response_json: dict[str, Any]) -> dict[str
         'pdf_url': str(current.get('pdf_url') or data.get('pdf_url') or '').strip(),
         'public_url': str(current.get('public_url') or data.get('public_url') or '').strip(),
         'reference_code': str(current.get('reference_code') or data.get('reference_code') or '').strip(),
-        'bill_number': str(current.get('bill_number') or data.get('bill_number') or '').strip(),
+        'bill_number': str(
+            current.get('bill_number')
+            or current.get('number_bill')
+            or data.get('bill_number')
+            or data.get('number_bill')
+            or ''
+        ).strip(),
         'status_raw': str(current.get('status') or data.get('status') or response_json.get('status') or '').strip().lower(),
     }
 
@@ -222,9 +236,26 @@ def _resolve_bill_id_and_customer(factura: FacturaElectronica, client: FactusCli
     raise CreditNoteValidationError('No fue posible identificar bill_id de la factura electrónica origen para emitir la nota crédito.')
 
 
+def _resolve_customization_id(*, factura: FacturaElectronica) -> int:
+    if not factura.emitida_en_factus:
+        raise CreditNoteValidationError('La nota crédito solo se permite para facturas electrónicas emitidas.')
+    return CREDIT_NOTE_CUSTOMIZATION_ID
+
+
+def _resolve_correction_concept_code(*, concepto: str, is_total: bool) -> int:
+    normalized = str(concepto or '').strip().upper()
+    if not normalized:
+        normalized = 'ANULACION_TOTAL' if is_total else 'DEVOLUCION_PARCIAL'
+    code = CREDIT_NOTE_CONCEPT_CODE_MAP.get(normalized)
+    if code is None:
+        raise CreditNoteValidationError(f'Concepto fiscal de nota crédito inválido: {concepto!r}.')
+    return int(code)
+
+
 def _build_reference_code(factura: FacturaElectronica, *, is_total: bool) -> str:
     tipo = 'TOTAL' if is_total else 'PARCIAL'
-    return f'NC-{factura.id}-{tipo}'
+    seed = uuid4().hex[:10].upper()
+    return f'NC-{factura.id}-{tipo}-{seed}'
 
 
 def _map_payload_for_factus(factura: FacturaElectronica, motivo: str, preview_lines: list[dict[str, Any]], *, is_total: bool, client: FactusClient) -> dict[str, Any]:
@@ -232,6 +263,12 @@ def _map_payload_for_factus(factura: FacturaElectronica, motivo: str, preview_li
     local_customer = reference_payload.get('customer', {})
     reference_items = {str(item.get('code_reference') or ''): item for item in reference_payload.get('items', [])}
     bill_id, customer = _resolve_bill_id_and_customer(factura, client, local_customer=local_customer)
+    numbering_range = resolve_numbering_range(document_code='NOTA_CREDITO')
+    numbering_range_id = int(numbering_range.factus_range_id or 0)
+    if numbering_range_id <= 0:
+        raise CreditNoteValidationError('El rango activo de nota crédito no tiene factus_range_id válido.')
+    concepto = 'ANULACION_TOTAL' if is_total else 'DEVOLUCION_PARCIAL'
+    reference_code = _build_reference_code(factura, is_total=is_total)
     items = []
     for line in preview_lines:
         detalle = DetalleVenta.objects.select_related('producto').get(pk=line['detalle_venta_original_id'], venta=factura.venta)
@@ -251,18 +288,20 @@ def _map_payload_for_factus(factura: FacturaElectronica, motivo: str, preview_li
                 'is_excluded': int((template or {}).get('is_excluded') or 0),
             }
         )
-    return {
+    payload = {
+        'numbering_range_id': numbering_range_id,
+        'correction_concept_code': _resolve_correction_concept_code(concepto=concepto, is_total=is_total),
+        'customization_id': _resolve_customization_id(factura=factura),
         'bill_id': bill_id,
-        'customer': customer,
-        'numbering_range_id': factura.response_json.get('data', {}).get('bill', {}).get('numbering_range_id'),
-        'reference_code': _build_reference_code(factura, is_total=is_total),
-        'correction_concept_code': 1 if is_total else 2,
-        'credit_note_reason': motivo,
-        'bill_number': factura.number,
-        'reference_code_bill': factura.reference_code or factura.number,
-        'reference_cufe': factura.cufe,
+        'reference_code': reference_code,
+        'payment_method_code': get_payment_method_code(factura.venta.medio_pago),
+        'observation': str(motivo or '')[:250],
+        'send_email': False,
         'items': items,
     }
+    if customer:
+        payload['customer'] = customer
+    return payload
 
 
 def _refresh_invoice_credit_status(factura: FacturaElectronica) -> None:
@@ -415,7 +454,7 @@ def sincronizar_nota_credito(nota_credito_id: int, *, user=None, force_retry: bo
         )
         reference_code = str(nota.reference_code or '').strip()
         if not reference_code:
-            reference_code = _build_reference_code(nota.factura, is_total=nota.tipo_nota == 'TOTAL')
+            reference_code = f'NC-{nota.factura_id}-{nota.tipo_nota}-{nota.id}'
             nota.reference_code = reference_code
             nota.save(update_fields=['reference_code', 'updated_at'])
 

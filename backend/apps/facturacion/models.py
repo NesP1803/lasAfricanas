@@ -315,6 +315,7 @@ class RangoNumeracionDIAN(models.Model):
     ]
     DOCUMENT_CODE_CHOICES = [
         ('FACTURA_VENTA', 'Factura de venta'),
+        ('NOTA_CREDITO', 'Nota crédito'),
     ]
 
     factus_range_id = models.PositiveIntegerField(

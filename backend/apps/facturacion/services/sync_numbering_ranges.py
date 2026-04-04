@@ -14,6 +14,18 @@ from apps.facturacion.services.factus_client import FactusClient
 logger = logging.getLogger(__name__)
 
 
+def _resolve_document_code(raw_range: dict[str, Any]) -> str:
+    raw = str(
+        raw_range.get('document')
+        or raw_range.get('document_code')
+        or raw_range.get('voucher_type')
+        or ''
+    ).strip().upper()
+    if raw in {'NOTA_CREDITO', 'CREDIT_NOTE', 'NC'}:
+        return 'NOTA_CREDITO'
+    return 'FACTURA_VENTA'
+
+
 def _as_date(value: Any) -> date | None:
     if not value:
         return None
@@ -64,10 +76,11 @@ def sync_numbering_ranges() -> list[RangoNumeracionDIAN]:
         resolucion = str(raw_range.get('resolution_number', raw_range.get('resolution', raw_range.get('resolucion', '')))).strip()
         consecutivo_actual = int(raw_range.get('current', raw_range.get('consecutivo_actual', desde)) or desde)
 
+        document_code = _resolve_document_code(raw_range)
         rango, _ = RangoNumeracionDIAN.objects.update_or_create(
             factus_range_id=factus_range_id,
             environment=environment,
-            document_code='FACTURA_VENTA',
+            document_code=document_code,
             defaults={
                 'desde': desde,
                 'hasta': hasta,
@@ -86,7 +99,6 @@ def sync_numbering_ranges() -> list[RangoNumeracionDIAN]:
 
     RangoNumeracionDIAN.objects.filter(
         environment=environment,
-        document_code='FACTURA_VENTA',
     ).exclude(factus_range_id__in=synced_ids).update(is_active_remote=False)
 
     logger.info(
