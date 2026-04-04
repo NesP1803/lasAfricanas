@@ -23,6 +23,7 @@ class InvoiceSequence:
 
 
 def resolve_numbering_range(document_code: str = 'FACTURA_VENTA') -> RangoNumeracionDIAN:
+    document_label = 'factura' if document_code == 'FACTURA_VENTA' else 'nota crédito'
     environment = _current_environment()
     base_queryset = RangoNumeracionDIAN.objects.filter(
         environment=environment,
@@ -31,20 +32,20 @@ def resolve_numbering_range(document_code: str = 'FACTURA_VENTA') -> RangoNumera
     if not base_queryset.exists():
         env_label = 'sandbox' if environment == 'SANDBOX' else 'producción'
         raise FactusValidationError(
-            f'No hay rangos sincronizados para factura en {env_label}. Debe sincronizar/configurar el rango antes de facturar.'
+            f'No hay rangos sincronizados para {document_label} en {env_label}. Debe sincronizar/configurar el rango antes de emitir.'
         )
 
     selected = base_queryset.filter(is_selected_local=True)
     if selected.count() > 1:
         raise FactusValidationError(
-            'Hay múltiples rangos seleccionados localmente para factura. Debe dejar solo uno activo.'
+            f'Hay múltiples rangos seleccionados localmente para {document_label}. Debe dejar solo uno activo.'
         )
     if selected.count() == 1:
         selected_range = selected.first()
         if not selected_range.is_active_remote:
             env_label = 'producción' if environment == 'PRODUCTION' else 'sandbox'
             raise FactusValidationError(
-                f'No hay rango local activo configurado para {env_label}. Debe sincronizar/configurar el rango antes de facturar.'
+                f'No hay rango local activo configurado para {document_label} en {env_label}. Debe sincronizar/configurar el rango antes de emitir.'
             )
         return selected_range
 
@@ -52,13 +53,13 @@ def resolve_numbering_range(document_code: str = 'FACTURA_VENTA') -> RangoNumera
     if not active_ranges:
         env_label = 'sandbox' if environment == 'SANDBOX' else 'producción'
         raise FactusValidationError(
-            f'No hay rangos sincronizados para factura en {env_label}. Debe sincronizar/configurar el rango antes de facturar.'
+            f'No hay rangos sincronizados para {document_label} en {env_label}. Debe sincronizar/configurar el rango antes de emitir.'
         )
     if len(active_ranges) == 1:
         return active_ranges[0]
 
     raise FactusValidationError(
-        'Hay múltiples rangos activos para factura, pero ninguno está seleccionado localmente.'
+        f'Hay múltiples rangos activos para {document_label}, pero ninguno está seleccionado localmente.'
     )
 
 

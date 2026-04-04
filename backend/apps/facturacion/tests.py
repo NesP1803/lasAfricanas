@@ -36,7 +36,11 @@ from apps.facturacion.services.factus_client import (
     FactusPendingCreditNoteError,
     FactusValidationError,
 )
-from apps.facturacion.services.credit_note_workflow import sincronizar_nota_credito
+from apps.facturacion.services.credit_note_workflow import (
+    _map_payload_for_factus,
+    extract_credit_note_remote_fields,
+    sincronizar_nota_credito,
+)
 from apps.facturacion.services.credit_note_service import build_credit_preview, create_credit_note
 from apps.facturacion.services.persistence_safety import (
     normalize_qr_image_value,
@@ -929,6 +933,23 @@ class NumberingRangeResolutionTests(TestCase):
             resolve_numbering_range(document_code='FACTURA_VENTA')
         self.assertIn('No hay rangos sincronizados', str(exc.exception))
 
+    def test_resuelve_rango_para_nota_credito(self):
+        rango = RangoNumeracionDIAN.objects.create(
+            factus_range_id=18,
+            environment='SANDBOX',
+            document_code='NOTA_CREDITO',
+            is_active_remote=True,
+            is_selected_local=True,
+            prefijo='NC',
+            desde=1,
+            hasta=999999,
+            resolucion='18760000018',
+            consecutivo_actual=1,
+            activo=True,
+        )
+        resolved = resolve_numbering_range(document_code='NOTA_CREDITO')
+        self.assertEqual(resolved.id, rango.id)
+
 
 class ConfiguracionDianRangosEndpointsTests(TestCase):
     def setUp(self):
@@ -1788,6 +1809,19 @@ class NotaCreditoWorkflowCoverageTests(TestCase):
                 }
             },
         )
+        RangoNumeracionDIAN.objects.create(
+            factus_range_id=501,
+            environment='SANDBOX',
+            document_code='NOTA_CREDITO',
+            is_active_remote=True,
+            is_selected_local=True,
+            prefijo='NC',
+            desde=1,
+            hasta=999999,
+            resolucion='18760000009',
+            consecutivo_actual=1,
+            activo=True,
+        )
 
     @patch('apps.facturacion.services.credit_note_workflow.FactusClient.create_and_validate_credit_note')
     def test_preview_and_partial_total_and_sync(self, mocked_create):
@@ -2064,9 +2098,67 @@ class CreditNoteWorkflowHardeningTests(TestCase):
             emitida_en_factus=True,
             response_json={'data': {'bill': {'id': 99, 'numbering_range_id': 1}}},
         )
+        RangoNumeracionDIAN.objects.create(
+            factus_range_id=502,
+            environment='SANDBOX',
+            document_code='NOTA_CREDITO',
+            is_active_remote=True,
+            is_selected_local=True,
+            prefijo='NC',
+            desde=1,
+            hasta=999999,
+            resolucion='18760000010',
+            consecutivo_actual=1,
+            activo=True,
+        )
 
     def _lines(self):
         return [{'detalle_venta_original_id': self.detalle.id, 'cantidad_a_acreditar': '1', 'afecta_inventario': True, 'motivo_linea': 'x'}]
+
+    def test_payload_credit_note_campos_requeridos_y_sin_campos_legacy(self):
+        payload = _map_payload_for_factus(
+            self.factura,
+            'Motivo de prueba largo ' * 20,
+            build_credit_preview(self.factura, self._lines(), is_total=False)['lineas'],
+            is_total=False,
+            client=FactusClient(),
+        )
+        self.assertEqual(payload['numbering_range_id'], 502)
+        self.assertEqual(payload['bill_id'], 99)
+        self.assertEqual(payload['customization_id'], 20)
+        self.assertEqual(payload['correction_concept_code'], 2)
+        self.assertEqual(payload['payment_method_code'], get_payment_method_code(self.venta.medio_pago))
+        self.assertTrue(payload['reference_code'].startswith('NC-'))
+        self.assertTrue(payload['items'])
+        self.assertLessEqual(len(payload.get('observation', '')), 250)
+        for field in ('credit_note_reason', 'bill_number', 'reference_code_bill', 'reference_cufe'):
+            self.assertNotIn(field, payload)
+
+    def test_extract_remote_fields_admite_number_bill(self):
+        fields = extract_credit_note_remote_fields({'data': {'credit_note': {'number_bill': 'FV-ALT'}}})
+        self.assertEqual(fields['bill_number'], 'FV-ALT')
+
+    def test_error_claro_si_no_hay_rango_de_nota_credito(self):
+        RangoNumeracionDIAN.objects.filter(document_code='NOTA_CREDITO').delete()
+        with self.assertRaises(Exception) as exc:
+            _map_payload_for_factus(
+                self.factura,
+                'x',
+                build_credit_preview(self.factura, self._lines(), is_total=False)['lineas'],
+                is_total=False,
+                client=FactusClient(),
+            )
+        self.assertIn('nota crédito', str(exc.exception).lower())
+
+    def test_reference_code_unico_para_multiples_parciales(self):
+        with patch('apps.facturacion.services.credit_note_workflow.FactusClient.create_and_validate_credit_note') as mocked_create:
+            mocked_create.side_effect = [
+                {'data': {'credit_note': {'number': 'NC-U1', 'reference_code': 'NC-U1-REF', 'status': 'accepted', 'cufe': 'CUFE-U1'}}},
+                {'data': {'credit_note': {'number': 'NC-U2', 'reference_code': 'NC-U2-REF', 'status': 'accepted', 'cufe': 'CUFE-U2'}}},
+            ]
+            nota1, _ = create_credit_note(factura=self.factura, motivo='x1', lines=self._lines(), is_total=False, user=self.user)
+            nota2, _ = create_credit_note(factura=self.factura, motivo='x2', lines=self._lines(), is_total=False, user=self.user)
+        self.assertNotEqual(nota1.reference_code, nota2.reference_code)
 
     @patch('apps.facturacion.services.credit_note_workflow.FactusClient.create_and_validate_credit_note')
     @patch('apps.facturacion.services.credit_note_workflow.FactusClient.get_credit_note')
