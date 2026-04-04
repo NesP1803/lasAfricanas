@@ -1,73 +1,14 @@
 from __future__ import annotations
 
-import logging
-import time as time_module
-
 from rest_framework.exceptions import ValidationError
 
-from apps.facturacion.services import FactusAPIError, FactusAuthError, emitir_nota_credito
+from apps.facturacion.services.credit_note_workflow import create_credit_note
 from apps.ventas.models import RemisionAnulada, VentaAnulada
-
-logger = logging.getLogger(__name__)
 
 
 def validar_estado_para_anulacion(venta):
     if venta.estado == 'ANULADA':
         raise ValidationError('Esta venta ya está anulada.')
-    if venta.estado in {'COBRADA', 'FACTURADA'} and venta.tipo_comprobante == 'FACTURA' and venta.facturada_at is None:
-        raise ValidationError('La venta está en un estado inconsistente y no se puede anular.')
-
-
-def build_credit_note_items(venta):
-    items = []
-    for detalle in venta.detalles.select_related('producto').all():
-        items.append(
-            {
-                'code_reference': detalle.producto.codigo,
-                'name': detalle.producto.nombre,
-                'quantity': float(detalle.cantidad),
-                'price': float(detalle.precio_unitario),
-                'tax_rate': float(detalle.iva_porcentaje),
-                'discount_rate': 0,
-            }
-        )
-    return items
-
-
-def anular_factura_electronica_con_nota_credito(venta, motivo, *, max_reintentos=2, backoff_segundos=0.3):
-    if not hasattr(venta, 'factura_electronica_factus'):
-        return None
-
-    factura = venta.factura_electronica_factus
-    if factura.status != 'ACEPTADA':
-        return None
-
-    items = build_credit_note_items(venta)
-    ultimo_error = None
-    for intento in range(max_reintentos + 1):
-        try:
-            nota_credito = emitir_nota_credito(factura_id=factura.id, motivo=motivo, items=items)
-            if nota_credito.status != 'ACEPTADA':
-                raise FactusAPIError(
-                    f'La nota crédito no fue aceptada por Factus (estado={nota_credito.status}).'
-                )
-            return nota_credito
-        except (FactusAPIError, FactusAuthError) as exc:
-            ultimo_error = exc
-            logger.warning(
-                'Reintento nota crédito para venta_id=%s intento=%s/%s error=%s',
-                venta.id,
-                intento + 1,
-                max_reintentos + 1,
-                str(exc),
-            )
-            if intento >= max_reintentos:
-                break
-            time_module.sleep(backoff_segundos * (intento + 1))
-
-    if ultimo_error:
-        raise ultimo_error
-    return None
 
 
 def debe_revertir_inventario(venta):
@@ -81,27 +22,18 @@ def debe_revertir_inventario(venta):
     referencias = {f'VENTA-{venta.id}'}
     if venta.numero_comprobante:
         referencias.add(venta.numero_comprobante)
-    return MovimientoInventario.objects.filter(
-        tipo='SALIDA',
-        referencia__in=referencias,
-    ).exists()
+    return MovimientoInventario.objects.filter(tipo='SALIDA', referencia__in=referencias).exists()
 
 
 def revertir_inventario_venta_anulada(venta, user, descripcion=''):
     from apps.inventario.models import MovimientoInventario, Producto
 
     detalles = [detalle for detalle in venta.detalles.all() if detalle.afecto_inventario]
-    productos_ids = [detalle.producto_id for detalle in detalles]
-    productos = {
-        producto.id: producto
-        for producto in Producto.objects.select_for_update().filter(id__in=productos_ids)
-    }
-
+    productos = {p.id: p for p in Producto.objects.select_for_update().filter(id__in=[d.producto_id for d in detalles])}
     for detalle in detalles:
         producto = productos.get(detalle.producto_id) or detalle.producto
         stock_anterior = producto.stock
         stock_nuevo = stock_anterior + detalle.cantidad
-
         MovimientoInventario.objects.create(
             producto=producto,
             tipo='DEVOLUCION',
@@ -113,18 +45,11 @@ def revertir_inventario_venta_anulada(venta, user, descripcion=''):
             referencia=f'Anulación {venta.numero_comprobante}',
             observaciones=f'Devolución por anulación: {descripcion}',
         )
+        producto.stock = stock_nuevo
+        producto.save(update_fields=['stock', 'updated_at'])
 
 
-def anular_venta(venta, user, *, motivo, descripcion='', devuelve_inventario=True):
-    validar_estado_para_anulacion(venta)
-    factura_emitida = getattr(venta, 'factura_electronica_factus', None)
-    if factura_emitida and factura_emitida.emitida_en_factus:
-        raise ValidationError(
-            'La factura ya fue emitida electrónicamente. Debe gestionar nota crédito parcial o total, no anulación directa.'
-        )
-
-    nota_credito = anular_factura_electronica_con_nota_credito(venta, motivo)
-
+def _registrar_anulacion_local(venta, user, *, motivo, descripcion, devuelve_inventario):
     if venta.tipo_comprobante == 'REMISION':
         RemisionAnulada.objects.create(
             remision=venta,
@@ -142,10 +67,37 @@ def anular_venta(venta, user, *, motivo, descripcion='', devuelve_inventario=Tru
             devuelve_inventario=devuelve_inventario,
         )
 
+
+def anular_venta(venta, user, *, motivo, descripcion='', devuelve_inventario=True):
+    validar_estado_para_anulacion(venta)
+    factura_emitida = getattr(venta, 'factura_electronica_factus', None)
+
+    # Remisión convertida a factura: se anula sobre la factura asociada
+    if venta.tipo_comprobante == 'REMISION' and venta.facturas_generadas.exists():
+        factura_generada = venta.facturas_generadas.order_by('-id').first()
+        if factura_generada:
+            return anular_venta(factura_generada, user, motivo=motivo, descripcion=descripcion, devuelve_inventario=devuelve_inventario)
+
+    if factura_emitida and factura_emitida.emitida_en_factus and (factura_emitida.estado_electronico or factura_emitida.status) in {'ACEPTADA', 'ACEPTADA_CON_OBSERVACIONES'}:
+        lines = [
+            {
+                'detalle_venta_original_id': detalle.id,
+                'cantidad_a_acreditar': detalle.cantidad,
+                'afecta_inventario': devuelve_inventario and detalle.afecto_inventario,
+                'motivo_linea': descripcion or motivo,
+            }
+            for detalle in venta.detalles.all()
+        ]
+        nota, meta = create_credit_note(factura=factura_emitida, motivo=motivo, lines=lines, is_total=True, user=user)
+        if meta.get('result') == 'accepted':
+            _registrar_anulacion_local(venta, user, motivo=motivo, descripcion=descripcion, devuelve_inventario=devuelve_inventario)
+            venta.refresh_from_db()
+        return {'nota_credito': nota, 'flow_meta': meta}
+
+    # Remisión no electrónica o factura local
+    _registrar_anulacion_local(venta, user, motivo=motivo, descripcion=descripcion, devuelve_inventario=devuelve_inventario)
     venta.estado = 'ANULADA'
     venta.save(update_fields=['estado', 'updated_at'])
-
     if devuelve_inventario and debe_revertir_inventario(venta):
         revertir_inventario_venta_anulada(venta, user, descripcion=descripcion)
-
-    return nota_credito
+    return {'nota_credito': None, 'flow_meta': {'ok': True, 'result': 'accepted', 'finalized': True, 'business_effects_applied': True}}

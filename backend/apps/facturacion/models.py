@@ -110,14 +110,12 @@ class NotaCreditoElectronica(models.Model):
     LOCAL_STATUS_CHOICES = [
         ('BORRADOR', 'Borrador'),
         ('PENDIENTE_ENVIO', 'Pendiente de envío'),
-        ('EN_PROCESO', 'En proceso DIAN'),
+        ('PENDIENTE_DIAN', 'Pendiente DIAN'),
         ('CONFLICTO_FACTUS', 'Conflicto Factus (sin confirmación remota)'),
         ('ACEPTADA', 'Aceptada'),
         ('RECHAZADA', 'Rechazada'),
         ('ERROR_INTEGRACION', 'Error de integración'),
-        ('ERROR_PERSISTENCIA', 'Error de persistencia'),
         ('ANULADA_LOCAL', 'Anulada local'),
-        ('ELIMINADA_EN_FACTUS', 'Eliminada en Factus'),
     ]
 
     factura = models.ForeignKey(
@@ -132,7 +130,7 @@ class NotaCreditoElectronica(models.Model):
         null=True,
         blank=True,
     )
-    number = models.CharField(max_length=50, db_index=True)
+    number = models.CharField(max_length=50, db_index=True, blank=True, default='')
     prefijo = models.CharField(max_length=20, blank=True, default='')
     consecutivo = models.CharField(max_length=30, blank=True, default='')
     reference_code = models.CharField(max_length=120, blank=True, default='', db_index=True)
@@ -147,8 +145,8 @@ class NotaCreditoElectronica(models.Model):
         db_index=True,
     )
     status_raw_factus = models.CharField(max_length=120, blank=True, default='')
-    uuid = models.CharField(max_length=100, null=True, blank=True)
-    cufe = models.CharField(max_length=150, null=True, blank=True)
+    uuid = models.CharField(max_length=100, null=True, blank=True, db_index=True)
+    cufe = models.CharField(max_length=150, null=True, blank=True, db_index=True)
     status = models.CharField(
         max_length=40,
         choices=FacturaElectronica.ELECTRONIC_STATUS_CHOICES,
@@ -185,9 +183,29 @@ class NotaCreditoElectronica(models.Model):
             models.UniqueConstraint(
                 fields=['factura', 'tipo_nota'],
                 condition=models.Q(
-                    estado_local__in=['BORRADOR', 'PENDIENTE_ENVIO', 'EN_PROCESO', 'CONFLICTO_FACTUS', 'ACEPTADA']
+                    estado_local__in=['BORRADOR', 'PENDIENTE_ENVIO', 'PENDIENTE_DIAN', 'CONFLICTO_FACTUS']
                 ),
                 name='uq_nota_credito_abierta_factura_tipo',
+            ),
+            models.UniqueConstraint(
+                fields=['factura'],
+                condition=models.Q(tipo_nota='TOTAL', estado_local__in=['BORRADOR', 'PENDIENTE_ENVIO', 'PENDIENTE_DIAN', 'CONFLICTO_FACTUS', 'ACEPTADA']),
+                name='uq_nota_credito_total_activa_factura',
+            ),
+            models.UniqueConstraint(
+                fields=['number'],
+                condition=~models.Q(number=''),
+                name='uq_nota_credito_number_non_empty',
+            ),
+            models.UniqueConstraint(
+                fields=['cufe'],
+                condition=models.Q(cufe__isnull=False) & ~models.Q(cufe=''),
+                name='uq_nota_credito_cufe_non_empty',
+            ),
+            models.UniqueConstraint(
+                fields=['reference_code'],
+                condition=~models.Q(reference_code=''),
+                name='uq_nota_credito_reference_code_non_empty',
             ),
         ]
 

@@ -19,6 +19,7 @@ from .credit_note_workflow import (
     build_credit_preview,
     create_credit_note,
     sync_credit_note,
+    sync_credit_note_with_effects,
 )
 from .support_document_payload_builder import build_support_document_payload
 from .emitir_documento_soporte import emitir_documento_soporte
@@ -50,6 +51,7 @@ __all__ = [
     'build_credit_preview',
     'create_credit_note',
     'sync_credit_note',
+    'sync_credit_note_with_effects',
     'build_support_document_payload',
     'emitir_documento_soporte',
     'build_adjustment_payload',

@@ -47,7 +47,6 @@ from apps.facturacion.services import (
     download_xml,
     emitir_documento_soporte,
     emitir_nota_ajuste_documento_soporte,
-    emitir_nota_credito,
     read_local_media_file,
     sync_numbering_ranges,
     sync_invoice_status,
@@ -55,6 +54,7 @@ from apps.facturacion.services import (
     build_credit_preview,
     create_credit_note,
     sync_credit_note,
+    sync_credit_note_with_effects,
     CreditNoteValidationError,
     CreditNoteStateError,
 )
@@ -83,6 +83,16 @@ def _build_file_response(content: bytes, filename: str, content_type: str) -> Ht
     response = HttpResponse(content, content_type=content_type)
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
     return response
+
+
+def _credit_note_http_status(meta: dict) -> int:
+    return int(meta.get('http_status') or status.HTTP_200_OK)
+
+
+def _credit_note_api_payload(nota, meta: dict) -> dict:
+    payload = NotaCreditoListSerializer(nota).data
+    payload.update({k: v for k, v in meta.items() if k != 'http_status'})
+    return payload
 
 
 class FacturaElectronicaViewSet(viewsets.GenericViewSet):
@@ -491,25 +501,24 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
         if not isinstance(items, list) or not items:
             return Response({'detail': 'El campo items debe ser una lista con al menos un elemento.'}, status=400)
 
+        factura = FacturaElectronica.objects.select_related('venta').filter(pk=pk).first()
+        if factura is None:
+            return Response({'detail': 'Factura electrónica no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
         try:
-            nota = emitir_nota_credito(factura_id=int(pk), motivo=motivo, items=items)
-        except ValueError:
-            return Response({'detail': 'factura_id inválido.'}, status=status.HTTP_400_BAD_REQUEST)
-        except FacturaElectronica.DoesNotExist as exc:
-            return Response({'detail': str(exc)}, status=status.HTTP_404_NOT_FOUND)
-        except FacturaNoValidaParaNotaCredito as exc:
+            nota, meta = create_credit_note(
+                factura=factura,
+                motivo=motivo,
+                lines=items,
+                is_total=False,
+                user=request.user,
+            )
+        except (CreditNoteValidationError, CreditNoteStateError, FacturaNoValidaParaNotaCredito) as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         except FactusValidationError as exc:
-            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-
-        return Response(
-            {
-                'nota_credito': nota.number,
-                'cufe': nota.cufe,
-                'estado': nota.status,
-            },
-            status=status.HTTP_201_CREATED,
-        )
+            return Response({'detail': str(exc)}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+        except (FactusAPIError, FactusAuthError) as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        return Response(_credit_note_api_payload(nota, meta), status=_credit_note_http_status(meta))
 
     @action(detail=True, methods=['post'], url_path='notas-credito/preview')
     def notas_credito_preview(self, request, pk=None):
@@ -545,22 +554,12 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
             )
         except (CreditNoteValidationError, CreditNoteStateError) as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-        except FactusPendingCreditNoteError as exc:
-            return Response({'detail': str(exc)}, status=status.HTTP_409_CONFLICT)
         except (FactusValidationError, FactusAPIError, FactusAuthError) as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
         except Exception:
             logger.exception('Error inesperado creando nota crédito parcial para factura %s', factura.id)
             return Response({'detail': 'Error interno al crear nota crédito parcial.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        payload = NotaCreditoListSerializer(nota).data
-        if meta.get('result') == 'factus_pending_manual_sync':
-            payload['detail'] = (
-                'Factus respondió conflicto 409, pero no se confirmó un documento remoto. '
-                'La nota quedó en CONFLICTO_FACTUS; use "Sincronizar".'
-            )
-        elif meta.get('result') != 'created':
-            payload['detail'] = 'Se detectó una nota crédito pendiente en Factus y se reconcilió automáticamente.'
-        return Response(payload, status=int(meta.get('http_status', status.HTTP_201_CREATED)))
+        return Response(_credit_note_api_payload(nota, meta), status=_credit_note_http_status(meta))
 
     @action(detail=True, methods=['post'], url_path='notas-credito/total')
     def notas_credito_total(self, request, pk=None):
@@ -587,22 +586,12 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
             )
         except (CreditNoteValidationError, CreditNoteStateError) as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-        except FactusPendingCreditNoteError as exc:
-            return Response({'detail': str(exc)}, status=status.HTTP_409_CONFLICT)
         except (FactusValidationError, FactusAPIError, FactusAuthError) as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
         except Exception:
             logger.exception('Error inesperado creando nota crédito total para factura %s', factura.id)
             return Response({'detail': 'Error interno al crear nota crédito total.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        payload = NotaCreditoListSerializer(nota).data
-        if meta.get('result') == 'factus_pending_manual_sync':
-            payload['detail'] = (
-                'Factus respondió conflicto 409, pero no se confirmó un documento remoto. '
-                'La nota quedó en CONFLICTO_FACTUS; use "Sincronizar".'
-            )
-        elif meta.get('result') != 'created':
-            payload['detail'] = 'Se detectó una nota crédito pendiente en Factus y se reconcilió automáticamente.'
-        return Response(payload, status=int(meta.get('http_status', status.HTTP_201_CREATED)))
+        return Response(_credit_note_api_payload(nota, meta), status=_credit_note_http_status(meta))
 
 
 
@@ -820,23 +809,13 @@ class NotasCreditoViewSet(viewsets.GenericViewSet):
             )
         except (CreditNoteValidationError, CreditNoteStateError) as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-        except FactusPendingCreditNoteError as exc:
-            return Response({'detail': str(exc)}, status=status.HTTP_409_CONFLICT)
         except (FactusValidationError, FactusAPIError, FactusAuthError) as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
         except Exception:
             logger.exception('Error inesperado creando nota crédito (endpoint legacy) para factura %s', factura.id)
             return Response({'detail': 'Error interno al crear nota crédito.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        output = NotaCreditoListSerializer(nota).data
-        if meta.get('result') == 'factus_pending_manual_sync':
-            output['detail'] = (
-                'Factus respondió conflicto 409, pero no se confirmó un documento remoto. '
-                'La nota quedó en CONFLICTO_FACTUS; use "Sincronizar".'
-            )
-        elif meta.get('result') != 'created':
-            output['detail'] = 'Se detectó una nota crédito pendiente en Factus y se reconcilió automáticamente.'
-        return Response(output, status=int(meta.get('http_status', status.HTTP_201_CREATED)))
+        return Response(_credit_note_api_payload(nota, meta), status=_credit_note_http_status(meta))
 
     @action(detail=False, methods=['get'], url_path=r'(?P<number>[^/.]+)/xml')
     def xml(self, request, number=None):
@@ -888,17 +867,31 @@ class NotasCreditoViewSet(viewsets.GenericViewSet):
         if nota is None:
             return Response({'detail': 'Nota crédito no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
         try:
-            nota = sync_credit_note(nota)
+            nota, effects = sync_credit_note_with_effects(nota, user=request.user)
+            meta = {
+                'ok': nota.estado_local in {'ACEPTADA', 'PENDIENTE_DIAN'},
+                'result': 'accepted' if nota.estado_local == 'ACEPTADA' else ('pending_dian' if nota.estado_local == 'PENDIENTE_DIAN' else ('rejected' if nota.estado_local == 'RECHAZADA' else ('conflict' if nota.estado_local == 'CONFLICTO_FACTUS' else 'error'))),
+                'finalized': nota.estado_local in {'ACEPTADA', 'RECHAZADA'},
+                'business_effects_applied': effects,
+                'note_id': nota.id,
+                'number': nota.number,
+                'estado_local': nota.estado_local,
+                'estado_electronico': nota.estado_electronico,
+                'codigo_error': nota.codigo_error,
+                'mensaje_error': nota.mensaje_error,
+                'can_sync': nota.estado_local in {'PENDIENTE_ENVIO', 'PENDIENTE_DIAN', 'CONFLICTO_FACTUS'},
+                'can_retry': nota.estado_local in {'ERROR_INTEGRACION', 'CONFLICTO_FACTUS'},
+                'warnings': [],
+                'http_status': 202 if nota.estado_local in {'PENDIENTE_DIAN', 'CONFLICTO_FACTUS'} else 200,
+            }
         except (CreditNoteValidationError, CreditNoteStateError) as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-        except FactusPendingCreditNoteError as exc:
-            return Response({'detail': str(exc)}, status=status.HTTP_409_CONFLICT)
         except (FactusValidationError, FactusAPIError, FactusAuthError) as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
         except Exception:
             logger.exception('Error inesperado sincronizando nota crédito %s', nota.id)
             return Response({'detail': 'Error interno al sincronizar la nota crédito.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        return Response(NotaCreditoListSerializer(nota).data)
+        return Response(_credit_note_api_payload(nota, meta), status=_credit_note_http_status(meta))
 
     @action(detail=True, methods=['get'], url_path='pdf')
     def pdf_by_id(self, request, pk=None):

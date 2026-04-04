@@ -1794,3 +1794,160 @@ class FactusClientCreditNoteFallbackTests(TestCase):
 
         self.assertEqual(response['data']['credit_note']['number'], 'NC-OK')
         self.assertEqual(mocked_send.call_count, 2)
+
+
+class CreditNoteWorkflowHardeningTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(username='nc-hard', password='1234')
+        self.cliente = Cliente.objects.create(numero_documento='9001', nombre='Cliente NC')
+        self.categoria = Categoria.objects.create(nombre='NC CAT')
+        self.proveedor = Proveedor.objects.create(nombre='NC PROV')
+        self.producto = Producto.objects.create(
+            codigo='NC-1',
+            nombre='Producto NC',
+            categoria=self.categoria,
+            proveedor=self.proveedor,
+            precio_costo=Decimal('10'),
+            precio_venta=Decimal('20'),
+            precio_venta_minimo=Decimal('15'),
+            stock=10,
+            stock_minimo=1,
+            iva_porcentaje=Decimal('19'),
+        )
+        self.venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            cliente=self.cliente,
+            vendedor=self.user,
+            subtotal=Decimal('20'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('3.8'),
+            total=Decimal('23.8'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('23.8'),
+            cambio=Decimal('0'),
+            estado='FACTURADA',
+            inventario_ya_afectado=True,
+        )
+        self.detalle = DetalleVenta.objects.create(
+            venta=self.venta,
+            producto=self.producto,
+            cantidad=Decimal('1'),
+            precio_unitario=Decimal('20'),
+            descuento_unitario=Decimal('0'),
+            iva_porcentaje=Decimal('19'),
+            subtotal=Decimal('20'),
+            total=Decimal('23.8'),
+            afecto_inventario=True,
+        )
+        self.factura = FacturaElectronica.objects.create(
+            venta=self.venta,
+            cufe='CUFE-WF',
+            uuid='UUID-WF',
+            number='FV-WF',
+            reference_code='FV-WF',
+            status='ACEPTADA',
+            estado_electronico='ACEPTADA',
+            emitida_en_factus=True,
+            response_json={'data': {'bill': {'id': 99, 'numbering_range_id': 1}}},
+        )
+
+    def _lines(self):
+        return [{'detalle_venta_original_id': self.detalle.id, 'cantidad_a_acreditar': '1', 'afecta_inventario': True, 'motivo_linea': 'x'}]
+
+    @patch('apps.facturacion.services.credit_note_workflow.FactusClient.create_and_validate_credit_note')
+    @patch('apps.facturacion.services.credit_note_workflow.FactusClient.get_credit_note')
+    def test_no_aplica_efectos_si_queda_pendiente_dian(self, mocked_get, mocked_create):
+        mocked_create.return_value = {'data': {'credit_note': {'number': 'NC-P1', 'status': 'pending'}}}
+        mocked_get.side_effect = FactusAPIError('not found', status_code=404)
+        nota, meta = create_credit_note(factura=self.factura, motivo='x', lines=self._lines(), is_total=False, user=self.user)
+        self.assertEqual(nota.estado_local, 'PENDIENTE_DIAN')
+        self.assertFalse(meta['business_effects_applied'])
+        self.assertEqual(MovimientoInventario.objects.filter(tipo='DEVOLUCION').count(), 0)
+
+    @patch('apps.facturacion.services.credit_note_workflow.FactusClient.create_and_validate_credit_note')
+    def test_aplica_efectos_si_aceptada(self, mocked_create):
+        mocked_create.return_value = {'data': {'credit_note': {'number': 'NC-A1', 'cufe': 'CUFE-NC', 'uuid': 'UUID-NC', 'status': 'accepted'}}}
+        nota, meta = create_credit_note(factura=self.factura, motivo='x', lines=self._lines(), is_total=False, user=self.user)
+        self.assertEqual(nota.estado_local, 'ACEPTADA')
+        self.assertTrue(meta['business_effects_applied'])
+        self.assertEqual(MovimientoInventario.objects.filter(tipo='DEVOLUCION').count(), 1)
+
+    @patch('apps.facturacion.services.credit_note_workflow.FactusClient.create_and_validate_credit_note')
+    @patch('apps.facturacion.services.credit_note_workflow.FactusClient.list_credit_notes')
+    def test_409_reconciliacion_exacta_no_duplica(self, mocked_list, mocked_create):
+        mocked_create.side_effect = FactusPendingCreditNoteError('409', status_code=409)
+        mocked_list.return_value = {'data': {'credit_notes': [{'number': 'NC-R1', 'reference_code': 'NC-1-PARCIAL', 'bill_number': 'FV-WF', 'status': 'pending'}]}}
+        with patch('apps.facturacion.services.credit_note_workflow._build_reference_code', return_value='NC-1-PARCIAL'):
+            nota, meta = create_credit_note(factura=self.factura, motivo='x', lines=self._lines(), is_total=False, user=self.user)
+        self.assertEqual(NotaCreditoElectronica.objects.filter(factura=self.factura).count(), 1)
+        self.assertIn(meta['result'], {'pending_dian', 'accepted'})
+        self.assertEqual(nota.number, 'NC-R1')
+
+    @patch('apps.facturacion.services.credit_note_workflow.FactusClient.create_and_validate_credit_note')
+    @patch('apps.facturacion.services.credit_note_workflow.FactusClient.list_credit_notes')
+    def test_409_sin_evidencia_exacta_queda_pendiente_sin_duplicar(self, mocked_list, mocked_create):
+        mocked_create.side_effect = FactusPendingCreditNoteError('409', status_code=409)
+        mocked_list.return_value = {'data': {'credit_notes': [{'number': 'NC-OTRA', 'reference_code': 'DIFERENTE', 'bill_number': 'FV-OTRA'}]}}
+        with patch('apps.facturacion.services.credit_note_workflow._build_reference_code', return_value='NC-1-PARCIAL'):
+            nota, meta = create_credit_note(factura=self.factura, motivo='x', lines=self._lines(), is_total=False, user=self.user)
+        self.assertEqual(NotaCreditoElectronica.objects.filter(factura=self.factura).count(), 1)
+        self.assertEqual(nota.estado_local, 'PENDIENTE_DIAN')
+        self.assertEqual(meta['result'], 'pending_dian')
+
+    def test_refresh_acreditacion_no_cuenta_pendientes(self):
+        nota = NotaCreditoElectronica.objects.create(
+            factura=self.factura,
+            venta_origen=self.venta,
+            number='NC-PEND',
+            tipo_nota='PARCIAL',
+            estado_local='PENDIENTE_DIAN',
+            estado_electronico='PENDIENTE_DIAN',
+            status='PENDIENTE_DIAN',
+            request_json={},
+            response_json={},
+        )
+        NotaCreditoDetalle.objects.create(
+            nota_credito=nota,
+            detalle_venta_original=self.detalle,
+            producto=self.producto,
+            cantidad_original_facturada=Decimal('1'),
+            cantidad_ya_acreditada=Decimal('0'),
+            cantidad_a_acreditar=Decimal('1'),
+            precio_unitario=Decimal('20'),
+            descuento=Decimal('0'),
+            base_impuesto=Decimal('20'),
+            impuesto=Decimal('3.8'),
+            total_linea=Decimal('23.8'),
+            afecta_inventario=True,
+        )
+        from apps.facturacion.services.credit_note_workflow import _refresh_invoice_credit_status
+        _refresh_invoice_credit_status(self.factura)
+        self.factura.refresh_from_db()
+        self.assertEqual(self.factura.estado_acreditacion, 'ACTIVA')
+
+    def test_permite_multiples_parciales_aceptadas(self):
+        NotaCreditoElectronica.objects.create(
+            factura=self.factura,
+            venta_origen=self.venta,
+            number='NC-H1',
+            tipo_nota='PARCIAL',
+            estado_local='ACEPTADA',
+            estado_electronico='ACEPTADA',
+            status='ACEPTADA',
+            request_json={},
+            response_json={},
+        )
+        NotaCreditoElectronica.objects.create(
+            factura=self.factura,
+            venta_origen=self.venta,
+            number='NC-H2',
+            tipo_nota='PARCIAL',
+            estado_local='ACEPTADA',
+            estado_electronico='ACEPTADA',
+            status='ACEPTADA',
+            request_json={},
+            response_json={},
+        )
+        self.assertEqual(NotaCreditoElectronica.objects.filter(factura=self.factura, tipo_nota='PARCIAL', estado_local='ACEPTADA').count(), 2)

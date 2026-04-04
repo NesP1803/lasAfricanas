@@ -126,7 +126,7 @@ export default function NotasCreditoTable({ notasCredito, loading, onRefresh }: 
             <option value="TODOS">Todos los estados</option>
             <option value="BORRADOR">Borrador</option>
             <option value="PENDIENTE_ENVIO">Pendiente envío</option>
-            <option value="EN_PROCESO">En proceso</option>
+            <option value="PENDIENTE_DIAN">Pendiente DIAN</option>
             <option value="CONFLICTO_FACTUS">Conflicto Factus</option>
             <option value="ACEPTADA">Aceptada</option>
             <option value="RECHAZADA">Rechazada</option>
@@ -164,7 +164,7 @@ export default function NotasCreditoTable({ notasCredito, loading, onRefresh }: 
                 const estado = resolveEstadoNota(nota);
                 const canSync = typeof nota.can_sync === 'boolean'
                   ? nota.can_sync
-                  : ['PENDIENTE_ENVIO', 'EN_PROCESO', 'CONFLICTO_FACTUS'].includes(estado);
+                  : ['PENDIENTE_ENVIO', 'PENDIENTE_DIAN', 'CONFLICTO_FACTUS'].includes(estado);
                 return (
                   <tr key={nota.id} className="hover:bg-slate-50">
                     <td className="px-4 py-3 font-semibold text-slate-800">{nota.numero}</td>
