@@ -17,7 +17,13 @@ const estadoStyles: Record<string, string> = {
 };
 
 export const resolveEstadoNota = ({ estado, estado_local, estado_dian }: { estado?: string; estado_local?: string; estado_dian?: string }) =>
-  (estado_local || estado || estado_dian || 'ERROR').toUpperCase();
+  {
+    const raw = (estado_local || estado || estado_dian || 'ERROR').toUpperCase();
+    if (['PENDIENTE_ENVIO', 'PENDIENTE_DIAN', 'CONFLICTO_FACTUS', 'ERROR_INTEGRACION', 'PENDIENTE_REINTENTO'].includes(raw)) {
+      return 'EN_PROCESO';
+    }
+    return raw;
+  };
 
 export default function EstadoNotaCreditoBadge({ estado }: { estado: EstadoDian }) {
   const normalizedEstado = estado?.toUpperCase() ?? 'ERROR';
