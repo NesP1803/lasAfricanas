@@ -1457,7 +1457,12 @@ class NotaCreditoFlujoTests(TestCase):
             status='ACEPTADA',
             estado_electronico='ACEPTADA',
             emitida_en_factus=True,
-            response_json={'data': {'bill': {'numbering_range_id': 1}}},
+            response_json={
+                'data': {
+                    'bill': {'id': 90001, 'numbering_range_id': 1},
+                    'customer': {'identification': '321', 'names': 'Cliente NC'},
+                }
+            },
         )
 
     def test_preview_bloquea_sobre_acreditacion(self):
@@ -1559,7 +1564,12 @@ class NotaCreditoWorkflowCoverageTests(TestCase):
             status='ACEPTADA',
             estado_electronico='ACEPTADA',
             emitida_en_factus=True,
-            response_json={'data': {'bill': {'numbering_range_id': 1}}},
+            response_json={
+                'data': {
+                    'bill': {'id': 90901, 'numbering_range_id': 1},
+                    'customer': {'identification': '909', 'names': 'Cliente workflow'},
+                }
+            },
         )
 
     @patch('apps.facturacion.services.credit_note_workflow.FactusClient.create_and_validate_credit_note')
@@ -1599,6 +1609,9 @@ class NotaCreditoWorkflowCoverageTests(TestCase):
             format='json',
         )
         self.assertEqual(total_resp.status_code, 201)
+        payload = mocked_create.call_args.args[0]
+        self.assertIn('bill_id', payload)
+        self.assertIn('customer', payload)
         self.factura.refresh_from_db()
         self.assertEqual(self.factura.estado_acreditacion, 'CREDITADA_TOTAL')
 

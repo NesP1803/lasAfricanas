@@ -7,6 +7,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.facturacion.models import FacturaElectronica, NotaCreditoDetalle, NotaCreditoElectronica
+from apps.facturacion.services.factus_payload_builder import build_invoice_payload
 from apps.facturacion.services.facturar_venta import map_factus_status
 from apps.facturacion.services.factus_client import FactusClient
 from apps.inventario.models import MovimientoInventario, Producto
@@ -186,7 +187,43 @@ def _apply_inventory_return(nota: NotaCreditoElectronica, user) -> None:
         producto.save(update_fields=['stock', 'updated_at'])
 
 
-def _map_payload_for_factus(factura: FacturaElectronica, motivo: str, preview_lines: list[dict[str, Any]], *, is_total: bool) -> dict[str, Any]:
+def _resolve_bill_id_and_customer(factura: FacturaElectronica, client: FactusClient) -> tuple[int, dict[str, Any]]:
+    response_json = factura.response_json if isinstance(factura.response_json, dict) else {}
+    data = response_json.get('data', response_json)
+    bill = data.get('bill', {}) if isinstance(data, dict) else {}
+    customer = data.get('customer', {}) if isinstance(data, dict) else {}
+    bill_id = bill.get('id')
+
+    if bill_id and customer:
+        return int(bill_id), customer
+
+    if factura.number:
+        remote = client.get_invoice(factura.number)
+        remote_data = remote.get('data', remote)
+        remote_bill = remote_data.get('bill', {}) if isinstance(remote_data, dict) else {}
+        remote_customer = remote_data.get('customer', {}) if isinstance(remote_data, dict) else {}
+        remote_bill_id = remote_bill.get('id')
+        if remote_bill_id and remote_customer:
+            return int(remote_bill_id), remote_customer
+
+    if not bill_id:
+        raise CreditNoteValidationError(
+            'No fue posible identificar bill_id de la factura electrónica origen para emitir la nota crédito.'
+        )
+    # Fallback: construir customer local cuando no viene en respuesta previa/remota.
+    local_customer = build_invoice_payload(factura.venta).get('customer', {})
+    return int(bill_id), local_customer
+
+
+def _map_payload_for_factus(
+    factura: FacturaElectronica,
+    motivo: str,
+    preview_lines: list[dict[str, Any]],
+    *,
+    is_total: bool,
+    client: FactusClient,
+) -> dict[str, Any]:
+    bill_id, customer = _resolve_bill_id_and_customer(factura, client)
     items = []
     for line in preview_lines:
         detalle = DetalleVenta.objects.select_related('producto').get(pk=line['detalle_venta_original_id'], venta=factura.venta)
@@ -202,6 +239,8 @@ def _map_payload_for_factus(factura: FacturaElectronica, motivo: str, preview_li
         )
 
     return {
+        'bill_id': bill_id,
+        'customer': customer,
         'numbering_range_id': factura.response_json.get('data', {}).get('bill', {}).get('numbering_range_id'),
         'reference_code': f'NC-{factura.number}-{timezone.now().strftime("%Y%m%d%H%M%S")}',
         'correction_concept_code': 1 if is_total else 2,
@@ -239,9 +278,9 @@ def create_credit_note(*, factura: FacturaElectronica, motivo: str, lines: list[
             f'La factura está en estado {estado_factura} y no admite nota crédito electrónica.'
         )
 
-    preview = build_credit_preview(factura, lines, is_total=is_total)
-    payload = _map_payload_for_factus(factura, motivo, preview['lineas'], is_total=is_total)
     client = FactusClient()
+    preview = build_credit_preview(factura, lines, is_total=is_total)
+    payload = _map_payload_for_factus(factura, motivo, preview['lineas'], is_total=is_total, client=client)
 
     with transaction.atomic():
         nota = NotaCreditoElectronica.objects.create(
