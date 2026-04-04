@@ -196,8 +196,8 @@ export const printComprobante = ({
       .item { margin: 4px 0; }
       .item strong { display: block; text-transform: uppercase; }
       .total-row { font-size: 11px; font-weight: 700; margin-top: 3px; }
-      .qr { margin-top: 2px; text-align: center; }
-      .qr img { width: 94px; height: 94px; object-fit: contain; }
+      .qr { margin-top: 0; text-align: center; }
+      .qr img { width: 94px; height: 94px; object-fit: contain; display: block; margin: 0 auto; }
       .placeholder { border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px; font-size: 8px; color: #64748b; }
       .logo { display: block; margin: 0 auto 4px; height: 42px; max-width: 52mm; object-fit: contain; border-radius: 5px; }
       .resolution { margin-top: 4px; padding: 2px 0; text-align: left; }
@@ -210,7 +210,7 @@ export const printComprobante = ({
       .items-header { font-size: 8px; font-weight: 700; text-transform: uppercase; color: #334155; }
       .item-row { border-top: 1px solid #e2e8f0; padding-top: 3px; margin-top: 3px; }
       .tiny { font-size: 7px; color: #64748b; }
-      .iva-box { border: 1px solid #cbd5e1; margin-top: 6px; padding: 4px; }
+      .iva-box { border: 1px solid #cbd5e1; margin-top: 6px; margin-bottom: 1px; padding: 4px; }
       .iva-grid { display: grid; grid-template-columns: .85fr 1fr 1fr 1fr; gap: 4px; align-items: start; }
       .right { text-align: right; }
       .policies { margin-top: 6px; font-size: 8px; line-height: 1.4; color: #334155; padding: 2px 4px; text-align: center; }
@@ -293,10 +293,10 @@ export const printComprobante = ({
               </div>
               ${resumenIvaArray.map((item) => `<div class="iva-grid" style="margin-top:2px;"><span>${item.porcentaje}%</span><span class="right">${currencyFormatter.format(item.total)}</span><span class="right">${currencyFormatter.format(item.base)}</span><span class="right">${currencyFormatter.format(item.iva)}</span></div>`).join('')}
             </div>
-            ${notas ? `<div class="muted break">${notas}</div>` : ''}
             <div class="qr">
               ${qrImageUrl ? `<img src="${qrImageUrl}" alt="QR factura electrónica"/>` : qrUrl ? `<div class="muted break">Verificación: ${qrUrl}</div>` : '<div class="placeholder">Espacio reservado para QR DIAN</div>'}
             </div>
+            ${notas ? `<div class="muted break" style="margin-top:4px;">${notas}</div>` : ''}
             <div class="policies">${POLITICAS_CAMBIOS_GARANTIAS}</div>
             <div class="thank-you">Gracias por su compra, es un placer atenderlo.</div>
           </div>
