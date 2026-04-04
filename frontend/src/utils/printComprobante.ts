@@ -181,10 +181,11 @@ export const printComprobante = ({
       @page { size: 80mm auto; margin: 0; }
       html, body { width: var(--ticket-width); margin: 0; padding: 0; background: #fff; }
       body { font-family: Arial, sans-serif; color: #0f172a; font-size: 10px; line-height: 1.28; }
-      .ticket { width: var(--ticket-width); border: 1px solid #cbd5e1; padding: 8px; }
-      .content { display: flex; gap: 6px; }
-      .cufe-side { width: 17px; border-right: 1px solid #cbd5e1; padding-right: 2px; position: relative; flex-shrink: 0; }
-      .cufe-vertical { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(180deg); writing-mode: vertical-rl; text-orientation: mixed; font-size: 7px; font-weight: 700; color: #475569; letter-spacing: .08em; line-height: 1.1; max-height: calc(100% - 8px); max-width: 100%; min-width: 0; overflow: hidden; overflow-wrap: anywhere; word-break: break-word; white-space: normal; }
+      .ticket { width: var(--ticket-width); border: 1px solid #cbd5e1; padding: 6px 5px; }
+      .content { display: flex; align-items: stretch; gap: 5px; }
+      .cufe-side { width: 14px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; padding-left: 2px; }
+      .cufe-divider { width: 1px; align-self: stretch; background: #cbd5e1; }
+      .cufe-vertical { transform: rotate(180deg); writing-mode: vertical-rl; text-orientation: mixed; font-size: 7px; font-weight: 700; color: #475569; letter-spacing: .08em; line-height: 1.12; max-height: calc(100% - 6px); max-width: 100%; min-width: 0; overflow: hidden; overflow-wrap: anywhere; word-break: break-word; white-space: normal; }
       .main { flex: 1; min-width: 0; }
       .center { text-align: center; }
       .line { border-top: 1px solid #e2e8f0; margin: 6px 0; }
@@ -250,7 +251,7 @@ export const printComprobante = ({
     ? `
       <div class="ticket">
         <div class="content">
-          ${cufe ? `<div class="cufe-side"><div class="cufe-vertical">CUFE · ${cufe}</div></div>` : ''}
+          ${cufe ? `<div class="cufe-side"><div class="cufe-vertical">CUFE · ${cufe}</div></div><div class="cufe-divider" aria-hidden="true"></div>` : ''}
           <div class="main">
             <div class="center">
               <img src="${getLogoEmpresa(empresa)}" alt="Logo empresa" class="logo"/>
