@@ -24,6 +24,7 @@ from apps.facturacion.services.document_totals import (
     calculate_document_detail_totals,
     q_money,
     to_decimal,
+    unit_base_without_tax,
 )
 from apps.facturacion_electronica.catalogos.models import TributoFactus
 from apps.ventas.models import Venta
@@ -173,29 +174,35 @@ def build_factus_item(document_detail: dict[str, Any]) -> dict[str, Any]:
     """
     Traduce una línea documental local al formato Factus.
 
-    Convención elegida por compatibilidad práctica:
-    - `price` se envía como precio unitario bruto/final (incluye IVA si aplica).
-    - Para líneas gravadas, `tax_rate` > 0, `is_excluded`=0 y `tribute_id` de IVA.
-    Esto reduce casos donde Factus interpreta la línea como excluida.
+    Convención elegida por compatibilidad con Factus:
+    - `price` se envía como precio unitario base (sin IVA) para líneas gravadas.
+    - Para líneas gravadas, `tax_rate` > 0, `is_excluded`=False y `tribute_id` de IVA.
     """
     is_excluded = bool(document_detail['is_excluded'])
     tax_rate = Decimal('0.00') if is_excluded else q_money(document_detail['tax_rate'])
     if not is_excluded and tax_rate <= Decimal('0.00'):
         raise FactusValidationError('Una línea gravada debe enviarse con tax_rate mayor a 0.')
+    price_for_factus = unit_base_without_tax(
+        unit_final_price=document_detail['unit_gross_price'],
+        tax_rate=tax_rate,
+        is_excluded=is_excluded,
+    )
 
-    return {
+    item_payload = {
         'code_reference': document_detail['code_reference'],
         'name': document_detail['name'],
         'quantity': _to_float(document_detail['quantity']),
-        'price': _to_float(document_detail['unit_gross_price']),
+        'price': _to_float(price_for_factus),
         'tax_rate': _to_float(tax_rate),
         'discount_rate': _to_float(document_detail['discount_rate']),
-        'is_excluded': 1 if is_excluded else 0,
+        'is_excluded': is_excluded,
         'tribute_id': int(document_detail['tribute_id']),
         'unit_measure_id': int(document_detail['unit_measure_id']),
         'standard_code_id': int(document_detail['standard_code_id']),
         'withholding_taxes': document_detail.get('withholding_taxes', []),
     }
+    logger.info('factus_payload.item_built payload=%s', item_payload)
+    return item_payload
 
 
 def _normalize_identification(value: str) -> str:
@@ -308,7 +315,7 @@ def build_invoice_payload(venta: Venta) -> dict:
         )
         items.append(build_factus_item(normalized_line))
 
-    return {
+    payload = {
         'document': '01',
         'numbering_range_id': int(rango.factus_range_id or settings.FACTUS_NUMBERING_RANGE_FACTURA),
         'reference_code': venta.numero_comprobante,
@@ -320,3 +327,5 @@ def build_invoice_payload(venta: Venta) -> dict:
         'customer': _build_customer_payload(cliente),
         'items': items,
     }
+    logger.info('factus_payload.final payload=%s', payload)
+    return payload
