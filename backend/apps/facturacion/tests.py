@@ -178,6 +178,16 @@ class FacturaHybridPdfFlowTests(TestCase):
             'https://factus.test/public/FAC-HYB-1',
         )
 
+    def test_serializer_venta_oculta_public_url_si_hay_inconsistencia_documental(self):
+        self.factura.codigo_error = 'ERROR_CONCILIACION_DOCUMENTAL'
+        self.factura.mensaje_error = 'ERROR_CONCILIACION_DOCUMENTAL: total remoto distinto'
+        self.factura.save(update_fields=['codigo_error', 'mensaje_error', 'updated_at'])
+
+        payload = VentaListSerializer(instance=self.venta).data
+        factura_data = payload['factura_electronica']
+        self.assertEqual(factura_data['factus_public_url'], '')
+        self.assertTrue(factura_data['documento_inconsistente'])
+
 
 class FacturaFilesEndpointsTests(TestCase):
     def setUp(self):
@@ -462,6 +472,65 @@ class FacturarVentaPersistenciaCriticaTests(TestCase):
         self.assertEqual(factura.qr_image_url, '')
         self.assertTrue(factura.qr_image_data.startswith('data:image/png;base64,'))
 
+    @patch('apps.facturacion.services.facturar_venta.download_xml')
+    @patch('apps.facturacion.services.facturar_venta.download_pdf')
+    @patch('apps.facturacion.services.facturar_venta.resolve_numbering_range')
+    @patch('apps.facturacion.services.facturar_venta.build_invoice_payload')
+    @patch('apps.facturacion.services.facturar_venta.FactusClient.create_and_validate_invoice')
+    @patch('apps.facturacion.services.facturar_venta.FactusClient.get_invoice')
+    def test_facturar_venta_rechaza_inconsistencia_economica_documental(
+        self,
+        mocked_get_invoice,
+        mocked_create_validate,
+        mocked_build_payload,
+        mocked_resolve_range,
+        _mocked_pdf,
+        _mocked_xml,
+    ):
+        mocked_build_payload.return_value = {
+            'numbering_range_id': 1,
+            'customer': {
+                'identification': '5555',
+                'names': 'Cliente QR Largo',
+                'identification_document_id': 3,
+            },
+            'items': [{'code_reference': 'PR-QR-LARGO', 'quantity': 1}],
+            'send_email': False,
+        }
+        mocked_resolve_range.return_value = RangoNumeracionDIAN(prefijo='FV', factus_range_id=1)
+        mocked_create_validate.return_value = {
+            'data': {
+                'bill': {
+                    'status': 'valid',
+                    'number': 'FV9001',
+                    'reference_code': 'FV9001',
+                    'cufe': 'CUFE-9001',
+                    'uuid': 'UUID-9001',
+                    'xml_url': 'https://example.com/fv9001.xml',
+                    'pdf_url': 'https://example.com/fv9001.pdf',
+                    'totals': {'total': '119.00', 'tax_amount': '19.00', 'taxable_amount': '100.00'},
+                }
+            }
+        }
+        mocked_get_invoice.return_value = {
+            'data': {
+                'bill': {
+                    'status': 'valid',
+                    'number': 'FV9001',
+                    'reference_code': 'FV9001',
+                    'customer': {'identification': '5555'},
+                    'totals': {'total': '8.40336', 'tax_amount': '1.34', 'taxable_amount': '7.06'},
+                    'items': [{'code_reference': 'X'}],
+                }
+            }
+        }
+
+        with self.assertRaises(FactusValidationError):
+            facturar_venta(self.venta.id, triggered_by=self.user)
+        factura = FacturaElectronica.objects.get(venta=self.venta)
+        self.assertEqual(factura.estado_electronico, 'RECHAZADA')
+        self.assertEqual(factura.codigo_error, 'ERROR_CONCILIACION_DOCUMENTAL')
+
 
 class FacturaQRYPosEndpointsTests(TestCase):
     def setUp(self):
@@ -504,6 +573,15 @@ class FacturaQRYPosEndpointsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['numero'], 'FV5555')
         self.assertIn('/media/facturas/qr/FV5555.png', response.data['qr'])
+
+    def test_listado_facturas_no_expone_public_url_si_inconsistente(self):
+        self.factura.codigo_error = 'ERROR_CONCILIACION_DOCUMENTAL'
+        self.factura.mensaje_error = 'ERROR_CONCILIACION_DOCUMENTAL: mismatch'
+        self.factura.save(update_fields=['codigo_error', 'mensaje_error', 'updated_at'])
+        response = self.client.get('/api/facturacion/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data[0]['public_url'], '')
+        self.assertTrue(response.data[0]['documento_inconsistente'])
 
     def test_pos_endpoint(self):
         response = self.client.get('/api/facturacion/FV5555/pos/')

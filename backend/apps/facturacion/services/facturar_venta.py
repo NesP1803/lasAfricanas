@@ -6,6 +6,7 @@ import copy
 import hashlib
 import json
 import logging
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from django.db import DataError, transaction
@@ -43,6 +44,8 @@ from apps.ventas.models import Venta
 logger = logging.getLogger(__name__)
 MISMATCH_ERROR_CODE = 'MISMATCH_NUMERACION'
 LOCAL_VALIDATION_ERROR_CODE = 'ERROR_VALIDACION_LOCAL'
+DOCUMENT_CONCILIATION_ERROR_CODE = 'ERROR_CONCILIACION_DOCUMENTAL'
+MONEY_TOLERANCE = Decimal('0.05')
 
 
 class FacturaPersistenciaError(Exception):
@@ -249,6 +252,105 @@ def _assert_emitted_document_matches_sale(
         )
 
 
+def _to_decimal_or_none(value: Any) -> Decimal | None:
+    if value is None or value == '':
+        return None
+    try:
+        return Decimal(str(value).strip())
+    except (InvalidOperation, ValueError, TypeError):
+        return None
+
+
+def _normalize_identification(value: Any) -> str:
+    return ''.join(char for char in str(value or '').strip() if char.isalnum()).upper()
+
+
+def _extract_remote_document_snapshot(payload: dict[str, Any]) -> dict[str, Any]:
+    data = payload.get('data', payload) if isinstance(payload, dict) else {}
+    bill = data.get('bill', data) if isinstance(data, dict) else {}
+    customer = bill.get('customer', data.get('customer', {})) if isinstance(bill, dict) else {}
+    totals = bill.get('totals', data.get('totals', {})) if isinstance(bill, dict) else {}
+    if not isinstance(customer, dict):
+        customer = {}
+    if not isinstance(totals, dict):
+        totals = {}
+    items = bill.get('items', data.get('items', [])) if isinstance(bill, dict) else []
+    taxes = bill.get('tax_totals', data.get('tax_totals', [])) if isinstance(bill, dict) else []
+    if not isinstance(items, list):
+        items = []
+    if not isinstance(taxes, list):
+        taxes = []
+
+    tax_total = _to_decimal_or_none(totals.get('tax_amount') or totals.get('tax') or totals.get('total_tax'))
+    if tax_total is None:
+        collected = [_to_decimal_or_none((t.get('tax_amount') if isinstance(t, dict) else None)) for t in taxes]
+        tax_total = sum((val for val in collected if val is not None), Decimal('0')) if collected else None
+
+    return {
+        'customer_identification': _normalize_identification(
+            customer.get('identification') or customer.get('identification_number') or customer.get('nit')
+        ),
+        'total': _to_decimal_or_none(totals.get('total') or totals.get('payable_amount') or bill.get('total') or data.get('total')),
+        'tax_total': tax_total,
+        'base_total': _to_decimal_or_none(
+            totals.get('taxable_amount')
+            or totals.get('gross_value')
+            or totals.get('subtotal')
+            or bill.get('gross_value')
+            or data.get('gross_value')
+        ),
+        'items_count': len(items),
+    }
+
+
+def _assert_document_conciliation(
+    *,
+    venta: Venta,
+    payload: dict[str, Any],
+    logger_context: dict[str, Any],
+) -> None:
+    remote = _extract_remote_document_snapshot(payload)
+    local_total = _to_decimal_or_none(venta.total) or Decimal('0')
+    local_tax = _to_decimal_or_none(venta.iva) or Decimal('0')
+    local_base = _to_decimal_or_none(venta.subtotal) or Decimal('0')
+    local_customer = _normalize_identification(getattr(venta.cliente, 'numero_documento', ''))
+    local_items_count = venta.detalles.count()
+
+    mismatches: list[str] = []
+    remote_total = remote.get('total')
+    if remote_total is not None and abs(remote_total - local_total) > MONEY_TOLERANCE:
+        mismatches.append(f'total_remoto={remote_total} total_local={local_total}')
+    remote_tax = remote.get('tax_total')
+    if remote_tax is not None and abs(remote_tax - local_tax) > MONEY_TOLERANCE:
+        mismatches.append(f'impuesto_remoto={remote_tax} impuesto_local={local_tax}')
+    remote_base = remote.get('base_total')
+    if remote_base is not None and abs(remote_base - local_base) > MONEY_TOLERANCE:
+        mismatches.append(f'base_remota={remote_base} base_local={local_base}')
+    remote_customer = str(remote.get('customer_identification') or '').strip()
+    if remote_customer and local_customer and remote_customer != local_customer:
+        mismatches.append(f'cliente_remoto={remote_customer} cliente_local={local_customer}')
+    remote_items_count = remote.get('items_count')
+    if remote_items_count and local_items_count and int(remote_items_count) != int(local_items_count):
+        mismatches.append(f'items_remotos={remote_items_count} items_locales={local_items_count}')
+
+    logger.info(
+        'facturar_venta.conciliacion venta_id=%s venta_total=%s factura_number=%s reference_code=%s '
+        'total_remoto=%s cliente_remoto=%s cliente_local=%s resultado=%s',
+        venta.id,
+        local_total,
+        logger_context.get('number', ''),
+        logger_context.get('reference_code', ''),
+        remote_total,
+        remote_customer,
+        local_customer,
+        'OK' if not mismatches else 'MISMATCH',
+    )
+    if mismatches:
+        raise FactusValidationError(
+            f'{DOCUMENT_CONCILIATION_ERROR_CODE}: Conciliación documental fallida ({", ".join(mismatches)}).'
+        )
+
+
 def _number_matches_active_range(numero: str, prefijo_rango: str) -> bool:
     numero_normalizado = str(numero or '').strip().upper()
     prefijo_normalizado = str(prefijo_rango or '').strip().upper()
@@ -280,8 +382,14 @@ def _persist_local_validation_error(
 
     factura.status = 'RECHAZADA'
     factura.estado_electronico = 'RECHAZADA'
-    factura.codigo_error = MISMATCH_ERROR_CODE if 'devolvió number=' in str(error) else LOCAL_VALIDATION_ERROR_CODE
-    factura.mensaje_error = str(error)
+    error_text = str(error)
+    if DOCUMENT_CONCILIATION_ERROR_CODE in error_text:
+        factura.codigo_error = DOCUMENT_CONCILIATION_ERROR_CODE
+    elif 'devolvió number=' in error_text:
+        factura.codigo_error = MISMATCH_ERROR_CODE
+    else:
+        factura.codigo_error = LOCAL_VALIDATION_ERROR_CODE
+    factura.mensaje_error = error_text
     factura.response_json = _build_attempt_trace(
         factura=factura,
         payload=payload,
@@ -295,7 +403,7 @@ def _persist_local_validation_error(
         error={
             'stage': 'local_document_validation',
             'error_type': error.__class__.__name__,
-            'message': str(error),
+            'message': error_text,
             'technical_status': LOCAL_VALIDATION_ERROR_CODE,
         },
     )
@@ -762,6 +870,11 @@ def facturar_venta(
             expected_number=numero if should_lock_expected_number else '',
             expected_reference_code=reference_code,
         )
+        _assert_document_conciliation(
+            venta=venta,
+            payload=response_json,
+            logger_context=fields,
+        )
     except FactusValidationError as exc:
         _persist_local_validation_error(
             factura=factura,
@@ -775,10 +888,14 @@ def facturar_venta(
         raise
     bill_errors = _extract_bill_errors(response_json)
 
+    remote_snapshot_before = _extract_remote_document_snapshot(response_json)
+    needs_conciliation_enrichment = not (
+        remote_snapshot_before.get('total') is not None and remote_snapshot_before.get('customer_identification')
+    )
     missing_before = [field for field in ['uuid', 'xml_url', 'pdf_url'] if not fields.get(field)]
     response_show_json: dict[str, Any] | None = None
     response_download_json: dict[str, Any] | None = None
-    if missing_before:
+    if missing_before or needs_conciliation_enrichment:
         logger.info(
             'facturar_venta.factus_complemento_inicio venta_id=%s numero=%s faltantes=%s',
             venta.id,
@@ -812,6 +929,11 @@ def facturar_venta(
                 expected_number=numero if should_lock_expected_number else '',
                 expected_reference_code=reference_code,
             )
+            _assert_document_conciliation(
+                venta=venta,
+                payload=response_show_json,
+                logger_context=fields,
+            )
         except FactusValidationError as exc:
             _persist_local_validation_error(
                 factura=factura,
@@ -843,6 +965,11 @@ def facturar_venta(
                         fields=fields,
                         expected_number=numero if should_lock_expected_number else '',
                         expected_reference_code=reference_code,
+                    )
+                    _assert_document_conciliation(
+                        venta=venta,
+                        payload=response_download_json,
+                        logger_context=fields,
                     )
                 except FactusValidationError as exc:
                     _persist_local_validation_error(

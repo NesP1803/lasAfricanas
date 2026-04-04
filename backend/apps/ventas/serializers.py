@@ -10,7 +10,7 @@ from .models import (
 )
 from apps.usuarios.models import Usuario
 from apps.ventas.services.calculo_venta import calcular_detalle_venta, recalcular_totales_venta
-from apps.facturacion.services.public_invoice_url import resolve_public_invoice_url
+from apps.facturacion.services.public_invoice_url import has_documental_inconsistency, resolve_public_invoice_url
 
 
 def _build_factura_electronica_data(venta):
@@ -23,6 +23,7 @@ def _build_factura_electronica_data(venta):
     response_bill = response_data.get('bill', {}) if isinstance(response_data.get('bill', {}), dict) else {}
     bill_errors = response_json.get('bill_errors', [])
     public_url = resolve_public_invoice_url(factura)
+    documento_inconsistente = has_documental_inconsistency(factura)
     return {
         'id': factura.id,
         'venta_id': factura.venta_id,
@@ -38,6 +39,8 @@ def _build_factura_electronica_data(venta):
         'bill_errors': bill_errors if isinstance(bill_errors, list) else [],
         'public_url': public_url,
         'factus_public_url': public_url,
+        'documento_inconsistente': documento_inconsistente,
+        'mensaje_inconsistencia_documental': factura.mensaje_error if documento_inconsistente else '',
         'qr_factus': final_fields.get('qr', ''),
         'qr_image': final_fields.get('qr_image', '') or factura.qr_image_url or factura.qr_image_data or '',
         'xml_url': factura.xml_url,
