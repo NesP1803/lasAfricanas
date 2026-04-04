@@ -133,6 +133,15 @@ const buildDocumentoPreviewFromVenta = (
   venta: Venta,
   emision?: Partial<FacturarCajaResponse>
 ): DocumentoPreview => {
+  const facturaVenta = venta.factura_electronica;
+  const responseJson =
+    facturaVenta?.response_json && typeof facturaVenta.response_json === 'object'
+      ? (facturaVenta.response_json as Record<string, unknown>)
+      : {};
+  const finalFields =
+    responseJson.final_fields && typeof responseJson.final_fields === 'object'
+      ? (responseJson.final_fields as Record<string, unknown>)
+      : {};
   const detallesPreview: DocumentoDetalle[] =
     venta.detalles?.map((detalle) => ({
       descripcion: detalle.producto_nombre ?? 'Producto',
@@ -163,10 +172,13 @@ const buildDocumentoPreviewFromVenta = (
     efectivoRecibido: parseMoneyCOP(venta.efectivo_recibido ?? 0),
     cambio: parseMoneyCOP(venta.cambio ?? 0),
     cufe:
+      facturaVenta?.cufe ||
       emision?.factura_electronica?.cufe ||
       emision?.cufe ||
       undefined,
     qrUrl:
+      facturaVenta?.public_url ||
+      (typeof finalFields.public_url === 'string' ? finalFields.public_url : undefined) ||
       emision?.factura_lista?.public_url ||
       emision?.factura_lista?.qr_url ||
       emision?.pos_ticket?.qr_url ||
@@ -1037,7 +1049,7 @@ export default function Ventas() {
           buildVentaPayload('FACTURA', ventaBorrador.vendedor)
         );
         const emision = await ventasApi.facturarEnCaja(ventaActualizada.id);
-        const ventaFacturada = emision.venta ?? ventaActualizada;
+        const ventaFacturada = await ventasApi.getVenta(ventaActualizada.id);
         setVentaBorrador(ventaFacturada);
         setDocumentoGenerado({
           tipo: 'FACTURA',
@@ -1065,7 +1077,7 @@ export default function Ventas() {
 
       const venta = await guardarVentaParaFacturar();
       const emision = await ventasApi.facturarVentaElectronica(venta.id);
-      const ventaEmitida = emision.venta?.id ? emision.venta : venta;
+      const ventaEmitida = await ventasApi.getVenta(venta.id);
       resetVentaState();
       setDocumentoGenerado({
         tipo: 'FACTURA',
