@@ -109,6 +109,7 @@ export default function DetalleNotaCreditoPage() {
                 <summary className="cursor-pointer font-semibold">Ver detalle técnico</summary>
                 <p className="mt-2"><strong>Código:</strong> {nota.codigo_error || 'N/D'}</p>
                 <p><strong>Mensaje:</strong> {nota.mensaje_error || 'Sin mensaje'}</p>
+                <p><strong>Error remoto:</strong> {nota.last_remote_error || 'Sin error remoto persistido'}</p>
               </details>
             )}
           </section>

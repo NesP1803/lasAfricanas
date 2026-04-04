@@ -66,19 +66,6 @@ export default function NotasCreditoTable({ notasCredito, loading, onRefresh }: 
     }
   };
 
-  const handleSync = async (nota: NotaCredito) => {
-    setActionLoading(nota.numero, 'sync');
-    try {
-      await notasCreditoApi.sincronizarNotaCredito(nota.id);
-      await onRefresh();
-      showNotification({ message: `Nota ${nota.numero} sincronizada correctamente.`, type: 'success' });
-    } catch {
-      showNotification({ message: 'No fue posible sincronizar la nota crédito.', type: 'error' });
-    } finally {
-      setActionLoading(nota.numero, null);
-    }
-  };
-
   const handleCorreo = async (nota: NotaCredito) => {
     setActionLoading(nota.numero, 'correo');
     try {
@@ -162,9 +149,6 @@ export default function NotasCreditoTable({ notasCredito, loading, onRefresh }: 
                 const loadingAction = rowLoading[nota.numero];
                 const total = getTotalNota(nota);
                 const estado = resolveEstadoNota(nota);
-                const canSync = typeof nota.can_sync === 'boolean'
-                  ? nota.can_sync
-                  : ['PENDIENTE_ENVIO', 'PENDIENTE_DIAN', 'CONFLICTO_FACTUS'].includes(estado);
                 return (
                   <tr key={nota.id} className="hover:bg-slate-50">
                     <td className="px-4 py-3 font-semibold text-slate-800">{nota.numero}</td>
@@ -188,7 +172,6 @@ export default function NotasCreditoTable({ notasCredito, loading, onRefresh }: 
                         <button type="button" onClick={() => handleDescargar(nota, 'xml')} disabled={Boolean(loadingAction)} className="rounded-md bg-indigo-600 px-2 py-1 text-xs font-semibold text-white disabled:opacity-60">XML</button>
                         <button type="button" onClick={() => handleDescargar(nota, 'pdf')} disabled={Boolean(loadingAction)} className="rounded-md bg-violet-600 px-2 py-1 text-xs font-semibold text-white disabled:opacity-60">PDF</button>
                         <button type="button" onClick={() => handleCorreo(nota)} disabled={Boolean(loadingAction)} className="rounded-md bg-emerald-600 px-2 py-1 text-xs font-semibold text-white disabled:opacity-60">Correo</button>
-                        <button type="button" onClick={() => handleSync(nota)} disabled={Boolean(loadingAction) || !canSync} className="rounded-md bg-blue-600 px-2 py-1 text-xs font-semibold text-white disabled:opacity-60">Sincronizar</button>
                         {(estado === 'BORRADOR' || estado.startsWith('ERROR') || estado === 'PENDIENTE_ENVIO') && (
                           <button type="button" onClick={() => handleEliminar(nota)} disabled={Boolean(loadingAction)} className="rounded-md bg-rose-600 px-2 py-1 text-xs font-semibold text-white disabled:opacity-60">Eliminar</button>
                         )}

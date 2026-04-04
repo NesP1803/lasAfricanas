@@ -70,13 +70,8 @@ class NotaCreditoListSerializer(serializers.ModelSerializer):
         return obj.estado_local in {'PENDIENTE_ENVIO', 'PENDIENTE_DIAN', 'CONFLICTO_FACTUS'}
 
     def get_estado_ui_mensaje(self, obj: NotaCreditoElectronica) -> str:
-        if obj.estado_local == 'CONFLICTO_FACTUS':
-            return (
-                'Factus no confirmó el documento remoto. '
-                'Use Sincronizar para conciliar el estado real antes de continuar.'
-            )
-        if obj.estado_local == 'PENDIENTE_DIAN':
-            return 'Documento creado en Factus, pendiente de resultado final DIAN.'
+        if obj.estado_local in {'CONFLICTO_FACTUS', 'PENDIENTE_DIAN', 'PENDIENTE_ENVIO'}:
+            return 'Documento en proceso DIAN/Factus. El sistema sincroniza automáticamente.'
         if obj.estado_local == 'ACEPTADA':
             return 'Documento aceptado electrónicamente.'
         if obj.estado_local == 'RECHAZADA':
@@ -110,6 +105,10 @@ class NotaCreditoListSerializer(serializers.ModelSerializer):
             'status_raw_factus',
             'remote_status_raw',
             'synchronized_at',
+            'last_sync_at',
+            'last_remote_error',
+            'remote_identifier',
+            'sync_metadata',
             'can_sync',
             'estado_ui_mensaje',
             'detalles',
