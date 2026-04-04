@@ -11,6 +11,11 @@ export default function DetalleNotaCreditoPage() {
   const [nota, setNota] = useState<NotaCredito | null>(null);
   const [loading, setLoading] = useState(true);
   const { showNotification } = useNotification();
+  const refreshNota = async () => {
+    if (!id) return;
+    const data = await notasCreditoApi.getNotaCredito(Number(id));
+    setNota(data);
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -52,6 +57,7 @@ export default function DetalleNotaCreditoPage() {
             <Link to="/listados/notas-credito" className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700">Volver</Link>
             <button type="button" onClick={() => notasCreditoApi.descargarPDF(nota.id, nota.numero)} className="rounded-md bg-violet-600 px-3 py-2 text-sm font-semibold text-white">PDF</button>
             <button type="button" onClick={() => notasCreditoApi.descargarXML(nota.id, nota.numero)} className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white">XML</button>
+            <button type="button" onClick={async () => { await notasCreditoApi.sincronizarNotaCredito(nota.id); await refreshNota(); }} className="rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white">Sincronizar</button>
           </div>
         </div>
       </div>
@@ -109,6 +115,7 @@ export default function DetalleNotaCreditoPage() {
                 <summary className="cursor-pointer font-semibold">Ver detalle técnico</summary>
                 <p className="mt-2"><strong>Código:</strong> {nota.codigo_error || 'N/D'}</p>
                 <p><strong>Mensaje:</strong> {nota.mensaje_error || 'Sin mensaje'}</p>
+                <p><strong>Error remoto:</strong> {nota.last_remote_error || 'Sin error remoto persistido'}</p>
               </details>
             )}
           </section>

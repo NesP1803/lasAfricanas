@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import time
 from decimal import Decimal
 from typing import Any
@@ -14,6 +15,8 @@ from apps.facturacion.services.factus_catalog_lookup import get_tribute_id, get_
 from apps.facturacion.services.factus_payload_builder import build_invoice_payload
 from apps.inventario.models import MovimientoInventario, Producto
 from apps.ventas.models import DetalleVenta
+
+logger = logging.getLogger(__name__)
 
 FINAL_ACCEPTED_ELECTRONIC_STATES = {'ACEPTADA', 'ACEPTADA_CON_OBSERVACIONES'}
 ACTIVE_CREDIT_LOCAL_STATES = {'BORRADOR', 'PENDIENTE_ENVIO', 'PENDIENTE_DIAN', 'CONFLICTO_FACTUS'}
@@ -303,6 +306,9 @@ def _update_note_from_remote(nota: NotaCreditoElectronica, remote: dict[str, Any
     nota.status = estado_electronico
     nota.response_json = remote
     nota.synchronized_at = timezone.now()
+    nota.last_sync_at = nota.synchronized_at
+    nota.remote_identifier = fields['uuid'] or fields['cufe'] or nota.remote_identifier
+    nota.last_remote_error = ''
     if estado_electronico in FINAL_ACCEPTED_ELECTRONIC_STATES:
         nota.estado_local = 'ACEPTADA'
     elif estado_electronico == 'RECHAZADA':
@@ -312,7 +318,18 @@ def _update_note_from_remote(nota: NotaCreditoElectronica, remote: dict[str, Any
     else:
         has_evidence = any([fields['number'], fields['uuid'], fields['reference_code'], estado_raw])
         nota.estado_local = 'PENDIENTE_DIAN' if has_evidence else 'CONFLICTO_FACTUS'
-    nota.save(update_fields=['number', 'uuid', 'cufe', 'pdf_url', 'xml_url', 'public_url', 'reference_code', 'status_raw_factus', 'remote_status_raw', 'estado_electronico', 'status', 'response_json', 'synchronized_at', 'estado_local', 'updated_at'])
+    sync_meta = dict(nota.sync_metadata or {})
+    sync_meta.update(
+        {
+            'last_resolution': nota.estado_local,
+            'last_remote_status': estado_raw,
+            'last_reference_code': nota.reference_code,
+            'last_number': nota.number,
+            'updated_from_remote_at': timezone.now().isoformat(),
+        }
+    )
+    nota.sync_metadata = sync_meta
+    nota.save(update_fields=['number', 'uuid', 'cufe', 'pdf_url', 'xml_url', 'public_url', 'reference_code', 'status_raw_factus', 'remote_status_raw', 'estado_electronico', 'status', 'response_json', 'synchronized_at', 'last_sync_at', 'remote_identifier', 'last_remote_error', 'sync_metadata', 'estado_local', 'updated_at'])
     return nota
 
 
@@ -321,15 +338,23 @@ def _find_existing_open_note(factura: FacturaElectronica, *, tipo: str) -> NotaC
 
 
 def _exact_match_remote_candidate(candidates: list[dict[str, Any]], *, reference_code: str, bill_number: str, number: str = '') -> dict[str, Any] | None:
+    if reference_code:
+        for item in candidates:
+            if not isinstance(item, dict):
+                continue
+            f = extract_credit_note_remote_fields({'data': {'credit_note': item}})
+            if f['reference_code'] == reference_code:
+                return item
     for item in candidates:
         if not isinstance(item, dict):
             continue
         f = extract_credit_note_remote_fields({'data': {'credit_note': item}})
-        if reference_code and f['reference_code'] == reference_code:
-            return item
-        if bill_number and f['bill_number'] == str(bill_number):
-            return item
         if number and f['number'] == number:
+            return item
+    if bill_number and len(candidates) == 1:
+        item = candidates[0]
+        f = extract_credit_note_remote_fields({'data': {'credit_note': item}})
+        if f['bill_number'] == str(bill_number):
             return item
     return None
 
@@ -350,7 +375,14 @@ def _try_reconcile_from_remote(factura: FacturaElectronica, *, reference_code: s
     client = FactusClient()
     try:
         remote_list = client.list_credit_notes(reference_code=reference_code, bill_number=factura.number, number=number or None)
-    except Exception:
+    except Exception as exc:
+        logger.warning(
+            'facturacion.nota_credito.reconcile_remote.error factura_id=%s reference_code=%s number=%s error=%s',
+            factura.id,
+            reference_code,
+            number,
+            str(exc),
+        )
         return None
     matched = _exact_match_remote_candidate(_list_candidates(remote_list), reference_code=reference_code, bill_number=str(factura.number or ''), number=number)
     if not matched:
@@ -372,6 +404,111 @@ def _try_reconcile_from_remote(factura: FacturaElectronica, *, reference_code: s
             reference_code=reference_code,
         )
     return _update_note_from_remote(nota, {'data': {'credit_note': matched}})
+
+
+def sincronizar_nota_credito(nota_credito_id: int, *, user=None, force_retry: bool = False) -> NotaCreditoElectronica:
+    with transaction.atomic():
+        nota = (
+            NotaCreditoElectronica.objects.select_for_update()
+            .select_related('factura__venta')
+            .get(pk=nota_credito_id)
+        )
+        reference_code = str(nota.reference_code or '').strip()
+        if not reference_code:
+            reference_code = _build_reference_code(nota.factura, is_total=nota.tipo_nota == 'TOTAL')
+            nota.reference_code = reference_code
+            nota.save(update_fields=['reference_code', 'updated_at'])
+
+        client = FactusClient()
+        sync_meta = dict(nota.sync_metadata or {})
+        sync_meta['last_sync_started_at'] = timezone.now().isoformat()
+        sync_meta['force_retry'] = bool(force_retry)
+        sync_meta['attempts'] = int(sync_meta.get('attempts') or 0) + 1
+        sync_meta['reference_code'] = reference_code
+
+        remote_candidate: dict[str, Any] | None = None
+        list_error = ''
+        try:
+            remote_list = client.get_credit_note_by_reference_code(reference_code, bill_number=nota.factura.number or None)
+            remote_candidate = _exact_match_remote_candidate(
+                _list_candidates(remote_list),
+                reference_code=reference_code,
+                bill_number=str(nota.factura.number or ''),
+                number=str(nota.number or ''),
+            )
+            sync_meta['last_lookup'] = 'list_credit_notes'
+            sync_meta['last_lookup_result_count'] = len(_list_candidates(remote_list))
+        except FactusAPIError as exc:
+            list_error = str(exc)
+            sync_meta['last_lookup_error'] = list_error
+
+        if remote_candidate:
+            logger.info(
+                'facturacion.nota_credito.sync.resolved nota_credito_id=%s venta_id=%s factura_id=%s reference_code=%s endpoint=%s method=GET status_code=%s decision=%s',
+                nota.id,
+                nota.factura.venta_id,
+                nota.factura_id,
+                reference_code,
+                client.credit_note_list_path,
+                200,
+                'remote_match_by_reference_code',
+            )
+            nota.sync_metadata = sync_meta
+            nota = _update_note_from_remote(nota, {'data': {'credit_note': remote_candidate}})
+            return nota
+
+        if nota.number:
+            try:
+                remote = client.get_credit_note(nota.number)
+                sync_meta['last_lookup'] = 'get_credit_note'
+                logger.info(
+                    'facturacion.nota_credito.sync.resolved nota_credito_id=%s venta_id=%s factura_id=%s reference_code=%s endpoint=%s method=GET status_code=%s decision=%s',
+                    nota.id,
+                    nota.factura.venta_id,
+                    nota.factura_id,
+                    reference_code,
+                    client.credit_note_show_path.format(number=nota.number),
+                    200,
+                    'remote_match_by_number',
+                )
+                nota.sync_metadata = sync_meta
+                return _update_note_from_remote(nota, remote)
+            except FactusAPIError as exc:
+                sync_meta['last_show_error'] = str(exc)
+                if exc.status_code != 404:
+                    raise
+
+        nota.synchronized_at = timezone.now()
+        nota.last_sync_at = nota.synchronized_at
+        nota.sync_metadata = sync_meta
+        if list_error:
+            nota.estado_local = 'PENDIENTE_DIAN'
+            nota.codigo_error = 'FACTUS_TIMEOUT_O_TRANSITORIO'
+            nota.last_remote_error = list_error
+            nota.mensaje_error = 'Factus no confirmó estado final. Reintente conciliación.'
+        elif force_retry:
+            nota.estado_local = 'CONFLICTO_FACTUS'
+            nota.codigo_error = 'FACTUS_REINTENTO_SIN_EVIDENCIA'
+            nota.last_remote_error = 'No hay evidencia remota por reference_code ni number.'
+            nota.mensaje_error = 'Reintento ejecutado sin evidencia remota verificable; puede reconsultar o reemitir según política de negocio.'
+        else:
+            nota.estado_local = 'CONFLICTO_FACTUS'
+            nota.codigo_error = 'FACTUS_SYNC_SIN_EVIDENCIA'
+            nota.last_remote_error = 'No hay evidencia remota por reference_code.'
+            nota.mensaje_error = 'Factus no confirmó el documento remoto. Use reintentar conciliación.'
+        logger.warning(
+            'facturacion.nota_credito.sync.unresolved nota_credito_id=%s venta_id=%s factura_id=%s reference_code=%s endpoint=%s method=GET status_code=%s decision=%s remote_error=%s',
+            nota.id,
+            nota.factura.venta_id,
+            nota.factura_id,
+            reference_code,
+            client.credit_note_list_path,
+            404 if not list_error else 502,
+            nota.estado_local,
+            nota.last_remote_error,
+        )
+        nota.save(update_fields=['estado_local', 'codigo_error', 'mensaje_error', 'synchronized_at', 'last_sync_at', 'last_remote_error', 'sync_metadata', 'updated_at'])
+        return nota
 
 
 def _poll_note_until_stable(nota: NotaCreditoElectronica, *, attempts: int = 4, sleep_seconds: float = 1.2) -> NotaCreditoElectronica:
@@ -453,6 +590,7 @@ def create_credit_note(*, factura: FacturaElectronica, motivo: str, lines: list[
             request_json=payload,
             response_json={},
             reference_code=reference_code,
+            sync_metadata={},
         )
         for line in preview['lineas']:
             detalle = DetalleVenta.objects.get(pk=line['detalle_venta_original_id'])
@@ -476,15 +614,10 @@ def create_credit_note(*, factura: FacturaElectronica, motivo: str, lines: list[
         response = client.create_and_validate_credit_note(payload)
         nota = _update_note_from_remote(nota, response)
     except FactusPendingCreditNoteError:
-        recovered = _try_reconcile_from_remote(factura, reference_code=reference_code, tipo_nota=tipo_nota)
+        recovered = sincronizar_nota_credito(nota.id, user=user)
         if recovered:
             effects = _apply_business_effects_if_needed(recovered, user)
             return recovered, _build_result_meta(recovered, business_effects_applied=effects, warnings=['Factus respondió 409 y se reconcilió nota existente.'])
-        nota.estado_local = 'PENDIENTE_DIAN'
-        nota.codigo_error = 'FACTUS_409_PENDIENTE_DIAN'
-        nota.mensaje_error = 'Factus reportó una nota pendiente por DIAN. Use sincronizar para confirmar el resultado final.'
-        nota.synchronized_at = timezone.now()
-        nota.save(update_fields=['estado_local', 'codigo_error', 'mensaje_error', 'synchronized_at', 'updated_at'])
         return nota, _build_result_meta(nota, warnings=['No se creó una nueva nota por idempotencia ante 409.'])
     except Exception as exc:
         nota.estado_local = 'ERROR_INTEGRACION'
@@ -498,36 +631,7 @@ def create_credit_note(*, factura: FacturaElectronica, motivo: str, lines: list[
 
 
 def sync_credit_note(nota: NotaCreditoElectronica) -> NotaCreditoElectronica:
-    if not nota.number:
-        reconciled = _try_reconcile_from_remote(nota.factura, reference_code=nota.reference_code, tipo_nota=nota.tipo_nota)
-        if reconciled:
-            return reconciled
-        nota.estado_local = 'CONFLICTO_FACTUS'
-        nota.codigo_error = 'FACTUS_SIN_NUMERO_CONFIRMADO'
-        nota.mensaje_error = 'No existe número confirmado en Factus para esta nota. Debe conciliarse manualmente.'
-        nota.synchronized_at = timezone.now()
-        nota.save(update_fields=['estado_local', 'codigo_error', 'mensaje_error', 'synchronized_at', 'updated_at'])
-        return nota
-    client = FactusClient()
-    try:
-        remote = client.get_credit_note(nota.number)
-        return _update_note_from_remote(nota, remote)
-    except FactusAPIError as exc:
-        if exc.status_code != 404:
-            raise
-        try:
-            remote_list = client.list_credit_notes(number=nota.number, bill_number=nota.factura.number, reference_code=nota.reference_code)
-        except Exception:
-            remote_list = {}
-        matched = _exact_match_remote_candidate(_list_candidates(remote_list), reference_code=nota.reference_code, bill_number=str(nota.factura.number or ''), number=str(nota.number or ''))
-        if matched:
-            return _update_note_from_remote(nota, {'data': {'credit_note': matched}})
-        nota.estado_local = 'CONFLICTO_FACTUS'
-        nota.codigo_error = 'FACTUS_SYNC_SIN_EVIDENCIA'
-        nota.mensaje_error = 'Factus no permitió confirmar la nota (show/list sin resultado verificable exacto).'
-        nota.synchronized_at = timezone.now()
-        nota.save(update_fields=['estado_local', 'codigo_error', 'mensaje_error', 'synchronized_at', 'updated_at'])
-        return nota
+    return sincronizar_nota_credito(nota.id)
 
 
 def sync_credit_note_with_effects(nota: NotaCreditoElectronica, *, user) -> tuple[NotaCreditoElectronica, bool]:

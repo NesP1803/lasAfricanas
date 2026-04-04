@@ -5,6 +5,7 @@ export type EstadoDian =
   | 'ACEPTADA_CON_OBSERVACIONES'
   | 'RECHAZADA'
   | 'PENDIENTE_DIAN'
+  | 'EN_PROCESO'
   | 'CONFLICTO_FACTUS'
   | 'ERROR_INTEGRACION'
   | 'ERROR_PERSISTENCIA'
@@ -50,6 +51,10 @@ export interface NotaCredito {
   codigo_error?: string;
   mensaje_error?: string;
   synchronized_at?: string;
+  last_sync_at?: string;
+  last_remote_error?: string;
+  remote_identifier?: string;
+  sync_metadata?: Record<string, unknown>;
   can_sync?: boolean;
   estado_ui_mensaje?: string;
   detail?: string;
@@ -161,6 +166,16 @@ export const notasCreditoApi = {
 
   async sincronizarNotaCredito(id: number) {
     const response = await apiClient.post(`/notas-credito/${id}/sincronizar/`);
+    return response.data;
+  },
+
+  async estadoRemotoNotaCredito(id: number) {
+    const response = await apiClient.get(`/notas-credito/${id}/estado-remoto/`);
+    return response.data;
+  },
+
+  async reintentarConciliacion(id: number) {
+    const response = await apiClient.post(`/notas-credito/${id}/reintentar-conciliacion/`);
     return response.data;
   },
 
