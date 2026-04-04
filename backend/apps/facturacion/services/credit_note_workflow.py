@@ -429,7 +429,7 @@ def sincronizar_nota_credito(nota_credito_id: int, *, user=None, force_retry: bo
         remote_candidate: dict[str, Any] | None = None
         list_error = ''
         try:
-            remote_list = client.list_credit_notes(reference_code=reference_code, bill_number=nota.factura.number or None, number=nota.number or None)
+            remote_list = client.get_credit_note_by_reference_code(reference_code, bill_number=nota.factura.number or None)
             remote_candidate = _exact_match_remote_candidate(
                 _list_candidates(remote_list),
                 reference_code=reference_code,
@@ -487,10 +487,10 @@ def sincronizar_nota_credito(nota_credito_id: int, *, user=None, force_retry: bo
             nota.last_remote_error = list_error
             nota.mensaje_error = 'Factus no confirmó estado final. Reintente conciliación.'
         elif force_retry:
-            nota.estado_local = 'ERROR_INTEGRACION'
-            nota.codigo_error = 'FACTUS_REEMISION_HABILITADA'
+            nota.estado_local = 'CONFLICTO_FACTUS'
+            nota.codigo_error = 'FACTUS_REINTENTO_SIN_EVIDENCIA'
             nota.last_remote_error = 'No hay evidencia remota por reference_code ni number.'
-            nota.mensaje_error = 'No existe evidencia remota verificable; se permite reemisión segura.'
+            nota.mensaje_error = 'Reintento ejecutado sin evidencia remota verificable; puede reconsultar o reemitir según política de negocio.'
         else:
             nota.estado_local = 'CONFLICTO_FACTUS'
             nota.codigo_error = 'FACTUS_SYNC_SIN_EVIDENCIA'

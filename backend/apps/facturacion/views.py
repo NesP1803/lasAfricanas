@@ -1,5 +1,6 @@
 """Endpoints de consulta para facturación electrónica."""
 
+import base64
 import logging
 
 from django.conf import settings
@@ -860,7 +861,15 @@ class NotasCreditoViewSet(viewsets.GenericViewSet):
             content = download_remote_file(pdf)
         except DownloadResourceError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
-        return _build_file_response(content, f'nota-credito-{nota.number}.pdf', 'application/pdf')
+        filename = f'nota-credito-{nota.number}.pdf'
+        if str(request.query_params.get('base64', '')).strip().lower() in {'1', 'true', 'yes'}:
+            return Response(
+                {
+                    'file_name': filename,
+                    'pdf_base_64_encoded': base64.b64encode(content).decode('ascii'),
+                }
+            )
+        return _build_file_response(content, filename, 'application/pdf')
 
     @action(detail=True, methods=['post'], url_path='sincronizar')
     def sincronizar(self, request, pk=None):
@@ -960,7 +969,15 @@ class NotasCreditoViewSet(viewsets.GenericViewSet):
                 content = FactusClient().download_credit_note_pdf(nota.number)
         except Exception as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
-        return _build_file_response(content, f'nota-credito-{nota.number}.pdf', 'application/pdf')
+        filename = f'nota-credito-{nota.number}.pdf'
+        if str(request.query_params.get('base64', '')).strip().lower() in {'1', 'true', 'yes'}:
+            return Response(
+                {
+                    'file_name': filename,
+                    'pdf_base_64_encoded': base64.b64encode(content).decode('ascii'),
+                }
+            )
+        return _build_file_response(content, filename, 'application/pdf')
 
     @action(detail=True, methods=['get'], url_path='xml')
     def xml_by_id(self, request, pk=None):
@@ -976,7 +993,15 @@ class NotasCreditoViewSet(viewsets.GenericViewSet):
                 content = FactusClient().download_credit_note_xml(nota.number)
         except Exception as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
-        return _build_file_response(content, f'nota-credito-{nota.number}.xml', 'application/xml')
+        filename = f'nota-credito-{nota.number}.xml'
+        if str(request.query_params.get('base64', '')).strip().lower() in {'1', 'true', 'yes'}:
+            return Response(
+                {
+                    'file_name': filename,
+                    'xml_base_64_encoded': base64.b64encode(content).decode('ascii'),
+                }
+            )
+        return _build_file_response(content, filename, 'application/xml')
 
     @action(detail=True, methods=['get'], url_path='correo/contenido')
     def correo_contenido(self, request, pk=None):

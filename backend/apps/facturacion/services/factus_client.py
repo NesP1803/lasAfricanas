@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import base64
 from datetime import timedelta
 from urllib.parse import urlparse
 from typing import Any
@@ -57,7 +58,7 @@ class FactusClient:
         self.invoice_path = config('FACTUS_INVOICE_PATH', default='/v1/bills/validate')
         self.credit_note_path = config('FACTUS_CREDIT_NOTE_PATH', default='/v1/credit-notes/validate')
         self.credit_note_list_path = config('FACTUS_CREDIT_NOTE_LIST_PATH', default='/v1/credit-notes')
-        self.credit_note_show_path = config('FACTUS_CREDIT_NOTE_SHOW_PATH', default='/v1/credit-notes/show/{number}')
+        self.credit_note_show_path = config('FACTUS_CREDIT_NOTE_SHOW_PATH', default='/v1/credit-notes/{number}')
         self.credit_note_download_pdf_path = config(
             'FACTUS_CREDIT_NOTE_DOWNLOAD_PDF_PATH',
             default='/v1/credit-notes/download-pdf/{number}',
@@ -68,7 +69,7 @@ class FactusClient:
         )
         self.credit_note_email_content_path = config(
             'FACTUS_CREDIT_NOTE_EMAIL_CONTENT_PATH',
-            default='/v1/credit-notes/email-content/{number}',
+            default='/v1/credit-notes/{number}/email-content',
         )
         self.credit_note_send_email_path = config(
             'FACTUS_CREDIT_NOTE_SEND_EMAIL_PATH',
@@ -76,7 +77,7 @@ class FactusClient:
         )
         self.credit_note_delete_path = config(
             'FACTUS_CREDIT_NOTE_DELETE_PATH',
-            default='/v1/credit-notes/{reference_code}',
+            default='/v1/credit-notes/reference/{reference_code}',
         )
         self.support_document_path = config('FACTUS_SUPPORT_DOCUMENT_PATH', default='/support-documents/validate')
         self.support_document_adjustment_path = config(
@@ -378,7 +379,27 @@ class FactusClient:
                 self.credit_note_path = original_path
 
     def list_credit_notes(self, **params: Any) -> dict[str, Any]:
-        return self.request('GET', self.credit_note_list_path, params=params or None)
+        raw_params = params or {}
+        translated_params: dict[str, Any] = {}
+        mapping = {
+            'reference_code': 'filter[reference_code]',
+            'number': 'filter[number]',
+            'status': 'filter[status]',
+            'prefix': 'filter[prefix]',
+            'identification': 'filter[identification]',
+            'names': 'filter[names]',
+        }
+        for key, value in raw_params.items():
+            if value in (None, ''):
+                continue
+            translated_params[mapping.get(key, key)] = value
+        return self.request('GET', self.credit_note_list_path, params=translated_params or None)
+
+    def get_credit_note_by_reference_code(self, reference_code: str, *, bill_number: str | None = None) -> dict[str, Any]:
+        filters: dict[str, Any] = {'reference_code': reference_code}
+        if bill_number:
+            filters['bill_number'] = bill_number
+        return self.list_credit_notes(**filters)
 
     def get_credit_note_by_reference_code(self, reference_code: str, *, bill_number: str | None = None) -> dict[str, Any]:
         filters: dict[str, Any] = {'reference_code': reference_code}
@@ -390,12 +411,33 @@ class FactusClient:
         return self.request('GET', self.credit_note_show_path.format(number=number))
 
     def download_credit_note_pdf(self, number: str) -> bytes:
-        content, _ = self.download_resource(self.credit_note_download_pdf_path.format(number=number))
-        return content
+        payload = self.request('GET', self.credit_note_download_pdf_path.format(number=number))
+        content = self._decode_base64_payload(payload, field='pdf_base_64_encoded')
+        if content:
+            return content
+        fallback, _ = self.download_resource(self.credit_note_download_pdf_path.format(number=number))
+        return fallback
 
     def download_credit_note_xml(self, number: str) -> bytes:
-        content, _ = self.download_resource(self.credit_note_download_xml_path.format(number=number))
-        return content
+        payload = self.request('GET', self.credit_note_download_xml_path.format(number=number))
+        content = self._decode_base64_payload(payload, field='xml_base_64_encoded')
+        if content:
+            return content
+        fallback, _ = self.download_resource(self.credit_note_download_xml_path.format(number=number))
+        return fallback
+
+    def _decode_base64_payload(self, payload: dict[str, Any], *, field: str) -> bytes:
+        data = payload.get('data', payload)
+        if not isinstance(data, dict):
+            return b''
+        encoded = str(data.get(field) or payload.get(field) or '').strip()
+        if not encoded:
+            return b''
+        try:
+            return base64.b64decode(encoded)
+        except Exception:
+            logger.warning('No fue posible decodificar base64 para credit-note field=%s', field)
+            return b''
 
     def get_credit_note_email_content(self, number: str) -> dict[str, Any]:
         return self.request('GET', self.credit_note_email_content_path.format(number=number))
