@@ -282,7 +282,12 @@ class VentaCreateSerializer(serializers.ModelSerializer):
     def _calcular_detalle(self, detalle):
         return calcular_detalle_venta(detalle)
 
+    def _strip_manual_totals(self, validated_data):
+        for field in ('subtotal', 'iva', 'total', 'cambio'):
+            validated_data.pop(field, None)
+
     def _recalcular_totales(self, validated_data, detalles_data):
+        self._strip_manual_totals(validated_data)
         try:
             totales = recalcular_totales_venta(
                 detalles_data=detalles_data,

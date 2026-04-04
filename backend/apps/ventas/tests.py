@@ -1461,6 +1461,36 @@ class VentaIVAIncluidoTests(TestCase):
         self.assertEqual(venta.iva, Decimal('957.98'))
         self.assertEqual(venta.total, Decimal('6000.00'))
 
+    def test_patch_ignora_totales_manual_y_recalcula_desde_detalles(self):
+        create_payload = self._payload_base([
+            {
+                'producto': self.producto_gravado.id,
+                'cantidad': '1',
+                'precio_unitario': '3000.00',
+                'descuento_unitario': '0.00',
+                'iva_porcentaje': '19.00',
+            }
+        ])
+        create_response = self.client.post('/api/ventas/', create_payload, format='json')
+        self.assertEqual(create_response.status_code, 201, create_response.data)
+        venta_id = create_response.data['id']
+
+        response = self.client.patch(
+            f"/api/ventas/{venta_id}/",
+            {
+                'subtotal': '1.00',
+                'iva': '1.00',
+                'total': '1.00',
+            },
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+
+        venta = Venta.objects.get(id=venta_id)
+        self.assertEqual(venta.subtotal, Decimal('2521.01'))
+        self.assertEqual(venta.iva, Decimal('478.99'))
+        self.assertEqual(venta.total, Decimal('3000.00'))
+
     def test_descuento_por_linea_iva_incluido(self):
         payload = self._payload_base([
             {
@@ -1525,6 +1555,35 @@ class VentaIVAIncluidoTests(TestCase):
         venta = Venta.objects.get(id=venta_id)
         self.assertEqual(venta.estado, 'ENVIADA_A_CAJA')
         self.assertEqual(venta.subtotal + venta.iva - venta.descuento_valor, venta.total)
+
+    def test_flujo_vendedor_caja_facturar_conserva_totales_originales(self):
+        payload = self._payload_base([
+            {
+                'producto': self.producto_gravado.id,
+                'cantidad': '1',
+                'precio_unitario': '3000.00',
+                'descuento_unitario': '0.00',
+                'iva_porcentaje': '19.00',
+            }
+        ])
+        create_response = self.client.post('/api/ventas/', payload, format='json')
+        self.assertEqual(create_response.status_code, 201, create_response.data)
+        venta_id = create_response.data['id']
+
+        patch_response = self.client.patch(
+            f'/api/ventas/{venta_id}/',
+            {'total': '10000.00', 'subtotal': '10000.00', 'iva': '0.00'},
+            format='json',
+        )
+        self.assertEqual(patch_response.status_code, 200, patch_response.data)
+
+        enviar_response = self.client.post(f'/api/ventas/{venta_id}/enviar-a-caja/')
+        self.assertEqual(enviar_response.status_code, 200, enviar_response.data)
+
+        venta = Venta.objects.get(id=venta_id)
+        self.assertEqual(venta.subtotal, Decimal('2521.01'))
+        self.assertEqual(venta.iva, Decimal('478.99'))
+        self.assertEqual(venta.total, Decimal('3000.00'))
 
     def test_producto_legacy_0365_cantidad_1(self):
         payload = self._payload_base([

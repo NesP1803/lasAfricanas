@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal
 import re
 import logging
 
@@ -19,29 +19,16 @@ from apps.facturacion.services.factus_catalog_lookup import (
     normalize_document_type_code,
 )
 from apps.facturacion.services.factus_client import FactusValidationError
+from apps.facturacion.services.document_totals import q_money, to_decimal, unit_base_without_tax
 from apps.facturacion_electronica.catalogos.models import TributoFactus
 from apps.ventas.models import Venta
 
 logger = logging.getLogger(__name__)
-CENT = Decimal('0.01')
 HUNDRED = Decimal('100.00')
 
 
 def _to_float(value: Decimal) -> float:
     return float(value or Decimal('0'))
-
-
-def _to_decimal(value, default: str = '0') -> Decimal:
-    if value is None:
-        return Decimal(default)
-    return Decimal(str(value))
-
-
-def _q_money(value: Decimal) -> Decimal:
-    return Decimal(str(value if value is not None else '0')).quantize(
-        CENT,
-        rounding=ROUND_HALF_UP,
-    )
 
 
 def _resolve_customer_tribute_id(tipo_documento: str) -> int:
@@ -88,35 +75,35 @@ def _resolve_excluded_item_tribute_id() -> int:
 
 def _is_excluded_item(detalle) -> bool:
     producto = detalle.producto
-    iva_porcentaje = _to_decimal(detalle.iva_porcentaje)
+    iva_porcentaje = to_decimal(detalle.iva_porcentaje)
     return bool(getattr(producto, 'iva_exento', False) or iva_porcentaje <= Decimal('0'))
 
 
 def _resolve_item_unit_gross_price(detalle) -> Decimal:
-    cantidad = _to_decimal(detalle.cantidad)
+    cantidad = to_decimal(detalle.cantidad)
     if cantidad <= Decimal('0'):
         raise FactusValidationError('La cantidad del item debe ser mayor a cero para facturación electrónica.')
-    precio_unitario = _to_decimal(detalle.precio_unitario)
+    precio_unitario = to_decimal(detalle.precio_unitario)
     if precio_unitario < Decimal('0'):
         raise FactusValidationError('El precio unitario del item no puede ser negativo.')
-    return _q_money(precio_unitario)
+    return q_money(precio_unitario)
 
 
 def _line_gross_total(detalle) -> Decimal:
-    cantidad = _to_decimal(detalle.cantidad)
+    cantidad = to_decimal(detalle.cantidad)
     unit_price = _resolve_item_unit_gross_price(detalle)
-    return _q_money(cantidad * unit_price)
+    return q_money(cantidad * unit_price)
 
 
 def _line_own_discount_total(detalle) -> Decimal:
-    cantidad = _to_decimal(detalle.cantidad)
-    descuento_unitario = max(_to_decimal(detalle.descuento_unitario), Decimal('0'))
+    cantidad = to_decimal(detalle.cantidad)
+    descuento_unitario = max(to_decimal(detalle.descuento_unitario), Decimal('0'))
     gross_total = _line_gross_total(detalle)
-    return min(gross_total, _q_money(cantidad * descuento_unitario))
+    return min(gross_total, q_money(cantidad * descuento_unitario))
 
 
 def _allocate_global_discount_totals(venta: Venta, detalles: list) -> list[Decimal]:
-    descuento_global = _q_money(_to_decimal(getattr(venta, 'descuento_valor', 0)))
+    descuento_global = q_money(to_decimal(getattr(venta, 'descuento_valor', 0)))
     if descuento_global <= Decimal('0.00') or not detalles:
         return [Decimal('0.00')] * len(detalles)
 
@@ -124,7 +111,7 @@ def _allocate_global_discount_totals(venta: Venta, detalles: list) -> list[Decim
     for detalle in detalles:
         gross_total = _line_gross_total(detalle)
         own_discount = _line_own_discount_total(detalle)
-        base = max(Decimal('0.00'), _q_money(gross_total - own_discount))
+        base = max(Decimal('0.00'), q_money(gross_total - own_discount))
         bases.append(base)
 
     total_base = sum(bases, Decimal('0.00'))
@@ -139,10 +126,10 @@ def _allocate_global_discount_totals(venta: Venta, detalles: list) -> list[Decim
             continue
 
         if idx == len(bases) - 1:
-            allocated = min(base, _q_money(remaining))
+            allocated = min(base, q_money(remaining))
         else:
-            allocated = min(base, _q_money((base / total_base) * descuento_global))
-            remaining = _q_money(remaining - allocated)
+            allocated = min(base, q_money((base / total_base) * descuento_global))
+            remaining = q_money(remaining - allocated)
 
         allocations.append(max(Decimal('0.00'), allocated))
 
@@ -157,12 +144,12 @@ def _resolve_item_discount_rate(detalle, allocated_global_discount: Decimal) -> 
     own_discount = _line_own_discount_total(detalle)
     total_discount = min(
         gross_total,
-        _q_money(own_discount + (allocated_global_discount or Decimal('0.00'))),
+        q_money(own_discount + (allocated_global_discount or Decimal('0.00'))),
     )
     if total_discount <= Decimal('0.00'):
         return Decimal('0.00')
 
-    discount_rate = _q_money((total_discount / gross_total) * HUNDRED)
+    discount_rate = q_money((total_discount / gross_total) * HUNDRED)
     return min(HUNDRED, max(Decimal('0.00'), discount_rate))
 
 
@@ -262,19 +249,24 @@ def build_invoice_payload(venta: Venta) -> dict:
     for idx, detalle in enumerate(detalles):
         producto = detalle.producto
         is_excluded = _is_excluded_item(detalle)
-        tax_rate = Decimal('0.00') if is_excluded else _to_decimal(detalle.iva_porcentaje)
+        tax_rate = Decimal('0.00') if is_excluded else to_decimal(detalle.iva_porcentaje)
         tribute_id = (
             _resolve_excluded_item_tribute_id()
             if is_excluded
             else _resolve_item_tribute_id(tax_rate)
         )
         discount_rate = _resolve_item_discount_rate(detalle, global_discount_allocations[idx])
+        unit_base_price = unit_base_without_tax(
+            unit_final_price=detalle.precio_unitario,
+            tax_rate=tax_rate,
+            is_excluded=is_excluded,
+        )
         items.append(
             {
                 'code_reference': producto.codigo,
                 'name': producto.nombre,
                 'quantity': _to_float(detalle.cantidad),
-                'price': _to_float(_resolve_item_unit_gross_price(detalle)),
+                'price': _to_float(unit_base_price),
                 'tax_rate': _to_float(tax_rate),
                 'unit_measure_id': get_unit_measure_id(producto.unidad_medida),
                 'standard_code_id': 1,
