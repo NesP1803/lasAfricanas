@@ -36,6 +36,7 @@ from apps.facturacion.services.factus_client import (
     FactusPendingCreditNoteError,
     FactusValidationError,
 )
+from apps.facturacion.services.credit_note_workflow import sincronizar_nota_credito
 from apps.facturacion.services.credit_note_service import build_credit_preview, create_credit_note
 from apps.facturacion.services.persistence_safety import (
     normalize_qr_image_value,
@@ -2104,3 +2105,153 @@ class CreditNoteWorkflowHardeningTests(TestCase):
             response_json={},
         )
         self.assertEqual(NotaCreditoElectronica.objects.filter(factura=self.factura, tipo_nota='PARCIAL', estado_local='ACEPTADA').count(), 2)
+
+    @patch('apps.facturacion.services.credit_note_workflow.FactusClient.list_credit_notes')
+    @patch('apps.facturacion.services.credit_note_workflow.FactusClient.get_credit_note')
+    def test_sync_prioriza_reference_code_si_show_number_404(self, mocked_get, mocked_list):
+        nota = NotaCreditoElectronica.objects.create(
+            factura=self.factura,
+            venta_origen=self.venta,
+            number='NC1073',
+            tipo_nota='PARCIAL',
+            estado_local='PENDIENTE_DIAN',
+            estado_electronico='PENDIENTE_DIAN',
+            status='PENDIENTE_DIAN',
+            request_json={},
+            response_json={},
+            reference_code='NC-1-PARCIAL',
+        )
+        mocked_get.side_effect = FactusAPIError('not found', status_code=404)
+        mocked_list.return_value = {
+            'data': {
+                'credit_notes': [
+                    {'number': 'NC999', 'reference_code': 'NC-OTRA', 'bill_number': self.factura.number, 'status': 'pending'},
+                    {'number': 'NC1073', 'reference_code': 'NC-1-PARCIAL', 'bill_number': self.factura.number, 'status': 'accepted', 'cufe': 'CUFE-NC'},
+                ]
+            }
+        }
+        synced = sincronizar_nota_credito(nota.id)
+        self.assertEqual(synced.estado_local, 'ACEPTADA')
+        self.assertEqual(synced.reference_code, 'NC-1-PARCIAL')
+        self.assertEqual(synced.last_remote_error, '')
+
+    @patch('apps.facturacion.services.credit_note_workflow.FactusClient.list_credit_notes')
+    def test_sync_timeout_transitorio_queda_pendiente(self, mocked_list):
+        nota = NotaCreditoElectronica.objects.create(
+            factura=self.factura,
+            venta_origen=self.venta,
+            number='',
+            tipo_nota='PARCIAL',
+            estado_local='PENDIENTE_ENVIO',
+            estado_electronico='PENDIENTE_DIAN',
+            status='PENDIENTE_DIAN',
+            request_json={},
+            response_json={},
+            reference_code='NC-TIMEOUT',
+        )
+        mocked_list.side_effect = FactusAPIError('timeout')
+        synced = sincronizar_nota_credito(nota.id)
+        self.assertEqual(synced.estado_local, 'PENDIENTE_DIAN')
+        self.assertEqual(synced.codigo_error, 'FACTUS_TIMEOUT_O_TRANSITORIO')
+
+    @patch('apps.facturacion.services.credit_note_workflow.FactusClient.create_and_validate_credit_note')
+    @patch('apps.facturacion.services.credit_note_workflow.FactusClient.list_credit_notes')
+    def test_sync_replay_validate_mismo_reference_code_recupera(self, mocked_list, mocked_replay):
+        nota = NotaCreditoElectronica.objects.create(
+            factura=self.factura,
+            venta_origen=self.venta,
+            number='',
+            tipo_nota='PARCIAL',
+            estado_local='CONFLICTO_FACTUS',
+            estado_electronico='PENDIENTE_DIAN',
+            status='PENDIENTE_DIAN',
+            request_json={'reference_code': 'NC-REPLAY', 'items': [{'name': 'x'}]},
+            response_json={},
+            reference_code='NC-REPLAY',
+        )
+        mocked_list.side_effect = FactusAPIError('not-found', status_code=404)
+        mocked_replay.return_value = {'data': {'credit_note': {'number': 'NC-REPLAY-1', 'reference_code': 'NC-REPLAY', 'cufe': 'CUFE-REPLAY', 'status': 'accepted'}}}
+        synced = sincronizar_nota_credito(nota.id)
+        self.assertEqual(synced.estado_local, 'ACEPTADA')
+        self.assertEqual(synced.number, 'NC-REPLAY-1')
+
+    @patch('apps.facturacion.services.credit_note_workflow.FactusClient.list_credit_notes')
+    def test_reintento_idempotente_no_duplica(self, mocked_list):
+        nota = NotaCreditoElectronica.objects.create(
+            factura=self.factura,
+            venta_origen=self.venta,
+            number='',
+            tipo_nota='PARCIAL',
+            estado_local='CONFLICTO_FACTUS',
+            estado_electronico='PENDIENTE_DIAN',
+            status='PENDIENTE_DIAN',
+            request_json={},
+            response_json={},
+            reference_code='NC-IDEMP',
+        )
+        mocked_list.return_value = {'data': {'credit_notes': [{'number': 'NC-IDEMP-1', 'reference_code': 'NC-IDEMP', 'status': 'pending'}]}}
+        first = sincronizar_nota_credito(nota.id)
+        second = sincronizar_nota_credito(nota.id)
+        self.assertEqual(first.id, second.id)
+        self.assertEqual(NotaCreditoElectronica.objects.filter(reference_code='NC-IDEMP').count(), 1)
+
+
+class CreditNoteEndpointsTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(username='nc-endpoint', password='1234')
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+        self.cliente = Cliente.objects.create(numero_documento='9301', nombre='Cliente Endpoints')
+        self.venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            cliente=self.cliente,
+            vendedor=self.user,
+            subtotal=Decimal('100'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('19'),
+            total=Decimal('119'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('119'),
+            cambio=Decimal('0'),
+            estado='FACTURADA',
+            inventario_ya_afectado=True,
+        )
+        self.factura = FacturaElectronica.objects.create(
+            venta=self.venta,
+            cufe='CUFE-END',
+            uuid='UUID-END',
+            number='FV-END',
+            reference_code='FV-END',
+            status='ACEPTADA',
+            estado_electronico='ACEPTADA',
+            emitida_en_factus=True,
+            response_json={'data': {'bill': {'id': 77, 'numbering_range_id': 1}}},
+        )
+        self.nota = NotaCreditoElectronica.objects.create(
+            factura=self.factura,
+            venta_origen=self.venta,
+            number='NC-END',
+            reference_code='NC-END-RC',
+            tipo_nota='PARCIAL',
+            estado_local='CONFLICTO_FACTUS',
+            estado_electronico='PENDIENTE_DIAN',
+            status='PENDIENTE_DIAN',
+            request_json={},
+            response_json={'data': {'credit_note': {'reference_code': 'NC-END-RC'}}},
+            sync_metadata={'attempts': 1},
+        )
+
+    def test_estado_remoto_endpoint(self):
+        response = self.client.get(f'/api/notas-credito/{self.nota.id}/estado-remoto/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['reference_code'], 'NC-END-RC')
+        self.assertIn('remote_response', response.data)
+
+    @patch('apps.facturacion.services.credit_note_workflow.FactusClient.list_credit_notes')
+    def test_reintentar_conciliacion_endpoint(self, mocked_list):
+        mocked_list.return_value = {'data': {'credit_notes': [{'number': 'NC-END', 'reference_code': 'NC-END-RC', 'status': 'pending'}]}}
+        response = self.client.post(f'/api/notas-credito/{self.nota.id}/reintentar-conciliacion/', {}, format='json')
+        self.assertEqual(response.status_code, 202)
+        self.assertIn(response.data['estado_local'], {'PENDIENTE_DIAN', 'CONFLICTO_FACTUS'})

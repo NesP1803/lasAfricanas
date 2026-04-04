@@ -18,6 +18,7 @@ from .credit_note_workflow import (
     CreditNoteValidationError,
     build_credit_preview,
     create_credit_note,
+    sincronizar_nota_credito,
     sync_credit_note,
     sync_credit_note_with_effects,
 )
@@ -52,6 +53,7 @@ __all__ = [
     'CreditNoteStateError',
     'build_credit_preview',
     'create_credit_note',
+    'sincronizar_nota_credito',
     'sync_credit_note',
     'sync_credit_note_with_effects',
     'build_support_document_payload',

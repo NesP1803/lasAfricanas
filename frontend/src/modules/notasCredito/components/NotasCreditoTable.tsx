@@ -79,6 +79,32 @@ export default function NotasCreditoTable({ notasCredito, loading, onRefresh }: 
     }
   };
 
+  const handleReconsultar = async (nota: NotaCredito) => {
+    setActionLoading(nota.numero, 'reconsultar');
+    try {
+      await notasCreditoApi.estadoRemotoNotaCredito(nota.id);
+      await onRefresh();
+      showNotification({ message: `Estado remoto consultado para ${nota.numero}.`, type: 'success' });
+    } catch {
+      showNotification({ message: 'No fue posible consultar estado remoto.', type: 'error' });
+    } finally {
+      setActionLoading(nota.numero, null);
+    }
+  };
+
+  const handleRetry = async (nota: NotaCredito) => {
+    setActionLoading(nota.numero, 'retry');
+    try {
+      await notasCreditoApi.reintentarConciliacion(nota.id);
+      await onRefresh();
+      showNotification({ message: `Conciliación reintentada para ${nota.numero}.`, type: 'success' });
+    } catch {
+      showNotification({ message: 'No fue posible reintentar conciliación.', type: 'error' });
+    } finally {
+      setActionLoading(nota.numero, null);
+    }
+  };
+
   const handleCorreo = async (nota: NotaCredito) => {
     setActionLoading(nota.numero, 'correo');
     try {
@@ -165,6 +191,7 @@ export default function NotasCreditoTable({ notasCredito, loading, onRefresh }: 
                 const canSync = typeof nota.can_sync === 'boolean'
                   ? nota.can_sync
                   : ['PENDIENTE_ENVIO', 'PENDIENTE_DIAN', 'CONFLICTO_FACTUS'].includes(estado);
+                const canRetry = ['CONFLICTO_FACTUS', 'ERROR_INTEGRACION'].includes(estado);
                 return (
                   <tr key={nota.id} className="hover:bg-slate-50">
                     <td className="px-4 py-3 font-semibold text-slate-800">{nota.numero}</td>
@@ -189,6 +216,8 @@ export default function NotasCreditoTable({ notasCredito, loading, onRefresh }: 
                         <button type="button" onClick={() => handleDescargar(nota, 'pdf')} disabled={Boolean(loadingAction)} className="rounded-md bg-violet-600 px-2 py-1 text-xs font-semibold text-white disabled:opacity-60">PDF</button>
                         <button type="button" onClick={() => handleCorreo(nota)} disabled={Boolean(loadingAction)} className="rounded-md bg-emerald-600 px-2 py-1 text-xs font-semibold text-white disabled:opacity-60">Correo</button>
                         <button type="button" onClick={() => handleSync(nota)} disabled={Boolean(loadingAction) || !canSync} className="rounded-md bg-blue-600 px-2 py-1 text-xs font-semibold text-white disabled:opacity-60">Sincronizar</button>
+                        <button type="button" onClick={() => handleReconsultar(nota)} disabled={Boolean(loadingAction)} className="rounded-md bg-cyan-600 px-2 py-1 text-xs font-semibold text-white disabled:opacity-60">Reconsultar</button>
+                        <button type="button" onClick={() => handleRetry(nota)} disabled={Boolean(loadingAction) || !canRetry} className="rounded-md bg-amber-600 px-2 py-1 text-xs font-semibold text-white disabled:opacity-60">Reintentar</button>
                         {(estado === 'BORRADOR' || estado.startsWith('ERROR') || estado === 'PENDIENTE_ENVIO') && (
                           <button type="button" onClick={() => handleEliminar(nota)} disabled={Boolean(loadingAction)} className="rounded-md bg-rose-600 px-2 py-1 text-xs font-semibold text-white disabled:opacity-60">Eliminar</button>
                         )}
