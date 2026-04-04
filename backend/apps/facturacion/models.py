@@ -111,6 +111,7 @@ class NotaCreditoElectronica(models.Model):
         ('BORRADOR', 'Borrador'),
         ('PENDIENTE_ENVIO', 'Pendiente de envío'),
         ('EN_PROCESO', 'En proceso DIAN'),
+        ('CONFLICTO_FACTUS', 'Conflicto Factus (sin confirmación remota)'),
         ('ACEPTADA', 'Aceptada'),
         ('RECHAZADA', 'Rechazada'),
         ('ERROR_INTEGRACION', 'Error de integración'),
@@ -184,7 +185,7 @@ class NotaCreditoElectronica(models.Model):
             models.UniqueConstraint(
                 fields=['factura', 'tipo_nota'],
                 condition=models.Q(
-                    estado_local__in=['BORRADOR', 'PENDIENTE_ENVIO', 'EN_PROCESO', 'ACEPTADA']
+                    estado_local__in=['BORRADOR', 'PENDIENTE_ENVIO', 'EN_PROCESO', 'CONFLICTO_FACTUS', 'ACEPTADA']
                 ),
                 name='uq_nota_credito_abierta_factura_tipo',
             ),
