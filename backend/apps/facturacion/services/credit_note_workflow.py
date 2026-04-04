@@ -9,7 +9,7 @@ from django.utils import timezone
 from apps.facturacion.models import FacturaElectronica, NotaCreditoDetalle, NotaCreditoElectronica
 from apps.facturacion.services.factus_payload_builder import build_invoice_payload
 from apps.facturacion.services.electronic_state_machine import map_factus_status
-from apps.facturacion.services.factus_client import FactusClient, FactusPendingCreditNoteError
+from apps.facturacion.services.factus_client import FactusAPIError, FactusClient, FactusPendingCreditNoteError
 from apps.facturacion.services.factus_catalog_lookup import get_tribute_id, get_unit_measure_id
 from apps.inventario.models import MovimientoInventario, Producto
 from apps.ventas.models import DetalleVenta
@@ -486,5 +486,42 @@ def sync_credit_note(nota: NotaCreditoElectronica) -> NotaCreditoElectronica:
         nota.synchronized_at = timezone.now()
         nota.save(update_fields=['estado_local', 'synchronized_at', 'updated_at'])
         return nota
-    remote = FactusClient().get_credit_note(nota.number)
-    return _update_note_from_remote(nota, remote)
+    client = FactusClient()
+    try:
+        remote = client.get_credit_note(nota.number)
+        return _update_note_from_remote(nota, remote)
+    except FactusAPIError as exc:
+        if exc.status_code != 404:
+            raise
+        # Fallback: algunos tenants no exponen endpoint show por número para notas crédito.
+        try:
+            remote_list = client.list_credit_notes(number=nota.number, bill_number=nota.factura.number)
+        except Exception:
+            remote_list = {}
+        data = remote_list.get('data', remote_list)
+        candidates: list[dict[str, Any]] = []
+        if isinstance(data, list):
+            candidates = [item for item in data if isinstance(item, dict)]
+        elif isinstance(data, dict):
+            for key in ('credit_notes', 'data', 'items'):
+                bucket = data.get(key)
+                if isinstance(bucket, list):
+                    candidates = [item for item in bucket if isinstance(item, dict)]
+                    break
+        matched = next(
+            (
+                item
+                for item in candidates
+                if str(item.get('number') or '').strip() == str(nota.number).strip()
+            ),
+            None,
+        )
+        if matched:
+            return _update_note_from_remote(nota, {'data': {'credit_note': matched}})
+        # Si no se puede consultar en remoto, no romper la operación: mantener estado recuperable.
+        nota.estado_local = 'EN_PROCESO'
+        nota.codigo_error = 'FACTUS_SYNC_PENDING'
+        nota.mensaje_error = 'No fue posible consultar la nota en Factus por endpoint show; quedó pendiente para reintento.'
+        nota.synchronized_at = timezone.now()
+        nota.save(update_fields=['estado_local', 'codigo_error', 'mensaje_error', 'synchronized_at', 'updated_at'])
+        return nota
