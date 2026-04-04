@@ -24,7 +24,6 @@ from apps.facturacion.services.document_totals import (
     calculate_document_detail_totals,
     q_money,
     to_decimal,
-    unit_base_without_tax,
 )
 from apps.facturacion_electronica.catalogos.models import TributoFactus
 from apps.ventas.models import Venta
@@ -175,18 +174,14 @@ def build_factus_item(document_detail: dict[str, Any]) -> dict[str, Any]:
     Traduce una línea documental local al formato Factus.
 
     Convención elegida por compatibilidad con Factus:
-    - `price` se envía como precio unitario base (sin IVA) para líneas gravadas.
+    - `price` se envía como precio unitario final (con IVA cuando aplique), como espera Factus.
     - Para líneas gravadas, `tax_rate` > 0, `is_excluded`=False y `tribute_id` de IVA.
     """
     is_excluded = bool(document_detail['is_excluded'])
     tax_rate = Decimal('0.00') if is_excluded else q_money(document_detail['tax_rate'])
     if not is_excluded and tax_rate <= Decimal('0.00'):
         raise FactusValidationError('Una línea gravada debe enviarse con tax_rate mayor a 0.')
-    price_for_factus = unit_base_without_tax(
-        unit_final_price=document_detail['unit_gross_price'],
-        tax_rate=tax_rate,
-        is_excluded=is_excluded,
-    )
+    price_for_factus = q_money(document_detail['unit_gross_price'])
 
     item_payload = {
         'code_reference': document_detail['code_reference'],
