@@ -29,7 +29,12 @@ from apps.facturacion.services.factus_catalog_lookup import (
 from apps.facturacion.services.factus_payload_builder import build_invoice_payload
 from apps.facturacion.services.support_document_payload_builder import build_support_document_payload
 from apps.facturacion.services.exceptions import DescargaFacturaError
-from apps.facturacion.services.factus_client import FactusAPIError, FactusClient, FactusValidationError
+from apps.facturacion.services.factus_client import (
+    FactusAPIError,
+    FactusClient,
+    FactusPendingCreditNoteError,
+    FactusValidationError,
+)
 from apps.facturacion.services.credit_note_service import build_credit_preview, create_credit_note
 from apps.facturacion.services.persistence_safety import (
     normalize_qr_image_value,
@@ -1686,6 +1691,22 @@ class NotaCreditoWorkflowCoverageTests(TestCase):
                 format='json',
             )
         self.assertEqual(resp.status_code, 502)
+
+    def test_conflicto_nota_pendiente_en_dian_retorna_409(self):
+        with patch(
+            'apps.facturacion.views.create_credit_note',
+            side_effect=FactusPendingCreditNoteError(
+                "Factus reportó una nota crédito pendiente en DIAN.",
+                status_code=409,
+                provider_detail="{'message': 'Se encontró una nota crédito pendiente por enviar a la DIAN'}",
+            ),
+        ):
+            resp = self.client.post(
+                f'/api/facturacion/facturas/{self.factura.id}/notas-credito/total/',
+                {'motivo': 'x'},
+                format='json',
+            )
+        self.assertEqual(resp.status_code, 409)
 
 
 class FactusClientCreditNoteFallbackTests(TestCase):

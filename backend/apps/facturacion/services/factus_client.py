@@ -41,6 +41,10 @@ class FactusPendingDianError(FactusAPIError):
     """Conflicto 409 por documento pendiente de envío/validación ante DIAN."""
 
 
+class FactusPendingCreditNoteError(FactusAPIError):
+    """Conflicto 409 por nota crédito pendiente de envío/validación ante DIAN."""
+
+
 class FactusValidationError(Exception):
     """Error de validación de datos para emitir una factura."""
 
@@ -266,6 +270,16 @@ class FactusClient:
             if status_code == 409 and 'factura pendiente por enviar a la dian' in pending_message:
                 raise FactusPendingDianError(
                     f'Factus reportó la factura pendiente en DIAN.{detail_suffix}',
+                    status_code=status_code,
+                    provider_detail=provider_detail,
+                    provider_payload=provider_payload,
+                ) from exc
+            if status_code == 409 and (
+                'nota crédito pendiente por enviar a la dian' in pending_message
+                or 'nota credito pendiente por enviar a la dian' in pending_message
+            ):
+                raise FactusPendingCreditNoteError(
+                    f'Factus reportó una nota crédito pendiente en DIAN.{detail_suffix}',
                     status_code=status_code,
                     provider_detail=provider_detail,
                     provider_payload=provider_payload,

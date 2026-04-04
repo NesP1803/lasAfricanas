@@ -40,6 +40,7 @@ from apps.facturacion.services import (
     FactusAPIError,
     FactusAuthError,
     FactusConsultaError,
+    FactusPendingCreditNoteError,
     FactusValidationError,
     download_pdf,
     download_remote_file,
@@ -544,6 +545,8 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
             )
         except (CreditNoteValidationError, CreditNoteStateError) as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except FactusPendingCreditNoteError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_409_CONFLICT)
         except (FactusValidationError, FactusAPIError, FactusAuthError) as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
         except Exception:
@@ -576,6 +579,8 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
             )
         except (CreditNoteValidationError, CreditNoteStateError) as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except FactusPendingCreditNoteError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_409_CONFLICT)
         except (FactusValidationError, FactusAPIError, FactusAuthError) as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
         except Exception:
@@ -799,6 +804,8 @@ class NotasCreditoViewSet(viewsets.GenericViewSet):
             )
         except (CreditNoteValidationError, CreditNoteStateError) as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except FactusPendingCreditNoteError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_409_CONFLICT)
         except (FactusValidationError, FactusAPIError, FactusAuthError) as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
         except Exception:
@@ -861,6 +868,8 @@ class NotasCreditoViewSet(viewsets.GenericViewSet):
             nota = sync_credit_note(nota)
         except (CreditNoteValidationError, CreditNoteStateError) as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except FactusPendingCreditNoteError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_409_CONFLICT)
         except (FactusValidationError, FactusAPIError, FactusAuthError) as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
         except Exception:

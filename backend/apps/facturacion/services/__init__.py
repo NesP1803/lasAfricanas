@@ -2,7 +2,13 @@
 
 from .facturar_venta import facturar_venta
 from .sync_invoice_status import map_factus_status, sync_invoice_status
-from .factus_client import FactusAPIError, FactusAuthError, FactusClient, FactusValidationError
+from .factus_client import (
+    FactusAPIError,
+    FactusAuthError,
+    FactusClient,
+    FactusPendingCreditNoteError,
+    FactusValidationError,
+)
 from .exceptions import DescargaFacturaError, FacturaNoEncontrada, FactusConsultaError
 from .factus_payload_builder import build_invoice_payload
 from .credit_note_payload_builder import build_credit_note_payload
@@ -30,6 +36,7 @@ __all__ = [
     'FactusAuthError',
     'FactusAPIError',
     'FactusValidationError',
+    'FactusPendingCreditNoteError',
     'DescargaFacturaError',
     'FacturaNoEncontrada',
     'FactusConsultaError',
