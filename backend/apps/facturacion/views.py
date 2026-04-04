@@ -536,7 +536,7 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
         try:
-            nota = create_credit_note(
+            nota, meta = create_credit_note(
                 factura=factura,
                 motivo=data['motivo'],
                 lines=data['lines'],
@@ -552,7 +552,12 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
         except Exception:
             logger.exception('Error inesperado creando nota crédito parcial para factura %s', factura.id)
             return Response({'detail': 'Error interno al crear nota crédito parcial.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        return Response(NotaCreditoListSerializer(nota).data, status=status.HTTP_201_CREATED)
+        payload = NotaCreditoListSerializer(nota).data
+        if meta.get('result') == 'factus_pending_manual_sync':
+            payload['detail'] = 'Factus reportó nota pendiente en DIAN; se registró en proceso y debe sincronizarse.'
+        elif meta.get('result') != 'created':
+            payload['detail'] = 'Se detectó una nota crédito pendiente en Factus y se reconcilió automáticamente.'
+        return Response(payload, status=int(meta.get('http_status', status.HTTP_201_CREATED)))
 
     @action(detail=True, methods=['post'], url_path='notas-credito/total')
     def notas_credito_total(self, request, pk=None):
@@ -570,7 +575,7 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
             for d in factura.venta.detalles.all()
         ]
         try:
-            nota = create_credit_note(
+            nota, meta = create_credit_note(
                 factura=factura,
                 motivo=motivo,
                 lines=lines,
@@ -586,7 +591,12 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
         except Exception:
             logger.exception('Error inesperado creando nota crédito total para factura %s', factura.id)
             return Response({'detail': 'Error interno al crear nota crédito total.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        return Response(NotaCreditoListSerializer(nota).data, status=status.HTTP_201_CREATED)
+        payload = NotaCreditoListSerializer(nota).data
+        if meta.get('result') == 'factus_pending_manual_sync':
+            payload['detail'] = 'Factus reportó nota pendiente en DIAN; se registró en proceso y debe sincronizarse.'
+        elif meta.get('result') != 'created':
+            payload['detail'] = 'Se detectó una nota crédito pendiente en Factus y se reconcilió automáticamente.'
+        return Response(payload, status=int(meta.get('http_status', status.HTTP_201_CREATED)))
 
 
 
@@ -795,7 +805,7 @@ class NotasCreditoViewSet(viewsets.GenericViewSet):
 
         lines = payload.get('lines') or payload.get('items') or []
         try:
-            nota = create_credit_note(
+            nota, meta = create_credit_note(
                 factura=factura,
                 motivo=payload['motivo'],
                 lines=lines,
@@ -812,8 +822,12 @@ class NotasCreditoViewSet(viewsets.GenericViewSet):
             logger.exception('Error inesperado creando nota crédito (endpoint legacy) para factura %s', factura.id)
             return Response({'detail': 'Error interno al crear nota crédito.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        output = NotaCreditoListSerializer(nota)
-        return Response(output.data, status=status.HTTP_201_CREATED)
+        output = NotaCreditoListSerializer(nota).data
+        if meta.get('result') == 'factus_pending_manual_sync':
+            output['detail'] = 'Factus reportó nota pendiente en DIAN; se registró en proceso y debe sincronizarse.'
+        elif meta.get('result') != 'created':
+            output['detail'] = 'Se detectó una nota crédito pendiente en Factus y se reconcilió automáticamente.'
+        return Response(output, status=int(meta.get('http_status', status.HTTP_201_CREATED)))
 
     @action(detail=False, methods=['get'], url_path=r'(?P<number>[^/.]+)/xml')
     def xml(self, request, number=None):
@@ -946,13 +960,18 @@ class NotasCreditoViewSet(viewsets.GenericViewSet):
                 {'detail': 'No se permite eliminar notas crédito aceptadas fiscalmente.'},
                 status=status.HTTP_409_CONFLICT,
             )
-        from apps.facturacion.services.factus_client import FactusClient
+        if nota.estado_local in {'BORRADOR', 'ERROR_INTEGRACION', 'ERROR_PERSISTENCIA', 'PENDIENTE_ENVIO'}:
+            nota.estado_local = 'ANULADA_LOCAL'
+            nota.deleted_at = timezone.now()
+            nota.save(update_fields=['estado_local', 'deleted_at', 'updated_at'])
+            return Response({'result': 'anulada_local', 'estado_local': nota.estado_local})
+        return Response(
+            {'detail': f'No se permite eliminar la nota en estado {nota.estado_local}.'},
+            status=status.HTTP_409_CONFLICT,
+        )
 
-        result = FactusClient().delete_credit_note(nota.reference_code or nota.number)
-        nota.estado_local = 'ELIMINADA_EN_FACTUS'
-        nota.deleted_at = timezone.now()
-        nota.save(update_fields=['estado_local', 'deleted_at', 'updated_at'])
-        return Response({'result': result, 'estado_local': nota.estado_local})
+    def destroy(self, request, pk=None):
+        return self.eliminar(request, pk=pk)
 
 
 class DocumentosSoporteViewSet(viewsets.GenericViewSet):

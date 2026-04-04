@@ -50,8 +50,8 @@ export default function DetalleNotaCreditoPage() {
           </div>
           <div className="flex gap-2">
             <Link to="/listados/notas-credito" className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700">Volver</Link>
-            <button type="button" onClick={() => notasCreditoApi.descargarPDF(nota.numero)} className="rounded-md bg-violet-600 px-3 py-2 text-sm font-semibold text-white">PDF</button>
-            <button type="button" onClick={() => notasCreditoApi.descargarXML(nota.numero)} className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white">XML</button>
+            <button type="button" onClick={() => notasCreditoApi.descargarPDF(nota.id, nota.numero)} className="rounded-md bg-violet-600 px-3 py-2 text-sm font-semibold text-white">PDF</button>
+            <button type="button" onClick={() => notasCreditoApi.descargarXML(nota.id, nota.numero)} className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white">XML</button>
           </div>
         </div>
       </div>

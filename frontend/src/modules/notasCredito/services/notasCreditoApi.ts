@@ -45,8 +45,11 @@ export interface NotaCredito {
   public_url?: string;
   correo_enviado?: boolean;
   correo_enviado_at?: string;
+  email_status?: string;
   codigo_error?: string;
   mensaje_error?: string;
+  synchronized_at?: string;
+  detail?: string;
   detalles?: NotaCreditoDetalle[];
 }
 
@@ -134,15 +137,15 @@ export const notasCreditoApi = {
     return response.data;
   },
 
-  async descargarXML(numero: string) {
-    const response = await apiClient.get<Blob>(`/notas-credito/${encodeURIComponent(numero)}/xml/`, {
+  async descargarXML(id: number, numero: string) {
+    const response = await apiClient.get<Blob>(`/notas-credito/${id}/xml/`, {
       responseType: 'blob',
     });
     crearArchivoDescargable(response.data, `nota-credito-${encodeURIComponent(numero)}.xml`);
   },
 
-  async descargarPDF(numero: string) {
-    const response = await apiClient.get<Blob>(`/notas-credito/${encodeURIComponent(numero)}/pdf/`, {
+  async descargarPDF(id: number, numero: string) {
+    const response = await apiClient.get<Blob>(`/notas-credito/${id}/pdf/`, {
       responseType: 'blob',
     });
     crearArchivoDescargable(response.data, `nota-credito-${encodeURIComponent(numero)}.pdf`);
@@ -169,7 +172,7 @@ export const notasCreditoApi = {
   },
 
   async eliminarNotaCredito(id: number) {
-    const response = await apiClient.post(`/notas-credito/${id}/eliminar/`);
+    const response = await apiClient.delete(`/notas-credito/${id}/`);
     return response.data;
   },
 };
