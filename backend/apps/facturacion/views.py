@@ -60,6 +60,9 @@ from apps.facturacion.services import (
     sync_credit_note_with_effects,
     CreditNoteValidationError,
     CreditNoteStateError,
+    get_invoice_email_content,
+    send_invoice_email,
+    delete_invoice_in_factus,
 )
 from apps.facturacion.services.factus_client import FactusClient
 from apps.facturacion.services.electronic_state_machine import resolve_actions
@@ -222,9 +225,10 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
             return Response({'detail': 'Factura electrónica no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
         if not factura.number:
             return Response({'detail': 'Factura sin número electrónico aún.'}, status=status.HTTP_409_CONFLICT)
+        save_zip = str(request.query_params.get('save_zip', '')).strip().lower() in {'1', 'true', 'yes', 'si', 'sí'}
         try:
-            payload = FactusClient().get_invoice_email_content(factura.number)
-        except (FactusAPIError, FactusAuthError) as exc:
+            payload = get_invoice_email_content(factura=factura, save_zip=save_zip)
+        except (FactusAPIError, FactusAuthError, FactusValidationError, DescargaFacturaError) as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
         return Response(payload)
 
@@ -236,14 +240,15 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
         if not factura.number:
             return Response({'detail': 'Factura sin número electrónico aún.'}, status=status.HTTP_409_CONFLICT)
         email = str(request.data.get('email', '')).strip() or None
+        pdf_base_64_encoded = str(request.data.get('pdf_base_64_encoded', '')).strip() or None
         try:
-            payload = FactusClient().send_invoice_email(factura.number, email=email)
+            payload = send_invoice_email(factura=factura, email=email, pdf_base_64_encoded=pdf_base_64_encoded)
+        except FactusValidationError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         except (FactusAPIError, FactusAuthError) as exc:
+            factura.ultimo_error_correo = str(exc)[:500]
+            factura.save(update_fields=['ultimo_error_correo', 'updated_at'])
             return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
-        factura.correo_enviado = True
-        factura.correo_enviado_at = timezone.now()
-        factura.ultimo_error_correo = ''
-        factura.save(update_fields=['correo_enviado', 'correo_enviado_at', 'ultimo_error_correo', 'updated_at'])
         return Response({'detail': 'Correo enviado por Factus.', 'provider': payload})
 
     @action(detail=True, methods=['get'], url_path='eventos')
@@ -277,21 +282,12 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
         factura = FacturaElectronica.objects.filter(pk=pk).first()
         if factura is None:
             return Response({'detail': 'Factura electrónica no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
-        if not factura.number:
-            return Response({'detail': 'Factura sin número electrónico aún.'}, status=status.HTTP_409_CONFLICT)
-        if (factura.estado_electronico or factura.status) in {'ACEPTADA', 'ACEPTADA_CON_OBSERVACIONES'}:
-            return Response(
-                {'detail': 'No se permite eliminar localmente una factura aceptada para preservar trazabilidad.'},
-                status=status.HTTP_409_CONFLICT,
-            )
         try:
-            payload = FactusClient().delete_invoice(factura.number)
+            payload = delete_invoice_in_factus(factura=factura)
+        except FactusValidationError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_409_CONFLICT)
         except (FactusAPIError, FactusAuthError) as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
-        factura.status = 'RECHAZADA'
-        factura.estado_electronico = 'RECHAZADA'
-        factura.mensaje_error = 'Documento eliminado/cancelado en Factus por acción administrativa.'
-        factura.save(update_fields=['status', 'estado_electronico', 'mensaje_error', 'updated_at'])
         return Response({'detail': 'Eliminación solicitada en Factus.', 'provider': payload})
 
     @action(detail=False, methods=['get'], url_path=r'(?P<number>[^/.]+)/estado')
