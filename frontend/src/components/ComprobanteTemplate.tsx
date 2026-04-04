@@ -176,6 +176,11 @@ export default function ComprobanteTemplate({
       <div className="mx-auto w-full max-w-[210mm] border border-slate-300 bg-white p-7 font-sans text-[11px] text-slate-800">
         <header className="grid grid-cols-[1.2fr,1fr] gap-6 border-b border-slate-200 pb-4">
           <div className="space-y-1">
+            <img
+              src={getLogoEmpresa(empresa)}
+              alt="Logo empresa"
+              className="mb-2 h-14 max-w-[80mm] rounded-md object-contain object-left"
+            />
             <p className="text-base font-bold uppercase tracking-wide">{infoEmpresa.nombre}</p>
             <p>{infoEmpresa.nit}</p>
             <p>{infoEmpresa.regimen}</p>
@@ -186,7 +191,6 @@ export default function ComprobanteTemplate({
             <p className="text-[10px] uppercase tracking-wider text-slate-500">{tituloDocumento}</p>
             <p className="text-xl font-bold leading-tight">{numero}</p>
             {referenceCode ? <p className="text-[10px] text-slate-500">Doc. Ref: {referenceCode}</p> : null}
-            {cufe ? <p className="break-all text-[10px]"><span className="font-semibold">CUFE:</span> {cufe}</p> : null}
             {qrImageUrl ? (
               <img src={qrImageUrl} alt="QR factura electrónica" className="ml-auto mt-2 h-20 w-20 border border-slate-200 p-1" />
             ) : qrUrl ? (
@@ -252,7 +256,12 @@ export default function ComprobanteTemplate({
         </section>
 
         <footer className="mt-4 rounded border border-slate-200 bg-slate-50 p-3 text-[10px] text-slate-600">
-            {representacionGrafica ? <p>{representacionGrafica}</p> : null}
+          {cufe ? (
+            <p className="min-w-0 max-w-full overflow-hidden whitespace-normal break-all">
+              <span className="font-semibold text-slate-700">CUFE:</span> {cufe}
+            </p>
+          ) : null}
+          {representacionGrafica ? <p className="mt-1">{representacionGrafica}</p> : null}
           {qrUrl ? <p className="mt-1 break-all">Verificación DIAN: {qrUrl}</p> : null}
           <p className="mt-1">{notas || 'Gracias por su compra. Presentar factura para garantías y devoluciones.'}</p>
         </footer>
@@ -264,8 +273,8 @@ export default function ComprobanteTemplate({
     <div className="mx-auto w-full max-w-[82mm] border border-slate-300 bg-white p-2.5 font-sans text-[10px] text-slate-900">
       <div className="flex gap-2">
         {cufe ? (
-          <div className="flex w-5 items-center justify-center border-r border-slate-300 pr-1">
-            <p className="break-all text-[7px] font-semibold leading-tight tracking-[0.08em] text-slate-600 [writing-mode:vertical-rl] [text-orientation:mixed] [transform:rotate(180deg)]">
+          <div className="relative w-5 shrink-0 border-r border-slate-300 pr-1">
+            <p className="absolute left-1/2 top-1/2 max-h-[calc(100%-8px)] min-w-0 max-w-full -translate-x-1/2 -translate-y-1/2 overflow-hidden whitespace-normal break-all text-[7px] font-semibold leading-tight tracking-[0.08em] text-slate-600 [writing-mode:vertical-rl] [text-orientation:mixed] [transform:rotate(180deg)]">
               CUFE · {cufe}
             </p>
           </div>

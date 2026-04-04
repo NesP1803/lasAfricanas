@@ -183,7 +183,8 @@ export const printComprobante = ({
       body { font-family: Arial, sans-serif; color: #0f172a; font-size: 10px; line-height: 1.28; }
       .ticket { width: var(--ticket-width); border: 1px solid #cbd5e1; padding: 8px; }
       .content { display: flex; gap: 6px; }
-      .cufe-vertical { width: 17px; border-right: 1px solid #cbd5e1; writing-mode: vertical-rl; text-orientation: mixed; transform: rotate(180deg); font-size: 7px; font-weight: 700; color: #475569; letter-spacing: .08em; line-height: 1.1; overflow-wrap: anywhere; padding-right: 2px; }
+      .cufe-side { width: 17px; border-right: 1px solid #cbd5e1; padding-right: 2px; position: relative; flex-shrink: 0; }
+      .cufe-vertical { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(180deg); writing-mode: vertical-rl; text-orientation: mixed; font-size: 7px; font-weight: 700; color: #475569; letter-spacing: .08em; line-height: 1.1; max-height: calc(100% - 8px); max-width: 100%; min-width: 0; overflow: hidden; overflow-wrap: anywhere; word-break: break-word; white-space: normal; }
       .main { flex: 1; min-width: 0; }
       .center { text-align: center; }
       .line { border-top: 1px solid #e2e8f0; margin: 6px 0; }
@@ -223,6 +224,7 @@ export const printComprobante = ({
       .header p { margin: 1mm 0; }
       .doc { text-align: right; }
       .doc-number { margin: 0; font-size: 20px; font-weight: 700; }
+      .logo { display: block; margin-bottom: 2mm; height: 14mm; max-width: 80mm; object-fit: contain; object-position: left; }
       .muted { color: #64748b; font-size: 10px; }
       .break { overflow-wrap: anywhere; word-break: break-word; }
       .qr img { margin-top: 2mm; width: 22mm; height: 22mm; border: 1px solid #e2e8f0; padding: 1mm; }
@@ -236,6 +238,8 @@ export const printComprobante = ({
       .row { display: flex; justify-content: space-between; margin: 1.4mm 0; }
       .total { border-top: 1px solid #e2e8f0; padding-top: 1.5mm; font-size: 13px; font-weight: 700; }
       .footer { margin-top: 4mm; border: 1px solid #e2e8f0; background: #f8fafc; padding: 3mm; font-size: 10px; }
+      .footer p { margin: 1mm 0; }
+      .cufe-inline { min-width: 0; max-width: 100%; overflow: hidden; overflow-wrap: anywhere; word-break: break-word; white-space: normal; }
       @media print {
         .sheet { border: 0; width: auto; margin: 0; padding: 0; }
         tr, td, th { break-inside: avoid; }
@@ -246,7 +250,7 @@ export const printComprobante = ({
     ? `
       <div class="ticket">
         <div class="content">
-          ${cufe ? `<div class="cufe-vertical">CUFE · ${cufe}</div>` : ''}
+          ${cufe ? `<div class="cufe-side"><div class="cufe-vertical">CUFE · ${cufe}</div></div>` : ''}
           <div class="main">
             <div class="center">
               <img src="${getLogoEmpresa(empresa)}" alt="Logo empresa" class="logo"/>
@@ -303,6 +307,7 @@ export const printComprobante = ({
       <div class="sheet">
         <div class="header">
           <div>
+            <img src="${getLogoEmpresa(empresa)}" alt="Logo empresa" class="logo"/>
             <h1>${infoEmpresa.nombre}</h1>
             <p>${infoEmpresa.nit}</p>
             <p>${infoEmpresa.regimen}</p>
@@ -313,7 +318,6 @@ export const printComprobante = ({
             <p class="muted">${tituloDocumento}</p>
             <p class="doc-number">${numero}</p>
             ${referenceCode ? `<p class="muted">Doc. Ref: ${referenceCode}</p>` : ''}
-            ${cufe ? `<p class="muted">CUFE</p><p class="break">${cufe}</p>` : ''}
             ${qrImageUrl ? `<div class="qr"><img src="${qrImageUrl}" alt="QR factura electrónica"/></div>` : qrUrl ? `<p class="muted break">${qrUrl}</p>` : ''}
           </div>
         </div>
@@ -353,7 +357,12 @@ export const printComprobante = ({
             ${efectivoRecibido !== undefined && cambio !== undefined ? `<div class="row"><span>Recibido</span><span>${currencyFormatter.format(efectivoRecibido)}</span></div><div class="row"><span>Cambio</span><span>${currencyFormatter.format(cambio)}</span></div>` : ''}
           </div>
         </div>
-        <div class="footer">${representacionGrafica ? `${representacionGrafica}<br/>` : ''}${qrUrl ? `Verificación DIAN: ${qrUrl}<br/>` : ''}${notas || 'Gracias por su compra. Presentar factura para garantías y devoluciones.'}</div>
+        <div class="footer">
+          ${cufe ? `<p class="cufe-inline"><strong>CUFE:</strong> ${cufe}</p>` : ''}
+          ${representacionGrafica ? `<p>${representacionGrafica}</p>` : ''}
+          ${qrUrl ? `<p class="break">Verificación DIAN: ${qrUrl}</p>` : ''}
+          <p>${notas || 'Gracias por su compra. Presentar factura para garantías y devoluciones.'}</p>
+        </div>
       </div>
     `;
 
