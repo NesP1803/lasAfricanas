@@ -94,8 +94,9 @@ class FactusClient:
             'FACTUS_INVOICE_TACIT_ACCEPTANCE_PATH',
             default='/v1/bills/acceptance-tacit/{number}',
         )
-        self.invoice_delete_path = config('FACTUS_INVOICE_DELETE_PATH', default='/v1/bills/{number}')
+        self.invoice_delete_path = config('FACTUS_INVOICE_DELETE_PATH', default='/v1/bills/reference/{reference_code}')
         self.invoice_send_email_path = config('FACTUS_INVOICE_SEND_EMAIL_PATH', default='/v1/bills/send-email/{number}')
+        self.invoice_email_content_path = config('FACTUS_INVOICE_EMAIL_CONTENT_PATH', default='/v1/bills/{number}/email-content')
         self.invoice_email_template_path = config('FACTUS_INVOICE_EMAIL_TEMPLATE_PATH', default='/v1/bills/email-template/{number}')
         self.invoice_custom_pdf_upload_path = config(
             'FACTUS_INVOICE_CUSTOM_PDF_UPLOAD_PATH',
@@ -425,9 +426,9 @@ class FactusClient:
         if not encoded:
             return b''
         try:
-            return base64.b64decode(encoded)
+            return base64.b64decode(encoded, validate=True)
         except Exception:
-            logger.warning('No fue posible decodificar base64 para credit-note field=%s', field)
+            logger.warning('No fue posible decodificar base64 field=%s', field)
             return b''
 
     def get_credit_note_email_content(self, number: str) -> dict[str, Any]:
@@ -489,22 +490,51 @@ class FactusClient:
 
     def download_invoice_xml(self, number: str) -> bytes:
         path = self.invoice_download_xml_path.format(number=number)
-        content, _ = self.download_resource(path)
-        return content
+        payload = self.request('GET', path)
+        content = self._decode_base64_payload(payload, field='xml_base_64_encoded')
+        if content:
+            return content
+        fallback, _ = self.download_resource(path)
+        return fallback
 
     def download_invoice_pdf(self, number: str) -> bytes:
         path = self.invoice_download_pdf_path.format(number=number)
-        content, _ = self.download_resource(path)
-        return content
+        payload = self.request('GET', path)
+        content = self._decode_base64_payload(payload, field='pdf_base_64_encoded')
+        if content:
+            return content
+        fallback, _ = self.download_resource(path)
+        return fallback
+
+    def get_invoice_pdf_payload(self, number: str) -> dict[str, Any]:
+        return self.request('GET', self.invoice_download_pdf_path.format(number=number))
+
+    def get_invoice_xml_payload(self, number: str) -> dict[str, Any]:
+        return self.request('GET', self.invoice_download_xml_path.format(number=number))
 
     def list_invoices(self, *, filters: dict[str, Any] | None = None) -> dict[str, Any]:
         return self.request('GET', self.invoice_list_path, params=filters or {})
 
     def get_invoice_email_content(self, number: str) -> dict[str, Any]:
-        return self.request('GET', self.invoice_email_template_path.format(number=number))
+        try:
+            return self.request('GET', self.invoice_email_content_path.format(number=number))
+        except FactusAPIError as exc:
+            detail = (exc.provider_detail or '').lower()
+            should_retry_template = (
+                exc.status_code == 404
+                and 'route' in detail
+                and self.invoice_email_template_path
+            )
+            if not should_retry_template:
+                raise
+            logger.warning(
+                'Factus invoice email-content no disponible; reintentando email-template number=%s',
+                number,
+            )
+            return self.request('GET', self.invoice_email_template_path.format(number=number))
 
-    def delete_invoice(self, number: str) -> dict[str, Any]:
-        return self.request('DELETE', self.invoice_delete_path.format(number=number))
+    def delete_invoice(self, reference_code: str) -> dict[str, Any]:
+        return self.request('DELETE', self.invoice_delete_path.format(reference_code=reference_code))
 
     def get_invoice_events(self, number: str) -> dict[str, Any]:
         return self.request('GET', self.invoice_events_path.format(number=number))
@@ -512,8 +542,18 @@ class FactusClient:
     def tacit_acceptance(self, number: str) -> dict[str, Any]:
         return self.request('POST', self.invoice_tacit_acceptance_path.format(number=number), json={})
 
-    def send_invoice_email(self, number: str, email: str | None = None) -> dict[str, Any]:
-        payload = {'email': email} if email else None
+    def send_invoice_email(
+        self,
+        number: str,
+        email: str | None = None,
+        *,
+        pdf_base_64_encoded: str | None = None,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {}
+        if email:
+            payload['email'] = email
+        if pdf_base_64_encoded:
+            payload['pdf_base_64_encoded'] = pdf_base_64_encoded
         return self.request('POST', self.invoice_send_email_path.format(number=number), json=payload)
 
     def get_invoice_email_template(self, number: str) -> dict[str, Any]:

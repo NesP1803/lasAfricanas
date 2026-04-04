@@ -34,6 +34,7 @@ from .emitir_factura_completa import emitir_factura_completa
 from .pdf_personalizado import generar_pdf_personalizado
 from .upload_custom_pdf_to_factus import send_invoice_email_via_factus, upload_custom_pdf_to_factus
 from .public_invoice_url import resolve_public_invoice_url
+from .invoice_email_delete_service import delete_invoice_in_factus, get_invoice_email_content, send_invoice_email
 
 __all__ = [
     'FactusClient',
@@ -73,4 +74,7 @@ __all__ = [
     'upload_custom_pdf_to_factus',
     'send_invoice_email_via_factus',
     'resolve_public_invoice_url',
+    'get_invoice_email_content',
+    'send_invoice_email',
+    'delete_invoice_in_factus',
 ]
