@@ -10,6 +10,7 @@ from apps.facturacion.models import FacturaElectronica, NotaCreditoDetalle, Nota
 from apps.facturacion.services.factus_payload_builder import build_invoice_payload
 from apps.facturacion.services.facturar_venta import map_factus_status
 from apps.facturacion.services.factus_client import FactusClient
+from apps.facturacion.services.factus_catalog_lookup import get_tribute_id, get_unit_measure_id
 from apps.inventario.models import MovimientoInventario, Producto
 from apps.ventas.models import DetalleVenta
 
@@ -187,31 +188,32 @@ def _apply_inventory_return(nota: NotaCreditoElectronica, user) -> None:
         producto.save(update_fields=['stock', 'updated_at'])
 
 
-def _resolve_bill_id_and_customer(factura: FacturaElectronica, client: FactusClient) -> tuple[int, dict[str, Any]]:
+def _resolve_bill_id_and_customer(
+    factura: FacturaElectronica,
+    client: FactusClient,
+    *,
+    local_customer: dict[str, Any],
+) -> tuple[int, dict[str, Any]]:
     response_json = factura.response_json if isinstance(factura.response_json, dict) else {}
     data = response_json.get('data', response_json)
     bill = data.get('bill', {}) if isinstance(data, dict) else {}
-    customer = data.get('customer', {}) if isinstance(data, dict) else {}
     bill_id = bill.get('id')
 
-    if bill_id and customer:
-        return int(bill_id), customer
+    if bill_id:
+        return int(bill_id), local_customer
 
     if factura.number:
         remote = client.get_invoice(factura.number)
         remote_data = remote.get('data', remote)
         remote_bill = remote_data.get('bill', {}) if isinstance(remote_data, dict) else {}
-        remote_customer = remote_data.get('customer', {}) if isinstance(remote_data, dict) else {}
         remote_bill_id = remote_bill.get('id')
-        if remote_bill_id and remote_customer:
-            return int(remote_bill_id), remote_customer
+        if remote_bill_id:
+            return int(remote_bill_id), local_customer
 
     if not bill_id:
         raise CreditNoteValidationError(
             'No fue posible identificar bill_id de la factura electrónica origen para emitir la nota crédito.'
         )
-    # Fallback: construir customer local cuando no viene en respuesta previa/remota.
-    local_customer = build_invoice_payload(factura.venta).get('customer', {})
     return int(bill_id), local_customer
 
 
@@ -223,10 +225,18 @@ def _map_payload_for_factus(
     is_total: bool,
     client: FactusClient,
 ) -> dict[str, Any]:
-    bill_id, customer = _resolve_bill_id_and_customer(factura, client)
+    reference_payload = build_invoice_payload(factura.venta)
+    local_customer = reference_payload.get('customer', {})
+    reference_items = {
+        str(item.get('code_reference') or ''): item
+        for item in reference_payload.get('items', [])
+    }
+    bill_id, customer = _resolve_bill_id_and_customer(factura, client, local_customer=local_customer)
     items = []
     for line in preview_lines:
         detalle = DetalleVenta.objects.select_related('producto').get(pk=line['detalle_venta_original_id'], venta=factura.venta)
+        template = reference_items.get(str(detalle.producto.codigo or ''))
+        tribute_default = get_tribute_id('ZZ' if _to_decimal(detalle.iva_porcentaje) == Decimal('0') else '01')
         items.append(
             {
                 'code_reference': detalle.producto.codigo,
@@ -235,6 +245,10 @@ def _map_payload_for_factus(
                 'price': float(detalle.precio_unitario),
                 'tax_rate': float(detalle.iva_porcentaje),
                 'discount_rate': float(_to_decimal(line.get('descuento') or 0)),
+                'unit_measure_id': int((template or {}).get('unit_measure_id') or get_unit_measure_id(detalle.producto.unidad_medida)),
+                'standard_code_id': int((template or {}).get('standard_code_id') or 1),
+                'tribute_id': int((template or {}).get('tribute_id') or tribute_default),
+                'is_excluded': int((template or {}).get('is_excluded') or 0),
             }
         )
 

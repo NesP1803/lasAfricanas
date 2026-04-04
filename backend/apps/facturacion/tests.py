@@ -1612,6 +1612,11 @@ class NotaCreditoWorkflowCoverageTests(TestCase):
         payload = mocked_create.call_args.args[0]
         self.assertIn('bill_id', payload)
         self.assertIn('customer', payload)
+        self.assertTrue(payload.get('items'))
+        self.assertIn('unit_measure_id', payload['items'][0])
+        self.assertIn('standard_code_id', payload['items'][0])
+        self.assertIn('tribute_id', payload['items'][0])
+        self.assertIn('is_excluded', payload['items'][0])
         self.factura.refresh_from_db()
         self.assertEqual(self.factura.estado_acreditacion, 'CREDITADA_TOTAL')
 
