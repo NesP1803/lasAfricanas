@@ -51,6 +51,11 @@ from apps.facturacion.services import (
     sync_numbering_ranges,
     sync_invoice_status,
     emitir_factura_completa,
+    build_credit_preview,
+    create_credit_note,
+    sync_credit_note,
+    CreditNoteValidationError,
+    CreditNoteStateError,
 )
 from apps.facturacion.services.factus_client import FactusClient
 from apps.facturacion.services.electronic_state_machine import resolve_actions
@@ -512,7 +517,13 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
             return Response({'detail': 'Factura electrónica no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
         serializer = NotaCreditoPreviewSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        preview = build_credit_preview(factura, serializer.validated_data['lines'])
+        try:
+            preview = build_credit_preview(factura, serializer.validated_data['lines'])
+        except (CreditNoteValidationError, CreditNoteStateError) as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception:
+            logger.exception('Error inesperado generando preview de nota crédito para factura %s', factura.id)
+            return Response({'detail': 'Error interno al generar preview de nota crédito.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         return Response(preview)
 
     @action(detail=True, methods=['post'], url_path='notas-credito/parcial')
@@ -531,8 +542,13 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
                 is_total=False,
                 user=request.user,
             )
-        except Exception as exc:
+        except (CreditNoteValidationError, CreditNoteStateError) as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except (FactusValidationError, FactusAPIError, FactusAuthError) as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        except Exception:
+            logger.exception('Error inesperado creando nota crédito parcial para factura %s', factura.id)
+            return Response({'detail': 'Error interno al crear nota crédito parcial.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         return Response(NotaCreditoListSerializer(nota).data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=['post'], url_path='notas-credito/total')
@@ -558,8 +574,13 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
                 is_total=True,
                 user=request.user,
             )
-        except Exception as exc:
+        except (CreditNoteValidationError, CreditNoteStateError) as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except (FactusValidationError, FactusAPIError, FactusAuthError) as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        except Exception:
+            logger.exception('Error inesperado creando nota crédito total para factura %s', factura.id)
+            return Response({'detail': 'Error interno al crear nota crédito total.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         return Response(NotaCreditoListSerializer(nota).data, status=status.HTTP_201_CREATED)
 
 
@@ -763,18 +784,26 @@ class NotasCreditoViewSet(viewsets.GenericViewSet):
         serializer.is_valid(raise_exception=True)
         payload = serializer.validated_data
 
+        factura = FacturaElectronica.objects.select_related('venta').filter(pk=payload.get('factura_id')).first()
+        if factura is None:
+            return Response({'detail': 'Factura electrónica no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+
+        lines = payload.get('lines') or payload.get('items') or []
         try:
-            nota = emitir_nota_credito(
-                factura_id=payload['factura_id'],
+            nota = create_credit_note(
+                factura=factura,
                 motivo=payload['motivo'],
-                items=payload['items'],
+                lines=lines,
+                is_total=False,
+                user=request.user,
             )
-        except FacturaElectronica.DoesNotExist as exc:
-            return Response({'detail': str(exc)}, status=status.HTTP_404_NOT_FOUND)
-        except FacturaNoValidaParaNotaCredito as exc:
+        except (CreditNoteValidationError, CreditNoteStateError) as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-        except FactusValidationError as exc:
-            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except (FactusValidationError, FactusAPIError, FactusAuthError) as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        except Exception:
+            logger.exception('Error inesperado creando nota crédito (endpoint legacy) para factura %s', factura.id)
+            return Response({'detail': 'Error interno al crear nota crédito.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         output = NotaCreditoListSerializer(nota)
         return Response(output.data, status=status.HTTP_201_CREATED)
@@ -830,8 +859,13 @@ class NotasCreditoViewSet(viewsets.GenericViewSet):
             return Response({'detail': 'Nota crédito no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
         try:
             nota = sync_credit_note(nota)
-        except Exception as exc:
+        except (CreditNoteValidationError, CreditNoteStateError) as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except (FactusValidationError, FactusAPIError, FactusAuthError) as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        except Exception:
+            logger.exception('Error inesperado sincronizando nota crédito %s', nota.id)
+            return Response({'detail': 'Error interno al sincronizar la nota crédito.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         return Response(NotaCreditoListSerializer(nota).data)
 
     @action(detail=True, methods=['get'], url_path='pdf')
