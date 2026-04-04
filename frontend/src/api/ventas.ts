@@ -517,10 +517,14 @@ export const ventasApi = {
   },
 
   async facturarEnCaja(ventaId: number): Promise<FacturarCajaResponse> {
+    const ventaIdNormalizado = Number(ventaId);
+    if (!Number.isInteger(ventaIdNormalizado) || ventaIdNormalizado <= 0) {
+      throw new Error('No se puede facturar en caja: identificador de venta inválido.');
+    }
     let data: unknown;
     try {
       data = await apiRequest<unknown>({
-        url: `${API_URL}/caja/${ventaId}/facturar/`,
+        url: `${API_URL}/caja/${ventaIdNormalizado}/facturar/`,
         method: 'POST',
       });
     } catch (error) {

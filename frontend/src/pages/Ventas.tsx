@@ -664,9 +664,27 @@ export default function Ventas() {
 
   useEffect(() => {
     if (!cajaPayload?.ventaId || !esCaja) return;
+    const ventaIdCaja = Number(cajaPayload.ventaId);
+    if (!Number.isInteger(ventaIdCaja) || ventaIdCaja <= 0) {
+      const detail = 'No se pudo cargar la venta de caja: identificador inválido.';
+      console.warn('caja.cargar_venta_id_invalido', { ventaId: cajaPayload.ventaId });
+      setMensaje(detail);
+      showNotification({ type: 'error', message: detail });
+      navigate('/ventas', { replace: true, state: null });
+      return;
+    }
     ventasApi
-      .getDetalleCaja(cajaPayload.ventaId)
-      .then((venta) => cargarVentaEnFormulario(venta))
+      .getDetalleCaja(ventaIdCaja)
+      .then((venta) => {
+        if (!venta?.id || !Number.isInteger(Number(venta.id))) {
+          console.warn('caja.detalle_venta_sin_id_valido', { venta });
+          const detail = 'La venta cargada desde caja no contiene un identificador válido.';
+          setMensaje(detail);
+          showNotification({ type: 'error', message: detail });
+          return;
+        }
+        cargarVentaEnFormulario(venta);
+      })
       .catch((error) => {
         const detail = error instanceof Error ? error.message : 'No se pudo cargar la venta enviada a caja.';
         setMensaje(detail);
@@ -1044,12 +1062,30 @@ export default function Ventas() {
       };
 
       if (esCaja && ventaBorrador?.estado === 'ENVIADA_A_CAJA') {
+        if (!ventaBorrador?.id || !Number.isInteger(Number(ventaBorrador.id))) {
+          const detalleError = 'No se puede facturar en caja sin un identificador de venta válido.';
+          console.warn('caja.facturar.venta_sin_id_valido', { ventaBorrador });
+          setMensaje(detalleError);
+          showNotification({ type: 'error', message: detalleError });
+          return;
+        }
         const ventaActualizada = await ventasApi.actualizarVenta(
           ventaBorrador.id,
           buildVentaPayload('FACTURA', ventaBorrador.vendedor)
         );
-        const emision = await ventasApi.facturarEnCaja(ventaActualizada.id);
-        const ventaFacturada = await ventasApi.getVenta(ventaActualizada.id);
+        const ventaIdFacturar = Number(ventaActualizada?.id ?? ventaBorrador.id);
+        if (!Number.isInteger(ventaIdFacturar) || ventaIdFacturar <= 0) {
+          const detalleError = 'No se puede facturar en caja: id de venta inválido luego de actualizar.';
+          console.warn('caja.facturar.id_invalido_post_actualizacion', {
+            ventaActualizada,
+            ventaBorradorId: ventaBorrador.id,
+          });
+          setMensaje(detalleError);
+          showNotification({ type: 'error', message: detalleError });
+          return;
+        }
+        const emision = await ventasApi.facturarEnCaja(ventaIdFacturar);
+        const ventaFacturada = await ventasApi.getVenta(ventaIdFacturar);
         setVentaBorrador(ventaFacturada);
         setDocumentoGenerado({
           tipo: 'FACTURA',

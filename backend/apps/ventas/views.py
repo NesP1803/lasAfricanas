@@ -730,16 +730,36 @@ class CajaViewSet(viewsets.GenericViewSet):
 
     @action(detail=True, methods=['post'])
     def facturar(self, request, pk=None):
+        try:
+            venta_id = int(pk)
+        except (TypeError, ValueError):
+            logger.warning(
+                'caja.facturar.venta_id_invalido venta_id_raw=%s user_id=%s username=%s',
+                pk,
+                getattr(request.user, 'id', None),
+                getattr(request.user, 'username', None),
+            )
+            return Response(
+                {
+                    'ok': False,
+                    'message': 'Identificador de venta inválido para facturar en caja.',
+                    'error_code': 'VENTA_ID_INVALIDO',
+                    'venta_id': None,
+                    'factus_sent': False,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         logger.info(
             'caja.facturar.inicio venta_id=%s user_id=%s username=%s ruta=/api/caja/%s/facturar/',
-            pk,
+            venta_id,
             getattr(request.user, 'id', None),
             getattr(request.user, 'username', None),
-            pk,
+            venta_id,
         )
         permission_response = self._require_caja(request)
         if permission_response:
-            logger.warning('caja.facturar.no_autorizado venta_id=%s user_id=%s', pk, getattr(request.user, 'id', None))
+            logger.warning('caja.facturar.no_autorizado venta_id=%s user_id=%s', venta_id, getattr(request.user, 'id', None))
             return permission_response
 
         try:
@@ -748,7 +768,7 @@ class CajaViewSet(viewsets.GenericViewSet):
                     Venta.objects.select_for_update()
                     .select_related('cliente', 'vendedor')
                     .prefetch_related('detalles', 'detalles__producto')
-                    .get(pk=pk)
+                    .get(pk=venta_id)
                 )
                 logger.info('caja.facturar.validando venta_id=%s estado=%s tipo=%s', venta.id, venta.estado, venta.tipo_comprobante)
                 self._validar_para_facturar(venta)
@@ -769,19 +789,19 @@ class CajaViewSet(viewsets.GenericViewSet):
                 factura.cufe,
             )
         except ValidationError as error:
-            logger.warning('caja.facturar.validacion_error venta_id=%s error=%s', pk, error.detail)
+            logger.warning('caja.facturar.validacion_error venta_id=%s error=%s', venta_id, error.detail)
             return Response({'error': error.detail}, status=status.HTTP_400_BAD_REQUEST)
         except FacturaDuplicadaError as error:
-            factura = FacturaElectronica.objects.filter(venta_id=pk).first()
+            factura = FacturaElectronica.objects.filter(venta_id=venta_id).first()
             if factura is None:
-                logger.error('caja.facturar.duplicada_sin_registro venta_id=%s error=%s', pk, str(error))
+                logger.error('caja.facturar.duplicada_sin_registro venta_id=%s error=%s', venta_id, str(error))
                 return Response({'error': str(error)}, status=status.HTTP_409_CONFLICT)
-            logger.warning('caja.facturar.duplicada_reutilizada venta_id=%s factura=%s', pk, factura.number)
+            logger.warning('caja.facturar.duplicada_reutilizada venta_id=%s factura=%s', venta_id, factura.number)
         except (FactusValidationError, FactusAuthError, FactusAPIError) as error:
-            logger.exception('caja.facturar.factus_error venta_id=%s', pk)
+            logger.exception('caja.facturar.factus_error venta_id=%s', venta_id)
             if 'venta' in locals():
                 venta.refresh_from_db()
-            factura_error = FacturaElectronica.objects.filter(venta_id=pk).first()
+            factura_error = FacturaElectronica.objects.filter(venta_id=venta_id).first()
             http_status, codigo_error = _factus_http_status_and_code(error)
             return Response(
                 {
@@ -789,7 +809,7 @@ class CajaViewSet(viewsets.GenericViewSet):
                     'message': str(error),
                     'codigo_error': codigo_error,
                     'mensaje_error': str(error),
-                    'venta_id': int(pk) if pk else None,
+                    'venta_id': venta_id,
                     'numero_factura': None,
                     'estado_local': venta.estado if 'venta' in locals() else 'COBRADA',
                     'estado_venta': venta.estado if 'venta' in locals() else 'COBRADA',
@@ -804,15 +824,15 @@ class CajaViewSet(viewsets.GenericViewSet):
                 status=http_status,
             )
         except Exception as error:
-            logger.exception('caja.facturar.error_no_controlado venta_id=%s', pk)
+            logger.exception('caja.facturar.error_no_controlado venta_id=%s', venta_id)
             if 'venta' in locals():
                 venta.refresh_from_db()
-            factura_error = FacturaElectronica.objects.filter(venta_id=pk).first()
+            factura_error = FacturaElectronica.objects.filter(venta_id=venta_id).first()
             return Response(
                 {
                     'ok': False,
                     'message': f'Error interno al facturar: {error}',
-                    'venta_id': int(pk) if pk else None,
+                    'venta_id': venta_id,
                     'numero_factura': None,
                     'estado_local': venta.estado if 'venta' in locals() else 'COBRADA',
                     'estado_venta': venta.estado if 'venta' in locals() else 'COBRADA',
