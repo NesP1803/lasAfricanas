@@ -5,6 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 import re
 import logging
+from typing import Any
 
 from django.conf import settings
 
@@ -23,7 +24,6 @@ from apps.facturacion.services.document_totals import (
     calculate_document_detail_totals,
     q_money,
     to_decimal,
-    unit_base_without_tax,
 )
 from apps.facturacion_electronica.catalogos.models import TributoFactus
 from apps.ventas.models import Venta
@@ -34,6 +34,11 @@ HUNDRED = Decimal('100.00')
 
 def _to_float(value: Decimal) -> float:
     return float(value or Decimal('0'))
+
+
+def _to_clean_text(value: Any, *, fallback: str) -> str:
+    text = str(value or '').strip()
+    return text or fallback
 
 
 def _resolve_customer_tribute_id(tipo_documento: str) -> int:
@@ -122,6 +127,75 @@ def _resolve_item_discount_rate(detalle) -> Decimal:
 
     discount_rate = q_money((total_discount / gross_total) * HUNDRED)
     return min(HUNDRED, max(Decimal('0.00'), discount_rate))
+
+
+def _normalize_document_detail(detalle) -> dict[str, Any]:
+    """
+    Normaliza una línea documental local en una única fuente de verdad.
+
+    Esta estructura evita recalcular cantidades/base/impuesto/total en
+    múltiples capas y deja explícita la semántica antes de mapear a Factus.
+    """
+    producto = detalle.producto
+    quantity = q_money(to_decimal(detalle.cantidad))
+    if quantity <= Decimal('0.00'):
+        raise FactusValidationError('La cantidad del item debe ser mayor a cero para facturación electrónica.')
+
+    unit_gross_price = _resolve_item_unit_gross_price(detalle)
+    discount_rate = _resolve_item_discount_rate(detalle)
+    is_excluded = _is_excluded_item(detalle)
+    tax_rate = Decimal('0.00') if is_excluded else q_money(to_decimal(detalle.iva_porcentaje))
+    tribute_id = _resolve_excluded_item_tribute_id() if is_excluded else _resolve_item_tribute_id(tax_rate)
+
+    totals = calculate_document_detail_totals(
+        quantity=quantity,
+        unit_gross_price=unit_gross_price,
+        discount_pct=discount_rate,
+        tax_pct=tax_rate,
+    )
+    return {
+        'code_reference': _to_clean_text(getattr(producto, 'codigo', ''), fallback=str(detalle.id)),
+        'name': _to_clean_text(getattr(producto, 'nombre', ''), fallback=f'ITEM-{detalle.id}'),
+        'quantity': quantity,
+        'unit_gross_price': unit_gross_price,
+        'discount_rate': discount_rate,
+        'tax_rate': tax_rate,
+        'is_excluded': is_excluded,
+        'tribute_id': int(tribute_id),
+        'unit_measure_id': int(get_unit_measure_id(producto.unidad_medida)),
+        'standard_code_id': 1,
+        'withholding_taxes': [],
+        'totals': totals,
+    }
+
+
+def build_factus_item(document_detail: dict[str, Any]) -> dict[str, Any]:
+    """
+    Traduce una línea documental local al formato Factus.
+
+    Convención elegida por compatibilidad práctica:
+    - `price` se envía como precio unitario bruto/final (incluye IVA si aplica).
+    - Para líneas gravadas, `tax_rate` > 0, `is_excluded`=0 y `tribute_id` de IVA.
+    Esto reduce casos donde Factus interpreta la línea como excluida.
+    """
+    is_excluded = bool(document_detail['is_excluded'])
+    tax_rate = Decimal('0.00') if is_excluded else q_money(document_detail['tax_rate'])
+    if not is_excluded and tax_rate <= Decimal('0.00'):
+        raise FactusValidationError('Una línea gravada debe enviarse con tax_rate mayor a 0.')
+
+    return {
+        'code_reference': document_detail['code_reference'],
+        'name': document_detail['name'],
+        'quantity': _to_float(document_detail['quantity']),
+        'price': _to_float(document_detail['unit_gross_price']),
+        'tax_rate': _to_float(tax_rate),
+        'discount_rate': _to_float(document_detail['discount_rate']),
+        'is_excluded': 1 if is_excluded else 0,
+        'tribute_id': int(document_detail['tribute_id']),
+        'unit_measure_id': int(document_detail['unit_measure_id']),
+        'standard_code_id': int(document_detail['standard_code_id']),
+        'withholding_taxes': document_detail.get('withholding_taxes', []),
+    }
 
 
 def _normalize_identification(value: str) -> str:
@@ -215,52 +289,24 @@ def build_invoice_payload(venta: Venta) -> dict:
     cliente = venta.cliente
     rango = resolve_numbering_range(document_code='FACTURA_VENTA')
     detalles = list(venta.detalles.select_related('producto').all())
-    items = []
+    items: list[dict[str, Any]] = []
     for detalle in detalles:
-        producto = detalle.producto
-        is_excluded = _is_excluded_item(detalle)
-        tax_rate = Decimal('0.00') if is_excluded else to_decimal(detalle.iva_porcentaje)
-        tribute_id = (
-            _resolve_excluded_item_tribute_id()
-            if is_excluded
-            else _resolve_item_tribute_id(tax_rate)
-        )
-        discount_rate = _resolve_item_discount_rate(detalle)
-        doc_line = calculate_document_detail_totals(
-            quantity=detalle.cantidad,
-            unit_gross_price=detalle.precio_unitario,
-            discount_pct=discount_rate,
-            tax_pct=tax_rate,
-        )
-        unit_base_price = unit_base_without_tax(
-            unit_final_price=detalle.precio_unitario,
-            tax_rate=tax_rate,
-            is_excluded=is_excluded,
-        )
+        normalized_line = _normalize_document_detail(detalle)
+        doc_line = normalized_line['totals']
         logger.info(
-            'factus_payload.item code=%s qty=%s price_gross=%s discount_pct=%s base=%s tax=%s total=%s',
-            producto.codigo,
-            detalle.cantidad,
-            detalle.precio_unitario,
-            discount_rate,
+            'factus_payload.item code=%s qty=%s price_gross=%s tax_rate=%s is_excluded=%s discount_pct=%s '
+            'base=%s tax=%s total=%s',
+            normalized_line['code_reference'],
+            normalized_line['quantity'],
+            normalized_line['unit_gross_price'],
+            normalized_line['tax_rate'],
+            1 if normalized_line['is_excluded'] else 0,
+            normalized_line['discount_rate'],
             doc_line['base'],
             doc_line['impuesto'],
             doc_line['total'],
         )
-        items.append(
-            {
-                'code_reference': producto.codigo,
-                'name': producto.nombre,
-                'quantity': _to_float(detalle.cantidad),
-                'price': _to_float(unit_base_price),
-                'tax_rate': _to_float(tax_rate),
-                'unit_measure_id': get_unit_measure_id(producto.unidad_medida),
-                'standard_code_id': 1,
-                'tribute_id': tribute_id,
-                'discount_rate': _to_float(discount_rate),
-                'is_excluded': 1 if is_excluded else 0,
-            }
-        )
+        items.append(build_factus_item(normalized_line))
 
     return {
         'document': '01',

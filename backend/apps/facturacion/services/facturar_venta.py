@@ -518,6 +518,15 @@ def _extract_remote_document_snapshot(payload: dict[str, Any]) -> dict[str, Any]
     }
 
 
+def _extract_items_from_payload(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    data = payload.get('data', payload) if isinstance(payload, dict) else {}
+    bill = data.get('bill', data) if isinstance(data, dict) else {}
+    items = bill.get('items', data.get('items', [])) if isinstance(bill, dict) else []
+    if not isinstance(items, list):
+        return []
+    return [item for item in items if isinstance(item, dict)]
+
+
 def _is_remote_snapshot_inconclusive(*, remote: dict[str, Any], expected_tax: Decimal) -> bool:
     remote_tax = _to_decimal_or_none(remote.get('tax_total'))
     remote_base = _to_decimal_or_none(remote.get('base_total'))
@@ -627,10 +636,15 @@ def _assert_document_conciliation(
         'OK' if not mismatches else 'MISMATCH',
     )
     if mismatches:
+        request_items = _extract_items_from_payload(request_payload)
+        response_items = _extract_items_from_payload(response_payload)
         logger.error(
-            'facturar_venta.conciliacion_error venta_id=%s items_enviados=%s totales_locales=%s totales_factus=%s response_json=%s',
+            'facturar_venta.conciliacion_error venta_id=%s payload_enviado=%s item_original=%s item_factus=%s '
+            'totales_locales=%s totales_factus=%s response_json=%s',
             venta.id,
-            request_payload.get('items', []),
+            request_payload,
+            request_items[0] if request_items else {},
+            response_items[0] if response_items else {},
             {
                 'base': str(expected_base),
                 'impuesto': str(expected_tax),
@@ -662,6 +676,35 @@ def _assert_document_conciliation(
         raise FactusValidationError(
             f'{DOCUMENT_CONCILIATION_ERROR_CODE}: Conciliación documental fallida ({", ".join(mismatches)}).'
         )
+
+
+def _build_and_log_factus_payload(venta: Venta) -> dict[str, Any]:
+    """
+    Separa explícitamente la traducción al formato Factus del resto del flujo.
+    La capa documental local se normaliza antes con _sync_sale_totals_before_emit.
+    """
+    payload = build_invoice_payload(venta)
+    customer = payload.get('customer', {}) if isinstance(payload.get('customer'), dict) else {}
+    items = payload.get('items', []) if isinstance(payload.get('items'), list) else []
+    first_item = items[0] if items and isinstance(items[0], dict) else {}
+    logger.info(
+        'facturar_venta.payload_normalizado venta_id=%s payload=%s',
+        venta.id,
+        payload,
+    )
+    logger.info(
+        'facturar_venta.payload_componentes venta_id=%s customer=%s payment_form=%s payment_method=%s '
+        'numbering_range_id=%s operation_type=%s first_item=%s items_count=%s',
+        venta.id,
+        customer,
+        payload.get('payment_form'),
+        payload.get('payment_method_code'),
+        payload.get('numbering_range_id'),
+        payload.get('operation_type'),
+        first_item,
+        len(items),
+    )
+    return payload
 
 
 def _number_matches_active_range(numero: str, prefijo_rango: str) -> bool:
@@ -961,6 +1004,42 @@ def _validate_customer_for_factus(customer: dict[str, Any], venta: Venta) -> Non
         raise FactusValidationError(field_messages[missing_fields[0]])
 
 
+def _validate_payload_tax_consistency(payload: dict[str, Any], venta: Venta) -> None:
+    customer = payload.get('customer', {}) if isinstance(payload.get('customer'), dict) else {}
+    items = payload.get('items', []) if isinstance(payload.get('items'), list) else []
+    if not items:
+        raise FactusValidationError('La factura no tiene ítems para emitir en Factus.')
+    if not payload.get('operation_type'):
+        raise FactusValidationError('Falta operation_type en el payload Factus.')
+    if not payload.get('payment_form') or not payload.get('payment_method_code'):
+        raise FactusValidationError('Falta payment_form/payment_method_code en el payload Factus.')
+
+    taxable_count = 0
+    for index, item in enumerate(items, start=1):
+        if not isinstance(item, dict):
+            continue
+        is_excluded = _to_bool(item.get('is_excluded'))
+        tax_rate = _to_decimal_or_none(item.get('tax_rate')) or Decimal('0.00')
+        tribute_id = item.get('tribute_id')
+        if not is_excluded:
+            taxable_count += 1
+            if tax_rate <= Decimal('0.00'):
+                raise FactusValidationError(
+                    f'Ítem gravado inválido en línea {index}: tax_rate debe ser mayor a 0 cuando is_excluded=0.'
+                )
+            if not tribute_id:
+                raise FactusValidationError(
+                    f'Ítem gravado inválido en línea {index}: tribute_id es obligatorio para evitar degradación en Factus.'
+                )
+    logger.info(
+        'facturar_venta.payload_consistencia venta_id=%s customer_tribute_id=%s taxable_items=%s total_items=%s',
+        venta.id,
+        customer.get('tribute_id'),
+        taxable_count,
+        len(items),
+    )
+
+
 def _mark_factura_persistence_error(
     *,
     factura_id: int,
@@ -1078,25 +1157,17 @@ def facturar_venta(
                 factura_existente.number,
             )
 
-        _sync_sale_totals_before_emit(venta)
-        payload = build_invoice_payload(venta)
+        local_totals = _sync_sale_totals_before_emit(venta)
+        payload = _build_and_log_factus_payload(venta)
         rango_activo = resolve_numbering_range(document_code='FACTURA_VENTA')
         _validate_customer_for_factus(payload.get('customer', {}), venta)
+        _validate_payload_tax_consistency(payload, venta)
         logger.info(
-            'facturar_venta.payload venta_id=%s items=%s customer=%s numbering_range_id=%s '
-            'customer_tribute_id=%s customer_document_id=%s first_discount_rate=%s first_is_excluded=%s send_email=%s',
+            'facturar_venta.documento_local_normalizado venta_id=%s base=%s impuesto=%s total=%s',
             venta.id,
-            len(payload.get('items', [])),
-            {
-                'identification': payload.get('customer', {}).get('identification'),
-                'names': payload.get('customer', {}).get('names'),
-            },
-            payload.get('numbering_range_id'),
-            payload.get('customer', {}).get('tribute_id'),
-            payload.get('customer', {}).get('identification_document_id'),
-            (payload.get('items', [{}])[0].get('discount_rate') if payload.get('items') else None),
-            (payload.get('items', [{}])[0].get('is_excluded') if payload.get('items') else None),
-            payload.get('send_email'),
+            local_totals['base_total'],
+            local_totals['tax_total'],
+            local_totals['total'],
         )
         numero = str(venta.numero_comprobante or '').strip()
         if not numero:
@@ -1150,7 +1221,18 @@ def facturar_venta(
 
     client = FactusClient()
     try:
-        logger.info('facturar_venta.payload_final venta_id=%s payload=%s', venta.id, payload)
+        logger.info(
+            'facturar_venta.payload_pre_post venta_id=%s payload=%s items=%s customer=%s payment_form=%s '
+            'payment_method=%s numbering_range_id=%s operation_type=%s',
+            venta.id,
+            payload,
+            payload.get('items', []),
+            payload.get('customer', {}),
+            payload.get('payment_form'),
+            payload.get('payment_method_code'),
+            payload.get('numbering_range_id'),
+            payload.get('operation_type'),
+        )
         response_json = client.create_and_validate_invoice(payload)
     except FactusPendingDianError as exc:
         logger.warning(
