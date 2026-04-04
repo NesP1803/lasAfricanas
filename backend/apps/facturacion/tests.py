@@ -2154,6 +2154,27 @@ class CreditNoteWorkflowHardeningTests(TestCase):
         self.assertEqual(synced.estado_local, 'PENDIENTE_DIAN')
         self.assertEqual(synced.codigo_error, 'FACTUS_TIMEOUT_O_TRANSITORIO')
 
+    @patch('apps.facturacion.services.credit_note_workflow.FactusClient.create_and_validate_credit_note')
+    @patch('apps.facturacion.services.credit_note_workflow.FactusClient.list_credit_notes')
+    def test_sync_replay_validate_mismo_reference_code_recupera(self, mocked_list, mocked_replay):
+        nota = NotaCreditoElectronica.objects.create(
+            factura=self.factura,
+            venta_origen=self.venta,
+            number='',
+            tipo_nota='PARCIAL',
+            estado_local='CONFLICTO_FACTUS',
+            estado_electronico='PENDIENTE_DIAN',
+            status='PENDIENTE_DIAN',
+            request_json={'reference_code': 'NC-REPLAY', 'items': [{'name': 'x'}]},
+            response_json={},
+            reference_code='NC-REPLAY',
+        )
+        mocked_list.side_effect = FactusAPIError('not-found', status_code=404)
+        mocked_replay.return_value = {'data': {'credit_note': {'number': 'NC-REPLAY-1', 'reference_code': 'NC-REPLAY', 'cufe': 'CUFE-REPLAY', 'status': 'accepted'}}}
+        synced = sincronizar_nota_credito(nota.id)
+        self.assertEqual(synced.estado_local, 'ACEPTADA')
+        self.assertEqual(synced.number, 'NC-REPLAY-1')
+
     @patch('apps.facturacion.services.credit_note_workflow.FactusClient.list_credit_notes')
     def test_reintento_idempotente_no_duplica(self, mocked_list):
         nota = NotaCreditoElectronica.objects.create(

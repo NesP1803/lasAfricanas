@@ -439,8 +439,11 @@ def sincronizar_nota_credito(nota_credito_id: int, *, user=None, force_retry: bo
             sync_meta['last_lookup'] = 'list_credit_notes'
             sync_meta['last_lookup_result_count'] = len(_list_candidates(remote_list))
         except FactusAPIError as exc:
-            list_error = str(exc)
-            sync_meta['last_lookup_error'] = list_error
+            if exc.status_code == 404:
+                sync_meta['last_lookup_error'] = 'list_empty_or_not_found'
+            else:
+                list_error = str(exc)
+                sync_meta['last_lookup_error'] = list_error
 
         if remote_candidate:
             logger.info(
@@ -477,6 +480,31 @@ def sincronizar_nota_credito(nota_credito_id: int, *, user=None, force_retry: bo
                 sync_meta['last_show_error'] = str(exc)
                 if exc.status_code != 404:
                     raise
+
+        if isinstance(nota.request_json, dict) and nota.request_json:
+            try:
+                replay = client.create_and_validate_credit_note(nota.request_json)
+                logger.info(
+                    'facturacion.nota_credito.sync.replay_validate_ok nota_credito_id=%s reference_code=%s decision=%s',
+                    nota.id,
+                    reference_code,
+                    'revalidated_with_same_reference_code',
+                )
+                nota.sync_metadata = sync_meta
+                return _update_note_from_remote(nota, replay)
+            except FactusPendingCreditNoteError:
+                nota.estado_local = 'PENDIENTE_DIAN'
+                nota.codigo_error = 'FACTUS_409_PENDIENTE_DIAN'
+                nota.last_remote_error = 'Factus reporta nota pendiente por enviar/validar DIAN.'
+                nota.mensaje_error = 'Factus confirmó que la nota sigue en proceso DIAN. Reintente sincronización.'
+                nota.synchronized_at = timezone.now()
+                nota.last_sync_at = nota.synchronized_at
+                nota.sync_metadata = sync_meta
+                nota.save(update_fields=['estado_local', 'codigo_error', 'last_remote_error', 'mensaje_error', 'synchronized_at', 'last_sync_at', 'sync_metadata', 'updated_at'])
+                return nota
+            except FactusAPIError as exc:
+                if exc.status_code not in {404, 409}:
+                    list_error = str(exc)
 
         nota.synchronized_at = timezone.now()
         nota.last_sync_at = nota.synchronized_at
