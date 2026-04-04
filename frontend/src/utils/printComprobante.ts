@@ -182,8 +182,8 @@ export const printComprobante = ({
       html, body { width: var(--ticket-width); margin: 0; padding: 0; background: #fff; }
       body { font-family: Arial, sans-serif; color: #0f172a; font-size: 10px; line-height: 1.28; }
       .ticket { width: var(--ticket-width); border: 1px solid #cbd5e1; padding: 6px 5px; }
-      .content { display: flex; align-items: stretch; gap: 5px; }
-      .cufe-side { width: 14px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; padding-left: 2px; }
+      .content { display: flex; align-items: stretch; gap: 4px; }
+      .cufe-side { width: 12px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; padding-left: 1px; }
       .cufe-divider { width: 1px; align-self: stretch; background: #cbd5e1; }
       .cufe-vertical { transform: rotate(180deg); writing-mode: vertical-rl; text-orientation: mixed; font-size: 7px; font-weight: 700; color: #475569; letter-spacing: .08em; line-height: 1.12; max-height: calc(100% - 6px); max-width: 100%; min-width: 0; overflow: hidden; overflow-wrap: anywhere; word-break: break-word; white-space: normal; }
       .main { flex: 1; min-width: 0; }
@@ -294,7 +294,6 @@ export const printComprobante = ({
               ${resumenIvaArray.map((item) => `<div class="iva-grid" style="margin-top:2px;"><span>${item.porcentaje}%</span><span class="right">${currencyFormatter.format(item.total)}</span><span class="right">${currencyFormatter.format(item.base)}</span><span class="right">${currencyFormatter.format(item.iva)}</span></div>`).join('')}
             </div>
             ${notas ? `<div class="muted break">${notas}</div>` : ''}
-            <div class="line"></div>
             <div class="qr">
               ${qrImageUrl ? `<img src="${qrImageUrl}" alt="QR factura electrónica"/>` : qrUrl ? `<div class="muted break">Verificación: ${qrUrl}</div>` : '<div class="placeholder">Espacio reservado para QR DIAN</div>'}
             </div>

@@ -271,9 +271,9 @@ export default function ComprobanteTemplate({
 
   return (
     <div className="mx-auto w-full max-w-[82mm] border border-slate-300 bg-white px-1.5 py-2 font-sans text-[10px] text-slate-900">
-      <div className={`flex items-stretch ${cufe ? 'gap-1.5' : ''}`}>
+      <div className={`flex items-stretch ${cufe ? 'gap-1' : ''}`}>
         {cufe ? (
-          <aside className="flex w-[14px] shrink-0 items-center justify-center pl-0.5">
+          <aside className="flex w-[12px] shrink-0 items-center justify-center">
             <p className="max-h-[calc(100%-6px)] overflow-hidden whitespace-normal break-all text-[7px] font-semibold leading-tight tracking-[0.08em] text-slate-600 [writing-mode:vertical-rl] [text-orientation:mixed] [transform:rotate(180deg)]">
               CUFE · {cufe}
             </p>
@@ -366,7 +366,7 @@ export default function ComprobanteTemplate({
             ))}
           </div>
 
-          <div className="mt-2 border-t border-slate-300 pt-2 text-[8px] text-slate-600">
+          <div className="mt-2 pt-2 text-[8px] text-slate-600">
             {notas ? <p className="break-words">{notas}</p> : null}
           </div>
 
