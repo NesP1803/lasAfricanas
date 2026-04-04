@@ -273,13 +273,13 @@ export default function ComprobanteTemplate({
     <div className="mx-auto w-full max-w-[82mm] border border-slate-300 bg-white px-1.5 py-2 font-sans text-[10px] text-slate-900">
       <div className={`flex items-stretch ${cufe ? 'gap-1.5' : ''}`}>
         {cufe ? (
-          <aside className="relative flex w-[14px] shrink-0 items-center justify-center pl-0.5">
-            <span className="absolute inset-y-0 left-[3px] w-px bg-slate-300" aria-hidden="true" />
+          <aside className="flex w-[14px] shrink-0 items-center justify-center pl-0.5">
             <p className="max-h-[calc(100%-6px)] overflow-hidden whitespace-normal break-all text-[7px] font-semibold leading-tight tracking-[0.08em] text-slate-600 [writing-mode:vertical-rl] [text-orientation:mixed] [transform:rotate(180deg)]">
               CUFE · {cufe}
             </p>
           </aside>
         ) : null}
+        {cufe ? <span className="w-px self-stretch bg-slate-300" aria-hidden="true" /> : null}
         <div className="min-w-0 flex-1">
           <div className="text-center">
             <img src={getLogoEmpresa(empresa)} alt="Logo empresa" className="mx-auto mb-1.5 h-11 max-w-[52mm] rounded-lg object-contain" />

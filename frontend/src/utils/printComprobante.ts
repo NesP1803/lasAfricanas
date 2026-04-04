@@ -183,8 +183,8 @@ export const printComprobante = ({
       body { font-family: Arial, sans-serif; color: #0f172a; font-size: 10px; line-height: 1.28; }
       .ticket { width: var(--ticket-width); border: 1px solid #cbd5e1; padding: 6px 5px; }
       .content { display: flex; align-items: stretch; gap: 5px; }
-      .cufe-side { width: 14px; position: relative; flex-shrink: 0; display: flex; align-items: center; justify-content: center; padding-left: 2px; }
-      .cufe-side::before { content: ''; position: absolute; top: 0; bottom: 0; left: 3px; width: 1px; background: #cbd5e1; }
+      .cufe-side { width: 14px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; padding-left: 2px; }
+      .cufe-divider { width: 1px; align-self: stretch; background: #cbd5e1; }
       .cufe-vertical { transform: rotate(180deg); writing-mode: vertical-rl; text-orientation: mixed; font-size: 7px; font-weight: 700; color: #475569; letter-spacing: .08em; line-height: 1.12; max-height: calc(100% - 6px); max-width: 100%; min-width: 0; overflow: hidden; overflow-wrap: anywhere; word-break: break-word; white-space: normal; }
       .main { flex: 1; min-width: 0; }
       .center { text-align: center; }
@@ -251,7 +251,7 @@ export const printComprobante = ({
     ? `
       <div class="ticket">
         <div class="content">
-          ${cufe ? `<div class="cufe-side"><div class="cufe-vertical">CUFE · ${cufe}</div></div>` : ''}
+          ${cufe ? `<div class="cufe-side"><div class="cufe-vertical">CUFE · ${cufe}</div></div><div class="cufe-divider" aria-hidden="true"></div>` : ''}
           <div class="main">
             <div class="center">
               <img src="${getLogoEmpresa(empresa)}" alt="Logo empresa" class="logo"/>
