@@ -21,13 +21,13 @@ def _extract_support_document_data(response_json: dict[str, Any]) -> dict[str, s
         'number': str(support_document.get('number', '')).strip(),
         'xml_url': str(support_document.get('xml_url', '')).strip(),
         'pdf_url': str(support_document.get('pdf_url', '')).strip(),
-        'status': map_factus_status(response_json),
+        'status': map_factus_status(response_json)[0],
     }
 
 
 def emitir_documento_soporte(data: dict[str, Any]) -> DocumentoSoporteElectronico:
     payload = build_support_document_payload(data)
-    response_json = FactusClient().send_support_document(payload)
+    response_json = FactusClient().create_and_validate_support_document(payload)
     fields = _extract_support_document_data(response_json)
 
     with transaction.atomic():
