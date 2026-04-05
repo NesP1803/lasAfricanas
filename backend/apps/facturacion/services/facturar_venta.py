@@ -6,6 +6,7 @@ import copy
 import hashlib
 import json
 import logging
+import uuid
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -674,8 +675,17 @@ def _assert_document_conciliation(
             remote_base,
         )
     if mismatches:
+        request_reference_code = str(request_payload.get('reference_code') or '').strip()
+        returned_reference_code = str(logger_context.get('reference_code') or '').strip()
+        collision_hint = ''
+        if request_reference_code and returned_reference_code and request_reference_code == returned_reference_code:
+            collision_hint = (
+                ' Posible colisión por reuse de reference_code: Factus respondió un documento previo '
+                'con el mismo reference_code técnico pero con totales/ítems distintos.'
+            )
         raise FactusValidationError(
             f'{DOCUMENT_CONCILIATION_ERROR_CODE}: Conciliación documental fallida ({", ".join(mismatches)}).'
+            f'{collision_hint}'
         )
 
 
@@ -714,6 +724,25 @@ def _number_matches_active_range(numero: str, prefijo_rango: str) -> bool:
     if not numero_normalizado or not prefijo_normalizado:
         return False
     return numero_normalizado.startswith(prefijo_normalizado)
+
+
+def _generate_unique_reference_code(venta_id: int, numero: str | None = None) -> str:
+    ts = timezone.now().strftime('%Y%m%d%H%M%S')
+    short = uuid.uuid4().hex[:8].upper()
+    if numero:
+        return f'{numero}-{ts}-{short}'
+    return f'VENTA-{venta_id}-{ts}-{short}'
+
+
+def _resolve_reference_code(
+    *,
+    venta: Venta,
+    factura_existente: FacturaElectronica | None,
+    numero: str,
+) -> str:
+    if factura_existente and str(factura_existente.reference_code or '').strip():
+        return str(factura_existente.reference_code).strip()
+    return _generate_unique_reference_code(venta.id, numero)
 
 
 def _persist_local_validation_error(
@@ -1125,13 +1154,6 @@ def facturar_venta(
 
         factura_existente = FacturaElectronica.objects.select_for_update().filter(venta=venta).first()
         if factura_existente and factura_existente.estado_electronico in {'ACEPTADA', 'ACEPTADA_CON_OBSERVACIONES'}:
-            if venta.numero_comprobante and factura_existente.reference_code:
-                if str(factura_existente.reference_code).strip() != str(venta.numero_comprobante).strip():
-                    raise FactusValidationError(
-                        f'La venta {venta.id} tiene numero_comprobante={venta.numero_comprobante}, '
-                        f'pero la factura asociada quedó con reference_code={factura_existente.reference_code}. '
-                        'Debe revisarse la asociación antes de reutilizar CUFE/QR.'
-                    )
             logger.info('facturar_venta.reutiliza_aceptada venta_id=%s factura=%s', venta.id, factura_existente.number)
             try:
                 if not factura_existente.xml_local_path:
@@ -1210,8 +1232,12 @@ def facturar_venta(
             payload['number'] = numero
         else:
             payload.pop('number', None)
-        payload['reference_code'] = numero
-        reference_code = numero
+        reference_code = _resolve_reference_code(
+            venta=venta,
+            factura_existente=factura_existente,
+            numero=numero,
+        )
+        payload['reference_code'] = reference_code
         if FacturaElectronica.objects.filter(reference_code=reference_code).exclude(venta=venta).exists():
             raise FacturaDuplicadaError(f'Ya existe una factura electrónica con reference_code={reference_code}.')
 
