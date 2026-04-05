@@ -867,13 +867,14 @@ class CajaViewSet(viewsets.GenericViewSet):
                 'cufe': factura.cufe,
                 'uuid': factura.uuid,
                 'reference_code': factura.reference_code,
-                'send_email': bool(factura.response_json.get('request', {}).get('send_email', False)),
+                'send_email': factura.send_email_enabled,
                 'pos_ticket': build_pos_ticket_payload(venta, factura),
                 'factus_sent': True,
                 'errores': [],
                 'warnings': warnings,
                 'xml_disponible': bool(factura.xml_local_path),
                 'pdf_disponible': bool(factura.pdf_local_path),
+                'email_content_available': bool(factura.email_zip_local_path or factura.email_subject),
                 'correo_enviado': factura.correo_enviado,
             }
         )

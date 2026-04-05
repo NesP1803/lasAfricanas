@@ -2,6 +2,7 @@
 
 import base64
 import logging
+from pathlib import Path
 
 from django.conf import settings
 from django.core.mail import send_mail
@@ -52,9 +53,7 @@ from apps.facturacion.services import (
     FactusConsultaError,
     FactusPendingCreditNoteError,
     FactusValidationError,
-    download_pdf,
     download_remote_file,
-    download_xml,
     emitir_documento_soporte,
     emitir_nota_ajuste_documento_soporte,
     read_local_media_file,
@@ -79,6 +78,7 @@ from apps.facturacion.services import (
     sync_ranges_to_db,
     update_range_current,
 )
+from apps.facturacion.services.factura_assets_service import sync_invoice_assets
 from apps.facturacion.services.factus_client import FactusClient
 from apps.facturacion.services.factus_environment import resolve_factus_environment
 from apps.facturacion.services.electronic_state_machine import resolve_actions
@@ -175,6 +175,11 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
                 'pdf_url': factura.pdf_url,
                 'xml_local_path': factura.xml_local_path,
                 'pdf_local_path': factura.pdf_local_path,
+                'email_subject': factura.email_subject,
+                'email_zip_local_path': factura.email_zip_local_path,
+                'send_email_enabled': factura.send_email_enabled,
+                'last_assets_sync_at': factura.last_assets_sync_at,
+                'can_sync_assets': bool(factura.number and (not factura.pdf_local_path or not factura.xml_local_path)),
                 'pdf_uploaded_to_factus': factura.pdf_uploaded_to_factus,
                 'pdf_uploaded_at': factura.pdf_uploaded_at,
                 'correo_enviado': factura.correo_enviado,
@@ -346,12 +351,8 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
             if factura.xml_local_path:
                 content = read_local_media_file(factura.xml_local_path)
             else:
-                if not factura.xml_url:
-                    return Response(
-                        {'detail': f'La factura {number} no tiene URL XML disponible.'},
-                        status=status.HTTP_409_CONFLICT,
-                    )
-                local_path = download_xml(factura)
+                sync_invoice_assets(factura, include_email_content=False)
+                local_path = factura.xml_local_path
                 content = read_local_media_file(local_path)
         except (DescargaFacturaError, DownloadResourceError) as exc:
             return Response(
@@ -380,12 +381,8 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
             if factura.pdf_local_path:
                 content = read_local_media_file(factura.pdf_local_path)
             else:
-                if not factura.pdf_url:
-                    return Response(
-                        {'detail': f'La factura {number} no tiene URL PDF disponible.'},
-                        status=status.HTTP_409_CONFLICT,
-                    )
-                local_path = download_pdf(factura)
+                sync_invoice_assets(factura, include_email_content=False)
+                local_path = factura.pdf_local_path
                 content = read_local_media_file(local_path)
         except (DescargaFacturaError, DownloadResourceError) as exc:
             return Response(
@@ -460,8 +457,8 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
         if factura is None:
             return Response({'detail': 'Factura electrónica no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
         try:
-            if not factura.xml_local_path and factura.xml_url:
-                download_xml(factura)
+            if not factura.xml_local_path:
+                sync_invoice_assets(factura, include_email_content=False)
             content = read_local_media_file(factura.xml_local_path)
         except Exception as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
@@ -473,29 +470,82 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
         if factura is None:
             return Response({'detail': 'Factura electrónica no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
         try:
-            if not factura.pdf_local_path and factura.pdf_url:
-                download_pdf(factura)
+            if not factura.pdf_local_path:
+                sync_invoice_assets(factura, include_email_content=False)
             content = read_local_media_file(factura.pdf_local_path)
         except Exception as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
         return _build_file_response(content, f'factura-{factura.number}.pdf', 'application/pdf')
 
-    @action(detail=True, methods=['post'], url_path='enviar_correo')
+    @action(detail=True, methods=['post'], url_path='enviar-correo')
     def enviar_correo_by_id(self, request, pk=None):
         factura = FacturaElectronica.objects.select_related('venta__cliente').filter(pk=pk).first()
         if factura is None:
             return Response({'detail': 'Factura electrónica no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
-        result = emitir_factura_completa(factura.venta_id, triggered_by=request.user)
-        factura.refresh_from_db()
+        if not factura.number:
+            return Response({'detail': 'Factura sin número Factus aún.'}, status=status.HTTP_409_CONFLICT)
+
+        email_destino = str(request.data.get('email') or getattr(factura.venta.cliente, 'email', '') or '').strip()
+        if not email_destino:
+            return Response({'detail': 'El cliente no tiene correo configurado.'}, status=status.HTTP_400_BAD_REQUEST)
+        pdf_base64 = None
+        if factura.pdf_local_path:
+            try:
+                absolute_pdf = Path(settings.MEDIA_ROOT) / factura.pdf_local_path
+                pdf_base64 = base64.b64encode(absolute_pdf.read_bytes()).decode('utf-8')
+            except Exception:
+                pdf_base64 = None
+        try:
+            provider = FactusClient().send_bill_email(factura.number, email_destino, pdf_base_64_encoded=pdf_base64)
+            factura.correo_enviado = True
+            factura.correo_enviado_at = timezone.now()
+            factura.email_sent_at = factura.correo_enviado_at
+            factura.ultimo_error_correo = ''
+            factura.email_last_error = ''
+            factura.response_json = {**(factura.response_json or {}), 'send_email_response': provider}
+            factura.save(
+                update_fields=[
+                    'correo_enviado',
+                    'correo_enviado_at',
+                    'email_sent_at',
+                    'ultimo_error_correo',
+                    'email_last_error',
+                    'response_json',
+                    'updated_at',
+                ]
+            )
+        except (FactusAPIError, FactusAuthError, FactusValidationError) as exc:
+            factura.ultimo_error_correo = str(exc)[:500]
+            factura.email_last_error = factura.ultimo_error_correo
+            factura.save(update_fields=['ultimo_error_correo', 'email_last_error', 'updated_at'])
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+
         return Response(
             {
-                'detail': 'Proceso de correo ejecutado.',
+                'detail': 'Correo enviado por Factus.',
                 'correo_enviado': factura.correo_enviado,
                 'correo_enviado_at': factura.correo_enviado_at,
                 'ultimo_error_correo': factura.ultimo_error_correo,
-                'warnings': result.get('warnings', []),
+                'provider': provider,
             }
         )
+
+    @action(detail=True, methods=['post'], url_path='sincronizar-archivos')
+    def sincronizar_archivos(self, request, pk=None):
+        factura = FacturaElectronica.objects.filter(pk=pk).first()
+        if factura is None:
+            return Response({'detail': 'Factura electrónica no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+        include_email_content = str(request.data.get('include_email_content', '')).strip().lower() in {'1', 'true', 'yes', 'si', 'sí'}
+        force = str(request.data.get('force', '')).strip().lower() in {'1', 'true', 'yes'}
+        try:
+            result = sync_invoice_assets(
+                factura,
+                include_email_content=include_email_content,
+                force=force,
+            )
+        except (FactusAPIError, FactusAuthError, DescargaFacturaError, FactusValidationError) as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        return Response(result)
 
     @action(detail=False, methods=['get'], url_path=r'(?P<number>[^/.]+)/pos')
     def pos(self, request, number=None):

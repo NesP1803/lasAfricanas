@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import base64
 import logging
+from pathlib import Path
 from typing import Any
 
+from django.conf import settings
 from django.utils import timezone
 
 from apps.facturacion.models import FacturaElectronica
-from apps.facturacion.services.download_invoice_files import decode_base64_to_bytes, persist_file_bytes
+from apps.facturacion.services.factura_assets_service import store_factura_email_zip
 from apps.facturacion.services.factus_client import FactusClient, FactusValidationError
 
 logger = logging.getLogger(__name__)
@@ -23,13 +26,14 @@ def get_invoice_email_content(*, factura: FacturaElectronica, save_zip: bool = F
     if not isinstance(data, dict):
         return payload
 
+    if data.get('subject'):
+        factura.email_subject = str(data.get('subject') or '').strip()
+
     if save_zip:
-        encoded_zip = str(data.get('zip_base_64_encoded') or '').strip()
-        if encoded_zip:
-            zip_bytes = decode_base64_to_bytes(encoded_zip, document_type='ZIP-CORREO')
-            zip_name = str(data.get('file_name') or f'{factura.number}.zip').strip()
-            data['zip_local_path'] = persist_file_bytes(folder='correo', filename=zip_name, content=zip_bytes)
+        if data.get('zip_base_64_encoded'):
+            data['zip_local_path'] = store_factura_email_zip(factura, payload)
             payload['data'] = data
+    factura.save(update_fields=['email_subject', 'email_zip_local_path', 'updated_at'])
     return payload
 
 
@@ -45,6 +49,14 @@ def send_invoice_email(
     if not resolved_email:
         raise FactusValidationError('El adquiriente no tiene correo configurado para envío por Factus.')
 
+    if pdf_base_64_encoded is None and factura.pdf_local_path:
+        try:
+            pdf_path = Path(settings.MEDIA_ROOT) / str(factura.pdf_local_path)
+            with pdf_path.open('rb') as file_handler:
+                pdf_base_64_encoded = base64.b64encode(file_handler.read()).decode('utf-8')
+        except Exception:
+            pdf_base_64_encoded = None
+
     payload = FactusClient().send_invoice_email(
         factura.number,
         email=resolved_email,
@@ -52,8 +64,24 @@ def send_invoice_email(
     )
     factura.correo_enviado = True
     factura.correo_enviado_at = timezone.now()
+    factura.email_sent_at = factura.correo_enviado_at
     factura.ultimo_error_correo = ''
-    factura.save(update_fields=['correo_enviado', 'correo_enviado_at', 'ultimo_error_correo', 'updated_at'])
+    factura.email_last_error = ''
+    factura.response_json = {
+        **(factura.response_json or {}),
+        'send_email_response': payload,
+    }
+    factura.save(
+        update_fields=[
+            'correo_enviado',
+            'correo_enviado_at',
+            'email_sent_at',
+            'ultimo_error_correo',
+            'email_last_error',
+            'response_json',
+            'updated_at',
+        ]
+    )
     logger.info(
         'factura_email.ok factura_id=%s number=%s custom_pdf=%s',
         factura.id,

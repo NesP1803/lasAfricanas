@@ -206,6 +206,11 @@ def build_factura_ready_payload(venta, factura):
         'pdf_url': factura.pdf_url,
         'xml_local_path': factura.xml_local_path,
         'pdf_local_path': factura.pdf_local_path,
+        'pdf_local_endpoint': f'/api/facturas-electronicas/{factura.id}/pdf/',
+        'xml_local_endpoint': f'/api/facturas-electronicas/{factura.id}/xml/',
+        'email_content_available': bool(factura.email_zip_local_path or factura.email_subject),
+        'email_subject': factura.email_subject,
+        'send_email_enabled': factura.send_email_enabled,
         'cliente': {
             'nombre': venta.cliente.nombre,
             'documento': venta.cliente.numero_documento,

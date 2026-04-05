@@ -643,6 +643,12 @@ class FactusClient:
     def get_invoice_xml_payload(self, number: str) -> dict[str, Any]:
         return self.request('GET', self.invoice_download_xml_path.format(number=number))
 
+    def get_bill_pdf(self, number: str) -> dict[str, Any]:
+        return self.get_invoice_pdf_payload(number)
+
+    def get_bill_xml(self, number: str) -> dict[str, Any]:
+        return self.get_invoice_xml_payload(number)
+
     def list_invoices(self, *, filters: dict[str, Any] | None = None) -> dict[str, Any]:
         return self.request('GET', self.invoice_list_path, params=filters or {})
 
@@ -663,6 +669,9 @@ class FactusClient:
                 number,
             )
             return self.request('GET', self.invoice_email_template_path.format(number=number))
+
+    def get_bill_email_content(self, number: str) -> dict[str, Any]:
+        return self.get_invoice_email_content(number)
 
     def delete_invoice(self, reference_code: str) -> dict[str, Any]:
         return self.request('DELETE', self.invoice_delete_path.format(reference_code=reference_code))
@@ -686,6 +695,14 @@ class FactusClient:
         if pdf_base_64_encoded:
             payload['pdf_base_64_encoded'] = pdf_base_64_encoded
         return self.request('POST', self.invoice_send_email_path.format(number=number), json=payload)
+
+    def send_bill_email(
+        self,
+        number: str,
+        email: str,
+        pdf_base_64_encoded: str | None = None,
+    ) -> dict[str, Any]:
+        return self.send_invoice_email(number, email=email, pdf_base_64_encoded=pdf_base_64_encoded)
 
     def get_invoice_email_template(self, number: str) -> dict[str, Any]:
         """Alias legacy: usar get_invoice_email_content."""

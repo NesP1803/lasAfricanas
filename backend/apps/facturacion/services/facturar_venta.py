@@ -20,10 +20,10 @@ from apps.facturacion.services.document_totals import (
     calculate_document_detail_totals,
     q_money,
 )
-from apps.facturacion.services.download_invoice_files import download_pdf, download_xml
 from apps.facturacion.services.electronic_state_machine import extract_bill_errors as _extract_bill_errors
 from apps.facturacion.services.electronic_state_machine import map_factus_status
 from apps.facturacion.services.exceptions import DescargaFacturaError
+from apps.facturacion.services.factura_assets_service import sync_invoice_assets
 from apps.facturacion.services.factus_catalog_lookup import get_tribute_id
 from apps.facturacion.services.factus_client import (
     FactusAPIError,
@@ -1702,16 +1702,15 @@ def facturar_venta(
             factura.save(update_fields=['status', 'estado_electronico', 'codigo_error', 'mensaje_error', 'updated_at'])
         raise DataError(str(exc))
 
+    factura.send_email_enabled = bool(payload.get('send_email', True))
+    factura.save(update_fields=['send_email_enabled', 'updated_at'])
     try:
-        if factura.xml_url:
-            download_xml(factura)
+        sync_invoice_assets(
+            factura,
+            include_email_content=not factura.send_email_enabled,
+        )
     except DescargaFacturaError:
-        logger.warning('facturar_venta.xml_descarga_error venta_id=%s factura=%s', venta.id, factura.number, exc_info=True)
-    try:
-        if factura.pdf_url:
-            download_pdf(factura)
-    except DescargaFacturaError:
-        logger.warning('facturar_venta.pdf_descarga_error venta_id=%s factura=%s', venta.id, factura.number, exc_info=True)
+        logger.warning('facturar_venta.assets_sync_error venta_id=%s factura=%s', venta.id, factura.number, exc_info=True)
     logger.info(
         'facturar_venta.emitida_ok venta_id=%s factura_id=%s numero=%s estado=%s',
         venta.id,
