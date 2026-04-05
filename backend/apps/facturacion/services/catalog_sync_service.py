@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from decouple import config
 from django.db import transaction
 
 from apps.facturacion.services.factus_client import FactusAPIError, FactusClient
@@ -20,14 +19,11 @@ class CatalogSyncService:
     def __init__(self) -> None:
         self.client = FactusClient()
         self.endpoints = {
-            'municipalities': config('FACTUS_MUNICIPALITIES_PATH', default='/v1/municipalities'),
-            'tributes': config('FACTUS_TRIBUTES_PATH', default='/v1/tributes'),
-            'payment_methods': config('FACTUS_PAYMENT_METHODS_PATH', default='/v1/payment-methods'),
-            'unit_measures': config('FACTUS_UNIT_MEASURES_PATH', default='/v1/unit-measures'),
-            'identification_documents': config(
-                'FACTUS_IDENTIFICATION_DOCUMENTS_PATH',
-                default='/v1/identification-documents',
-            ),
+            'municipalities': self.client.municipalities_path,
+            'tributes': self.client.tributes_path,
+            'payment_methods': '/v1/payment-methods',
+            'unit_measures': self.client.measurement_units_path,
+            'identification_documents': '/v1/identification-documents',
         }
 
     def _fetch_catalog(self, endpoint: str) -> list[dict]:

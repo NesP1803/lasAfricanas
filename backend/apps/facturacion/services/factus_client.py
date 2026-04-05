@@ -59,11 +59,28 @@ class FactusClient:
         self.base_url = self._resolve_factus_base_url()
         self.environment = resolve_factus_environment()
         self.auth_path = config('FACTUS_AUTH_PATH', default='/oauth/token')
-        self.refresh_path = config('FACTUS_REFRESH_PATH', default='/oauth/token')
+        self.refresh_token_path = config('FACTUS_REFRESH_TOKEN_PATH', default='/oauth/token')
         self.invoice_path = config('FACTUS_INVOICE_PATH', default='/v1/bills/validate')
+        self.bills_list_path = config('FACTUS_BILLS_LIST_PATH', default='/v1/bills')
+        self.bill_show_path = config('FACTUS_BILL_SHOW_PATH', default='/v1/bills/show/{number}')
+        self.bill_download_pdf_path = config('FACTUS_BILL_DOWNLOAD_PDF_PATH', default='/v1/bills/download-pdf/{number}')
+        self.bill_download_xml_path = config('FACTUS_BILL_DOWNLOAD_XML_PATH', default='/v1/bills/download-xml/{number}')
+        self.bill_email_content_path = config(
+            'FACTUS_BILL_EMAIL_CONTENT_PATH',
+            default='/v1/bills/{number}/email-content',
+        )
+        self.bill_send_email_path = config('FACTUS_BILL_SEND_EMAIL_PATH', default='/v1/bills/send-email/{number}')
+        self.bill_custom_pdf_upload_path = config(
+            'FACTUS_BILL_CUSTOM_PDF_UPLOAD_PATH',
+            default='/v1/bills/custom-pdf/{number}',
+        )
+        self.bill_delete_by_reference_path = config(
+            'FACTUS_BILL_DELETE_BY_REFERENCE_PATH',
+            default='/v1/bills/reference/{reference_code}',
+        )
         self.credit_note_path = config('FACTUS_CREDIT_NOTE_PATH', default='/v1/credit-notes/validate')
-        self.credit_note_list_path = config('FACTUS_CREDIT_NOTE_LIST_PATH', default='/v1/credit-notes')
-        self.credit_note_show_path = config('FACTUS_CREDIT_NOTE_SHOW_PATH', default='/v1/credit-notes/{number}')
+        self.credit_notes_list_path = config('FACTUS_CREDIT_NOTES_LIST_PATH', default='/v1/credit-notes')
+        self.credit_note_show_path = config('FACTUS_CREDIT_NOTE_SHOW_PATH', default='/v1/credit-notes/show/{number}')
         self.credit_note_download_pdf_path = config(
             'FACTUS_CREDIT_NOTE_DOWNLOAD_PDF_PATH',
             default='/v1/credit-notes/download-pdf/{number}',
@@ -80,13 +97,16 @@ class FactusClient:
             'FACTUS_CREDIT_NOTE_SEND_EMAIL_PATH',
             default='/v1/credit-notes/send-email/{number}',
         )
-        self.credit_note_delete_path = config(
-            'FACTUS_CREDIT_NOTE_DELETE_PATH',
+        self.credit_note_delete_by_reference_path = config(
+            'FACTUS_CREDIT_NOTE_DELETE_BY_REFERENCE_PATH',
             default='/v1/credit-notes/reference/{reference_code}',
         )
-        self.support_document_path = config('FACTUS_SUPPORT_DOCUMENT_PATH', default='/support-documents/validate')
-        self.support_document_list_path = config('FACTUS_SUPPORT_DOCUMENT_LIST_PATH', default='/v1/support-documents')
-        self.support_document_show_path = config('FACTUS_SUPPORT_DOCUMENT_SHOW_PATH', default='/v1/support-documents/{number}')
+        self.support_document_validate_path = config(
+            'FACTUS_SUPPORT_DOCUMENT_VALIDATE_PATH',
+            default='/v1/support-documents/validate',
+        )
+        self.support_documents_list_path = config('FACTUS_SUPPORT_DOCUMENTS_LIST_PATH', default='/v1/support-documents')
+        self.support_document_show_path = config('FACTUS_SUPPORT_DOCUMENT_SHOW_PATH', default='/v1/support-documents/show/{number}')
         self.support_document_download_pdf_path = config(
             'FACTUS_SUPPORT_DOCUMENT_DOWNLOAD_PDF_PATH',
             default='/v1/support-documents/download-pdf/{number}',
@@ -95,48 +115,99 @@ class FactusClient:
             'FACTUS_SUPPORT_DOCUMENT_DOWNLOAD_XML_PATH',
             default='/v1/support-documents/download-xml/{number}',
         )
-        self.support_document_delete_path = config(
-            'FACTUS_SUPPORT_DOCUMENT_DELETE_PATH',
+        self.support_document_delete_by_reference_path = config(
+            'FACTUS_SUPPORT_DOCUMENT_DELETE_BY_REFERENCE_PATH',
             default='/v1/support-documents/reference/{reference_code}',
         )
-        self.support_document_adjustment_path = config(
-            'FACTUS_SUPPORT_DOCUMENT_ADJUSTMENT_PATH',
-            default='/support-document-adjustment-notes/validate',
+        self.support_adjustment_note_validate_path = config(
+            'FACTUS_SUPPORT_ADJUSTMENT_NOTE_VALIDATE_PATH',
+            default='/v1/adjustment-notes/validate',
+        )
+        self.support_adjustment_notes_list_path = config(
+            'FACTUS_SUPPORT_ADJUSTMENT_NOTES_LIST_PATH',
+            default='/v1/adjustment-notes',
+        )
+        self.support_adjustment_note_show_path = config(
+            'FACTUS_SUPPORT_ADJUSTMENT_NOTE_SHOW_PATH',
+            default='/v1/adjustment-notes/show/{number}',
+        )
+        self.support_adjustment_note_download_pdf_path = config(
+            'FACTUS_SUPPORT_ADJUSTMENT_NOTE_DOWNLOAD_PDF_PATH',
+            default='/v1/adjustment-notes/download-pdf/{number}',
+        )
+        self.support_adjustment_note_download_xml_path = config(
+            'FACTUS_SUPPORT_ADJUSTMENT_NOTE_DOWNLOAD_XML_PATH',
+            default='/v1/adjustment-notes/download-xml/{number}',
+        )
+        self.support_adjustment_note_delete_by_reference_path = config(
+            'FACTUS_SUPPORT_ADJUSTMENT_NOTE_DELETE_BY_REFERENCE_PATH',
+            default='/v1/adjustment-notes/reference/{reference_code}',
         )
         self.numbering_ranges_path = config('FACTUS_NUMBERING_RANGES_PATH', default='/v1/numbering-ranges')
-        self.numbering_ranges_show_path = config(
-            'FACTUS_NUMBERING_RANGES_SHOW_PATH',
+        self.numbering_range_show_path = config(
+            'FACTUS_NUMBERING_RANGE_SHOW_PATH',
             default='/v1/numbering-ranges/{id}',
         )
-        self.numbering_ranges_delete_path = config(
-            'FACTUS_NUMBERING_RANGES_DELETE_PATH',
+        self.numbering_range_create_path = config(
+            'FACTUS_NUMBERING_RANGE_CREATE_PATH',
+            default='/v1/numbering-ranges',
+        )
+        self.numbering_range_delete_path = config(
+            'FACTUS_NUMBERING_RANGE_DELETE_PATH',
             default='/v1/numbering-ranges/{id}',
         )
-        self.numbering_ranges_update_current_path = config(
-            'FACTUS_NUMBERING_RANGES_UPDATE_CURRENT_PATH',
-            default='/v1/numbering-ranges/{id}/update-current',
+        self.numbering_range_update_path = config(
+            'FACTUS_NUMBERING_RANGE_UPDATE_PATH',
+            default='/v1/numbering-ranges/{id}/update-number',
         )
-        self.numbering_ranges_software_path = config(
-            'FACTUS_NUMBERING_RANGES_SOFTWARE_PATH',
+        self.numbering_ranges_dian_path = config(
+            'FACTUS_NUMBERING_RANGES_DIAN_PATH',
             default='/v1/numbering-ranges/dian',
         )
-        self.invoice_show_path = config('FACTUS_INVOICE_SHOW_PATH', default='/v1/bills/show/{number}')
-        self.invoice_list_path = config('FACTUS_INVOICE_LIST_PATH', default='/v1/bills')
-        self.invoice_download_xml_path = config('FACTUS_INVOICE_DOWNLOAD_XML_PATH', default='/v1/bills/download-xml/{number}')
-        self.invoice_download_pdf_path = config('FACTUS_INVOICE_DOWNLOAD_PDF_PATH', default='/v1/bills/download-pdf/{number}')
-        self.invoice_events_path = config('FACTUS_INVOICE_EVENTS_PATH', default='/v1/bills/events/{number}')
-        self.invoice_tacit_acceptance_path = config(
-            'FACTUS_INVOICE_TACIT_ACCEPTANCE_PATH',
+        self.bill_events_path = config('FACTUS_BILL_EVENTS_PATH', default='/v1/bills/events/{number}')
+        self.bill_tacit_acceptance_path = config(
+            'FACTUS_BILL_TACIT_ACCEPTANCE_PATH',
             default='/v1/bills/acceptance-tacit/{number}',
         )
-        self.invoice_delete_path = config('FACTUS_INVOICE_DELETE_PATH', default='/v1/bills/reference/{reference_code}')
-        self.invoice_send_email_path = config('FACTUS_INVOICE_SEND_EMAIL_PATH', default='/v1/bills/send-email/{number}')
-        self.invoice_email_content_path = config('FACTUS_INVOICE_EMAIL_CONTENT_PATH', default='/v1/bills/{number}/email-content')
-        self.invoice_email_template_path = config('FACTUS_INVOICE_EMAIL_TEMPLATE_PATH', default='/v1/bills/email-template/{number}')
-        self.invoice_custom_pdf_upload_path = config(
-            'FACTUS_INVOICE_CUSTOM_PDF_UPLOAD_PATH',
-            default='/v1/bills/custom-pdf/{number}',
+        self.bill_email_template_path = config(
+            'FACTUS_BILL_EMAIL_TEMPLATE_PATH',
+            default='/v1/bills/email-template/{number}',
         )
+        self.company_show_path = config('FACTUS_COMPANY_SHOW_PATH', default='/v1/company')
+        self.company_update_path = config('FACTUS_COMPANY_UPDATE_PATH', default='/v1/company')
+        self.company_update_logo_path = config('FACTUS_COMPANY_UPDATE_LOGO_PATH', default='/v1/company/update-image')
+        self.tributes_path = config('FACTUS_TRIBUTES_PATH', default='/v1/tributes/products')
+        self.measurement_units_path = config('FACTUS_MEASUREMENT_UNITS_PATH', default='/v1/measurement-units')
+        self.countries_path = config('FACTUS_COUNTRIES_PATH', default='/v1/countries')
+        self.municipalities_path = config('FACTUS_MUNICIPALITIES_PATH', default='/v1/municipalities')
+        self.reference_tables_path = config('FACTUS_REFERENCE_TABLES_PATH', default='/v1/reference-tables')
+        self.customers_lookup_path = config('FACTUS_CUSTOMERS_LOOKUP_PATH', default='/v1/customers')
+        self.document_receptions_path = config('FACTUS_DOCUMENT_RECEPTIONS_PATH', default='/v1/document-receptions')
+        self.subscriptions_path = config('FACTUS_SUBSCRIPTIONS_PATH', default='/v1/subscriptions')
+
+        # Alias internos temporales para mantener compatibilidad en módulos/tests existentes.
+        self.refresh_path = self.refresh_token_path
+        self.credit_note_list_path = self.credit_notes_list_path
+        self.credit_note_delete_path = self.credit_note_delete_by_reference_path
+        self.support_document_path = self.support_document_validate_path
+        self.support_document_list_path = self.support_documents_list_path
+        self.support_document_delete_path = self.support_document_delete_by_reference_path
+        self.support_document_adjustment_path = self.support_adjustment_note_validate_path
+        self.numbering_ranges_show_path = self.numbering_range_show_path
+        self.numbering_ranges_delete_path = self.numbering_range_delete_path
+        self.numbering_ranges_update_current_path = self.numbering_range_update_path
+        self.numbering_ranges_software_path = self.numbering_ranges_dian_path
+        self.invoice_show_path = self.bill_show_path
+        self.invoice_list_path = self.bills_list_path
+        self.invoice_download_xml_path = self.bill_download_xml_path
+        self.invoice_download_pdf_path = self.bill_download_pdf_path
+        self.invoice_events_path = self.bill_events_path
+        self.invoice_tacit_acceptance_path = self.bill_tacit_acceptance_path
+        self.invoice_delete_path = self.bill_delete_by_reference_path
+        self.invoice_send_email_path = self.bill_send_email_path
+        self.invoice_email_content_path = self.bill_email_content_path
+        self.invoice_email_template_path = self.bill_email_template_path
+        self.invoice_custom_pdf_upload_path = self.bill_custom_pdf_upload_path
         self.client_id = config('FACTUS_CLIENT_ID', default='')
         self.client_secret = config('FACTUS_CLIENT_SECRET', default='')
         self.username = config('FACTUS_USERNAME', default='')
@@ -145,7 +216,7 @@ class FactusClient:
             'factus.client.credit_note.endpoints environment=%s create=%s list=%s show=%s',
             self.environment,
             self.credit_note_path,
-            self.credit_note_list_path,
+            self.credit_notes_list_path,
             self.credit_note_show_path,
         )
 
@@ -223,7 +294,7 @@ class FactusClient:
         if token.refresh_expires_at and token.refresh_expires_at <= timezone.now():
             return self.authenticate()
 
-        refresh_url = f'{self.base_url}{self.refresh_path}'
+        refresh_url = f'{self.base_url}{self.refresh_token_path}'
         try:
             response = requests.post(
                 refresh_url,
@@ -409,29 +480,7 @@ class FactusClient:
             payload.get('reference_code'),
             payload.get('numbering_range_id'),
         )
-        try:
-            return self.send_credit_note(payload)
-        except FactusAPIError as exc:
-            detail = (exc.provider_detail or '').lower()
-            should_retry_with_v1 = (
-                exc.status_code == 404
-                and 'route' in detail
-                and 'credit-notes/validate' in detail
-                and self.credit_note_path != '/v1/credit-notes/validate'
-            )
-            if not should_retry_with_v1:
-                raise
-
-            logger.warning(
-                'Factus credit_note_path=%s no encontrado; reintentando con endpoint /v1/credit-notes/validate',
-                self.credit_note_path,
-            )
-            original_path = self.credit_note_path
-            try:
-                self.credit_note_path = '/v1/credit-notes/validate'
-                return self.send_credit_note(payload)
-            finally:
-                self.credit_note_path = original_path
+        return self.send_credit_note(payload)
 
     def list_credit_notes(self, **params: Any) -> dict[str, Any]:
         raw_params = params or {}
@@ -450,12 +499,12 @@ class FactusClient:
             translated_params[mapping.get(key, key)] = value
         logger.info(
             'factus.credit_note.list request_path=%s params=%s',
-            self.credit_note_list_path,
+            self.credit_notes_list_path,
             translated_params or {},
         )
-        response = self.request('GET', self.credit_note_list_path, params=translated_params or None)
+        response = self.request('GET', self.credit_notes_list_path, params=translated_params or None)
         raw = str(response)[:1200]
-        logger.info('factus.credit_note.list response_path=%s raw=%s', self.credit_note_list_path, raw)
+        logger.info('factus.credit_note.list response_path=%s raw=%s', self.credit_notes_list_path, raw)
         return response
 
     def get_credit_note_by_reference_code(self, reference_code: str, *, bill_number: str | None = None) -> dict[str, Any]:
@@ -463,25 +512,7 @@ class FactusClient:
 
     def get_credit_note(self, number: str) -> dict[str, Any]:
         logger.info('factus.credit_note.show request_path=%s number=%s', self.credit_note_show_path, number)
-        try:
-            return self.request('GET', self.credit_note_show_path.format(number=number))
-        except FactusAPIError as exc:
-            detail = (exc.provider_detail or '').lower()
-            should_retry_with_show = (
-                exc.status_code == 404
-                and 'route' in detail
-                and '/credit-notes/' in detail
-                and '/show/' not in self.credit_note_show_path
-            )
-            if not should_retry_with_show:
-                raise
-            fallback_path = '/v1/credit-notes/show/{number}'
-            logger.warning(
-                'Factus credit_note_show_path=%s no encontrado; reintentando con endpoint %s',
-                self.credit_note_show_path,
-                fallback_path,
-            )
-            return self.request('GET', fallback_path.format(number=number))
+        return self.request('GET', self.credit_note_show_path.format(number=number))
 
     def download_credit_note_pdf(self, number: str) -> bytes:
         payload = self.request('GET', self.credit_note_download_pdf_path.format(number=number))
@@ -519,14 +550,14 @@ class FactusClient:
         return self.request('POST', self.credit_note_send_email_path.format(number=number), json=payload or {})
 
     def delete_credit_note(self, reference_code: str) -> dict[str, Any]:
-        return self.request('DELETE', self.credit_note_delete_path.format(reference_code=reference_code))
+        return self.request('DELETE', self.credit_note_delete_by_reference_path.format(reference_code=reference_code))
 
     def send_support_document(self, payload: dict[str, Any]) -> dict[str, Any]:
         if not payload.get('provider'):
             raise FactusValidationError('El documento soporte debe incluir provider para enviar a Factus.')
         if not payload.get('items'):
             raise FactusValidationError('El documento soporte no contiene ítems para enviar a Factus.')
-        return self.request('POST', self.support_document_path, json=payload)
+        return self.request('POST', self.support_document_validate_path, json=payload)
 
     def create_and_validate_support_document(self, payload: dict[str, Any]) -> dict[str, Any]:
         try:
@@ -541,20 +572,7 @@ class FactusClient:
                     provider_detail=exc.provider_detail,
                     provider_payload=exc.provider_payload,
                 ) from exc
-            should_retry_with_v1 = (
-                exc.status_code == 404
-                and 'route' in detail
-                and 'support-documents/validate' in detail
-                and self.support_document_path != '/v1/support-documents/validate'
-            )
-            if not should_retry_with_v1:
-                raise
-            original_path = self.support_document_path
-            try:
-                self.support_document_path = '/v1/support-documents/validate'
-                return self.send_support_document(payload)
-            finally:
-                self.support_document_path = original_path
+            raise
 
     def list_support_documents(self, **params: Any) -> dict[str, Any]:
         translated_params: dict[str, Any] = {}
@@ -570,34 +588,10 @@ class FactusClient:
             if value in (None, ''):
                 continue
             translated_params[mapping.get(key, key)] = value
-        return self.request('GET', self.support_document_list_path, params=translated_params or None)
+        return self.request('GET', self.support_documents_list_path, params=translated_params or None)
 
     def get_support_document(self, number: str) -> dict[str, Any]:
-        try:
-            return self.request('GET', self.support_document_show_path.format(number=number))
-        except FactusAPIError as exc:
-            detail = (exc.provider_detail or '').lower()
-            should_retry_with_show = (
-                (
-                    exc.status_code == 404
-                    and 'route' in detail
-                    and '/support-documents/' in detail
-                )
-                or (
-                    exc.status_code == 405
-                    and 'method not allowed' in detail
-                    and 'supported methods' in detail
-                )
-            ) and '/show/' not in self.support_document_show_path
-            if not should_retry_with_show:
-                raise
-            fallback_path = '/v1/support-documents/show/{number}'
-            logger.warning(
-                'Factus support_document_show_path=%s rechazado; reintentando con endpoint %s',
-                self.support_document_show_path,
-                fallback_path,
-            )
-            return self.request('GET', fallback_path.format(number=number))
+        return self.request('GET', self.support_document_show_path.format(number=number))
 
     def download_support_document_pdf(self, number: str) -> bytes:
         path = self.support_document_download_pdf_path.format(number=number)
@@ -618,7 +612,7 @@ class FactusClient:
         return fallback
 
     def delete_support_document(self, reference_code: str) -> dict[str, Any]:
-        return self.request('DELETE', self.support_document_delete_path.format(reference_code=reference_code))
+        return self.request('DELETE', self.support_document_delete_by_reference_path.format(reference_code=reference_code))
 
 
     def send_support_document_adjustment(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -632,7 +626,7 @@ class FactusClient:
             )
         if not payload.get('items'):
             raise FactusValidationError('La nota de ajuste no contiene ítems para enviar a Factus.')
-        return self.request('POST', self.support_document_adjustment_path, json=payload)
+        return self.request('POST', self.support_adjustment_note_validate_path, json=payload)
 
 
     def get_numbering_ranges(self) -> dict[str, Any]:
@@ -640,23 +634,23 @@ class FactusClient:
         return self.request('GET', self.numbering_ranges_path)
 
     def get_numbering_range(self, factus_id: int) -> dict[str, Any]:
-        return self.request('GET', self.numbering_ranges_show_path.format(id=factus_id))
+        return self.request('GET', self.numbering_range_show_path.format(id=factus_id))
 
     def create_numbering_range(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return self.request('POST', self.numbering_ranges_path, json=payload)
+        return self.request('POST', self.numbering_range_create_path, json=payload)
 
     def delete_numbering_range(self, factus_id: int) -> dict[str, Any]:
-        return self.request('DELETE', self.numbering_ranges_delete_path.format(id=factus_id))
+        return self.request('DELETE', self.numbering_range_delete_path.format(id=factus_id))
 
     def update_numbering_range_current(self, *, factus_id: int, current: int) -> dict[str, Any]:
         return self.request(
             'PATCH',
-            self.numbering_ranges_update_current_path.format(id=factus_id),
+            self.numbering_range_update_path.format(id=factus_id),
             json={'current': current},
         )
 
     def get_software_numbering_ranges(self) -> dict[str, Any]:
-        return self.request('GET', self.numbering_ranges_software_path)
+        return self.request('GET', self.numbering_ranges_dian_path)
 
     def health_check(self) -> dict[str, Any]:
         """Smoke test de credenciales/token/acceso a rangos."""
@@ -705,7 +699,7 @@ class FactusClient:
 
     def get_invoice(self, number: str) -> dict[str, Any]:
         """Consulta una factura electrónica existente en Factus por número."""
-        path = self.invoice_show_path.format(number=number)
+        path = self.bill_show_path.format(number=number)
         return self.request(
             'GET',
             path,
@@ -716,7 +710,7 @@ class FactusClient:
 
     def get_invoice_downloads(self, number: str) -> dict[str, Any]:
         """Consulta enlaces de descarga XML/PDF de una factura en Factus."""
-        path = self.invoice_download_pdf_path.format(number=number)
+        path = self.bill_download_pdf_path.format(number=number)
         return self.request(
             'GET',
             path,
@@ -726,7 +720,7 @@ class FactusClient:
         )
 
     def download_invoice_xml(self, number: str) -> bytes:
-        path = self.invoice_download_xml_path.format(number=number)
+        path = self.bill_download_xml_path.format(number=number)
         payload = self.request('GET', path)
         content = self._decode_base64_payload(payload, field='xml_base_64_encoded')
         if content:
@@ -735,7 +729,7 @@ class FactusClient:
         return fallback
 
     def download_invoice_pdf(self, number: str) -> bytes:
-        path = self.invoice_download_pdf_path.format(number=number)
+        path = self.bill_download_pdf_path.format(number=number)
         payload = self.request('GET', path)
         content = self._decode_base64_payload(payload, field='pdf_base_64_encoded')
         if content:
@@ -744,10 +738,10 @@ class FactusClient:
         return fallback
 
     def get_invoice_pdf_payload(self, number: str) -> dict[str, Any]:
-        return self.request('GET', self.invoice_download_pdf_path.format(number=number))
+        return self.request('GET', self.bill_download_pdf_path.format(number=number))
 
     def get_invoice_xml_payload(self, number: str) -> dict[str, Any]:
-        return self.request('GET', self.invoice_download_xml_path.format(number=number))
+        return self.request('GET', self.bill_download_xml_path.format(number=number))
 
     def get_bill_pdf(self, number: str) -> dict[str, Any]:
         return self.get_invoice_pdf_payload(number)
@@ -756,37 +750,22 @@ class FactusClient:
         return self.get_invoice_xml_payload(number)
 
     def list_invoices(self, *, filters: dict[str, Any] | None = None) -> dict[str, Any]:
-        return self.request('GET', self.invoice_list_path, params=filters or {})
+        return self.request('GET', self.bills_list_path, params=filters or {})
 
     def get_invoice_email_content(self, number: str) -> dict[str, Any]:
-        try:
-            return self.request('GET', self.invoice_email_content_path.format(number=number))
-        except FactusAPIError as exc:
-            detail = (exc.provider_detail or '').lower()
-            should_retry_template = (
-                exc.status_code == 404
-                and 'route' in detail
-                and self.invoice_email_template_path
-            )
-            if not should_retry_template:
-                raise
-            logger.warning(
-                'Factus invoice email-content no disponible; reintentando email-template number=%s',
-                number,
-            )
-            return self.request('GET', self.invoice_email_template_path.format(number=number))
+        return self.request('GET', self.bill_email_content_path.format(number=number))
 
     def get_bill_email_content(self, number: str) -> dict[str, Any]:
         return self.get_invoice_email_content(number)
 
     def delete_invoice(self, reference_code: str) -> dict[str, Any]:
-        return self.request('DELETE', self.invoice_delete_path.format(reference_code=reference_code))
+        return self.request('DELETE', self.bill_delete_by_reference_path.format(reference_code=reference_code))
 
     def get_invoice_events(self, number: str) -> dict[str, Any]:
-        return self.request('GET', self.invoice_events_path.format(number=number))
+        return self.request('GET', self.bill_events_path.format(number=number))
 
     def tacit_acceptance(self, number: str) -> dict[str, Any]:
-        return self.request('POST', self.invoice_tacit_acceptance_path.format(number=number), json={})
+        return self.request('POST', self.bill_tacit_acceptance_path.format(number=number), json={})
 
     def send_invoice_email(
         self,
@@ -800,7 +779,7 @@ class FactusClient:
             payload['email'] = email
         if pdf_base_64_encoded:
             payload['pdf_base_64_encoded'] = pdf_base_64_encoded
-        return self.request('POST', self.invoice_send_email_path.format(number=number), json=payload)
+        return self.request('POST', self.bill_send_email_path.format(number=number), json=payload)
 
     def send_bill_email(
         self,
@@ -816,7 +795,7 @@ class FactusClient:
 
     def upload_custom_pdf(self, number: str, pdf_bytes: bytes, filename: str | None = None) -> dict[str, Any]:
         token = self.get_valid_token()
-        url = f"{self.base_url}{self.invoice_custom_pdf_upload_path.format(number=number)}"
+        url = f"{self.base_url}{self.bill_custom_pdf_upload_path.format(number=number)}"
         files = {
             'file': (filename or f'{number}.pdf', pdf_bytes, 'application/pdf'),
         }
