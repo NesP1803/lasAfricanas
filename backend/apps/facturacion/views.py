@@ -700,12 +700,14 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
     @action(detail=False, methods=['post'], url_path='documento-soporte')
     def documento_soporte(self, request):
         try:
-            documento = emitir_documento_soporte(request.data)
+            documento = emitir_documento_soporte(request.data, user=request.user)
         except DocumentoSoporteInvalido as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         except FactusValidationError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         except (FactusAPIError, FactusAuthError) as exc:
+            if isinstance(exc, FactusAPIError) and int(getattr(exc, 'status_code', 0) or 0) == 409:
+                return Response({'detail': str(exc), 'result': 'PENDING_DIAN_CONFLICT'}, status=status.HTTP_409_CONFLICT)
             return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
 
         return Response(
@@ -1458,12 +1460,14 @@ class DocumentosSoporteViewSet(viewsets.GenericViewSet):
         serializer.is_valid(raise_exception=True)
 
         try:
-            documento = emitir_documento_soporte(serializer.validated_data)
+            documento = emitir_documento_soporte(serializer.validated_data, user=request.user)
         except DocumentoSoporteInvalido as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         except FactusValidationError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         except (FactusAPIError, FactusAuthError) as exc:
+            if isinstance(exc, FactusAPIError) and int(getattr(exc, 'status_code', 0) or 0) == 409:
+                return Response({'detail': str(exc), 'result': 'PENDING_DIAN_CONFLICT'}, status=status.HTTP_409_CONFLICT)
             return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
 
         output = DocumentoSoporteListSerializer(documento)

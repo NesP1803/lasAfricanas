@@ -522,8 +522,8 @@ class FactusClient:
         return self.request('DELETE', self.credit_note_delete_path.format(reference_code=reference_code))
 
     def send_support_document(self, payload: dict[str, Any]) -> dict[str, Any]:
-        if not payload.get('supplier'):
-            raise FactusValidationError('El documento soporte debe incluir supplier para enviar a Factus.')
+        if not payload.get('provider'):
+            raise FactusValidationError('El documento soporte debe incluir provider para enviar a Factus.')
         if not payload.get('items'):
             raise FactusValidationError('El documento soporte no contiene ítems para enviar a Factus.')
         return self.request('POST', self.support_document_path, json=payload)
@@ -533,6 +533,14 @@ class FactusClient:
             return self.send_support_document(payload)
         except FactusAPIError as exc:
             detail = (exc.provider_detail or '').lower()
+            if exc.status_code == 409 and 'documento soporte por enviar a la dian' in detail:
+                raise FactusPendingDianError(
+                    'Ya existe un documento soporte pendiente de envío/validación ante DIAN en Factus. '
+                    'Debe esperar o sincronizar antes de emitir uno nuevo.',
+                    status_code=409,
+                    provider_detail=exc.provider_detail,
+                    provider_payload=exc.provider_payload,
+                ) from exc
             should_retry_with_v1 = (
                 exc.status_code == 404
                 and 'route' in detail

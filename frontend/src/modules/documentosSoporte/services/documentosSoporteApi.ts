@@ -32,9 +32,13 @@ export interface CrearDocumentoSoportePayload {
   provider_municipality_id?: number;
   observation?: string;
   items: Array<{
+    producto_id?: number;
+    codigo_referencia?: string;
     descripcion: string;
     cantidad: number;
     precio: number;
+    unidad_medida?: string;
+    iva_porcentaje?: string;
   }>;
 }
 
@@ -46,6 +50,17 @@ export interface ProveedorSugerencia {
   email?: string;
   telefono?: string;
   ciudad?: string;
+}
+
+export interface MercanciaSugerencia {
+  id: number;
+  codigo: string;
+  nombre: string;
+  categoria_nombre?: string;
+  unidad_medida?: string;
+  precio_costo?: string;
+  precio_venta?: string;
+  iva_porcentaje?: string;
 }
 
 const crearArchivoDescargable = (blob: Blob, fileName: string) => {
@@ -70,6 +85,22 @@ export const documentosSoporteApi = {
     );
     const payload = response.data;
     return Array.isArray(payload) ? payload : (payload.results ?? []);
+  },
+
+  async buscarMercancias(search: string) {
+    const response = await apiClient.get<{ results?: MercanciaSugerencia[] } | MercanciaSugerencia[]>(
+      '/productos/',
+      {
+        params: { is_active: true, es_servicio: false, search, page_size: 20 },
+      },
+    );
+    const payload = response.data;
+    return Array.isArray(payload) ? payload : (payload.results ?? []);
+  },
+
+  async getMercancia(id: number) {
+    const response = await apiClient.get<MercanciaSugerencia>(`/productos/${id}/`);
+    return response.data;
   },
 
   async getDocumentosSoporte() {

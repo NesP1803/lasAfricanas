@@ -1,5 +1,10 @@
 import { useMemo, useState } from 'react';
-import { documentosSoporteApi, type CrearDocumentoSoportePayload, type ProveedorSugerencia } from '../services/documentosSoporteApi';
+import {
+  documentosSoporteApi,
+  type CrearDocumentoSoportePayload,
+  type MercanciaSugerencia,
+  type ProveedorSugerencia,
+} from '../services/documentosSoporteApi';
 
 interface DocumentoSoporteFormProps {
   loading: boolean;
@@ -18,6 +23,15 @@ export default function DocumentoSoporteForm({ onSubmit, loading }: DocumentoSop
   const [emailProveedor, setEmailProveedor] = useState('');
   const [telefonoProveedor, setTelefonoProveedor] = useState('');
   const [descripcion, setDescripcion] = useState('');
+  const [codigoReferencia, setCodigoReferencia] = useState('');
+  const [mercanciaId, setMercanciaId] = useState<number | undefined>(undefined);
+  const [mercanciaBusqueda, setMercanciaBusqueda] = useState('');
+  const [mercanciasSugeridas, setMercanciasSugeridas] = useState<MercanciaSugerencia[]>([]);
+  const [mostrarSugerenciasMercancias, setMostrarSugerenciasMercancias] = useState(false);
+  const [buscandoMercancia, setBuscandoMercancia] = useState(false);
+  const [categoriaMercancia, setCategoriaMercancia] = useState('');
+  const [unidadMedida, setUnidadMedida] = useState('');
+  const [ivaMercancia, setIvaMercancia] = useState('');
   const [cantidad, setCantidad] = useState('1');
   const [valorUnitario, setValorUnitario] = useState('');
   const [observacion, setObservacion] = useState('');
@@ -63,6 +77,46 @@ export default function DocumentoSoporteForm({ onSubmit, loading }: DocumentoSop
     }
   };
 
+  const handleMercanciaSelect = async (mercancia: MercanciaSugerencia) => {
+    setMercanciaId(mercancia.id);
+    setMercanciaBusqueda(`${mercancia.codigo} - ${mercancia.nombre}`);
+    setDescripcion(mercancia.nombre);
+    setCodigoReferencia(mercancia.codigo);
+    const costo = Number(mercancia.precio_costo ?? 0);
+    if (Number.isFinite(costo) && costo > 0) {
+      setValorUnitario(String(costo));
+    }
+    setCategoriaMercancia(mercancia.categoria_nombre ?? '');
+    setUnidadMedida(mercancia.unidad_medida ?? '');
+    setIvaMercancia(mercancia.iva_porcentaje ?? '');
+    try {
+      const detalle = await documentosSoporteApi.getMercancia(mercancia.id);
+      setCategoriaMercancia(detalle.categoria_nombre ?? mercancia.categoria_nombre ?? '');
+      setUnidadMedida(detalle.unidad_medida ?? mercancia.unidad_medida ?? '');
+      setIvaMercancia(detalle.iva_porcentaje ?? mercancia.iva_porcentaje ?? '');
+    } catch {
+      // Si falla detalle, mantenemos la info disponible del listado.
+    }
+    setMostrarSugerenciasMercancias(false);
+  };
+
+  const handleMercanciaChange = async (value: string) => {
+    setMercanciaBusqueda(value);
+    setMercanciaId(undefined);
+    setMostrarSugerenciasMercancias(true);
+    if (!value.trim()) {
+      setMercanciasSugeridas([]);
+      return;
+    }
+    setBuscandoMercancia(true);
+    try {
+      const resultados = await documentosSoporteApi.buscarMercancias(value.trim());
+      setMercanciasSugeridas(resultados);
+    } finally {
+      setBuscandoMercancia(false);
+    }
+  };
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (proveedorExacto && !proveedorId) {
@@ -80,9 +134,13 @@ export default function DocumentoSoporteForm({ onSubmit, loading }: DocumentoSop
       observation: observacion.trim(),
       items: [
         {
+          producto_id: mercanciaId,
+          codigo_referencia: codigoReferencia.trim(),
           descripcion: descripcion.trim(),
           cantidad: Number(cantidad),
           precio: Number(valorUnitario),
+          unidad_medida: unidadMedida.trim(),
+          iva_porcentaje: ivaMercancia.trim(),
         },
       ],
     });
@@ -183,6 +241,79 @@ export default function DocumentoSoporteForm({ onSubmit, loading }: DocumentoSop
             <option value="NIT">NIT</option>
             <option value="PASAPORTE">Pasaporte</option>
           </select>
+        </label>
+
+        <label className="flex flex-col gap-1 text-sm text-slate-700 md:col-span-2">
+          Artículo / Mercancía
+          <input
+            value={mercanciaBusqueda}
+            onChange={(event) => void handleMercanciaChange(event.target.value)}
+            onFocus={() => setMostrarSugerenciasMercancias(true)}
+            onBlur={() => window.setTimeout(() => setMostrarSugerenciasMercancias(false), 150)}
+            className="rounded-md border border-slate-300 px-3 py-2 outline-none ring-blue-200 focus:ring"
+            placeholder="Buscar en Artículos - Mercancías..."
+          />
+          {mostrarSugerenciasMercancias && (
+            <div className="z-20 mt-1 max-h-56 overflow-y-auto rounded-md border border-slate-200 bg-white shadow">
+              {buscandoMercancia ? (
+                <div className="px-3 py-2 text-xs text-slate-500">Buscando mercancías...</div>
+              ) : mercanciasSugeridas.length === 0 ? (
+                <div className="px-3 py-2 text-xs text-slate-500">Sin coincidencias.</div>
+              ) : (
+                mercanciasSugeridas.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onMouseDown={() => handleMercanciaSelect(item)}
+                    className="block w-full px-3 py-2 text-left text-xs hover:bg-slate-50"
+                  >
+                    <div className="font-semibold text-slate-700">{item.codigo} - {item.nombre}</div>
+                    <div className="text-slate-500">Costo: {item.precio_costo ?? '0'}</div>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </label>
+
+        <label className="flex flex-col gap-1 text-sm text-slate-700">
+          Código referencia
+          <input
+            value={codigoReferencia}
+            onChange={(event) => setCodigoReferencia(event.target.value)}
+            className="rounded-md border border-slate-300 px-3 py-2 outline-none ring-blue-200 focus:ring"
+            required
+          />
+        </label>
+
+        <label className="flex flex-col gap-1 text-sm text-slate-700">
+          Categoría
+          <input
+            value={categoriaMercancia}
+            onChange={(event) => setCategoriaMercancia(event.target.value)}
+            className="rounded-md border border-slate-300 px-3 py-2 outline-none ring-blue-200 focus:ring"
+            placeholder="Categoría del artículo"
+          />
+        </label>
+
+        <label className="flex flex-col gap-1 text-sm text-slate-700">
+          U/M
+          <input
+            value={unidadMedida}
+            onChange={(event) => setUnidadMedida(event.target.value)}
+            className="rounded-md border border-slate-300 px-3 py-2 outline-none ring-blue-200 focus:ring"
+            placeholder="Unidad de medida"
+          />
+        </label>
+
+        <label className="flex flex-col gap-1 text-sm text-slate-700">
+          IVA (%)
+          <input
+            value={ivaMercancia}
+            onChange={(event) => setIvaMercancia(event.target.value)}
+            className="rounded-md border border-slate-300 px-3 py-2 outline-none ring-blue-200 focus:ring"
+            placeholder="IVA del artículo"
+          />
         </label>
 
         <label className="flex flex-col gap-1 text-sm text-slate-700 md:col-span-2">
