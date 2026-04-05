@@ -1621,6 +1621,16 @@ class DocumentosSoporteResourceEndpointsTests(TestCase):
         self.assertEqual(response.data[0]['estado'], 'ACEPTADA')
         self.assertEqual(response.data[0]['reference_code'], 'DS-001')
 
+    def test_list_endpoint_pending_shows_estado_creado(self):
+        self.documento.status = 'EN_PROCESO'
+        self.documento.save(update_fields=['status'])
+
+        response = self.client.get('/api/documentos-soporte/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data[0]['estado'], 'CREADO')
+        self.assertEqual(response.data[0]['estado_dian'], 'EN_PROCESO')
+
     @patch('apps.facturacion.views.emitir_documento_soporte')
     def test_create_endpoint(self, mocked_emitir):
         mocked_emitir.return_value = self.documento
