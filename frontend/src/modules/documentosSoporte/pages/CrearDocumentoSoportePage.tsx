@@ -13,7 +13,18 @@ export default function CrearDocumentoSoportePage() {
   const handleSubmit = async (payload: CrearDocumentoSoportePayload) => {
     setLoading(true);
     try {
-      await documentosSoporteApi.crearDocumentoSoporte(payload);
+      const response = await documentosSoporteApi.crearDocumentoSoporte(payload);
+      if (response?.result === 'PENDING_DIAN_CONFLICT') {
+        showNotification({
+          message:
+            response.warning ||
+            response.detail ||
+            'Hay un documento soporte pendiente en DIAN. Sincronice y reintente.',
+          type: 'info',
+        });
+        navigate('/listados/documentos-soporte');
+        return;
+      }
       showNotification({
         message: 'Documento soporte emitido correctamente.',
         type: 'success',

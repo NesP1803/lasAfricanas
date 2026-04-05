@@ -707,7 +707,14 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         except (FactusAPIError, FactusAuthError) as exc:
             if isinstance(exc, FactusAPIError) and int(getattr(exc, 'status_code', 0) or 0) == 409:
-                return Response({'detail': str(exc), 'result': 'PENDING_DIAN_CONFLICT'}, status=status.HTTP_409_CONFLICT)
+                return Response(
+                    {
+                        'detail': str(exc),
+                        'result': 'PENDING_DIAN_CONFLICT',
+                        'warning': 'Existe un documento soporte en proceso DIAN en Factus. Sincronice y reintente.',
+                    },
+                    status=status.HTTP_202_ACCEPTED,
+                )
             return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
 
         return Response(
@@ -1467,7 +1474,14 @@ class DocumentosSoporteViewSet(viewsets.GenericViewSet):
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         except (FactusAPIError, FactusAuthError) as exc:
             if isinstance(exc, FactusAPIError) and int(getattr(exc, 'status_code', 0) or 0) == 409:
-                return Response({'detail': str(exc), 'result': 'PENDING_DIAN_CONFLICT'}, status=status.HTTP_409_CONFLICT)
+                return Response(
+                    {
+                        'detail': str(exc),
+                        'result': 'PENDING_DIAN_CONFLICT',
+                        'warning': 'Existe un documento soporte en proceso DIAN en Factus. Sincronice y reintente.',
+                    },
+                    status=status.HTTP_202_ACCEPTED,
+                )
             return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
 
         output = DocumentoSoporteListSerializer(documento)

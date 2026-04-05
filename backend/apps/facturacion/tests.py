@@ -1635,7 +1635,7 @@ class DocumentosSoporteResourceEndpointsTests(TestCase):
         self.assertEqual(response.data['numero'], 'DS-001')
 
     @patch('apps.facturacion.views.emitir_documento_soporte')
-    def test_create_endpoint_conflicto_pendiente_dian_retorna_409(self, mocked_emitir):
+    def test_create_endpoint_conflicto_pendiente_dian_retorna_202(self, mocked_emitir):
         mocked_emitir.side_effect = FactusAPIError(
             'Se encontró un documento soporte por enviar a la DIAN',
             status_code=409,
@@ -1648,7 +1648,7 @@ class DocumentosSoporteResourceEndpointsTests(TestCase):
             'items': [{'descripcion': 'Servicio', 'cantidad': 1, 'precio': 50000}],
         }
         response = self.client.post('/api/documentos-soporte/', payload, format='json')
-        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.status_code, 202)
         self.assertEqual(response.data['result'], 'PENDING_DIAN_CONFLICT')
 
     @patch('apps.facturacion.views.download_remote_file', return_value=b'<xml>ds</xml>')
