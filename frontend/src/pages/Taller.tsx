@@ -383,6 +383,49 @@ export default function Taller() {
     await openEditMoto(selected);
   };
 
+  const handleQuitarMotoSeleccionada = async () => {
+    const selected = motosPorMecanico.find((moto) => moto.id === selectedMotoId);
+    if (!selected) {
+      showNotification({
+        message: 'Selecciona una moto para quitar.',
+        type: 'error',
+      });
+      return;
+    }
+    await handleQuitarMotoAsignada(selected);
+  };
+
+  const handleQuitarMotoAsignada = async (moto: Moto) => {
+    if (!selectedMecanicoId) return;
+
+    const confirmar = window.confirm(`¿Quitar la moto ${moto.placa} del mecánico actual?`);
+    if (!confirmar) return;
+
+    try {
+      setLoading(true);
+      await tallerApi.updateMoto(moto.id, { mecanico: null });
+
+      if (selectedMotoId === moto.id) {
+        setSelectedMotoId(null);
+        setOrdenActual(null);
+      }
+
+      await loadMotosPorMecanico(selectedMecanicoId);
+      showNotification({
+        message: 'Moto retirada correctamente del mecánico.',
+        type: 'success',
+      });
+    } catch (error) {
+      console.error('Error al quitar la moto del mecánico:', error);
+      showNotification({
+        message: 'No se pudo quitar la moto del mecánico.',
+        type: 'error',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleQuitarRepuesto = async (repuestoId: number) => {
     if (!ordenActual) return;
     try {
@@ -668,6 +711,47 @@ export default function Taller() {
             <p className="text-xs font-semibold uppercase text-blue-500">Taller</p>
             <h1 className="text-xl font-semibold text-slate-900">{activeTabConfig.label}</h1>
             <p className="text-sm text-slate-500">{activeTabConfig.description}</p>
+            {activeTab === 'ordenes' && (
+              <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2">
+                <h2 className="text-xs font-semibold uppercase text-blue-800">Registro de motos</h2>
+                <p className="text-[11px] text-blue-600">Crear o editar motos del taller</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={openCreateMoto}
+                    className="inline-flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-[11px] font-semibold text-blue-700 transition hover:bg-blue-100"
+                  >
+                    <Plus size={14} />
+                    Registrar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleEditMotoSeleccionada}
+                    className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 transition hover:border-blue-200 hover:text-blue-600"
+                  >
+                    <Pencil size={14} />
+                    Editar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleQuitarMotoSeleccionada}
+                    disabled={!selectedMecanicoId}
+                    className="inline-flex items-center gap-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <X size={14} />
+                    Quitar moto
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSearchParams({ tab: 'motos' })}
+                    className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 transition hover:border-blue-200 hover:text-blue-600"
+                  >
+                    <Bike size={14} />
+                    Ver listado
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -714,14 +798,14 @@ export default function Taller() {
             <div className="grid gap-4 xl:grid-cols-[260px_1fr]">
               <section className="space-y-4">
                 <div className="border border-slate-200 bg-white shadow-sm">
-                  <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-3 py-2">
+                  <div className="flex items-center justify-between border-b border-blue-100 bg-blue-50 px-3 py-2">
                     <div>
-                      <h2 className="text-xs font-semibold uppercase text-slate-600">
+                      <h2 className="text-xs font-semibold uppercase text-blue-800">
                         Seleccione mecánico
                       </h2>
-                      <p className="text-[11px] text-slate-500">Lista de técnicos disponibles</p>
+                      <p className="text-[11px] text-blue-600">Lista de técnicos disponibles</p>
                     </div>
-                    <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-slate-600 shadow-sm">
+                    <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-blue-700 shadow-sm">
                       {mecanicos.length}
                     </span>
                   </div>
@@ -762,12 +846,12 @@ export default function Taller() {
                 </div>
 
                 <div className="border border-slate-200 bg-white shadow-sm">
-                  <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-3 py-2">
+                  <div className="flex items-center justify-between border-b border-blue-100 bg-blue-50 px-3 py-2">
                     <div>
-                      <h2 className="text-xs font-semibold uppercase text-slate-600">Motos asociadas</h2>
-                      <p className="text-[11px] text-slate-500">Doble clic para abrir la orden</p>
+                      <h2 className="text-xs font-semibold uppercase text-blue-800">Motos asociadas</h2>
+                      <p className="text-[11px] text-blue-600">Doble clic para abrir la orden</p>
                     </div>
-                    <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-slate-600 shadow-sm">
+                    <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-blue-700 shadow-sm">
                       {motosPorMecanico.length}
                     </span>
                   </div>
@@ -783,6 +867,7 @@ export default function Taller() {
                             <th className="px-3 py-2">Placa</th>
                             <th className="px-3 py-2">Marca</th>
                             <th className="px-3 py-2">Modelo</th>
+                            <th className="px-3 py-2 text-right">Acción</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -798,6 +883,19 @@ export default function Taller() {
                               <td className="px-3 py-2 font-semibold text-slate-800">{moto.placa}</td>
                               <td className="px-3 py-2">{moto.marca}</td>
                               <td className="px-3 py-2">{moto.modelo || '—'}</td>
+                              <td className="px-3 py-2 text-right">
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    void handleQuitarMotoAsignada(moto);
+                                  }}
+                                  className="inline-flex items-center gap-1 rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-700 transition hover:bg-rose-100"
+                                >
+                                  <X size={12} />
+                                  Quitar
+                                </button>
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -806,44 +904,12 @@ export default function Taller() {
                   </div>
                 </div>
 
-                <div className="border border-slate-200 bg-white shadow-sm">
-                  <div className="border-b border-slate-200 bg-slate-50 px-3 py-2">
-                    <h2 className="text-xs font-semibold uppercase text-slate-600">Registro de motos</h2>
-                    <p className="text-[11px] text-slate-500">Crear o editar motos del taller</p>
-                  </div>
-                  <div className="flex flex-wrap gap-2 px-3 py-3">
-                    <button
-                      type="button"
-                      onClick={openCreateMoto}
-                      className="inline-flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-[11px] font-semibold text-blue-700 transition hover:bg-blue-100"
-                    >
-                      <Plus size={14} />
-                      Registrar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleEditMotoSeleccionada}
-                      className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 transition hover:border-blue-200 hover:text-blue-600"
-                    >
-                      <Pencil size={14} />
-                      Editar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSearchParams({ tab: 'motos' })}
-                      className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 transition hover:border-blue-200 hover:text-blue-600"
-                    >
-                      <Bike size={14} />
-                      Ver listado
-                    </button>
-                  </div>
-                </div>
               </section>
 
               <section className="space-y-4">
                 <div className="border border-slate-200 bg-white shadow-sm">
-                  <div className="border-b border-slate-200 bg-slate-50 px-3 py-2">
-                    <h2 className="text-xs font-semibold uppercase text-slate-600">
+                  <div className="border-b border-blue-100 bg-blue-50 px-3 py-2">
+                    <h2 className="text-xs font-semibold uppercase text-blue-800">
                       Escriba el código y presione buscar
                     </h2>
                   </div>
@@ -881,11 +947,11 @@ export default function Taller() {
                 </div>
 
                 <div className="border border-slate-200 bg-white shadow-sm">
-                  <div className="border-b border-slate-200 bg-slate-50 px-3 py-2">
+                  <div className="border-b border-blue-100 bg-blue-50 px-3 py-2">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
-                        <h2 className="text-xs font-semibold uppercase text-slate-600">Orden actual</h2>
-                        <p className="text-[11px] text-slate-500">Repuestos asociados y total</p>
+                        <h2 className="text-xs font-semibold uppercase text-blue-800">Orden actual</h2>
+                        <p className="text-[11px] text-blue-600">Repuestos asociados y total</p>
                       </div>
                       {ordenActual && (
                         <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
