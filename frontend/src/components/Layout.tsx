@@ -267,11 +267,11 @@ export default function Layout() {
       }
 
       if (pathname.startsWith("/ventas/detalles-cuentas")) {
-        return { moduleKey: "listados", sectionKey: "detalles_cuentas" };
+        return { moduleKey: "reportes", sectionKey: "detalles_cuentas" };
       }
 
       if (pathname.startsWith("/ventas/cuentas-dia")) {
-        return { moduleKey: "listados", sectionKey: "cuentas_dia" };
+        return { moduleKey: "reportes", sectionKey: "cuentas_dia" };
       }
 
 
@@ -293,25 +293,25 @@ export default function Layout() {
         pathname.startsWith("/documentos-soporte")
       ) {
         if (pathname.startsWith("/facturacion/facturas")) {
-          return { moduleKey: "listados", sectionKey: "facturas" };
+          return { moduleKey: "reportes", sectionKey: "facturas" };
         }
         if (pathname.startsWith("/facturacion/remisiones")) {
-          return { moduleKey: "listados", sectionKey: "remisiones" };
+          return { moduleKey: "reportes", sectionKey: "remisiones" };
         }
         if (pathname.startsWith("/facturacion-electronica")) {
-          return { moduleKey: "listados", sectionKey: "facturas" };
+          return { moduleKey: "reportes", sectionKey: "facturas" };
         }
         if (
           pathname.startsWith("/listados/notas-credito") ||
           pathname.startsWith("/notas-credito")
         ) {
-          return { moduleKey: "listados", sectionKey: "notas_credito" };
+          return { moduleKey: "reportes", sectionKey: "notas_credito" };
         }
         if (
           pathname.startsWith("/listados/documentos-soporte") ||
           pathname.startsWith("/documentos-soporte")
         ) {
-          return { moduleKey: "listados", sectionKey: "documentos_soporte" };
+          return { moduleKey: "reportes", sectionKey: "documentos_soporte" };
         }
         return null;
       }
@@ -412,9 +412,9 @@ export default function Layout() {
       }
       {
         const facturacionItems: MenuItem[] = [];
-        const facturacionListadosItems: MenuItem[] = [];
         const listadosMaestrosItems: MenuItem[] = [];
         const listadosSections = getSystemModuleByKey("listados")?.sections ?? [];
+        const reportesItems: MenuItem[] = [];
         const facturacionSections = getSystemModuleByKey("facturacion")?.sections ?? [];
         const ventaRapidaSection = facturacionSections.find(
           (section) => section.key === "venta_rapida"
@@ -430,20 +430,19 @@ export default function Layout() {
         );
         const canAccessCuentas =
           isAdmin ||
-          sectionEnabled("listados", "cuentas_dia") ||
-          sectionEnabled("listados", "detalles_cuentas");
+          sectionEnabled("reportes", "cuentas_dia") ||
+          sectionEnabled("reportes", "detalles_cuentas");
         const canAccessNotasCreditoListado =
           isAdmin ||
-          sectionEnabled("listados", "notas_credito");
+          sectionEnabled("reportes", "notas_credito");
         const canAccessDocumentosSoporteListado =
           isAdmin ||
-          sectionEnabled("listados", "documentos_soporte");
+          sectionEnabled("reportes", "documentos_soporte");
 
         const maestrosKeys = [
           "clientes",
           "proveedores",
           "empleados",
-          "categorias",
           "mecanicos",
         ] as const;
         maestrosKeys.forEach((key) => {
@@ -493,7 +492,7 @@ export default function Layout() {
           });
         }
         if (canAccessCuentas) {
-          facturacionListadosItems.push({
+          reportesItems.push({
             label: "Cuentas",
             items: [
               { label: "Cuentas del día", path: "/ventas/cuentas-dia" },
@@ -505,10 +504,10 @@ export default function Layout() {
           });
         }
         const listadosItems: MenuItem[] = [];
-        if (isAdmin || sectionEnabled("listados", "facturas")) {
+        if (isAdmin || sectionEnabled("reportes", "facturas")) {
           listadosItems.push({ label: "Facturas", path: "/facturacion/facturas" });
         }
-        if (isAdmin || sectionEnabled("listados", "remisiones")) {
+        if (isAdmin || sectionEnabled("reportes", "remisiones")) {
           listadosItems.push({ label: "Remisiones", path: "/facturacion/remisiones" });
         }
         if (canAccessNotasCreditoListado) {
@@ -524,29 +523,23 @@ export default function Layout() {
           });
         }
         if (listadosItems.length > 0) {
-          facturacionListadosItems.push({
+          reportesItems.push({
             label: "Listados",
             items: listadosItems,
           });
         }
-        if (facturacionListadosItems.length > 0) {
-          const listadosItemsForMenu = [...facturacionListadosItems];
-          if (listadosMaestrosItems.length > 0) {
-            listadosItemsForMenu.unshift({
-              label: "Maestros",
-              items: listadosMaestrosItems,
-            });
-          }
-          items.push({
-            label: "Listados",
-            icon: <ClipboardList size={18} />,
-            items: listadosItemsForMenu,
-          });
-        } else if (listadosMaestrosItems.length > 0) {
+        if (listadosMaestrosItems.length > 0) {
           items.push({
             label: "Listados",
             icon: <ClipboardList size={18} />,
             items: listadosMaestrosItems,
+          });
+        }
+        if (reportesItems.length > 0) {
+          items.push({
+            label: "Reportes",
+            icon: <ClipboardList size={18} />,
+            items: reportesItems,
           });
         }
         if (facturacionItems.length > 0) {

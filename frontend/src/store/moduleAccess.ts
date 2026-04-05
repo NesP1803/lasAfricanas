@@ -152,7 +152,9 @@ export const normalizeModuleAccess = (
   }
 
   moduleDefinitions.forEach((moduleDef) => {
-    const incoming = access[moduleDef.key];
+    const fallbackIncoming =
+      moduleDef.key === "reportes" ? access.listados : undefined;
+    const incoming = access[moduleDef.key] ?? fallbackIncoming;
     if (!incoming) {
       return;
     }
@@ -208,7 +210,7 @@ export const normalizeModuleAccess = (
       }
     }
 
-    if (moduleDef.key === "listados") {
+    if (moduleDef.key === "reportes") {
       const legacyCuentasEnabled =
         typeof incoming === "object" &&
         !Array.isArray(incoming) &&

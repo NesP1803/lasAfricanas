@@ -27,14 +27,19 @@ export const SYSTEM_MODULES: SystemModule[] = [
   {
     key: "listados",
     label: "Listados",
-    description:
-      "Consultas de cuentas, facturas, remisiones y documentos.",
+    description: "Maestros de clientes, proveedores, empleados y mecánicos.",
     sections: [
       { key: "clientes", label: "Clientes", path: "/listados?tab=clientes" },
       { key: "proveedores", label: "Proveedores", path: "/listados?tab=proveedores" },
       { key: "empleados", label: "Empleados", path: "/listados?tab=empleados" },
-      { key: "categorias", label: "Categorías", path: "/listados?tab=categorias" },
       { key: "mecanicos", label: "Mecánicos", path: "/listados?tab=mecanicos" },
+    ],
+  },
+  {
+    key: "reportes",
+    label: "Reportes",
+    description: "Consultas de cuentas, facturas, remisiones y documentos.",
+    sections: [
       { key: "cuentas_dia", label: "Cuentas del día" },
       { key: "detalles_cuentas", label: "Detalles cuentas" },
       { key: "facturas", label: "Facturas" },
