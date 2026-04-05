@@ -121,13 +121,8 @@ export default function FacturacionElectronicaAdmin({
     setLoading(true);
     setError('');
 
-    const query = {
-      document_code: docFilter || undefined,
-      estado: stateFilter !== 'todos' ? stateFilter : undefined,
-    };
-
     const [rangosRes, remisionRes] = await Promise.allSettled([
-      configuracionAPI.listarRangosFacturacion(query),
+      configuracionAPI.listarRangosFacturacion(),
       configuracionAPI.obtenerNumeracionRemision(),
     ]);
 
@@ -146,12 +141,19 @@ export default function FacturacionElectronicaAdmin({
 
   useEffect(() => {
     loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [docFilter, stateFilter]);
+  }, []);
 
-  const paged = useMemo(() => {
-    return rangos.slice(0, 10);
-  }, [rangos]);
+  const filteredRangos = useMemo(() => {
+    return rangos.filter((rango) => {
+      const matchDocumento = !docFilter || rango.document_code === docFilter;
+      const isActivo = Boolean(rango.is_active_remote);
+      const matchEstado =
+        stateFilter === 'todos' ? true : stateFilter === 'activo' ? isActivo : !isActivo;
+      return matchDocumento && matchEstado;
+    });
+  }, [docFilter, rangos, stateFilter]);
+
+  const paged = useMemo(() => filteredRangos.slice(0, 50), [filteredRangos]);
 
   const applyRemoteRange = (remote: Record<string, unknown>) => {
     const startDate = String(remote.start_date || '').split('T')[0];
@@ -189,6 +191,27 @@ export default function FacturacionElectronicaAdmin({
     }
   };
 
+  const loadResolutionsByDocument = async (documentCode: string) => {
+    const selected = DOC_OPTIONS.find((d) => d.value === documentCode);
+    if (!selected || !('factusDocument' in selected)) {
+      setAvailableRanges([]);
+      return;
+    }
+    try {
+      const software = await configuracionAPI.obtenerRangosSoftware();
+      const remoteItems = software.items
+        .map((row) => row.remote)
+        .filter((item) => String(item.document || '') === selected.factusDocument);
+      setAvailableRanges(remoteItems);
+      if (!remoteItems.length) {
+        setActionMessage('No hay resoluciones vinculadas en Factus para este documento.');
+      }
+    } catch (e: unknown) {
+      setActionMessage(getApiErrorMessage(e) || 'No fue posible consultar resoluciones de Factus.');
+      setAvailableRanges([]);
+    }
+  };
+
   const handleCreate = async () => {
     setActionMessage('');
     try {
@@ -208,6 +231,11 @@ export default function FacturacionElectronicaAdmin({
       setActionMessage(getApiErrorMessage(e) || 'No fue posible registrar el rango.');
     }
   };
+
+  useEffect(() => {
+    if (!showModal) return;
+    loadResolutionsByDocument(form.document_code);
+  }, [form.document_code, showModal, createTab]);
 
   const toggleActivo = async (rango: FacturacionRango) => {
     try {
@@ -332,16 +360,16 @@ export default function FacturacionElectronicaAdmin({
                       <td className="px-4 py-3 text-slate-700">{rango.hasta || 'N/A'}</td>
                       <td className="px-4 py-3 text-slate-700">{rango.consecutivo_actual || 'N/A'}</td>
                       <td className="px-4 py-3">
-                        <label className="inline-flex cursor-pointer items-center">
-                          <input
-                            className="peer sr-only"
-                            type="checkbox"
-                            checked={rango.is_active_remote}
-                            onChange={() => toggleActivo(rango)}
-                            disabled={!isAdmin}
-                          />
-                          <span className="h-6 w-11 rounded-full bg-slate-300 transition-colors peer-checked:bg-blue-600" />
-                        </label>
+                        <button
+                          type="button"
+                          onClick={() => toggleActivo(rango)}
+                          disabled={!isAdmin}
+                          className={`min-w-14 rounded-full px-3 py-1 text-xs font-semibold text-white ${
+                            rango.is_active_remote ? 'bg-blue-600' : 'bg-slate-400'
+                          } disabled:cursor-not-allowed disabled:opacity-60`}
+                        >
+                          {rango.is_active_remote ? 'ON' : 'OFF'}
+                        </button>
                       </td>
                       <td className="px-4 py-3 text-slate-700">{rango.fecha_expiracion || 'N/A'}</td>
                       <td className="px-4 py-3">
@@ -518,10 +546,14 @@ export default function FacturacionElectronicaAdmin({
               </div>
             </div>
 
-            {availableRanges.length > 0 && (
-              <div className="mt-3 rounded-lg border bg-white p-4">
-                <p className="mb-2 text-xl font-semibold text-slate-600">Rangos de numeración</p>
-                <p className="mb-2 text-sm font-semibold text-slate-600">Selecciona un rango de numeración</p>
+            <div className="mt-3 rounded-lg border bg-white p-4">
+              <p className="mb-2 text-base font-semibold text-slate-700">
+                Resoluciones vinculadas en Factus
+              </p>
+              <p className="mb-2 text-sm font-medium text-slate-600">
+                Selecciona una resolución para autocompletar el rango.
+              </p>
+              {availableRanges.length > 0 ? (
                 <div className="max-h-44 overflow-auto rounded border p-2">
                   {availableRanges.map((item) => (
                     <button
@@ -533,8 +565,12 @@ export default function FacturacionElectronicaAdmin({
                     </button>
                   ))}
                 </div>
-              </div>
-            )}
+              ) : (
+                <p className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500">
+                  No hay resoluciones vinculadas para el documento seleccionado.
+                </p>
+              )}
+            </div>
 
             <div className="mt-4 flex justify-end gap-2">
               <button className="rounded border px-3 py-2 text-sm" onClick={() => setShowModal(false)}>
