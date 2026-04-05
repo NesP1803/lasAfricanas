@@ -15,6 +15,7 @@ from apps.facturacion.services.factus_client import FactusAPIError, FactusClient
 from apps.facturacion.services.factus_catalog_lookup import get_tribute_id, get_unit_measure_id
 from apps.facturacion.services.factus_catalog_lookup import get_payment_method_code
 from apps.facturacion.services.consecutivo_service import resolve_numbering_range
+from apps.facturacion.services.document_totals import calculate_document_detail_totals, q_money, to_decimal
 from apps.facturacion.services.factus_payload_builder import build_invoice_payload
 from apps.inventario.models import MovimientoInventario, Producto
 from apps.ventas.models import DetalleVenta
@@ -165,11 +166,17 @@ def build_credit_preview(factura: FacturaElectronica, lines: list[dict[str, Any]
     unidades = Decimal('0')
     for line in resolved_lines:
         detalle = DetalleVenta.objects.select_related('producto').get(pk=line['detalle_venta_original_id'], venta=factura.venta)
-        qty = _to_decimal(line['cantidad_a_acreditar'])
+        qty = to_decimal(line['cantidad_a_acreditar'])
         balance = line_credit_balance(detalle)
-        base = (qty * detalle.precio_unitario).quantize(Decimal('0.01'))
-        tax = (base * detalle.iva_porcentaje / Decimal('100')).quantize(Decimal('0.01'))
-        line_total = (base + tax).quantize(Decimal('0.01'))
+        totals = calculate_document_detail_totals(
+            quantity=qty,
+            unit_gross_price=detalle.precio_unitario,
+            discount_pct=Decimal('0.00'),
+            tax_pct=detalle.iva_porcentaje,
+        )
+        base = q_money(totals['base'])
+        tax = q_money(totals['impuesto'])
+        line_total = q_money(totals['total'])
         subtotal += base
         impuestos += tax
         total += line_total
