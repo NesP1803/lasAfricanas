@@ -82,7 +82,7 @@ from apps.facturacion.services import (
 from apps.facturacion.services.factura_assets_service import sync_invoice_assets
 from apps.facturacion.services.factus_client import FactusClient
 from apps.facturacion.services.factus_environment import resolve_factus_environment
-from apps.facturacion.services.electronic_state_machine import resolve_actions
+from apps.facturacion.services.electronic_state_machine import map_factus_status, resolve_actions
 from apps.facturacion.services.public_invoice_url import has_documental_inconsistency
 
 logger = logging.getLogger(__name__)
@@ -1649,6 +1649,14 @@ class DocumentosSoporteViewSet(viewsets.GenericViewSet):
             return Response({'detail': 'El documento soporte aún no tiene número confirmado.'}, status=status.HTTP_409_CONFLICT)
         try:
             content = FactusClient().download_support_document_xml(documento.number)
+        except FactusAPIError as exc:
+            status_code = int(getattr(exc, 'status_code', 0) or 0)
+            if status_code == 409:
+                return Response(
+                    {'detail': 'El documento soporte aún no ha sido validado por DIAN. Intente sincronizar más tarde.'},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            return Response({'detail': 'No fue posible descargar el XML del documento soporte.'}, status=status.HTTP_502_BAD_GATEWAY)
         except Exception as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
         filename = f'documento-soporte-{documento.number}.xml'
@@ -1670,6 +1678,14 @@ class DocumentosSoporteViewSet(viewsets.GenericViewSet):
             return Response({'detail': 'El documento soporte aún no tiene número confirmado.'}, status=status.HTTP_409_CONFLICT)
         try:
             content = FactusClient().download_support_document_pdf(documento.number)
+        except FactusAPIError as exc:
+            status_code = int(getattr(exc, 'status_code', 0) or 0)
+            if status_code == 409:
+                return Response(
+                    {'detail': 'El documento soporte aún no ha sido validado por DIAN. Intente sincronizar más tarde.'},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            return Response({'detail': 'No fue posible descargar el PDF del documento soporte.'}, status=status.HTTP_502_BAD_GATEWAY)
         except Exception as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
         filename = f'documento-soporte-{documento.number}.pdf'
