@@ -5,6 +5,7 @@ import { documentosSoporteApi, type DocumentoSoporte, type EstadoDian } from '..
 interface DocumentosSoporteTableProps {
   documentos: DocumentoSoporte[];
   loading: boolean;
+  onRefresh: () => Promise<void>;
 }
 
 const estadoStyles: Record<string, string> = {
@@ -41,17 +42,17 @@ function EstadoDianBadge({ estado }: { estado: EstadoDian }) {
 const resolveEstadoDocumento = (documento: DocumentoSoporte): EstadoDian =>
   documento.estado ?? documento.estado_dian ?? 'ERROR';
 
-export default function DocumentosSoporteTable({ documentos, loading }: DocumentosSoporteTableProps) {
+export default function DocumentosSoporteTable({ documentos, loading, onRefresh }: DocumentosSoporteTableProps) {
   const [rowLoading, setRowLoading] = useState<Record<string, string | null>>({});
   const { showNotification } = useNotification();
 
-  const handleDescargar = async (numero: string, tipo: 'xml' | 'pdf') => {
+  const handleDescargar = async (id: number, numero: string, tipo: 'xml' | 'pdf') => {
     setRowLoading((prev) => ({ ...prev, [numero]: tipo }));
     try {
       if (tipo === 'xml') {
-        await documentosSoporteApi.descargarXML(numero);
+        await documentosSoporteApi.descargarXML(id, numero);
       } else {
-        await documentosSoporteApi.descargarPDF(numero);
+        await documentosSoporteApi.descargarPDF(id, numero);
       }
     } catch {
       showNotification({
@@ -60,6 +61,39 @@ export default function DocumentosSoporteTable({ documentos, loading }: Document
       });
     } finally {
       setRowLoading((prev) => ({ ...prev, [numero]: null }));
+    }
+  };
+
+  const handleSync = async (documento: DocumentoSoporte) => {
+    setRowLoading((prev) => ({ ...prev, [documento.numero]: 'sync' }));
+    try {
+      await documentosSoporteApi.sincronizarDocumentoSoporte(documento.id);
+      await onRefresh();
+    } catch {
+      showNotification({
+        message: `No fue posible sincronizar el documento soporte ${documento.numero}.`,
+        type: 'error',
+      });
+    } finally {
+      setRowLoading((prev) => ({ ...prev, [documento.numero]: null }));
+    }
+  };
+
+  const handleEliminar = async (documento: DocumentoSoporte) => {
+    const confirmado = window.confirm(`¿Eliminar documento soporte ${documento.numero}?`);
+    if (!confirmado) return;
+    setRowLoading((prev) => ({ ...prev, [documento.numero]: 'delete' }));
+    try {
+      await documentosSoporteApi.eliminarDocumentoSoporte(documento.id);
+      showNotification({ message: 'Documento soporte eliminado.', type: 'success' });
+      await onRefresh();
+    } catch {
+      showNotification({
+        message: `No fue posible eliminar el documento soporte ${documento.numero}.`,
+        type: 'error',
+      });
+    } finally {
+      setRowLoading((prev) => ({ ...prev, [documento.numero]: null }));
     }
   };
 
@@ -105,7 +139,7 @@ export default function DocumentosSoporteTable({ documentos, loading }: Document
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
-                        onClick={() => handleDescargar(documento.numero, 'xml')}
+                        onClick={() => handleDescargar(documento.id, documento.numero, 'xml')}
                         className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
                         disabled={Boolean(loadingAction)}
                       >
@@ -113,11 +147,27 @@ export default function DocumentosSoporteTable({ documentos, loading }: Document
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleDescargar(documento.numero, 'pdf')}
+                        onClick={() => handleDescargar(documento.id, documento.numero, 'pdf')}
                         className="rounded-md bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
                         disabled={Boolean(loadingAction)}
                       >
                         PDF
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSync(documento)}
+                        className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+                        disabled={Boolean(loadingAction) || !documento.can_sync}
+                      >
+                        Sincronizar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleEliminar(documento)}
+                        className="rounded-md bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+                        disabled={Boolean(loadingAction)}
+                      >
+                        Eliminar
                       </button>
                     </div>
                   </td>

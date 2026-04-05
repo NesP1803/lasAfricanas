@@ -22,7 +22,7 @@ def _extract_adjustment_note_data(response_json: dict[str, Any]) -> dict[str, st
         'number': str(adjustment_note.get('number', '')).strip(),
         'xml_url': str(adjustment_note.get('xml_url', '')).strip(),
         'pdf_url': str(adjustment_note.get('pdf_url', '')).strip(),
-        'status': map_factus_status(response_json),
+        'status': map_factus_status(response_json)[0],
     }
 
 
