@@ -82,7 +82,7 @@ from apps.facturacion.services import (
 from apps.facturacion.services.factura_assets_service import sync_invoice_assets
 from apps.facturacion.services.factus_client import FactusClient
 from apps.facturacion.services.factus_environment import resolve_factus_environment
-from apps.facturacion.services.electronic_state_machine import resolve_actions
+from apps.facturacion.services.electronic_state_machine import map_factus_status, resolve_actions
 from apps.facturacion.services.public_invoice_url import has_documental_inconsistency
 
 logger = logging.getLogger(__name__)
