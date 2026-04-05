@@ -55,6 +55,9 @@ export interface NotaCredito {
   last_remote_error?: string;
   remote_identifier?: string;
   sync_metadata?: Record<string, unknown>;
+  request_numbering_range_id?: number | null;
+  range_prefix?: string;
+  range_resolution?: string;
   can_sync?: boolean;
   estado_ui_mensaje?: string;
   detail?: string;

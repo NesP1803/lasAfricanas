@@ -111,6 +111,13 @@ class FactusClient:
         self.client_secret = config('FACTUS_CLIENT_SECRET', default='')
         self.username = config('FACTUS_USERNAME', default='')
         self.password = config('FACTUS_PASSWORD', default='')
+        logger.info(
+            'factus.client.credit_note.endpoints environment=%s create=%s list=%s show=%s',
+            self.environment,
+            self.credit_note_path,
+            self.credit_note_list_path,
+            self.credit_note_show_path,
+        )
 
     def _resolve_factus_base_url(self) -> str:
         return resolve_factus_base_url()
@@ -366,6 +373,12 @@ class FactusClient:
         return self.request('POST', self.credit_note_path, json=payload)
 
     def create_and_validate_credit_note(self, payload: dict[str, Any]) -> dict[str, Any]:
+        logger.info(
+            'factus.credit_note.create request_path=%s reference_code=%s numbering_range_id=%s',
+            self.credit_note_path,
+            payload.get('reference_code'),
+            payload.get('numbering_range_id'),
+        )
         try:
             return self.send_credit_note(payload)
         except FactusAPIError as exc:
@@ -405,12 +418,21 @@ class FactusClient:
             if value in (None, ''):
                 continue
             translated_params[mapping.get(key, key)] = value
-        return self.request('GET', self.credit_note_list_path, params=translated_params or None)
+        logger.info(
+            'factus.credit_note.list request_path=%s params=%s',
+            self.credit_note_list_path,
+            translated_params or {},
+        )
+        response = self.request('GET', self.credit_note_list_path, params=translated_params or None)
+        raw = str(response)[:1200]
+        logger.info('factus.credit_note.list response_path=%s raw=%s', self.credit_note_list_path, raw)
+        return response
 
     def get_credit_note_by_reference_code(self, reference_code: str, *, bill_number: str | None = None) -> dict[str, Any]:
         return self.list_credit_notes(reference_code=reference_code)
 
     def get_credit_note(self, number: str) -> dict[str, Any]:
+        logger.info('factus.credit_note.show request_path=%s number=%s', self.credit_note_show_path, number)
         try:
             return self.request('GET', self.credit_note_show_path.format(number=number))
         except FactusAPIError as exc:
