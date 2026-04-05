@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any
 
 from django.db import transaction
@@ -10,7 +11,7 @@ from apps.facturacion.models import DocumentoSoporteElectronico
 from apps.facturacion.services.facturar_venta import map_factus_status
 from apps.facturacion.services.factus_client import FactusAPIError, FactusClient, FactusValidationError
 from apps.facturacion.services.support_document_payload_builder import build_support_document_payload
-from apps.inventario.models import Proveedor
+from apps.inventario.models import MovimientoInventario, Producto, Proveedor
 
 
 def _extract_support_document_data(response_json: dict[str, Any]) -> dict[str, str]:
@@ -26,7 +27,46 @@ def _extract_support_document_data(response_json: dict[str, Any]) -> dict[str, s
     }
 
 
-def emitir_documento_soporte(data: dict[str, Any]) -> DocumentoSoporteElectronico:
+def _afectar_inventario_desde_documento_soporte(
+    *,
+    payload_data: dict[str, Any],
+    documento: DocumentoSoporteElectronico,
+    user=None,
+) -> None:
+    items = payload_data.get('items') if isinstance(payload_data.get('items'), list) else []
+    if not items:
+        return
+    for item in items:
+        producto_id = item.get('producto_id')
+        if not producto_id:
+            continue
+        producto = Producto.objects.filter(pk=producto_id, is_active=True).first()
+        if producto is None:
+            continue
+        cantidad = Decimal(str(item.get('cantidad') or '0'))
+        costo_unitario = Decimal(str(item.get('precio') or producto.precio_costo or '0'))
+        if cantidad <= 0:
+            continue
+        stock_anterior = Decimal(str(producto.stock or '0'))
+        stock_nuevo = stock_anterior + cantidad
+        producto.stock = stock_nuevo
+        producto.precio_costo = costo_unitario
+        producto.save(update_fields=['stock', 'precio_costo', 'ultima_compra', 'updated_at'])
+        if user is not None:
+            MovimientoInventario.objects.create(
+                producto=producto,
+                tipo='ENTRADA',
+                cantidad=cantidad,
+                stock_anterior=stock_anterior,
+                stock_nuevo=stock_nuevo,
+                costo_unitario=costo_unitario,
+                usuario=user,
+                referencia=f'DOC-SOP-{documento.number}',
+                observaciones='Entrada por emisión de documento soporte.',
+            )
+
+
+def emitir_documento_soporte(data: dict[str, Any], *, user=None) -> DocumentoSoporteElectronico:
     payload_data = dict(data)
     proveedor_id = payload_data.get('proveedor_id')
     if proveedor_id:
@@ -62,4 +102,5 @@ def emitir_documento_soporte(data: dict[str, Any]) -> DocumentoSoporteElectronic
             pdf_url=fields['pdf_url'] or None,
             response_json=response_json,
         )
+        _afectar_inventario_desde_documento_soporte(payload_data=payload_data, documento=documento, user=user)
     return documento

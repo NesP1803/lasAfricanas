@@ -522,8 +522,8 @@ class FactusClient:
         return self.request('DELETE', self.credit_note_delete_path.format(reference_code=reference_code))
 
     def send_support_document(self, payload: dict[str, Any]) -> dict[str, Any]:
-        if not payload.get('supplier'):
-            raise FactusValidationError('El documento soporte debe incluir supplier para enviar a Factus.')
+        if not payload.get('provider'):
+            raise FactusValidationError('El documento soporte debe incluir provider para enviar a Factus.')
         if not payload.get('items'):
             raise FactusValidationError('El documento soporte no contiene ítems para enviar a Factus.')
         return self.request('POST', self.support_document_path, json=payload)

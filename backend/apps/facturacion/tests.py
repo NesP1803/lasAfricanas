@@ -63,7 +63,7 @@ from apps.facturacion.services.persistence_safety import (
     safe_assign_json,
 )
 from apps.core.models import Impuesto
-from apps.inventario.models import Categoria, Producto, Proveedor
+from apps.inventario.models import Categoria, MovimientoInventario, Producto, Proveedor
 from apps.ventas.models import Cliente, DetalleVenta, Venta
 from apps.ventas.services.anular_venta import anular_venta
 from apps.facturacion.models import RangoNumeracionDIAN
@@ -1118,6 +1118,79 @@ class DocumentoSoporteEndpointTests(TestCase):
         self.assertEqual(response.data['numero'], 'DS123')
         self.assertEqual(response.data['cufe'], 'CUFE-DS-1')
         self.assertEqual(response.data['estado'], 'ACEPTADA')
+
+
+class DocumentoSoporteInventarioTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(username='doc-stock', password='1234')
+        self.categoria = Categoria.objects.create(nombre='Repuestos DS')
+        self.producto = Producto.objects.create(
+            codigo='DS-PROD-1',
+            nombre='Aceite 20W50',
+            categoria=self.categoria,
+            precio_costo=Decimal('10000'),
+            precio_venta=Decimal('12000'),
+            precio_venta_minimo=Decimal('11000'),
+            stock=Decimal('5'),
+            stock_minimo=Decimal('1'),
+        )
+
+    @patch('apps.facturacion.services.emitir_documento_soporte.FactusClient.create_and_validate_support_document')
+    @patch('apps.facturacion.services.support_document_payload_builder.resolve_numbering_range')
+    def test_emitir_documento_soporte_actualiza_mercancia(self, mocked_resolve_range, mocked_create):
+        mocked_resolve_range.return_value = RangoNumeracionDIAN(
+            factus_range_id=501,
+            factus_id=501,
+            prefijo='DS',
+            desde=1,
+            hasta=999999,
+            consecutivo_actual=1,
+            resolucion='RES-DS',
+            document_code='DOCUMENTO_SOPORTE',
+            environment='SANDBOX',
+        )
+        mocked_create.return_value = {
+            'data': {
+                'support_document': {
+                    'number': 'DS-501',
+                    'uuid': 'UUID-DS-501',
+                    'cufe': 'CUFE-DS-501',
+                    'status': 'valid',
+                }
+            }
+        }
+        payload = {
+            'proveedor_nombre': 'Proveedor test',
+            'proveedor_documento': '900123456',
+            'proveedor_tipo_documento': 'NIT',
+            'provider_address': 'CRA 1 # 1-01',
+            'provider_email': 'proveedor@test.com',
+            'items': [
+                {
+                    'producto_id': self.producto.id,
+                    'codigo_referencia': self.producto.codigo,
+                    'descripcion': self.producto.nombre,
+                    'cantidad': 3,
+                    'precio': 15000,
+                }
+            ],
+        }
+
+        from apps.facturacion.services.emitir_documento_soporte import emitir_documento_soporte
+
+        documento = emitir_documento_soporte(payload, user=self.user)
+
+        self.producto.refresh_from_db()
+        self.assertEqual(self.producto.stock, Decimal('8'))
+        self.assertEqual(self.producto.precio_costo, Decimal('15000'))
+        self.assertTrue(
+            MovimientoInventario.objects.filter(
+                producto=self.producto,
+                tipo='ENTRADA',
+                referencia=f'DOC-SOP-{documento.number}',
+            ).exists()
+        )
 
 
 class SyncInvoiceStatusCommandTests(TestCase):
