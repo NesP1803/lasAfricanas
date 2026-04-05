@@ -9,10 +9,12 @@ interface DocumentosSoporteTableProps {
 }
 
 const estadoStyles: Record<string, string> = {
-  CREADO: 'bg-sky-100 text-sky-700',
+  PENDIENTE_DIAN: 'bg-amber-100 text-amber-700',
   ACEPTADA: 'bg-emerald-100 text-emerald-700',
+  ACEPTADA_CON_OBSERVACIONES: 'bg-emerald-100 text-emerald-700',
   RECHAZADA: 'bg-red-100 text-red-700',
   EN_PROCESO: 'bg-amber-100 text-amber-700',
+  CONFLICTO_FACTUS: 'bg-orange-100 text-orange-700',
   ERROR: 'bg-slate-200 text-slate-700',
 };
 
@@ -142,7 +144,7 @@ export default function DocumentosSoporteTable({ documentos, loading, onRefresh 
                         type="button"
                         onClick={() => handleDescargar(documento.id, documento.numero, 'xml')}
                         className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
-                        disabled={Boolean(loadingAction)}
+                        disabled={Boolean(loadingAction) || !documento.can_download}
                       >
                         XML
                       </button>
@@ -150,7 +152,7 @@ export default function DocumentosSoporteTable({ documentos, loading, onRefresh 
                         type="button"
                         onClick={() => handleDescargar(documento.id, documento.numero, 'pdf')}
                         className="rounded-md bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
-                        disabled={Boolean(loadingAction)}
+                        disabled={Boolean(loadingAction) || !documento.can_download}
                       >
                         PDF
                       </button>

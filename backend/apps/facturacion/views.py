@@ -1649,6 +1649,14 @@ class DocumentosSoporteViewSet(viewsets.GenericViewSet):
             return Response({'detail': 'El documento soporte aún no tiene número confirmado.'}, status=status.HTTP_409_CONFLICT)
         try:
             content = FactusClient().download_support_document_xml(documento.number)
+        except FactusAPIError as exc:
+            status_code = int(getattr(exc, 'status_code', 0) or 0)
+            if status_code == 409:
+                return Response(
+                    {'detail': 'El documento soporte aún no ha sido validado por DIAN. Intente sincronizar más tarde.'},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            return Response({'detail': 'No fue posible descargar el XML del documento soporte.'}, status=status.HTTP_502_BAD_GATEWAY)
         except Exception as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
         filename = f'documento-soporte-{documento.number}.xml'
@@ -1670,6 +1678,14 @@ class DocumentosSoporteViewSet(viewsets.GenericViewSet):
             return Response({'detail': 'El documento soporte aún no tiene número confirmado.'}, status=status.HTTP_409_CONFLICT)
         try:
             content = FactusClient().download_support_document_pdf(documento.number)
+        except FactusAPIError as exc:
+            status_code = int(getattr(exc, 'status_code', 0) or 0)
+            if status_code == 409:
+                return Response(
+                    {'detail': 'El documento soporte aún no ha sido validado por DIAN. Intente sincronizar más tarde.'},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            return Response({'detail': 'No fue posible descargar el PDF del documento soporte.'}, status=status.HTTP_502_BAD_GATEWAY)
         except Exception as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
         filename = f'documento-soporte-{documento.number}.pdf'

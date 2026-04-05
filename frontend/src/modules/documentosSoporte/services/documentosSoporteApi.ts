@@ -18,6 +18,7 @@ export interface DocumentoSoporte {
   pdf_url?: string;
   reference_code?: string;
   can_sync?: boolean;
+  can_download?: boolean;
   result?: string;
   warning?: string;
   detail?: string;
