@@ -1,4 +1,5 @@
 import type { ModulosPermitidos } from "../types";
+import { SYSTEM_MODULES } from "../config/systemModules";
 
 export type ModuleSection = {
   key: string;
@@ -19,61 +20,17 @@ export type ModuleAccessEntry = {
 
 export type ModuleAccessState = Record<string, ModuleAccessEntry>;
 
-export const MODULE_DEFINITIONS: ModuleDefinition[] = [
-  {
-    key: "configuracion",
-    label: "Configuración",
-    description: "Permite acceder a la información y ajustes del sistema.",
-    sections: [
-      { key: "facturacion", label: "Facturación" },
-      { key: "empresa", label: "Empresa" },
-      { key: "usuarios", label: "Usuarios" },
-      { key: "impuestos", label: "Impuestos" },
-      { key: "auditoria", label: "Auditoría" },
-    ],
-  },
-  {
-    key: "listados",
-    label: "Listados",
-    description: "Acceso a clientes, proveedores, empleados y categorías.",
-    sections: [
-      { key: "clientes", label: "Clientes" },
-      { key: "proveedores", label: "Proveedores" },
-      { key: "empleados", label: "Empleados" },
-      { key: "categorias", label: "Categorías" },
-      { key: "mecanicos", label: "Mecánicos" },
-    ],
-  },
-  {
-    key: "articulos",
-    label: "Artículos",
-    description: "Inventario, stock y bajas de mercancía.",
-    sections: [
-      { key: "mercancia", label: "Mercancía" },
-      { key: "stock_bajo", label: "Stock bajo" },
-    ],
-  },
-  {
-    key: "taller",
-    label: "Taller",
-    description: "Operaciones y registro de motos del taller.",
-    sections: [
-      { key: "ordenes", label: "Operaciones" },
-      { key: "motos", label: "Registro de motos" },
-    ],
-  },
-  {
-    key: "facturacion",
-    label: "Facturación",
-    description: "Venta rápida, cuentas y listados de facturas.",
-    sections: [
-      { key: "venta_rapida", label: "Venta rápida" },
-      { key: "caja", label: "Caja" },
-      { key: "cuentas", label: "Cuentas" },
-      { key: "listados", label: "Listados" },
-    ],
-  },
-];
+export const MODULE_DEFINITIONS: ModuleDefinition[] = SYSTEM_MODULES.map(
+  ({ key, label, description, sections }) => ({
+    key,
+    label,
+    description,
+    sections: sections.map((section) => ({
+      key: section.key,
+      label: section.label,
+    })),
+  })
+);
 
 const prettifyLabel = (value: string): string =>
   value

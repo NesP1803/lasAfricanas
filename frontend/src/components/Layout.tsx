@@ -21,6 +21,7 @@ import {
   isSectionEnabled,
   normalizeModuleAccess,
 } from "../store/moduleAccess";
+import { getSystemModuleByKey } from "../config/systemModules";
 
 import {
   ClipboardList,
@@ -203,13 +204,10 @@ export default function Layout() {
     isSectionEnabled(moduleAccess, moduleKey, sectionKey);
 
   const configuracionItems = useMemo(() => {
-    const sections = [
-      { label: "Facturación", path: "/configuracion?tab=facturacion", key: "facturacion" },
-      { label: "Empresa", path: "/configuracion?tab=empresa", key: "empresa" },
-      { label: "Usuarios", path: "/configuracion?tab=usuarios", key: "usuarios" },
-      { label: "Impuestos", path: "/configuracion?tab=impuestos", key: "impuestos" },
-      { label: "Auditoría", path: "/configuracion?tab=auditoria", key: "auditoria" },
-    ];
+    const sections =
+      getSystemModuleByKey("configuracion")?.sections.filter(
+        (section) => Boolean(section.path)
+      ) ?? [];
 
     const filtered = isAdmin
       ? sections
@@ -380,14 +378,10 @@ export default function Layout() {
       }
 
       {
-        const articulosItems = [
-          { label: "Mercancia", path: "/articulos?tab=mercancia", key: "mercancia" },
-          {
-            label: "Stock Bajo",
-            path: "/articulos?tab=stock_bajo",
-            key: "stock_bajo",
-          },
-        ];
+        const articulosItems =
+          getSystemModuleByKey("articulos")?.sections.filter(
+            (section) => Boolean(section.path)
+          ) ?? [];
         const filtered = isAdmin
           ? articulosItems
           : articulosItems.filter((item) =>
@@ -402,10 +396,10 @@ export default function Layout() {
         }
       }
       {
-        const tallerItems = [
-          { label: "Operaciones", path: "/taller?tab=ordenes", key: "ordenes" },
-          { label: "Registro de Motos", path: "/taller?tab=motos", key: "motos" },
-        ];
+        const tallerItems =
+          getSystemModuleByKey("taller")?.sections.filter(
+            (section) => Boolean(section.path)
+          ) ?? [];
         const filtered = isAdmin
           ? tallerItems
           : tallerItems.filter((item) => sectionEnabled("taller", item.key));
@@ -420,6 +414,13 @@ export default function Layout() {
       {
         const facturacionItems: MenuItem[] = [];
         const facturacionListadosItems: MenuItem[] = [];
+        const facturacionSections = getSystemModuleByKey("facturacion")?.sections ?? [];
+        const ventaRapidaSection = facturacionSections.find(
+          (section) => section.key === "venta_rapida"
+        );
+        const cajaSection = facturacionSections.find(
+          (section) => section.key === "caja"
+        );
         const canAccessCuentas =
           isAdmin ||
           sectionEnabled("facturacion", "cuentas") ||
@@ -437,11 +438,20 @@ export default function Layout() {
           sectionEnabled("facturacion", "listados") ||
           sectionEnabled("listados", "documentos_soporte");
 
-        if (isAdmin || sectionEnabled("facturacion", "venta_rapida")) {
-          facturacionItems.push({ label: "Venta rápida", path: "/ventas" });
+        if (
+          ventaRapidaSection?.path &&
+          (isAdmin || sectionEnabled("facturacion", "venta_rapida"))
+        ) {
+          facturacionItems.push({
+            label: ventaRapidaSection.label,
+            path: ventaRapidaSection.path,
+          });
         }
-        if (isAdmin || sectionEnabled("facturacion", "caja")) {
-          facturacionItems.push({ label: "Caja", path: "/facturacion/caja" });
+        if (cajaSection?.path && (isAdmin || sectionEnabled("facturacion", "caja"))) {
+          facturacionItems.push({
+            label: cajaSection.label,
+            path: cajaSection.path,
+          });
         }
         if (isAdmin || sectionEnabled("facturacion", "listados")) {
           facturacionItems.push({
