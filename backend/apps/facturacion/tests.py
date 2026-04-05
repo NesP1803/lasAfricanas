@@ -1042,7 +1042,19 @@ class DocumentoSoporteBuilderTests(TestCase):
                 }
             )
 
-    def test_normaliza_tipo_documento_proveedor_cc_y_homologa_id(self):
+    @patch('apps.facturacion.services.support_document_payload_builder.resolve_numbering_range')
+    def test_normaliza_tipo_documento_proveedor_cc_y_homologa_id(self, mocked_resolve_range):
+        mocked_resolve_range.return_value = RangoNumeracionDIAN(
+            factus_range_id=148,
+            factus_id=148,
+            prefijo='DS',
+            desde=1,
+            hasta=999999,
+            consecutivo_actual=1,
+            resolucion='TEST',
+            document_code='DOCUMENTO_SOPORTE',
+            environment='SANDBOX',
+        )
         payload = build_support_document_payload(
             {
                 'proveedor_nombre': 'Juan Perez',
@@ -1052,8 +1064,9 @@ class DocumentoSoporteBuilderTests(TestCase):
                 'items': [{'descripcion': 'Servicio', 'cantidad': 1, 'precio': 15000}],
             }
         )
-        self.assertEqual(payload['supplier']['identification_type'], 'CC')
-        self.assertEqual(payload['supplier']['identification_document_id'], 3)
+        self.assertEqual(payload['provider']['identification_document_id'], 3)
+        self.assertEqual(payload['provider']['identification'], '123')
+        self.assertTrue(payload.get('reference_code'))
 
 
 class FactusCatalogLookupHomologationTests(TestCase):
@@ -1477,6 +1490,7 @@ class DocumentosSoporteResourceEndpointsTests(TestCase):
         self.assertEqual(len(response.data), 1)
         self.assertEqual(response.data[0]['numero'], 'DS-001')
         self.assertEqual(response.data[0]['estado'], 'ACEPTADA')
+        self.assertEqual(response.data[0]['reference_code'], 'DS-001')
 
     @patch('apps.facturacion.views.emitir_documento_soporte')
     def test_create_endpoint(self, mocked_emitir):
@@ -1506,6 +1520,57 @@ class DocumentosSoporteResourceEndpointsTests(TestCase):
         self.assertEqual(response['Content-Type'], 'application/pdf')
         self.assertEqual(response.content, b'%PDF-ds')
         mocked_download.assert_called_once()
+
+    def test_retrieve_endpoint(self):
+        response = self.client.get(f'/api/documentos-soporte/{self.documento.id}/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['numero'], 'DS-001')
+
+    @patch('apps.facturacion.views.FactusClient.get_support_document')
+    def test_sincronizar_endpoint(self, mocked_get_support):
+        self.documento.status = 'EN_PROCESO'
+        self.documento.save(update_fields=['status'])
+        mocked_get_support.return_value = {
+            'data': {
+                'support_document': {
+                    'number': 'DS-001',
+                    'cufe': 'CUFE-DS-1-UPD',
+                    'uuid': 'UUID-DS-1-UPD',
+                    'xml_url': 'https://example.com/ds-001-upd.xml',
+                    'pdf_url': 'https://example.com/ds-001-upd.pdf',
+                },
+                'status': 'valid',
+            }
+        }
+        response = self.client.post(f'/api/documentos-soporte/{self.documento.id}/sincronizar/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['estado_dian'], 'ACEPTADA')
+        self.documento.refresh_from_db()
+        self.assertEqual(self.documento.status, 'ACEPTADA')
+
+    @patch('apps.facturacion.views.FactusClient.download_support_document_xml', return_value=b'<xml>ds-id</xml>')
+    def test_xml_by_id_endpoint(self, _mocked_download):
+        response = self.client.get(f'/api/documentos-soporte/{self.documento.id}/xml/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/xml')
+        self.assertEqual(response.content, b'<xml>ds-id</xml>')
+
+    @patch('apps.facturacion.views.FactusClient.download_support_document_pdf', return_value=b'%PDF-ds-id')
+    def test_pdf_by_id_endpoint(self, _mocked_download):
+        response = self.client.get(f'/api/documentos-soporte/{self.documento.id}/pdf/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/pdf')
+        self.assertEqual(response.content, b'%PDF-ds-id')
+
+    @patch('apps.facturacion.views.FactusClient.delete_support_document', return_value={'ok': True})
+    def test_delete_endpoint(self, mocked_delete):
+        self.documento.status = 'RECHAZADA'
+        self.documento.save(update_fields=['status'])
+        response = self.client.delete(f'/api/documentos-soporte/{self.documento.id}/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['result'], 'deleted')
+        mocked_delete.assert_called_once_with('DS-001')
+        self.assertFalse(DocumentoSoporteElectronico.objects.filter(pk=self.documento.id).exists())
 
 
 class FacturaEstadoContratoTests(TestCase):
