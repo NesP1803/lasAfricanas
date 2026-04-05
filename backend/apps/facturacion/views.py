@@ -737,6 +737,10 @@ class ConfiguracionDIANViewSet(viewsets.GenericViewSet):
         return Response(
             {
                 'message': 'Rango activo actualizado correctamente.',
+                'note': (
+                    'El cambio de rango DIAN aplica únicamente a nuevas emisiones. '
+                    'No altera uuid/cufe/number históricos ya emitidos.'
+                ),
                 'range_id': rango.id,
                 'document_code': document_code,
                 'environment': environment,
@@ -786,6 +790,9 @@ class ConfiguracionDIANViewSet(viewsets.GenericViewSet):
         serializer = self.get_serializer(configuracion, data=request.data, partial=False)
         serializer.is_valid(raise_exception=True)
         serializer.save()
+        # El cambio de rango seleccionado actualiza solo la configuración para futuras emisiones.
+        # Los campos locales/visuales (ej. FAC-1 / REM-1) no reemplazan identificadores electrónicos
+        # históricos (number, uuid, cufe) de documentos ya emitidos.
         rango_id = serializer.validated_data.get('rango_facturacion').id
         environment = resolve_factus_environment()
         RangoNumeracionDIAN.objects.filter(environment=environment, document_code='FACTURA_VENTA').update(

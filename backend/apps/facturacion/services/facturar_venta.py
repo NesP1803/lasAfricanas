@@ -53,6 +53,7 @@ LOCAL_VALIDATION_ERROR_CODE = 'ERROR_VALIDACION_LOCAL'
 DOCUMENT_CONCILIATION_ERROR_CODE = 'ERROR_CONCILIACION_DOCUMENTAL'
 MONEY_TOLERANCE = Decimal('0.05')
 MONEY_QUANT = Decimal('0.01')
+FINAL_ACCEPTED_STATUSES = {'ACEPTADA', 'ACEPTADA_CON_OBSERVACIONES'}
 
 
 class FacturaPersistenciaError(Exception):
@@ -745,6 +746,16 @@ def _resolve_reference_code(
     return _generate_unique_reference_code(venta.id, numero)
 
 
+def _has_definitive_electronic_identifiers(factura: FacturaElectronica | None) -> bool:
+    if factura is None:
+        return False
+    return bool(
+        str(factura.uuid or '').strip()
+        and str(factura.cufe or '').strip()
+        and str(factura.number or '').strip()
+    )
+
+
 def _persist_local_validation_error(
     *,
     factura: FacturaElectronica,
@@ -1153,8 +1164,45 @@ def facturar_venta(
             raise FactusValidationError('La venta debe estar en estado COBRADA antes de enviarse a Factus.')
 
         factura_existente = FacturaElectronica.objects.select_for_update().filter(venta=venta).first()
-        if factura_existente and factura_existente.estado_electronico in {'ACEPTADA', 'ACEPTADA_CON_OBSERVACIONES'}:
-            logger.info('facturar_venta.reutiliza_aceptada venta_id=%s factura=%s', venta.id, factura_existente.number)
+        if (
+            factura_existente
+            and factura_existente.estado_electronico in FINAL_ACCEPTED_STATUSES
+            and _has_definitive_electronic_identifiers(factura_existente)
+        ):
+            if venta.factura_electronica_uuid and venta.factura_electronica_uuid != factura_existente.uuid:
+                logger.warning(
+                    'facturar_venta.venta_uuid_historico_preservado venta_id=%s venta_uuid=%s factura_uuid=%s',
+                    venta.id,
+                    venta.factura_electronica_uuid,
+                    factura_existente.uuid,
+                )
+            if venta.factura_electronica_cufe and venta.factura_electronica_cufe != factura_existente.cufe:
+                logger.warning(
+                    'facturar_venta.venta_cufe_historico_preservado venta_id=%s venta_cufe=%s factura_cufe=%s',
+                    venta.id,
+                    venta.factura_electronica_cufe,
+                    factura_existente.cufe,
+                )
+            if not venta.factura_electronica_uuid or not venta.factura_electronica_cufe or not venta.fecha_envio_dian:
+                venta.factura_electronica_uuid = venta.factura_electronica_uuid or (factura_existente.uuid or '')
+                venta.factura_electronica_cufe = venta.factura_electronica_cufe or (factura_existente.cufe or '')
+                venta.fecha_envio_dian = venta.fecha_envio_dian or factura_existente.updated_at
+                venta.save(
+                    update_fields=[
+                        'factura_electronica_uuid',
+                        'factura_electronica_cufe',
+                        'fecha_envio_dian',
+                        'updated_at',
+                    ]
+                )
+            logger.info(
+                'facturar_venta.reutiliza_aceptada_historial_preservado venta_id=%s factura=%s '
+                'uuid=%s cufe=%s range_change_ignored=true',
+                venta.id,
+                factura_existente.number,
+                factura_existente.uuid,
+                factura_existente.cufe,
+            )
             try:
                 if not factura_existente.xml_local_path:
                     download_xml(factura_existente)
@@ -1176,7 +1224,21 @@ def facturar_venta(
                     exc_info=True,
                 )
             return factura_existente
-        if factura_existente and factura_existente.cufe and factura_existente.estado_electronico not in {'ACEPTADA', 'ACEPTADA_CON_OBSERVACIONES'}:
+        if (
+            factura_existente
+            and factura_existente.estado_electronico in FINAL_ACCEPTED_STATUSES
+            and (venta.factura_electronica_uuid or venta.factura_electronica_cufe)
+        ):
+            logger.info(
+                'facturar_venta.reenvio_bloqueado_documento_historico venta_id=%s factura_id=%s '
+                'uuid=%s cufe=%s motivo=documento_aceptado_preservado',
+                venta.id,
+                factura_existente.pk,
+                factura_existente.uuid,
+                factura_existente.cufe,
+            )
+            return factura_existente
+        if factura_existente and factura_existente.cufe and factura_existente.estado_electronico not in FINAL_ACCEPTED_STATUSES:
             raise FactusValidationError(
                 f'La venta {venta.id} ya tiene CUFE persistido ({factura_existente.cufe}) en estado {factura_existente.status}. '
                 'No se permite una nueva asociación automática.'
@@ -1591,9 +1653,27 @@ def facturar_venta(
                 raise FacturaPersistenciaError('Se detectaron campos con overflow antes de guardar la factura.')
             factura.save()
 
-            venta.factura_electronica_uuid = fields.get('uuid') or ''
-            venta.factura_electronica_cufe = fields.get('cufe') or ''
-            venta.fecha_envio_dian = factura.updated_at
+            incoming_uuid = fields.get('uuid') or ''
+            incoming_cufe = fields.get('cufe') or ''
+            if not venta.factura_electronica_uuid:
+                venta.factura_electronica_uuid = incoming_uuid
+            elif incoming_uuid and venta.factura_electronica_uuid != incoming_uuid:
+                logger.warning(
+                    'facturar_venta.no_sobrescribe_venta_uuid_historico venta_id=%s actual=%s incoming=%s',
+                    venta.id,
+                    venta.factura_electronica_uuid,
+                    incoming_uuid,
+                )
+            if not venta.factura_electronica_cufe:
+                venta.factura_electronica_cufe = incoming_cufe
+            elif incoming_cufe and venta.factura_electronica_cufe != incoming_cufe:
+                logger.warning(
+                    'facturar_venta.no_sobrescribe_venta_cufe_historico venta_id=%s actual=%s incoming=%s',
+                    venta.id,
+                    venta.factura_electronica_cufe,
+                    incoming_cufe,
+                )
+            venta.fecha_envio_dian = venta.fecha_envio_dian or factura.updated_at
             venta.save(update_fields=['factura_electronica_uuid', 'factura_electronica_cufe', 'fecha_envio_dian', 'updated_at'])
             logger.info(
                 'facturar_venta.persistida venta_id=%s factura=%s status=%s reference_code=%s',

@@ -29,7 +29,7 @@ from apps.facturacion.services.facturar_venta import (
     facturar_venta,
 )
 from apps.facturacion.services.upload_custom_pdf_to_factus import upload_custom_pdf_to_factus
-from apps.facturacion.services.consecutivo_service import resolve_numbering_range
+from apps.facturacion.services.consecutivo_service import InvoiceSequence, resolve_numbering_range
 from apps.facturacion.services.factus_catalog_lookup import (
     get_municipality_id,
     get_payment_method_code,
@@ -2085,6 +2085,159 @@ class FacturarVentaPersistenciaQrTests(TestCase):
             facturar_venta(self.venta.id, triggered_by=self.user)
         factura = FacturaElectronica.objects.get(venta=self.venta)
         self.assertEqual(factura.estado_electronico, 'ERROR_PERSISTENCIA')
+
+
+class FacturarVentaRangosHistoricosTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(username='hist-range-user', password='1234')
+        self.cliente = Cliente.objects.create(numero_documento='900', nombre='Cliente Hist Rangos', tipo_documento='CC')
+
+    def _crear_venta(self, *, numero: str | None = None, estado: str = 'COBRADA') -> Venta:
+        venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            numero_comprobante=numero,
+            cliente=self.cliente,
+            vendedor=self.user,
+            subtotal=Decimal('100'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('19'),
+            total=Decimal('119'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('119'),
+            cambio=Decimal('0'),
+            estado=estado,
+        )
+        DetalleVenta.objects.create(
+            venta=venta,
+            producto=Producto.objects.create(
+                codigo=f'PR-{venta.id}',
+                nombre='Producto Hist',
+                precio_costo=Decimal('50'),
+                precio_venta=Decimal('100'),
+                precio_venta_minimo=Decimal('90'),
+                stock=Decimal('5'),
+                categoria=Categoria.objects.create(nombre=f'Cat-{venta.id}'),
+                proveedor=Proveedor.objects.create(nombre=f'Prov-{venta.id}'),
+            ),
+            cantidad=1,
+            precio_unitario=Decimal('100'),
+            descuento_unitario=Decimal('0'),
+            iva_porcentaje=Decimal('19'),
+            subtotal=Decimal('100'),
+            total=Decimal('119'),
+        )
+        return venta
+
+    @patch('apps.facturacion.services.facturar_venta.FactusClient.create_and_validate_invoice')
+    def test_venta_aceptada_no_se_reemite_ni_recalcula_identificadores(self, mocked_create):
+        venta = self._crear_venta(numero='FAC-LEGACY-1', estado='FACTURADA')
+        factura = FacturaElectronica.objects.create(
+            venta=venta,
+            status='ACEPTADA',
+            estado_electronico='ACEPTADA',
+            number='SETP-9001',
+            reference_code='REF-HIST-9001',
+            uuid='UUID-HIST-9001',
+            cufe='CUFE-HIST-9001',
+            response_json={'ok': True},
+        )
+        venta.factura_electronica_uuid = factura.uuid
+        venta.factura_electronica_cufe = factura.cufe
+        venta.fecha_envio_dian = timezone.now()
+        venta.save(update_fields=['factura_electronica_uuid', 'factura_electronica_cufe', 'fecha_envio_dian', 'updated_at'])
+
+        result = facturar_venta(venta.id, triggered_by=self.user, force_resend_pending=True)
+
+        venta.refresh_from_db()
+        factura.refresh_from_db()
+        self.assertEqual(result.id, factura.id)
+        self.assertEqual(factura.number, 'SETP-9001')
+        self.assertEqual(factura.reference_code, 'REF-HIST-9001')
+        self.assertEqual(factura.uuid, 'UUID-HIST-9001')
+        self.assertEqual(factura.cufe, 'CUFE-HIST-9001')
+        self.assertEqual(venta.factura_electronica_uuid, 'UUID-HIST-9001')
+        self.assertEqual(venta.factura_electronica_cufe, 'CUFE-HIST-9001')
+        mocked_create.assert_not_called()
+
+    @patch('apps.facturacion.services.facturar_venta.send_invoice_email_via_factus')
+    @patch('apps.facturacion.services.facturar_venta.upload_custom_pdf_to_factus')
+    @patch('apps.facturacion.services.facturar_venta.download_xml')
+    @patch('apps.facturacion.services.facturar_venta.download_pdf')
+    @patch('apps.facturacion.services.facturar_venta.FactusClient.create_and_validate_invoice')
+    @patch('apps.facturacion.services.facturar_venta.build_invoice_payload')
+    @patch('apps.facturacion.services.facturar_venta.get_next_invoice_sequence')
+    @patch('apps.facturacion.services.facturar_venta.resolve_numbering_range')
+    def test_cambio_de_rango_solo_aplica_a_nueva_venta(
+        self,
+        mocked_resolve_range,
+        mocked_next_sequence,
+        mocked_build_payload,
+        mocked_create_validate,
+        _mocked_pdf,
+        _mocked_xml,
+        _mocked_upload_pdf,
+        _mocked_send_email,
+    ):
+        venta_historica = self._crear_venta(numero='FAC-1', estado='FACTURADA')
+        factura_historica = FacturaElectronica.objects.create(
+            venta=venta_historica,
+            status='ACEPTADA',
+            estado_electronico='ACEPTADA',
+            number='SETP-1000',
+            reference_code='REF-SETP-1000',
+            uuid='UUID-SETP-1000',
+            cufe='CUFE-SETP-1000',
+            response_json={'ok': True},
+        )
+        venta_historica.factura_electronica_uuid = factura_historica.uuid
+        venta_historica.factura_electronica_cufe = factura_historica.cufe
+        venta_historica.save(update_fields=['factura_electronica_uuid', 'factura_electronica_cufe', 'updated_at'])
+
+        facturar_venta(venta_historica.id, triggered_by=self.user)
+        mocked_create_validate.assert_not_called()
+
+        venta_nueva = self._crear_venta(numero=None, estado='COBRADA')
+        mocked_resolve_range.return_value = MagicMock(prefijo='SETP', factus_range_id=502)
+        mocked_next_sequence.return_value = InvoiceSequence(number='SETP001001', numbering_range_id=502)
+        mocked_build_payload.return_value = {
+            'numbering_range_id': None,
+            'customer': {'identification': '900', 'names': 'Cliente Hist Rangos', 'identification_document_id': 3},
+            'items': [{'code_reference': f'PR-{venta_nueva.id}', 'quantity': 1, 'tax_rate': 19, 'is_excluded': 0, 'taxable_amount': '100', 'tax_amount': '19', 'tribute_id': 1}],
+            'payment_form': 1,
+            'payment_method_code': 10,
+            'operation_type': 10,
+            'send_email': False,
+        }
+        mocked_create_validate.return_value = {
+            'data': {
+                'bill': {
+                    'status': 'valid',
+                    'number': 'SETP001001',
+                    'reference_code': 'REF-SETP-1001',
+                    'uuid': 'UUID-SETP-1001',
+                    'cufe': 'CUFE-SETP-1001',
+                    'xml_url': 'https://factus.test/xml/SETP001001',
+                    'pdf_url': 'https://factus.test/pdf/SETP001001',
+                }
+            }
+        }
+
+        factura_nueva = facturar_venta(venta_nueva.id, triggered_by=self.user)
+
+        factura_historica.refresh_from_db()
+        venta_historica.refresh_from_db()
+        venta_nueva.refresh_from_db()
+        self.assertEqual(factura_historica.number, 'SETP-1000')
+        self.assertEqual(factura_historica.uuid, 'UUID-SETP-1000')
+        self.assertEqual(factura_historica.cufe, 'CUFE-SETP-1000')
+        self.assertEqual(venta_historica.numero_comprobante, 'FAC-1')
+        self.assertEqual(factura_nueva.number, 'SETP001001')
+        self.assertEqual(factura_nueva.uuid, 'UUID-SETP-1001')
+        self.assertEqual(factura_nueva.cufe, 'CUFE-SETP-1001')
+        self.assertEqual(venta_nueva.numero_comprobante, 'SETP001001')
+        self.assertEqual(mocked_create_validate.call_count, 1)
 
 class NotaCreditoFlujoTests(TestCase):
     def setUp(self):

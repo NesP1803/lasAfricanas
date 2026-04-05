@@ -1,4 +1,11 @@
-"""Servicios para control de consecutivos internos DIAN."""
+"""Servicios para control de consecutivos internos DIAN.
+
+Importante de dominio:
+- Este módulo gestiona exclusivamente la numeración electrónica (Factus/DIAN).
+- NO debe usarse para recalcular/modificar números históricos de documentos ya emitidos.
+- Los consecutivos visibles locales (p. ej. FAC-1 / REM-1 en configuración POS) pertenecen
+  a configuración local y están desacoplados del ``number`` electrónico de Factus.
+"""
 
 from __future__ import annotations
 
@@ -28,6 +35,10 @@ class InvoiceSequence:
 
 
 def resolve_numbering_range(document_code: str = 'FACTURA_VENTA') -> RangoNumeracionDIAN:
+    """Resuelve el rango DIAN activo para una NUEVA emisión electrónica.
+
+    No debe invocarse para relinkear facturas históricas ya emitidas.
+    """
     document_label = DOCUMENT_LABELS.get(document_code, document_code)
     environment = resolve_factus_environment()
     base_queryset = RangoNumeracionDIAN.objects.filter(
@@ -69,7 +80,10 @@ def resolve_numbering_range(document_code: str = 'FACTURA_VENTA') -> RangoNumera
 
 
 def get_next_document_sequence(document_code: str) -> InvoiceSequence:
-    """Obtiene e incrementa el siguiente consecutivo del rango resuelto por documento."""
+    """Obtiene e incrementa consecutivo DIAN solo para documentos NUEVOS.
+
+    Este método nunca debe aplicarse a facturas históricas ya emitidas.
+    """
     with transaction.atomic():
         range_base = resolve_numbering_range(document_code=document_code)
         rango = RangoNumeracionDIAN.objects.select_for_update().get(pk=range_base.pk)
