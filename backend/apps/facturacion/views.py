@@ -1426,6 +1426,68 @@ class DocumentosSoporteViewSet(viewsets.GenericViewSet):
             return DocumentoSoporteCreateSerializer
         return DocumentoSoporteListSerializer
 
+    def _sync_pending_support_document_from_factus(self) -> DocumentoSoporteElectronico | None:
+        try:
+            payload = FactusClient().list_support_documents()
+        except Exception:
+            return None
+        data = payload.get('data', payload) if isinstance(payload, dict) else {}
+        candidates = []
+        if isinstance(data, dict):
+            if isinstance(data.get('data'), list):
+                candidates = data.get('data') or []
+            elif isinstance(data.get('support_documents'), list):
+                candidates = data.get('support_documents') or []
+            elif isinstance(data.get('support_document'), dict):
+                candidates = [data.get('support_document')]
+        elif isinstance(data, list):
+            candidates = data
+        if not candidates:
+            return None
+        candidate = candidates[0] if isinstance(candidates[0], dict) else None
+        if candidate is None:
+            return None
+        number = str(candidate.get('number') or '').strip()
+        if not number:
+            return None
+        detail_payload = payload
+        try:
+            detail_payload = FactusClient().get_support_document(number)
+        except Exception:
+            pass
+        detail_data = detail_payload.get('data', detail_payload) if isinstance(detail_payload, dict) else {}
+        support_document = detail_data.get('support_document', detail_data) if isinstance(detail_data, dict) else {}
+        status_electronic, _status_raw = map_factus_status(detail_payload if isinstance(detail_payload, dict) else payload)
+        documento, _created = DocumentoSoporteElectronico.objects.update_or_create(
+            number=number,
+            defaults={
+                'proveedor_nombre': str(
+                    support_document.get('supplier', {}).get('names')
+                    if isinstance(support_document.get('supplier'), dict)
+                    else ''
+                ).strip()
+                or 'Proveedor pendiente DIAN',
+                'proveedor_documento': str(
+                    support_document.get('supplier', {}).get('identification')
+                    if isinstance(support_document.get('supplier'), dict)
+                    else ''
+                ).strip(),
+                'proveedor_tipo_documento': str(
+                    support_document.get('supplier', {}).get('identification_document')
+                    if isinstance(support_document.get('supplier'), dict)
+                    else ''
+                ).strip()
+                or 'CC',
+                'cufe': str(support_document.get('cufe') or '').strip() or None,
+                'uuid': str(support_document.get('uuid') or '').strip() or None,
+                'status': status_electronic or 'EN_PROCESO',
+                'xml_url': str(support_document.get('xml_url') or '').strip() or None,
+                'pdf_url': str(support_document.get('pdf_url') or '').strip() or None,
+                'response_json': detail_payload if isinstance(detail_payload, dict) else payload,
+            },
+        )
+        return documento
+
     def list(self, request):
         queryset = DocumentoSoporteElectronico.objects.order_by('-created_at')
         documents = [self._auto_sync_if_needed(documento) for documento in queryset]
@@ -1474,11 +1536,17 @@ class DocumentosSoporteViewSet(viewsets.GenericViewSet):
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         except (FactusAPIError, FactusAuthError) as exc:
             if isinstance(exc, FactusAPIError) and int(getattr(exc, 'status_code', 0) or 0) == 409:
+                pending_document = self._sync_pending_support_document_from_factus()
                 return Response(
                     {
                         'detail': str(exc),
                         'result': 'PENDING_DIAN_CONFLICT',
                         'warning': 'Existe un documento soporte en proceso DIAN en Factus. Sincronice y reintente.',
+                        'pending_document': (
+                            DocumentoSoporteListSerializer(pending_document).data
+                            if pending_document
+                            else None
+                        ),
                     },
                     status=status.HTTP_202_ACCEPTED,
                 )
