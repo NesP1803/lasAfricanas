@@ -27,6 +27,13 @@ from .emitir_documento_soporte import emitir_documento_soporte
 from .support_document_adjustment_payload_builder import build_adjustment_payload
 from .emitir_nota_ajuste_documento_soporte import emitir_nota_ajuste_documento_soporte
 from .download_invoice_files import download_pdf, download_xml
+from .factura_assets_service import (
+    decode_base64_file,
+    store_factura_email_zip,
+    store_factura_pdf,
+    store_factura_xml,
+    sync_invoice_assets,
+)
 from .sync_numbering_ranges import sync_numbering_ranges
 from .consecutivo_service import get_next_invoice_number
 from .download_resource_files import DownloadResourceError, download_remote_file, read_local_media_file
@@ -57,6 +64,11 @@ __all__ = [
     'FactusConsultaError',
     'download_xml',
     'download_pdf',
+    'decode_base64_file',
+    'store_factura_pdf',
+    'store_factura_xml',
+    'store_factura_email_zip',
+    'sync_invoice_assets',
     'build_invoice_payload',
     'build_credit_note_payload',
     'emitir_nota_credito',
