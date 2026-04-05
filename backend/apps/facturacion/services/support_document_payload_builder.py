@@ -7,6 +7,8 @@ import logging
 from typing import Any
 import uuid
 
+from django.conf import settings
+
 from apps.facturacion.exceptions import DocumentoSoporteInvalido
 from apps.facturacion.services.consecutivo_service import resolve_numbering_range
 from apps.facturacion.services.factus_catalog_lookup import (
@@ -83,13 +85,26 @@ def build_support_document_payload(data: dict[str, Any]) -> dict[str, Any]:
 
     reference_code = str(data.get('reference_code', '')).strip() or f'DSREF-{uuid.uuid4().hex[:12].upper()}'
 
+    fallback_range_id = int(
+        getattr(
+            settings,
+            'FACTUS_NUMBERING_RANGE_DOCUMENTO_SOPORTE',
+            getattr(settings, 'FACTUS_NUMBERING_RANGE_FACTURA', 1),
+        )
+        or 1
+    )
     try:
         numbering_range = resolve_numbering_range(document_code='DOCUMENTO_SOPORTE')
         numbering_range_id = int(numbering_range.factus_range_id or numbering_range.factus_id or 0)
     except Exception as exc:
-        raise DocumentoSoporteInvalido(str(exc)) from exc
+        logger.warning(
+            'factus_payload.support_document.range_fallback detail=%s fallback_numbering_range_id=%s',
+            str(exc),
+            fallback_range_id,
+        )
+        numbering_range_id = fallback_range_id
     if not numbering_range_id:
-        raise DocumentoSoporteInvalido('El rango activo de documento soporte no tiene factus_range_id válido.')
+        numbering_range_id = fallback_range_id
 
     provider_address = str(data.get('provider_address') or '').strip() or 'NA'
     provider_email = str(data.get('provider_email') or '').strip() or 'no-email@no-email.com'
