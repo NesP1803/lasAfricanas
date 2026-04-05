@@ -30,8 +30,10 @@ import { useNotification } from "../contexts/NotificationContext";
 import {
   MODULE_DEFINITIONS,
   createEmptyModuleAccess,
+  getModuleDefinitions,
   isSectionEnabled,
   normalizeModuleAccess,
+  type ModuleDefinition,
   type ModuleAccessState,
 } from "../store/moduleAccess";
 import FacturacionElectronicaAdmin from "../modules/facturacionConfig/components/FacturacionElectronicaAdmin";
@@ -111,6 +113,8 @@ export default function Configuracion() {
   const [accessUsuario, setAccessUsuario] = useState<UsuarioAdmin | null>(null);
   const [accessSeleccionado, setAccessSeleccionado] =
     useState<ModuleAccessState>(createEmptyModuleAccess());
+  const [accessModuleDefinitions, setAccessModuleDefinitions] =
+    useState<ModuleDefinition[]>(MODULE_DEFINITIONS);
   const [mensajeAccesos, setMensajeAccesos] = useState("");
   const [accessLoading, setAccessLoading] = useState(false);
   const { showNotification } = useNotification();
@@ -525,6 +529,7 @@ export default function Configuracion() {
   const openAccessModal = async (usuario: UsuarioAdmin) => {
     setAccessLoading(true);
     setAccessUsuario(usuario);
+    setAccessModuleDefinitions(getModuleDefinitions(usuario.modulos_permitidos ?? null));
     setAccessSeleccionado(
       normalizeModuleAccess(usuario.modulos_permitidos ?? null)
     );
@@ -534,6 +539,7 @@ export default function Configuracion() {
     try {
       const data = await configuracionAPI.obtenerUsuario(usuario.id);
       setAccessUsuario(data);
+      setAccessModuleDefinitions(getModuleDefinitions(data.modulos_permitidos ?? null));
       setAccessSeleccionado(
         normalizeModuleAccess(data.modulos_permitidos ?? null)
       );
@@ -548,13 +554,14 @@ export default function Configuracion() {
   const closeAccessModal = () => {
     setAccessModalOpen(false);
     setAccessUsuario(null);
+    setAccessModuleDefinitions(MODULE_DEFINITIONS);
     setAccessSeleccionado(createEmptyModuleAccess());
     setMensajeAccesos("");
   };
 
   const toggleAccessModule = (moduleKey: string, enabled: boolean) => {
     setAccessSeleccionado((prev) => {
-      const moduleDef = MODULE_DEFINITIONS.find(
+      const moduleDef = accessModuleDefinitions.find(
         (definition) => definition.key === moduleKey
       );
       if (!moduleDef) {
@@ -1897,7 +1904,7 @@ export default function Configuracion() {
                 Activa o desactiva los módulos disponibles para este usuario.
               </p>
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {MODULE_DEFINITIONS.map((moduleDef) => {
+                {accessModuleDefinitions.map((moduleDef) => {
                   const moduleState = accessSeleccionado[moduleDef.key];
                   const totalSections =
                     moduleDef.sections && moduleDef.sections.length > 0
