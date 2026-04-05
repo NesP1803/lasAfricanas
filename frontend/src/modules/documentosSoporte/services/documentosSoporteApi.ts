@@ -53,17 +53,6 @@ export interface ProveedorSugerencia {
   ciudad?: string;
 }
 
-export interface MercanciaSugerencia {
-  id: number;
-  codigo: string;
-  nombre: string;
-  categoria_nombre?: string;
-  unidad_medida?: string;
-  precio_costo?: string;
-  precio_venta?: string;
-  iva_porcentaje?: string;
-}
-
 export interface CategoriaOption {
   id: number;
   nombre: string;
