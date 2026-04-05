@@ -120,6 +120,14 @@ from .nota_credito_serializer import (
     NotaCreditoListSerializer,
     NotaCreditoPreviewSerializer,
 )
+from .numbering_ranges_serializer import (
+    CreateRangoFactusSerializer,
+    RangoNumeracionDIANSerializer,
+    RemisionNumeracionHistorialSerializer,
+    RemisionNumeracionSerializer,
+    SelectActiveRangeSerializer,
+    UpdateConsecutivoSerializer,
+)
 
 __all__ = [
     'FacturaElectronicaSerializer',
@@ -131,4 +139,10 @@ __all__ = [
     'NotaCreditoPreviewSerializer',
     'DocumentoSoporteCreateSerializer',
     'DocumentoSoporteListSerializer',
+    'RangoNumeracionDIANSerializer',
+    'CreateRangoFactusSerializer',
+    'UpdateConsecutivoSerializer',
+    'SelectActiveRangeSerializer',
+    'RemisionNumeracionSerializer',
+    'RemisionNumeracionHistorialSerializer',
 ]

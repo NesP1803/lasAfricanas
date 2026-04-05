@@ -20,6 +20,30 @@ const inFlightRequests = {
   facturacion: null as Promise<ConfiguracionFacturacion> | null,
   usuarioActual: null as Promise<UsuarioAdmin> | null,
 };
+
+export type FacturacionRango = {
+  id: number;
+  id_factus: number | null;
+  factus_range_id: number | null;
+  environment: 'SANDBOX' | 'PRODUCTION';
+  document_code: string;
+  document_name: string;
+  document_code_label: string;
+  prefijo: string;
+  desde: number;
+  hasta: number;
+  consecutivo_actual: number;
+  resolucion: string;
+  fecha_autorizacion: string | null;
+  fecha_expiracion: string | null;
+  technical_key: string;
+  is_active_remote: boolean;
+  is_expired_remote: boolean;
+  is_associated_to_software: boolean;
+  is_selected_local: boolean;
+  is_near_expiration: boolean;
+  last_synced_at: string | null;
+};
 const buildEmpresaFormData = (
   data: ConfiguracionEmpresa,
   logoFile?: File | null,
@@ -158,6 +182,88 @@ export const configuracionAPI = {
       '/factus/rangos/seleccionar-activo/',
       { range_id: rangeId, document_code: documentCode }
     );
+    return response.data;
+  },
+  listarRangosFacturacion: async (params?: {
+    document_code?: string;
+    prefijo?: string;
+    resolucion?: string;
+  }) => {
+    const response = await apiClient.get<FacturacionRango[]>(
+      '/facturacion/rangos/',
+      { params }
+    );
+    return response.data;
+  },
+  sincronizarRangosFacturacion: async () => {
+    const response = await apiClient.post<{ message: string; count: number }>(
+      '/facturacion/rangos/sync/'
+    );
+    return response.data;
+  },
+  obtenerDetalleRangoFacturacion: async (id: number) => {
+    const response = await apiClient.get(`/facturacion/rangos/${id}/`);
+    return response.data;
+  },
+  crearRangoFacturacion: async (payload: {
+    document: string;
+    prefix: string;
+    current: number;
+    resolution_number?: string;
+    start_date?: string;
+    end_date?: string;
+    technical_key?: string;
+    from_number: number;
+    to_number: number;
+  }) => {
+    const response = await apiClient.post('/facturacion/rangos/', payload);
+    return response.data;
+  },
+  actualizarConsecutivoRango: async (
+    id: number,
+    payload: { current: number; sync_local?: boolean }
+  ) => {
+    const response = await apiClient.patch(
+      `/facturacion/rangos/${id}/consecutivo/`,
+      payload
+    );
+    return response.data;
+  },
+  eliminarRangoFacturacion: async (id: number) => {
+    const response = await apiClient.delete(`/facturacion/rangos/${id}/`);
+    return response.data;
+  },
+  obtenerRangosSoftware: async () => {
+    const response = await apiClient.get('/facturacion/rangos/software/');
+    return response.data;
+  },
+  seleccionarActivoRangoFacturacion: async (id: number, documentCode: string) => {
+    const response = await apiClient.patch(
+      `/facturacion/rangos/${id}/seleccionar-activo/`,
+      { document_code: documentCode }
+    );
+    return response.data;
+  },
+  obtenerNumeracionRemision: async () => {
+    const response = await apiClient.get('/facturacion/remisiones/numeracion/');
+    return response.data;
+  },
+  actualizarNumeracionRemision: async (payload: {
+    prefix: string;
+    current: number;
+    range_from: number;
+    range_to: number;
+    resolution_reference?: string;
+    notes?: string;
+  }) => {
+    const response = await apiClient.patch(
+      '/facturacion/remisiones/numeracion/',
+      payload
+    );
+    return response.data;
+  },
+  obtenerHistorialRemision: async () => {
+    const response = await apiClient.get('/facturacion/remisiones/historial/');
     return response.data;
   },
   obtenerImpuestos: async () => {

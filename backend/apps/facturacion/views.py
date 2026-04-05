@@ -6,6 +6,7 @@ import logging
 from django.conf import settings
 from django.core.mail import send_mail
 from django.http import HttpResponse
+from django.db import transaction
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -22,9 +23,12 @@ from apps.facturacion.models import (
     DocumentoSoporteElectronico,
     FacturaElectronica,
     NotaCreditoElectronica,
+    RemisionNumeracion,
+    RemisionNumeracionHistorial,
     RangoNumeracionDIAN,
 )
 from apps.facturacion.serializers import (
+    CreateRangoFactusSerializer,
     ConfiguracionDIANSerializer,
     DocumentoSoporteCreateSerializer,
     DocumentoSoporteListSerializer,
@@ -32,6 +36,11 @@ from apps.facturacion.serializers import (
     NotaCreditoCreateSerializer,
     NotaCreditoListSerializer,
     NotaCreditoPreviewSerializer,
+    RangoNumeracionDIANSerializer,
+    RemisionNumeracionHistorialSerializer,
+    RemisionNumeracionSerializer,
+    SelectActiveRangeSerializer,
+    UpdateConsecutivoSerializer,
 )
 from apps.facturacion.serializers.factura_pos_serializer import FacturaPOSSerializer
 from apps.facturacion.services import (
@@ -63,6 +72,12 @@ from apps.facturacion.services import (
     get_invoice_email_content,
     send_invoice_email,
     delete_invoice_in_factus,
+    create_range,
+    delete_range,
+    get_range,
+    get_software_ranges,
+    sync_ranges_to_db,
+    update_range_current,
 )
 from apps.facturacion.services.factus_client import FactusClient
 from apps.facturacion.services.factus_environment import resolve_factus_environment
@@ -800,6 +815,168 @@ class ConfiguracionDIANViewSet(viewsets.GenericViewSet):
         )
         RangoNumeracionDIAN.objects.filter(pk=rango_id).update(is_selected_local=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class FacturacionRangosViewSet(viewsets.GenericViewSet):
+    permission_classes = [IsAuthenticated]
+
+    def _base_queryset(self):
+        environment = resolve_factus_environment()
+        return RangoNumeracionDIAN.objects.filter(environment=environment).order_by('-created_at', '-id')
+
+    def list(self, request):
+        queryset = self._base_queryset()
+        document_code = str(request.query_params.get('document_code', '')).strip().upper()
+        if document_code:
+            queryset = queryset.filter(document_code=document_code)
+        prefijo = str(request.query_params.get('prefijo', '')).strip()
+        if prefijo:
+            queryset = queryset.filter(prefijo__icontains=prefijo)
+        resolucion = str(request.query_params.get('resolucion', '')).strip()
+        if resolucion:
+            queryset = queryset.filter(resolucion__icontains=resolucion)
+        serializer = RangoNumeracionDIANSerializer(queryset, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['post'], url_path='sync')
+    def sync(self, request):
+        if not _is_admin(request.user):
+            return Response({'detail': 'No autorizado.'}, status=status.HTTP_403_FORBIDDEN)
+        synced = sync_ranges_to_db()
+        return Response({'message': 'Rangos sincronizados correctamente.', 'count': len(synced)})
+
+    def retrieve(self, request, pk=None):
+        rango = self._base_queryset().filter(pk=pk).first()
+        if not rango:
+            return Response({'detail': 'Rango no encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+        payload = get_range(int(rango.factus_id or rango.factus_range_id or 0))
+        return Response(
+            {
+                'local': RangoNumeracionDIANSerializer(rango).data,
+                'remote': payload,
+            }
+        )
+
+    def create(self, request):
+        if not _is_admin(request.user):
+            return Response({'detail': 'No autorizado.'}, status=status.HTTP_403_FORBIDDEN)
+        serializer = CreateRangoFactusSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        payload = serializer.validated_data
+        created = create_range(payload)
+        sync_ranges_to_db()
+        return Response(created, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['patch'], url_path='consecutivo')
+    def consecutivo(self, request, pk=None):
+        if not _is_admin(request.user):
+            return Response({'detail': 'No autorizado.'}, status=status.HTTP_403_FORBIDDEN)
+        rango = self._base_queryset().filter(pk=pk).first()
+        if not rango:
+            return Response({'detail': 'Rango no encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+        serializer = UpdateConsecutivoSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        new_current = serializer.validated_data['current']
+        if new_current < rango.desde or new_current > rango.hasta:
+            return Response({'detail': 'El consecutivo está fuera del rango permitido.'}, status=status.HTTP_400_BAD_REQUEST)
+        payload = update_range_current(int(rango.factus_id or rango.factus_range_id), new_current)
+        if serializer.validated_data.get('sync_local', True):
+            rango.consecutivo_actual = new_current
+            rango.last_synced_at = timezone.now()
+            rango.save(update_fields=['consecutivo_actual', 'last_synced_at'])
+        return Response({'message': 'Consecutivo actualizado.', 'provider': payload, 'range': RangoNumeracionDIANSerializer(rango).data})
+
+    def destroy(self, request, pk=None):
+        if not _is_admin(request.user):
+            return Response({'detail': 'No autorizado.'}, status=status.HTTP_403_FORBIDDEN)
+        rango = self._base_queryset().filter(pk=pk).first()
+        if not rango:
+            return Response({'detail': 'Rango no encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+        payload = delete_range(int(rango.factus_id or rango.factus_range_id))
+        rango.delete()
+        return Response({'message': 'Rango eliminado en Factus y en local.', 'provider': payload})
+
+    @action(detail=False, methods=['get'], url_path='software')
+    def software(self, request):
+        software_ranges = get_software_ranges()
+        local_by_id = {int(item.factus_id or item.factus_range_id or 0): item for item in self._base_queryset()}
+        comparisons = []
+        for item in software_ranges:
+            factus_id = int(item.get('id') or item.get('numbering_range_id') or 0)
+            local = local_by_id.get(factus_id)
+            comparisons.append(
+                {
+                    'remote': item,
+                    'local_match': RangoNumeracionDIANSerializer(local).data if local else None,
+                    'matches_local': bool(local),
+                    'differences': [] if not local else _compare_software_vs_local(item, local),
+                }
+            )
+        return Response(comparisons)
+
+    @action(detail=True, methods=['patch'], url_path='seleccionar-activo')
+    def seleccionar_activo(self, request, pk=None):
+        if not _is_admin(request.user):
+            return Response({'detail': 'No autorizado.'}, status=status.HTTP_403_FORBIDDEN)
+        serializer = SelectActiveRangeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        document_code = serializer.validated_data['document_code']
+        rango = self._base_queryset().filter(pk=pk, document_code=document_code).first()
+        if not rango:
+            return Response({'detail': 'Rango no encontrado para el tipo documental indicado.'}, status=status.HTTP_404_NOT_FOUND)
+        with transaction.atomic():
+            self._base_queryset().filter(document_code=document_code).update(is_selected_local=False)
+            rango.is_selected_local = True
+            rango.save(update_fields=['is_selected_local'])
+        return Response({'message': 'Rango seleccionado localmente.', 'range': RangoNumeracionDIANSerializer(rango).data})
+
+
+def _compare_software_vs_local(remote: dict, local: RangoNumeracionDIAN) -> list[str]:
+    differences: list[str] = []
+    pairs = [
+        ('prefix', local.prefijo, str(remote.get('prefix') or '')),
+        ('from', local.desde, int(remote.get('from') or local.desde)),
+        ('to', local.hasta, int(remote.get('to') or local.hasta)),
+        ('resolution_number', local.resolucion, str(remote.get('resolution_number') or '')),
+        ('technical_key', local.technical_key, str(remote.get('technical_key') or '')),
+    ]
+    for field, local_value, remote_value in pairs:
+        if local_value != remote_value:
+            differences.append(field)
+    return differences
+
+
+class RemisionesNumeracionViewSet(viewsets.GenericViewSet):
+    permission_classes = [IsAuthenticated]
+
+    @action(detail=False, methods=['get'], url_path='numeracion')
+    def numeracion(self, request):
+        numeracion = RemisionNumeracion.objects.order_by('-updated_at').first()
+        if not numeracion:
+            return Response({})
+        return Response(RemisionNumeracionSerializer(numeracion).data)
+
+    @numeracion.mapping.patch
+    def actualizar_numeracion(self, request):
+        if not _is_admin(request.user):
+            return Response({'detail': 'No autorizado.'}, status=status.HTTP_403_FORBIDDEN)
+        instance = RemisionNumeracion.objects.order_by('-updated_at').first()
+        previous = RemisionNumeracionSerializer(instance).data if instance else {}
+        serializer = RemisionNumeracionSerializer(instance=instance, data=request.data, partial=bool(instance))
+        serializer.is_valid(raise_exception=True)
+        numeracion = serializer.save(updated_by=request.user)
+        RemisionNumeracionHistorial.objects.create(
+            numeracion=numeracion,
+            previous_data=previous,
+            new_data=RemisionNumeracionSerializer(numeracion).data,
+            changed_by=request.user,
+        )
+        return Response(RemisionNumeracionSerializer(numeracion).data)
+
+    @action(detail=False, methods=['get'], url_path='historial')
+    def historial(self, request):
+        queryset = RemisionNumeracionHistorial.objects.select_related('changed_by', 'numeracion')[:100]
+        return Response(RemisionNumeracionHistorialSerializer(queryset, many=True).data)
 
 
 class NotasCreditoViewSet(viewsets.GenericViewSet):

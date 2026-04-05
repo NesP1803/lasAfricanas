@@ -9,6 +9,7 @@ from typing import Any
 from apps.facturacion.models import RangoNumeracionDIAN
 from apps.facturacion.services.factus_client import FactusClient
 from apps.facturacion.services.factus_environment import resolve_factus_environment
+from apps.facturacion.services.numbering_range_admin_service import sync_ranges_to_db
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,11 @@ def _as_date(value: Any) -> date | None:
 
 def sync_numbering_ranges() -> list[RangoNumeracionDIAN]:
     """Sincroniza rangos de numeración desde Factus y retorna los rangos procesados."""
+    return sync_ranges_to_db()
+
+
+def _sync_numbering_ranges_legacy() -> list[RangoNumeracionDIAN]:
+    """Implementación legacy (mantenida temporalmente por compatibilidad)."""
     environment = resolve_factus_environment()
     payload = FactusClient().get_numbering_ranges()
     ranges: list[dict[str, Any]] = []
