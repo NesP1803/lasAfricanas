@@ -27,13 +27,18 @@ export const SYSTEM_MODULES: SystemModule[] = [
   {
     key: "listados",
     label: "Listados",
-    description: "Acceso a clientes, proveedores, empleados y categorías.",
+    description:
+      "Acceso a clientes, proveedores, empleados, categorías y consultas de facturación.",
     sections: [
       { key: "clientes", label: "Clientes" },
       { key: "proveedores", label: "Proveedores" },
       { key: "empleados", label: "Empleados" },
       { key: "categorias", label: "Categorías" },
       { key: "mecanicos", label: "Mecánicos" },
+      { key: "cuentas", label: "Cuentas" },
+      { key: "listados", label: "Facturas y remisiones" },
+      { key: "notas_credito", label: "Notas crédito" },
+      { key: "documentos_soporte", label: "Documentos soporte" },
     ],
   },
   {
