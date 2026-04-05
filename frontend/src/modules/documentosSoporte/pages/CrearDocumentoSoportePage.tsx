@@ -1,5 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
+import axios from 'axios';
 import { useNotification } from '../../../contexts/NotificationContext';
 import DocumentoSoporteForm from '../components/DocumentoSoporteForm';
 import { documentosSoporteApi, type CrearDocumentoSoportePayload } from '../services/documentosSoporteApi';
@@ -12,15 +13,30 @@ export default function CrearDocumentoSoportePage() {
   const handleSubmit = async (payload: CrearDocumentoSoportePayload) => {
     setLoading(true);
     try {
-      await documentosSoporteApi.crearDocumentoSoporte(payload);
+      const response = await documentosSoporteApi.crearDocumentoSoporte(payload);
+      if (response?.result === 'PENDING_DIAN_CONFLICT') {
+        showNotification({
+          message:
+            response.warning ||
+            response.detail ||
+            'Hay un documento soporte pendiente en DIAN. Sincronice y reintente.',
+          type: 'info',
+        });
+        navigate('/listados/documentos-soporte');
+        return;
+      }
       showNotification({
         message: 'Documento soporte emitido correctamente.',
         type: 'success',
       });
       navigate('/listados/documentos-soporte');
-    } catch {
+    } catch (error) {
+      const detail =
+        axios.isAxiosError<{ detail?: string }>(error)
+          ? error.response?.data?.detail
+          : undefined;
       showNotification({
-        message: 'No fue posible emitir el documento soporte.',
+        message: detail || 'No fue posible emitir el documento soporte.',
         type: 'error',
       });
     } finally {
