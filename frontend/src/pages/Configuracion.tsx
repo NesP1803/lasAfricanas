@@ -138,6 +138,9 @@ export default function Configuracion() {
   });
 
   const [mensajeEmpresa, setMensajeEmpresa] = useState("");
+  const empresaFieldClassName =
+    "w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm";
+  const empresaFieldGroupClassName = "space-y-1 text-sm font-medium text-slate-700";
   const [mensajeImpuesto, setMensajeImpuesto] = useState("");
   const [mensajeUsuario, setMensajeUsuario] = useState("");
   const [mensajeNuevoUsuario, setMensajeNuevoUsuario] = useState("");
@@ -891,7 +894,7 @@ export default function Configuracion() {
         />
       )}
       {activeTab === "facturacion" && !facturacion && (
-        <section className="rounded-2xl bg-white p-6 shadow-sm">
+        <section className="rounded-2xl bg-white p-5 shadow-sm">
           <p className="text-sm text-slate-600">
             No se encontró configuración de facturación. Verifica la conexión con
             el backend.
@@ -900,7 +903,7 @@ export default function Configuracion() {
       )}
 
       {activeTab === "impuestos" && (
-        <section className="rounded-2xl bg-white p-6 shadow-sm">
+        <section className="rounded-2xl bg-white p-5 shadow-sm">
           <div className="flex items-start justify-between">
             <div>
               <h3 className="text-lg font-semibold text-slate-900">
@@ -1016,7 +1019,7 @@ export default function Configuracion() {
       )}
 
       {activeTab === "empresa" && (
-        <section className="rounded-2xl bg-white p-6 shadow-sm">
+        <section className="rounded-2xl bg-white p-5 shadow-sm">
           <div className="flex items-start justify-between gap-4">
             <div>
               <h3 className="text-lg font-semibold text-slate-900">
@@ -1042,11 +1045,11 @@ export default function Configuracion() {
             </div>
           )}
 
-          <div className="mt-6 grid gap-4 md:grid-cols-2">
-            <div className="space-y-2 text-sm font-medium text-slate-700 md:col-span-2">
+          <div className="mt-5 grid gap-3 md:grid-cols-2">
+            <div className="space-y-1 text-sm font-medium text-slate-700 md:col-span-2">
               Logo
-              <div className="flex flex-wrap items-center gap-4 rounded-lg border border-slate-200 p-4">
-                <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-base font-semibold text-slate-500">
+              <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 p-3">
+                <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-xl font-semibold text-slate-500">
                   {logoPreview ? (
                     <img
                       src={logoPreview}
@@ -1091,7 +1094,7 @@ export default function Configuracion() {
                 </div>
               </div>
             </div>
-            <label className="space-y-2 text-sm font-medium text-slate-700">
+            <label className={empresaFieldGroupClassName}>
               Tipo de identificación
               <select
                 value={empresa.tipo_identificacion}
@@ -1102,7 +1105,7 @@ export default function Configuracion() {
                       .value as ConfiguracionEmpresa["tipo_identificacion"],
                   }))
                 }
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                className={empresaFieldClassName}
               >
                 <option value="NIT">
                   NÚMERO DE IDENTIFICACIÓN TRIBUTARIA (NIT)
@@ -1112,7 +1115,7 @@ export default function Configuracion() {
               </select>
             </label>
             <div className="grid gap-4 md:grid-cols-3">
-              <label className="space-y-2 text-sm font-medium text-slate-700 md:col-span-2">
+              <label className={`${empresaFieldGroupClassName} md:col-span-2`}>
                 Identificación
                 <input
                   value={empresa.identificacion}
@@ -1122,21 +1125,21 @@ export default function Configuracion() {
                       identificacion: event.target.value,
                     }))
                   }
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  className={empresaFieldClassName}
                 />
               </label>
-              <label className="space-y-2 text-sm font-medium text-slate-700">
+              <label className={empresaFieldGroupClassName}>
                 DV
                 <input
                   value={empresa.dv}
                   onChange={(event) =>
                     setEmpresa((prev) => ({ ...prev, dv: event.target.value }))
                   }
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  className={empresaFieldClassName}
                 />
               </label>
             </div>
-            <label className="space-y-2 text-sm font-medium text-slate-700">
+            <label className={empresaFieldGroupClassName}>
               Tipo de persona
               <select
                 value={empresa.tipo_persona}
@@ -1147,13 +1150,13 @@ export default function Configuracion() {
                       .value as ConfiguracionEmpresa["tipo_persona"],
                   }))
                 }
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                className={empresaFieldClassName}
               >
                 <option value="Persona natural">Persona natural</option>
                 <option value="Persona jurídica">Persona jurídica</option>
               </select>
             </label>
-            <label className="space-y-2 text-sm font-medium text-slate-700">
+            <label className={empresaFieldGroupClassName}>
               Razón social
               <input
                 value={empresa.razon_social}
@@ -1163,10 +1166,10 @@ export default function Configuracion() {
                     razon_social: event.target.value,
                   }))
                 }
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                className={empresaFieldClassName}
               />
             </label>
-            <label className="space-y-2 text-sm font-medium text-slate-700">
+            <label className={empresaFieldGroupClassName}>
               Régimen
               <select
                 value={empresa.regimen}
@@ -1177,7 +1180,7 @@ export default function Configuracion() {
                       .value as ConfiguracionEmpresa["regimen"],
                   }))
                 }
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                className={empresaFieldClassName}
               >
                 <option value="RÉGIMEN COMÚN">RÉGIMEN COMÚN</option>
                 <option value="RÉGIMEN SIMPLIFICADO">
@@ -1185,7 +1188,7 @@ export default function Configuracion() {
                 </option>
               </select>
             </label>
-            <label className="space-y-2 text-sm font-medium text-slate-700">
+            <label className={empresaFieldGroupClassName}>
               Dirección
               <input
                 value={empresa.direccion}
@@ -1195,11 +1198,11 @@ export default function Configuracion() {
                     direccion: event.target.value,
                   }))
                 }
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                className={empresaFieldClassName}
               />
             </label>
-            <div className="grid gap-4 md:grid-cols-2">
-              <label className="space-y-2 text-sm font-medium text-slate-700">
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className={empresaFieldGroupClassName}>
                 Ciudad
                 <input
                   value={empresa.ciudad}
@@ -1209,10 +1212,10 @@ export default function Configuracion() {
                       ciudad: event.target.value,
                     }))
                   }
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  className={empresaFieldClassName}
                 />
               </label>
-              <label className="space-y-2 text-sm font-medium text-slate-700">
+              <label className={empresaFieldGroupClassName}>
                 Municipio
                 <input
                   value={empresa.municipio}
@@ -1222,11 +1225,11 @@ export default function Configuracion() {
                       municipio: event.target.value,
                     }))
                   }
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  className={empresaFieldClassName}
                 />
               </label>
             </div>
-            <label className="space-y-2 text-sm font-medium text-slate-700">
+            <label className={empresaFieldGroupClassName}>
               Teléfono
               <input
                 value={empresa.telefono}
@@ -1236,10 +1239,10 @@ export default function Configuracion() {
                     telefono: event.target.value,
                   }))
                 }
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                className={empresaFieldClassName}
               />
             </label>
-            <label className="space-y-2 text-sm font-medium text-slate-700">
+            <label className={empresaFieldGroupClassName}>
               Sitio web
               <input
                 value={empresa.sitio_web}
@@ -1249,10 +1252,10 @@ export default function Configuracion() {
                     sitio_web: event.target.value,
                   }))
                 }
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                className={empresaFieldClassName}
               />
             </label>
-            <label className="space-y-2 text-sm font-medium text-slate-700">
+            <label className={empresaFieldGroupClassName}>
               Correo
               <input
                 value={empresa.correo}
@@ -1262,7 +1265,7 @@ export default function Configuracion() {
                     correo: event.target.value,
                   }))
                 }
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                className={empresaFieldClassName}
               />
             </label>
           </div>
