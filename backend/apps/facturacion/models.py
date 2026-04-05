@@ -328,6 +328,12 @@ class RangoNumeracionDIAN(models.Model):
         db_index=True,
         verbose_name='ID de rango en Factus',
     )
+    factus_id = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        db_index=True,
+        verbose_name='ID original en Factus',
+    )
     environment = models.CharField(
         max_length=20,
         choices=ENVIRONMENT_CHOICES,
@@ -342,7 +348,14 @@ class RangoNumeracionDIAN(models.Model):
         db_index=True,
         verbose_name='Tipo de documento',
     )
+    document_name = models.CharField(max_length=120, blank=True, default='')
     is_active_remote = models.BooleanField(default=True, db_index=True, verbose_name='Activo remoto en Factus')
+    is_expired_remote = models.BooleanField(default=False, db_index=True, verbose_name='Vencido remoto en Factus')
+    is_associated_to_software = models.BooleanField(
+        default=False,
+        db_index=True,
+        verbose_name='Asociado al software en Factus',
+    )
     is_selected_local = models.BooleanField(
         default=False,
         db_index=True,
@@ -355,7 +368,10 @@ class RangoNumeracionDIAN(models.Model):
     consecutivo_actual = models.IntegerField()
     fecha_autorizacion = models.DateField(null=True)
     fecha_expiracion = models.DateField(null=True)
+    technical_key = models.CharField(max_length=255, blank=True, default='')
     activo = models.BooleanField(default=True)
+    last_synced_at = models.DateTimeField(null=True, blank=True)
+    metadata_json = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -377,6 +393,58 @@ class RangoNumeracionDIAN(models.Model):
 
     def __str__(self) -> str:
         return f'{self.prefijo}: {self.desde}-{self.hasta}'
+
+
+class RemisionNumeracion(models.Model):
+    """Configuración local de numeración para remisiones (no depende de Factus)."""
+
+    prefix = models.CharField(max_length=20, unique=True)
+    current = models.PositiveIntegerField(default=1)
+    range_from = models.PositiveIntegerField(default=1)
+    range_to = models.PositiveIntegerField(default=99999999)
+    resolution_reference = models.CharField(max_length=120, blank=True, default='')
+    notes = models.TextField(blank=True, default='')
+    updated_by = models.ForeignKey(
+        'usuarios.Usuario',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='remisiones_numeracion_actualizadas',
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'facturacion_remisiones_numeracion'
+        verbose_name = 'Numeración de remisiones'
+        verbose_name_plural = 'Numeraciones de remisiones'
+        ordering = ['-updated_at']
+
+
+class RemisionNumeracionHistorial(models.Model):
+    """Historial de cambios de la numeración local de remisiones."""
+
+    numeracion = models.ForeignKey(
+        RemisionNumeracion,
+        on_delete=models.CASCADE,
+        related_name='historial',
+    )
+    previous_data = models.JSONField(default=dict, blank=True)
+    new_data = models.JSONField(default=dict, blank=True)
+    changed_by = models.ForeignKey(
+        'usuarios.Usuario',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='remisiones_numeracion_historial',
+    )
+    changed_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        db_table = 'facturacion_remisiones_numeracion_historial'
+        verbose_name = 'Historial numeración remisiones'
+        verbose_name_plural = 'Historiales numeración remisiones'
+        ordering = ['-changed_at']
 
 
 class ConfiguracionDIAN(models.Model):

@@ -35,6 +35,15 @@ from .pdf_personalizado import generar_pdf_personalizado
 from .upload_custom_pdf_to_factus import send_invoice_email_via_factus, upload_custom_pdf_to_factus
 from .public_invoice_url import resolve_public_invoice_url
 from .invoice_email_delete_service import delete_invoice_in_factus, get_invoice_email_content, send_invoice_email
+from .numbering_range_admin_service import (
+    create_range,
+    delete_range,
+    get_range,
+    get_software_ranges,
+    list_ranges,
+    sync_ranges_to_db,
+    update_range_current,
+)
 
 __all__ = [
     'FactusClient',
@@ -77,4 +86,11 @@ __all__ = [
     'get_invoice_email_content',
     'send_invoice_email',
     'delete_invoice_in_factus',
+    'list_ranges',
+    'get_range',
+    'create_range',
+    'delete_range',
+    'update_range_current',
+    'get_software_ranges',
+    'sync_ranges_to_db',
 ]

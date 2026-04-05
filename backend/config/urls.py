@@ -21,7 +21,12 @@ from django.conf.urls.static import static
 from rest_framework_simplejwt.views import TokenRefreshView
 from apps.usuarios.serializers import CustomTokenObtainPairView
 from .api_router import router
-from apps.facturacion.views import ConfiguracionDIANViewSet, FacturaElectronicaViewSet
+from apps.facturacion.views import (
+    ConfiguracionDIANViewSet,
+    FacturaElectronicaViewSet,
+    FacturacionRangosViewSet,
+    RemisionesNumeracionViewSet,
+)
 from apps.facturacion.views import NotasCreditoViewSet
 
 
@@ -46,6 +51,14 @@ nota_credito_xml = NotasCreditoViewSet.as_view({'get': 'xml_by_id'})
 nota_credito_correo_contenido = NotasCreditoViewSet.as_view({'get': 'correo_contenido'})
 nota_credito_enviar_correo = NotasCreditoViewSet.as_view({'post': 'enviar_correo'})
 nota_credito_eliminar = NotasCreditoViewSet.as_view({'post': 'eliminar'})
+facturacion_rangos_list = FacturacionRangosViewSet.as_view({'get': 'list', 'post': 'create'})
+facturacion_rangos_sync = FacturacionRangosViewSet.as_view({'post': 'sync'})
+facturacion_rangos_detail = FacturacionRangosViewSet.as_view({'get': 'retrieve', 'delete': 'destroy'})
+facturacion_rangos_consecutivo = FacturacionRangosViewSet.as_view({'patch': 'consecutivo'})
+facturacion_rangos_software = FacturacionRangosViewSet.as_view({'get': 'software'})
+facturacion_rangos_select = FacturacionRangosViewSet.as_view({'patch': 'seleccionar_activo'})
+remisiones_numeracion = RemisionesNumeracionViewSet.as_view({'get': 'numeracion', 'patch': 'actualizar_numeracion'})
+remisiones_historial = RemisionesNumeracionViewSet.as_view({'get': 'historial'})
 
 urlpatterns = [
     # Admin de Django
@@ -66,6 +79,14 @@ urlpatterns = [
     path('api/factus/rangos/sincronizar/', configuracion_dian_rangos_sync, name='factus-rangos-sync'),
     path('api/factus/rangos/seleccionar-activo/', configuracion_dian_rangos_select, name='factus-rangos-select'),
     path('api/factus/health/', configuracion_dian_factus_health, name='factus-health'),
+    path('api/facturacion/rangos/', facturacion_rangos_list, name='facturacion-rangos'),
+    path('api/facturacion/rangos/sync/', facturacion_rangos_sync, name='facturacion-rangos-sync'),
+    path('api/facturacion/rangos/software/', facturacion_rangos_software, name='facturacion-rangos-software'),
+    path('api/facturacion/rangos/<int:pk>/', facturacion_rangos_detail, name='facturacion-rangos-detail'),
+    path('api/facturacion/rangos/<int:pk>/consecutivo/', facturacion_rangos_consecutivo, name='facturacion-rangos-consecutivo'),
+    path('api/facturacion/rangos/<int:pk>/seleccionar-activo/', facturacion_rangos_select, name='facturacion-rangos-select'),
+    path('api/facturacion/remisiones/numeracion/', remisiones_numeracion, name='facturacion-remisiones-numeracion'),
+    path('api/facturacion/remisiones/historial/', remisiones_historial, name='facturacion-remisiones-historial'),
     path('api/facturacion/facturas-electronicas/<int:pk>/xml/', factura_electronica_xml, name='factura-electronica-xml'),
     path('api/facturacion/facturas-electronicas/<int:pk>/pdf/', factura_electronica_pdf, name='factura-electronica-pdf'),
     path('api/facturacion/facturas-electronicas/<int:pk>/enviar_correo/', factura_electronica_correo, name='factura-electronica-correo'),

@@ -90,6 +90,22 @@ class FactusClient:
             default='/support-document-adjustment-notes/validate',
         )
         self.numbering_ranges_path = config('FACTUS_NUMBERING_RANGES_PATH', default='/v1/numbering-ranges')
+        self.numbering_ranges_show_path = config(
+            'FACTUS_NUMBERING_RANGES_SHOW_PATH',
+            default='/v1/numbering-ranges/{id}',
+        )
+        self.numbering_ranges_delete_path = config(
+            'FACTUS_NUMBERING_RANGES_DELETE_PATH',
+            default='/v1/numbering-ranges/{id}',
+        )
+        self.numbering_ranges_update_current_path = config(
+            'FACTUS_NUMBERING_RANGES_UPDATE_CURRENT_PATH',
+            default='/v1/numbering-ranges/{id}/update-current',
+        )
+        self.numbering_ranges_software_path = config(
+            'FACTUS_NUMBERING_RANGES_SOFTWARE_PATH',
+            default='/v1/numbering-ranges/software',
+        )
         self.invoice_show_path = config('FACTUS_INVOICE_SHOW_PATH', default='/v1/bills/show/{number}')
         self.invoice_list_path = config('FACTUS_INVOICE_LIST_PATH', default='/v1/bills')
         self.invoice_download_xml_path = config('FACTUS_INVOICE_DOWNLOAD_XML_PATH', default='/v1/bills/download-xml/{number}')
@@ -516,6 +532,25 @@ class FactusClient:
     def get_numbering_ranges(self) -> dict[str, Any]:
         """Consulta los rangos de numeración autorizados en Factus."""
         return self.request('GET', self.numbering_ranges_path)
+
+    def get_numbering_range(self, factus_id: int) -> dict[str, Any]:
+        return self.request('GET', self.numbering_ranges_show_path.format(id=factus_id))
+
+    def create_numbering_range(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self.request('POST', self.numbering_ranges_path, json=payload)
+
+    def delete_numbering_range(self, factus_id: int) -> dict[str, Any]:
+        return self.request('DELETE', self.numbering_ranges_delete_path.format(id=factus_id))
+
+    def update_numbering_range_current(self, *, factus_id: int, current: int) -> dict[str, Any]:
+        return self.request(
+            'PATCH',
+            self.numbering_ranges_update_current_path.format(id=factus_id),
+            json={'current': current},
+        )
+
+    def get_software_numbering_ranges(self) -> dict[str, Any]:
+        return self.request('GET', self.numbering_ranges_software_path)
 
     def health_check(self) -> dict[str, Any]:
         """Smoke test de credenciales/token/acceso a rangos."""

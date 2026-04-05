@@ -35,6 +35,7 @@ import {
   normalizeModuleAccess,
   type ModuleAccessState,
 } from "../store/moduleAccess";
+import FacturacionElectronicaAdmin from "../modules/facturacionConfig/components/FacturacionElectronicaAdmin";
 
 type ConfigTab =
   | "facturacion"
@@ -50,32 +51,6 @@ type PlantillaField =
   | "plantilla_remision_tirilla"
   | "plantilla_nota_credito_carta"
   | "plantilla_nota_credito_tirilla";
-
-type FactusRangeItem = {
-  id: number;
-  factus_range_id: number;
-  environment: "SANDBOX" | "PRODUCTION";
-  document_code: string;
-  document_name: string;
-  prefix: string;
-  from_number: number;
-  to_number: number;
-  current: number;
-  resolution_number: string;
-  technical_key: string;
-  is_active_remote: boolean;
-  is_selected_local: boolean;
-};
-
-const FACTUS_DOCUMENT_OPTIONS = [
-  { code: "FACTURA_VENTA", label: "Factura de venta" },
-  { code: "NOTA_CREDITO", label: "Nota crédito" },
-  { code: "DOCUMENTO_SOPORTE", label: "Documento soporte" },
-  {
-    code: "NOTA_AJUSTE_DOCUMENTO_SOPORTE",
-    label: "Nota de ajuste documento soporte",
-  },
-] as const;
 
 const defaultEmpresa: ConfiguracionEmpresa = {
   id: 1,
@@ -194,18 +169,6 @@ export default function Configuracion() {
 
   const [mensajeEmpresa, setMensajeEmpresa] = useState("");
   const [mensajeFacturacion, setMensajeFacturacion] = useState("");
-  const [mensajeRangos, setMensajeRangos] = useState("");
-  const [factusEnvironment, setFactusEnvironment] =
-    useState<"SANDBOX" | "PRODUCTION">("SANDBOX");
-  const [rangosFactus, setRangosFactus] = useState<FactusRangeItem[]>([]);
-  const [factusDocumentCode, setFactusDocumentCode] = useState<string>(
-    "FACTURA_VENTA"
-  );
-  const [rangoSeleccionadoId, setRangoSeleccionadoId] = useState<number | "">(
-    ""
-  );
-  const [syncingRangos, setSyncingRangos] = useState(false);
-  const [savingRango, setSavingRango] = useState(false);
   const [mensajeImpuesto, setMensajeImpuesto] = useState("");
   const [mensajeUsuario, setMensajeUsuario] = useState("");
   const [mensajeNuevoUsuario, setMensajeNuevoUsuario] = useState("");
@@ -311,21 +274,6 @@ export default function Configuracion() {
         console.error("Error cargando facturación:", error);
       }
 
-      if (isAdmin) {
-        try {
-          const data = await configuracionAPI.obtenerRangosFactus(
-            factusDocumentCode
-          );
-          setFactusEnvironment(data.environment);
-          setRangosFactus(data.ranges);
-          setRangoSeleccionadoId(data.selected_range_id ?? "");
-        } catch (error) {
-          console.error("Error cargando rangos Factus:", error);
-          setRangosFactus([]);
-          setRangoSeleccionadoId("");
-        }
-      }
-
       if (canViewImpuestos) {
         try {
           const data = await configuracionAPI.obtenerImpuestos();
@@ -340,7 +288,7 @@ export default function Configuracion() {
     };
 
     cargarDatos();
-  }, [canViewAuditoria, canViewImpuestos, factusDocumentCode, isAdmin]);
+  }, [canViewAuditoria, canViewImpuestos, isAdmin]);
 
   useEffect(() => {
     if (!canViewAuditoria) {
@@ -522,68 +470,6 @@ export default function Configuracion() {
     } catch (error) {
       console.error("Error actualizando facturación:", error);
       setMensajeFacturacion("No se pudo actualizar la facturación.");
-    }
-  };
-
-  const handleSyncRangosFactus = async () => {
-    if (!isAdmin) return;
-    setSyncingRangos(true);
-    setMensajeRangos("");
-    try {
-      const syncResult = await configuracionAPI.sincronizarRangosFactus();
-      const data = await configuracionAPI.obtenerRangosFactus(factusDocumentCode);
-      setFactusEnvironment(data.environment);
-      setRangosFactus(data.ranges);
-      setRangoSeleccionadoId(data.selected_range_id ?? "");
-      setMensajeRangos(`${syncResult.message} (${syncResult.count})`);
-      showNotification({
-        type: "success",
-        message: `${syncResult.message} (${syncResult.count})`,
-      });
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "No se pudo sincronizar rangos Factus.";
-      setMensajeRangos(message);
-      showNotification({
-        type: "error",
-        message,
-      });
-    } finally {
-      setSyncingRangos(false);
-    }
-  };
-
-  const handleGuardarRangoActivo = async () => {
-    if (!isAdmin || !rangoSeleccionadoId) return;
-    setSavingRango(true);
-    setMensajeRangos("");
-    try {
-      const result = await configuracionAPI.seleccionarRangoFactus(
-        Number(rangoSeleccionadoId),
-        factusDocumentCode
-      );
-      const data = await configuracionAPI.obtenerRangosFactus(factusDocumentCode);
-      setRangosFactus(data.ranges);
-      setRangoSeleccionadoId(data.selected_range_id ?? "");
-      setMensajeRangos(result.message);
-      showNotification({
-        type: "success",
-        message: result.message,
-      });
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "No se pudo guardar el rango activo.";
-      setMensajeRangos(message);
-      showNotification({
-        type: "error",
-        message,
-      });
-    } finally {
-      setSavingRango(false);
     }
   };
 
@@ -1139,108 +1025,7 @@ export default function Configuracion() {
                 </label>
               </div>
 
-              <div className="mt-8 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <h4 className="text-sm font-semibold text-slate-800">
-                      Rangos electrónicos Factus/DIAN
-                    </h4>
-                    <p className="text-xs text-slate-500">
-                      Entorno Factus actual:{" "}
-                      <span className="font-semibold">{factusEnvironment}</span>
-                    </p>
-                  </div>
-                  {isAdmin && (
-                    <button
-                      type="button"
-                      onClick={handleSyncRangosFactus}
-                      disabled={syncingRangos}
-                      className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold uppercase text-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {syncingRangos
-                        ? "Sincronizando..."
-                        : "Sincronizar rangos Factus"}
-                    </button>
-                  )}
-                </div>
-
-                {mensajeRangos && (
-                  <div className="mt-3 rounded border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700">
-                    {mensajeRangos}
-                  </div>
-                )}
-
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  <label className="space-y-2 text-sm font-medium text-slate-700">
-                    Tipo de documento electrónico
-                    <select
-                      value={factusDocumentCode}
-                      onChange={(event) => setFactusDocumentCode(event.target.value)}
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                    >
-                      {FACTUS_DOCUMENT_OPTIONS.map((option) => (
-                        <option key={option.code} value={option.code}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="space-y-2 text-sm font-medium text-slate-700">
-                    Rango activo para el documento
-                    <select
-                      value={rangoSeleccionadoId}
-                      onChange={(event) =>
-                        setRangoSeleccionadoId(
-                          event.target.value ? Number(event.target.value) : ""
-                        )
-                      }
-                      disabled={!isAdmin || rangosFactus.length === 0}
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-100"
-                    >
-                      <option value="">
-                        {rangosFactus.length === 0
-                          ? "Sin rangos sincronizados"
-                          : "Seleccione un rango"}
-                      </option>
-                      {rangosFactus.map((rango) => (
-                        <option key={rango.id} value={rango.id}>
-                          #{rango.factus_range_id} | {rango.prefix} | Res.{" "}
-                          {rango.resolution_number}{" "}
-                          {rango.is_active_remote ? "" : "(inactivo remoto)"}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  {isAdmin && (
-                    <button
-                      type="button"
-                      onClick={handleGuardarRangoActivo}
-                      disabled={!rangoSeleccionadoId || savingRango}
-                      className="h-fit self-end rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold uppercase text-white disabled:cursor-not-allowed disabled:bg-slate-300"
-                    >
-                      {savingRango ? "Guardando..." : "Guardar rango activo"}
-                    </button>
-                  )}
-                </div>
-
-                {rangoSeleccionadoId ? (
-                  <div className="mt-3 text-xs text-slate-600">
-                    {(() => {
-                      const seleccionado = rangosFactus.find(
-                        (item) => item.id === Number(rangoSeleccionadoId)
-                      );
-                      if (!seleccionado) return null;
-                      return (
-                        <p>
-                          Activo: {seleccionado.prefix} | Res.{" "}
-                          {seleccionado.resolution_number} | Rango{" "}
-                          {seleccionado.from_number}-{seleccionado.to_number}
-                        </p>
-                      );
-                    })()}
-                  </div>
-                ) : null}
-              </div>
+              <FacturacionElectronicaAdmin isAdmin={isAdmin} />
             </div>
 
           </div>
