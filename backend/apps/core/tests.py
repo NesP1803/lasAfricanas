@@ -9,7 +9,7 @@ from rest_framework.test import APIClient
 
 from apps.core.services.legacy_excel_importer import Dataset, FileReport, LegacyExcelImporter, to_decimal, to_dt
 from apps.inventario.models import Categoria, Producto
-from apps.core.models import Auditoria
+from apps.core.models import Auditoria, ConfiguracionFacturacion
 from apps.facturacion.models import FacturaElectronica, NotaCreditoElectronica
 from apps.ventas.models import Cliente, Venta
 
@@ -171,3 +171,76 @@ class LegacyExcelImporterNormalizationTests(TestCase):
         self.importer._import_productos(dataset, report)
         p = Producto.objects.get(codigo="P-003")
         self.assertEqual(p.iva_porcentaje, Decimal("19"))
+
+
+class ConfiguracionFacturacionHistoricoTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(username='cfg-historico', password='1234')
+        self.cliente = Cliente.objects.create(numero_documento='CF-1', nombre='Cliente Config Hist')
+        self.venta_factura = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            numero_comprobante='FAC-1',
+            cliente=self.cliente,
+            vendedor=self.user,
+            subtotal=Decimal('100'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('19'),
+            total=Decimal('119'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('119'),
+            cambio=Decimal('0'),
+            estado='FACTURADA',
+            factura_electronica_uuid='UUID-HIST-1',
+            factura_electronica_cufe='CUFE-HIST-1',
+        )
+        self.venta_remision = Venta.objects.create(
+            tipo_comprobante='REMISION',
+            numero_comprobante='REM-1',
+            cliente=self.cliente,
+            vendedor=self.user,
+            subtotal=Decimal('10'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('0'),
+            total=Decimal('10'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('10'),
+            cambio=Decimal('0'),
+            estado='COBRADA',
+        )
+        self.factura_electronica = FacturaElectronica.objects.create(
+            venta=self.venta_factura,
+            status='ACEPTADA',
+            estado_electronico='ACEPTADA',
+            number='SETP99001',
+            reference_code='REF-SETP99001',
+            uuid='UUID-HIST-1',
+            cufe='CUFE-HIST-1',
+            response_json={'ok': True},
+        )
+
+    def test_actualizar_fac_rem_local_solo_afecta_configuracion(self):
+        cfg = ConfiguracionFacturacion.objects.create(
+            prefijo_factura='FAC',
+            numero_factura=1,
+            prefijo_remision='REM',
+            numero_remision=1,
+        )
+        cfg.prefijo_factura = 'FACX'
+        cfg.numero_factura = 200
+        cfg.prefijo_remision = 'RMX'
+        cfg.numero_remision = 900
+        cfg.save(update_fields=['prefijo_factura', 'numero_factura', 'prefijo_remision', 'numero_remision'])
+
+        self.venta_factura.refresh_from_db()
+        self.venta_remision.refresh_from_db()
+        self.factura_electronica.refresh_from_db()
+        self.assertEqual(self.venta_factura.numero_comprobante, 'FAC-1')
+        self.assertEqual(self.venta_remision.numero_comprobante, 'REM-1')
+        self.assertEqual(self.factura_electronica.number, 'SETP99001')
+        self.assertEqual(self.factura_electronica.uuid, 'UUID-HIST-1')
+        self.assertEqual(self.factura_electronica.cufe, 'CUFE-HIST-1')
+        self.assertEqual(self.venta_factura.factura_electronica_uuid, 'UUID-HIST-1')
+        self.assertEqual(self.venta_factura.factura_electronica_cufe, 'CUFE-HIST-1')
