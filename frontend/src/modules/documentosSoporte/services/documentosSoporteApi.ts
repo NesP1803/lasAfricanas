@@ -16,6 +16,8 @@ export interface DocumentoSoporte {
   uuid?: string;
   xml_url?: string;
   pdf_url?: string;
+  reference_code?: string;
+  can_sync?: boolean;
 }
 
 export interface CrearDocumentoSoportePayload {
@@ -52,17 +54,37 @@ export const documentosSoporteApi = {
     return response.data;
   },
 
-  async descargarXML(numero: string) {
-    const response = await apiClient.get<Blob>(`/documentos-soporte/${encodeURIComponent(numero)}/xml/`, {
+  async descargarXML(id: number, numero: string) {
+    const response = await apiClient.get<Blob>(`/documentos-soporte/${id}/xml/`, {
       responseType: 'blob',
     });
     crearArchivoDescargable(response.data, `documento-soporte-${encodeURIComponent(numero)}.xml`);
   },
 
-  async descargarPDF(numero: string) {
-    const response = await apiClient.get<Blob>(`/documentos-soporte/${encodeURIComponent(numero)}/pdf/`, {
+  async descargarPDF(id: number, numero: string) {
+    const response = await apiClient.get<Blob>(`/documentos-soporte/${id}/pdf/`, {
       responseType: 'blob',
     });
     crearArchivoDescargable(response.data, `documento-soporte-${encodeURIComponent(numero)}.pdf`);
+  },
+
+  async getDocumentoSoporte(id: number) {
+    const response = await apiClient.get<DocumentoSoporte>(`/documentos-soporte/${id}/`);
+    return response.data;
+  },
+
+  async sincronizarDocumentoSoporte(id: number) {
+    const response = await apiClient.post<DocumentoSoporte>(`/documentos-soporte/${id}/sincronizar/`);
+    return response.data;
+  },
+
+  async estadoRemotoDocumentoSoporte(id: number) {
+    const response = await apiClient.get(`/documentos-soporte/${id}/estado-remoto/`);
+    return response.data;
+  },
+
+  async eliminarDocumentoSoporte(id: number) {
+    const response = await apiClient.delete(`/documentos-soporte/${id}/`);
+    return response.data;
   },
 };

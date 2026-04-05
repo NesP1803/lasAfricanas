@@ -28,6 +28,7 @@ from apps.facturacion.views import (
     RemisionesNumeracionViewSet,
 )
 from apps.facturacion.views import NotasCreditoViewSet
+from apps.facturacion.views import DocumentosSoporteViewSet
 
 
 configuracion_dian_list = ConfiguracionDIANViewSet.as_view({'get': 'list', 'post': 'create'})
@@ -52,6 +53,12 @@ nota_credito_xml = NotasCreditoViewSet.as_view({'get': 'xml_by_id'})
 nota_credito_correo_contenido = NotasCreditoViewSet.as_view({'get': 'correo_contenido'})
 nota_credito_enviar_correo = NotasCreditoViewSet.as_view({'post': 'enviar_correo'})
 nota_credito_eliminar = NotasCreditoViewSet.as_view({'post': 'eliminar'})
+documento_soporte_detail = DocumentosSoporteViewSet.as_view({'get': 'retrieve', 'delete': 'destroy'})
+documento_soporte_sync = DocumentosSoporteViewSet.as_view({'post': 'sincronizar'})
+documento_soporte_estado_remoto = DocumentosSoporteViewSet.as_view({'get': 'estado_remoto'})
+documento_soporte_pdf = DocumentosSoporteViewSet.as_view({'get': 'pdf_by_id'})
+documento_soporte_xml = DocumentosSoporteViewSet.as_view({'get': 'xml_by_id'})
+documento_soporte_eliminar = DocumentosSoporteViewSet.as_view({'post': 'eliminar'})
 facturacion_rangos_list = FacturacionRangosViewSet.as_view({'get': 'list', 'post': 'create'})
 facturacion_rangos_sync = FacturacionRangosViewSet.as_view({'post': 'sync'})
 facturacion_rangos_detail = FacturacionRangosViewSet.as_view({'get': 'retrieve', 'patch': 'partial_update', 'delete': 'destroy'})
@@ -107,6 +114,12 @@ urlpatterns = [
     path('api/notas-credito/<int:pk>/correo/contenido/', nota_credito_correo_contenido, name='nota-credito-correo-contenido'),
     path('api/notas-credito/<int:pk>/enviar-correo/', nota_credito_enviar_correo, name='nota-credito-enviar-correo'),
     path('api/notas-credito/<int:pk>/eliminar/', nota_credito_eliminar, name='nota-credito-eliminar'),
+    path('api/documentos-soporte/<int:pk>/', documento_soporte_detail, name='documento-soporte-detail'),
+    path('api/documentos-soporte/<int:pk>/sincronizar/', documento_soporte_sync, name='documento-soporte-sync'),
+    path('api/documentos-soporte/<int:pk>/estado-remoto/', documento_soporte_estado_remoto, name='documento-soporte-estado-remoto'),
+    path('api/documentos-soporte/<int:pk>/pdf/', documento_soporte_pdf, name='documento-soporte-pdf'),
+    path('api/documentos-soporte/<int:pk>/xml/', documento_soporte_xml, name='documento-soporte-xml'),
+    path('api/documentos-soporte/<int:pk>/eliminar/', documento_soporte_eliminar, name='documento-soporte-eliminar'),
     
     # API completa
     path('api/', include(router.urls)),
