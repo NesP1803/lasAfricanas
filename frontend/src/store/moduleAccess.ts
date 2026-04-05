@@ -75,8 +75,84 @@ export const MODULE_DEFINITIONS: ModuleDefinition[] = [
   },
 ];
 
-export const createEmptyModuleAccess = (): ModuleAccessState => {
-  return MODULE_DEFINITIONS.reduce<ModuleAccessState>((acc, moduleDef) => {
+const prettifyLabel = (value: string): string =>
+  value
+    .split(/[_-]/)
+    .filter(Boolean)
+    .map((chunk) => chunk.charAt(0).toUpperCase() + chunk.slice(1))
+    .join(" ");
+
+const inferSectionsFromIncoming = (incoming: unknown): ModuleSection[] => {
+  const sectionKeys = new Set<string>();
+
+  if (Array.isArray(incoming)) {
+    incoming.forEach((item) => {
+      if (typeof item === "string" && item.trim()) {
+        sectionKeys.add(item);
+      }
+    });
+  } else if (incoming && typeof incoming === "object") {
+    const record = incoming as Record<string, unknown>;
+    const recordSections = record.sections;
+
+    if (Array.isArray(recordSections)) {
+      recordSections.forEach((item) => {
+        if (typeof item === "string" && item.trim()) {
+          sectionKeys.add(item);
+        }
+      });
+    } else if (recordSections && typeof recordSections === "object") {
+      Object.keys(recordSections).forEach((key) => {
+        if (key.trim()) {
+          sectionKeys.add(key);
+        }
+      });
+    }
+
+    Object.keys(record).forEach((key) => {
+      if (key !== "enabled" && key !== "sections" && key.trim()) {
+        sectionKeys.add(key);
+      }
+    });
+  }
+
+  return Array.from(sectionKeys).map((sectionKey) => ({
+    key: sectionKey,
+    label: prettifyLabel(sectionKey),
+  }));
+};
+
+export const getModuleDefinitions = (
+  access?: ModulosPermitidos | null
+): ModuleDefinition[] => {
+  if (!access) {
+    return MODULE_DEFINITIONS;
+  }
+
+  const knownByKey = new Map(
+    MODULE_DEFINITIONS.map((moduleDef) => [moduleDef.key, moduleDef])
+  );
+  const dynamicDefinitions: ModuleDefinition[] = [];
+
+  Object.entries(access).forEach(([moduleKey, incoming]) => {
+    if (knownByKey.has(moduleKey)) {
+      return;
+    }
+    dynamicDefinitions.push({
+      key: moduleKey,
+      label: prettifyLabel(moduleKey),
+      description: "Módulo agregado dinámicamente.",
+      sections: inferSectionsFromIncoming(incoming),
+    });
+  });
+
+  return [...MODULE_DEFINITIONS, ...dynamicDefinitions];
+};
+
+export const createEmptyModuleAccess = (
+  moduleDefinitions: ModuleDefinition[] = MODULE_DEFINITIONS
+): ModuleAccessState => {
+  return moduleDefinitions.reduce<ModuleAccessState>((acc, moduleDef) => {
     const sections = (moduleDef.sections ?? []).reduce<Record<string, boolean>>(
       (sectionAcc, section) => {
         sectionAcc[section.key] = false;
@@ -112,12 +188,13 @@ export const createFullModuleAccess = (): ModuleAccessState => {
 export const normalizeModuleAccess = (
   access?: ModulosPermitidos | null
 ): ModuleAccessState => {
-  const normalized = createEmptyModuleAccess();
+  const moduleDefinitions = getModuleDefinitions(access);
+  const normalized = createEmptyModuleAccess(moduleDefinitions);
   if (!access) {
     return normalized;
   }
 
-  MODULE_DEFINITIONS.forEach((moduleDef) => {
+  moduleDefinitions.forEach((moduleDef) => {
     const incoming = access[moduleDef.key];
     if (!incoming) {
       return;
