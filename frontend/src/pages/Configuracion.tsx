@@ -21,6 +21,7 @@ import type {
   AuditoriaRegistro,
   AuditoriaRetention,
   ConfiguracionEmpresa,
+  ConfiguracionFacturacion,
   Impuesto,
   UsuarioAdmin,
 } from "../types";
@@ -33,7 +34,9 @@ import {
   normalizeModuleAccess,
   type ModuleAccessState,
 } from "../store/moduleAccess";
+import FacturacionElectronicaAdmin from "../modules/facturacionConfig/components/FacturacionElectronicaAdmin";
 type ConfigTab =
+  | "facturacion"
   | "empresa"
   | "impuestos"
   | "auditoria"
@@ -75,6 +78,9 @@ export default function Configuracion() {
 
   const [activeTab, setActiveTab] = useState<ConfigTab>(initialTab);
   const [empresa, setEmpresa] = useState<ConfiguracionEmpresa>(defaultEmpresa);
+  const [facturacion, setFacturacion] = useState<ConfiguracionFacturacion | null>(
+    null
+  );
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoRemoved, setLogoRemoved] = useState(false);
@@ -162,7 +168,7 @@ export default function Configuracion() {
             section.key !== "usuarios" &&
             isSectionEnabled(moduleAccess, "configuracion", section.key)
         )
-    ).filter((section) => section.key !== "facturacion");
+    );
 
     return visibleSections.map((section) => ({
       id: section.key as ConfigTab,
@@ -236,6 +242,14 @@ export default function Configuracion() {
         } catch (error) {
           console.error("Error cargando impuestos:", error);
         }
+      }
+
+      try {
+        const data = await configuracionAPI.obtenerFacturacion();
+        setFacturacion(data ?? null);
+      } catch (error) {
+        console.error("Error cargando configuración de facturación:", error);
+        setFacturacion(null);
       }
 
     };
@@ -402,6 +416,34 @@ export default function Configuracion() {
       setMensajeEmpresa(
         "No se pudo actualizar la información. Intenta nuevamente."
       );
+    }
+  };
+
+  const handleGuardarFacturacion = async () => {
+    if (!facturacion) {
+      showNotification({
+        message: "No se encontró configuración de facturación para guardar.",
+        type: "error",
+      });
+      return;
+    }
+
+    try {
+      const data = await configuracionAPI.actualizarFacturacion(
+        facturacion.id,
+        facturacion
+      );
+      setFacturacion(data);
+      showNotification({
+        message: "Configuración de facturación actualizada correctamente.",
+        type: "success",
+      });
+    } catch (error) {
+      console.error("Error actualizando facturación:", error);
+      showNotification({
+        message: "No se pudo actualizar la configuración de facturación.",
+        type: "error",
+      });
     }
   };
 
@@ -839,6 +881,23 @@ export default function Configuracion() {
           ))}
         </div>
       </div>
+
+      {activeTab === "facturacion" && facturacion && (
+        <FacturacionElectronicaAdmin
+          isAdmin={isAdmin}
+          facturacion={facturacion}
+          onFacturacionChange={setFacturacion}
+          onSaveFacturacion={handleGuardarFacturacion}
+        />
+      )}
+      {activeTab === "facturacion" && !facturacion && (
+        <section className="rounded-2xl bg-white p-6 shadow-sm">
+          <p className="text-sm text-slate-600">
+            No se encontró configuración de facturación. Verifica la conexión con
+            el backend.
+          </p>
+        </section>
+      )}
 
       {activeTab === "impuestos" && (
         <section className="rounded-2xl bg-white p-6 shadow-sm">
