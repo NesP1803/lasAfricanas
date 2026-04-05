@@ -2920,6 +2920,47 @@ class FactusClientCreditNoteFallbackTests(TestCase):
         self.assertEqual(mocked_request.call_count, 2)
 
 
+class FactusClientSupportDocumentFallbackTests(TestCase):
+    @patch('apps.facturacion.services.factus_client.FactusClient.request')
+    def test_retry_support_document_show_with_show_endpoint_when_route_not_found(self, mocked_request):
+        client = FactusClient()
+        client.support_document_show_path = '/v1/support-documents/{number}'
+        mocked_request.side_effect = [
+            FactusAPIError(
+                "Factus rechazó la factura. Detalle: {'message': 'The route v1/support-documents/DS-001 could not be found.'}",
+                status_code=404,
+                provider_detail="{'message': 'The route v1/support-documents/DS-001 could not be found.'}",
+            ),
+            {'data': {'support_document': {'number': 'DS-001'}}},
+        ]
+
+        payload = client.get_support_document('DS-001')
+
+        self.assertEqual(payload['data']['support_document']['number'], 'DS-001')
+        self.assertEqual(mocked_request.call_count, 2)
+
+    @patch('apps.facturacion.services.factus_client.FactusClient.request')
+    def test_retry_support_document_show_with_show_endpoint_when_method_not_allowed(self, mocked_request):
+        client = FactusClient()
+        client.support_document_show_path = '/v1/support-documents/{number}'
+        mocked_request.side_effect = [
+            FactusAPIError(
+                "Factus rechazó la factura. Detalle: {'status': 'Method Not Allowed', 'message': 'The GET method is not supported for route v1/support-documents/DS-001. Supported methods: DELETE.'}",
+                status_code=405,
+                provider_detail=(
+                    "{'status': 'Method Not Allowed', 'message': 'The GET method is not supported "
+                    "for route v1/support-documents/DS-001. Supported methods: DELETE.'}"
+                ),
+            ),
+            {'data': {'support_document': {'number': 'DS-001'}}},
+        ]
+
+        payload = client.get_support_document('DS-001')
+
+        self.assertEqual(payload['data']['support_document']['number'], 'DS-001')
+        self.assertEqual(mocked_request.call_count, 2)
+
+
 class CreditNoteWorkflowHardeningTests(TestCase):
     def setUp(self):
         User = get_user_model()
