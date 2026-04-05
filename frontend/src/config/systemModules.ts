@@ -27,13 +27,25 @@ export const SYSTEM_MODULES: SystemModule[] = [
   {
     key: "listados",
     label: "Listados",
-    description: "Acceso a clientes, proveedores, empleados y categorías.",
+    description: "Maestros de clientes, proveedores, empleados y mecánicos.",
     sections: [
-      { key: "clientes", label: "Clientes" },
-      { key: "proveedores", label: "Proveedores" },
-      { key: "empleados", label: "Empleados" },
-      { key: "categorias", label: "Categorías" },
-      { key: "mecanicos", label: "Mecánicos" },
+      { key: "clientes", label: "Clientes", path: "/listados?tab=clientes" },
+      { key: "proveedores", label: "Proveedores", path: "/listados?tab=proveedores" },
+      { key: "empleados", label: "Empleados", path: "/listados?tab=empleados" },
+      { key: "mecanicos", label: "Mecánicos", path: "/listados?tab=mecanicos" },
+    ],
+  },
+  {
+    key: "reportes",
+    label: "Reportes",
+    description: "Consultas de cuentas, facturas, remisiones y documentos.",
+    sections: [
+      { key: "cuentas_dia", label: "Cuentas del día" },
+      { key: "detalles_cuentas", label: "Detalles cuentas" },
+      { key: "facturas", label: "Facturas" },
+      { key: "remisiones", label: "Remisiones" },
+      { key: "notas_credito", label: "Notas crédito" },
+      { key: "documentos_soporte", label: "Documentos soporte" },
     ],
   },
   {
@@ -57,12 +69,16 @@ export const SYSTEM_MODULES: SystemModule[] = [
   {
     key: "facturacion",
     label: "Facturación",
-    description: "Venta rápida, cuentas y listados de facturas.",
+    description: "Venta rápida, caja y diligenciamiento de documentos.",
     sections: [
       { key: "venta_rapida", label: "Venta rápida", path: "/ventas" },
       { key: "caja", label: "Caja", path: "/facturacion/caja" },
-      { key: "cuentas", label: "Cuentas" },
-      { key: "listados", label: "Listados" },
+      { key: "nota_credito", label: "Nota crédito", path: "/facturacion/nota-credito" },
+      {
+        key: "documento_soporte",
+        label: "Documento soporte",
+        path: "/facturacion/documento-soporte",
+      },
     ],
   },
 ];
