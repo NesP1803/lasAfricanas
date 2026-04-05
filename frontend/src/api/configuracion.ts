@@ -124,7 +124,7 @@ export const configuracionAPI = {
     sessionCache.facturacion = response.data;
     return response.data;
   },
-  obtenerRangosFactus: async () => {
+  obtenerRangosFactus: async (documentCode = 'FACTURA_VENTA') => {
     const response = await apiClient.get<{
       environment: 'SANDBOX' | 'PRODUCTION';
       document_code: string;
@@ -144,7 +144,7 @@ export const configuracionAPI = {
         is_active_remote: boolean;
         is_selected_local: boolean;
       }>;
-    }>('/factus/rangos/');
+    }>('/factus/rangos/', { params: { document_code: documentCode } });
     return response.data;
   },
   sincronizarRangosFactus: async () => {
@@ -153,10 +153,10 @@ export const configuracionAPI = {
     );
     return response.data;
   },
-  seleccionarRangoFactus: async (rangeId: number) => {
+  seleccionarRangoFactus: async (rangeId: number, documentCode = 'FACTURA_VENTA') => {
     const response = await apiClient.post<{ message: string; range_id: number }>(
       '/factus/rangos/seleccionar-activo/',
-      { range_id: rangeId }
+      { range_id: rangeId, document_code: documentCode }
     );
     return response.data;
   },

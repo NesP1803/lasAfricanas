@@ -36,6 +36,7 @@ from apps.facturacion.services.factus_client import (
     FactusPendingCreditNoteError,
     FactusValidationError,
 )
+from apps.facturacion.services.sync_numbering_ranges import _resolve_document_code
 from apps.facturacion.services.credit_note_workflow import (
     _map_payload_for_factus,
     extract_credit_note_remote_fields,
@@ -1219,11 +1220,19 @@ class ConfiguracionDianRangosEndpointsTests(TestCase):
     def test_admin_puede_seleccionar_rango(self):
         client = APIClient()
         client.force_authenticate(self.admin)
-        response = client.post('/api/configuracion/dian/rangos/select/', {'range_id': self.rango.id}, format='json')
+        response = client.post(
+            '/api/configuracion/dian/rangos/select/',
+            {'range_id': self.rango.id, 'document_code': 'FACTURA_VENTA'},
+            format='json',
+        )
         self.assertEqual(response.status_code, 200)
         self.rango.refresh_from_db()
         self.assertTrue(self.rango.is_selected_local)
-        response_alias = client.post('/api/factus/rangos/seleccionar-activo/', {'range_id': self.rango.id}, format='json')
+        response_alias = client.post(
+            '/api/factus/rangos/seleccionar-activo/',
+            {'range_id': self.rango.id, 'document_code': 'FACTURA_VENTA'},
+            format='json',
+        )
         self.assertEqual(response_alias.status_code, 200)
 
     @patch('apps.facturacion.views.sync_numbering_ranges')
@@ -1237,9 +1246,75 @@ class ConfiguracionDianRangosEndpointsTests(TestCase):
     def test_list_rangos_alias_factus(self):
         client = APIClient()
         client.force_authenticate(self.admin)
-        response = client.get('/api/factus/rangos/')
+        response = client.get('/api/factus/rangos/?document_code=FACTURA_VENTA')
         self.assertEqual(response.status_code, 200)
         self.assertIn('ranges', response.data)
+
+    def test_list_y_select_rangos_por_documento(self):
+        rango_nc = RangoNumeracionDIAN.objects.create(
+            factus_range_id=81,
+            environment='SANDBOX',
+            document_code='NOTA_CREDITO',
+            is_active_remote=True,
+            is_selected_local=False,
+            prefijo='NC',
+            desde=1,
+            hasta=99,
+            resolucion='RES-NC',
+            consecutivo_actual=1,
+            activo=True,
+        )
+        client = APIClient()
+        client.force_authenticate(self.admin)
+        list_response = client.get('/api/configuracion/dian/rangos/?document_code=NOTA_CREDITO')
+        self.assertEqual(list_response.status_code, 200)
+        self.assertEqual(list_response.data['document_code'], 'NOTA_CREDITO')
+        select_response = client.post(
+            '/api/configuracion/dian/rangos/select/',
+            {'range_id': rango_nc.id, 'document_code': 'NOTA_CREDITO'},
+            format='json',
+        )
+        self.assertEqual(select_response.status_code, 200)
+        rango_nc.refresh_from_db()
+        self.assertTrue(rango_nc.is_selected_local)
+
+
+class FactusEnvironmentResolutionTests(TestCase):
+    @override_settings(FACTUS_ENV='sandbox')
+    def test_base_url_sandbox_por_defecto(self):
+        with patch.dict(os.environ, {'FACTUS_API_URL': ''}, clear=False):
+            client = FactusClient()
+        self.assertEqual(client.base_url, 'https://api-sandbox.factus.com.co')
+        self.assertEqual(client.get_effective_environment(), 'SANDBOX')
+
+    @override_settings(FACTUS_ENV='production')
+    def test_base_url_production_por_entorno(self):
+        with patch.dict(os.environ, {'FACTUS_API_URL': ''}, clear=False):
+            client = FactusClient()
+        self.assertEqual(client.base_url, 'https://api.factus.com.co')
+        self.assertEqual(client.get_effective_environment(), 'PRODUCTION')
+
+    @override_settings(FACTUS_ENV='sandbox')
+    def test_base_url_override_con_factus_api_url(self):
+        with patch.dict(os.environ, {'FACTUS_API_URL': 'https://custom.factus.local'}, clear=False):
+            client = FactusClient()
+        self.assertEqual(client.base_url, 'https://custom.factus.local')
+
+
+class NumberingRangeDocumentMappingTests(TestCase):
+    def test_mapea_document_codes_de_factus(self):
+        self.assertEqual(_resolve_document_code({'document': 'Factura'}), 'FACTURA_VENTA')
+        self.assertEqual(_resolve_document_code({'document': 'Invoice'}), 'FACTURA_VENTA')
+        self.assertEqual(_resolve_document_code({'document': 'Bill'}), 'FACTURA_VENTA')
+        self.assertEqual(_resolve_document_code({'document': 'Nota Crédito'}), 'NOTA_CREDITO')
+        self.assertEqual(_resolve_document_code({'document': 'NC'}), 'NOTA_CREDITO')
+        self.assertEqual(_resolve_document_code({'document': 'Documento Soporte'}), 'DOCUMENTO_SOPORTE')
+        self.assertEqual(_resolve_document_code({'document': 'DS'}), 'DOCUMENTO_SOPORTE')
+        self.assertEqual(
+            _resolve_document_code({'document': 'Nota de Ajuste Documento Soporte'}),
+            'NOTA_AJUSTE_DOCUMENTO_SOPORTE',
+        )
+        self.assertEqual(_resolve_document_code({'document': 'NADS'}), 'NOTA_AJUSTE_DOCUMENTO_SOPORTE')
 
 
 class DocumentosSoporteResourceEndpointsTests(TestCase):

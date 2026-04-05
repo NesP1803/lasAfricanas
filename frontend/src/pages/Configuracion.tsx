@@ -67,6 +67,16 @@ type FactusRangeItem = {
   is_selected_local: boolean;
 };
 
+const FACTUS_DOCUMENT_OPTIONS = [
+  { code: "FACTURA_VENTA", label: "Factura de venta" },
+  { code: "NOTA_CREDITO", label: "Nota crédito" },
+  { code: "DOCUMENTO_SOPORTE", label: "Documento soporte" },
+  {
+    code: "NOTA_AJUSTE_DOCUMENTO_SOPORTE",
+    label: "Nota de ajuste documento soporte",
+  },
+] as const;
+
 const defaultEmpresa: ConfiguracionEmpresa = {
   id: 1,
   tipo_identificacion: "NIT",
@@ -188,6 +198,9 @@ export default function Configuracion() {
   const [factusEnvironment, setFactusEnvironment] =
     useState<"SANDBOX" | "PRODUCTION">("SANDBOX");
   const [rangosFactus, setRangosFactus] = useState<FactusRangeItem[]>([]);
+  const [factusDocumentCode, setFactusDocumentCode] = useState<string>(
+    "FACTURA_VENTA"
+  );
   const [rangoSeleccionadoId, setRangoSeleccionadoId] = useState<number | "">(
     ""
   );
@@ -300,7 +313,9 @@ export default function Configuracion() {
 
       if (isAdmin) {
         try {
-          const data = await configuracionAPI.obtenerRangosFactus();
+          const data = await configuracionAPI.obtenerRangosFactus(
+            factusDocumentCode
+          );
           setFactusEnvironment(data.environment);
           setRangosFactus(data.ranges);
           setRangoSeleccionadoId(data.selected_range_id ?? "");
@@ -325,7 +340,7 @@ export default function Configuracion() {
     };
 
     cargarDatos();
-  }, [canViewAuditoria, canViewImpuestos, isAdmin]);
+  }, [canViewAuditoria, canViewImpuestos, factusDocumentCode, isAdmin]);
 
   useEffect(() => {
     if (!canViewAuditoria) {
@@ -516,7 +531,7 @@ export default function Configuracion() {
     setMensajeRangos("");
     try {
       const syncResult = await configuracionAPI.sincronizarRangosFactus();
-      const data = await configuracionAPI.obtenerRangosFactus();
+      const data = await configuracionAPI.obtenerRangosFactus(factusDocumentCode);
       setFactusEnvironment(data.environment);
       setRangosFactus(data.ranges);
       setRangoSeleccionadoId(data.selected_range_id ?? "");
@@ -546,9 +561,10 @@ export default function Configuracion() {
     setMensajeRangos("");
     try {
       const result = await configuracionAPI.seleccionarRangoFactus(
-        Number(rangoSeleccionadoId)
+        Number(rangoSeleccionadoId),
+        factusDocumentCode
       );
-      const data = await configuracionAPI.obtenerRangosFactus();
+      const data = await configuracionAPI.obtenerRangosFactus(factusDocumentCode);
       setRangosFactus(data.ranges);
       setRangoSeleccionadoId(data.selected_range_id ?? "");
       setMensajeRangos(result.message);
@@ -1127,10 +1143,10 @@ export default function Configuracion() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <h4 className="text-sm font-semibold text-slate-800">
-                      Rangos Factus (Factura de venta)
+                      Rangos electrónicos Factus/DIAN
                     </h4>
                     <p className="text-xs text-slate-500">
-                      Entorno actual:{" "}
+                      Entorno Factus actual:{" "}
                       <span className="font-semibold">{factusEnvironment}</span>
                     </p>
                   </div>
@@ -1154,9 +1170,23 @@ export default function Configuracion() {
                   </div>
                 )}
 
-                <div className="mt-4 grid gap-3 md:grid-cols-[2fr,1fr]">
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
                   <label className="space-y-2 text-sm font-medium text-slate-700">
-                    Rango activo para facturar
+                    Tipo de documento electrónico
+                    <select
+                      value={factusDocumentCode}
+                      onChange={(event) => setFactusDocumentCode(event.target.value)}
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    >
+                      {FACTUS_DOCUMENT_OPTIONS.map((option) => (
+                        <option key={option.code} value={option.code}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="space-y-2 text-sm font-medium text-slate-700">
+                    Rango activo para el documento
                     <select
                       value={rangoSeleccionadoId}
                       onChange={(event) =>
