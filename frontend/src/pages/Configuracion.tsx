@@ -909,140 +909,24 @@ export default function Configuracion() {
       </div>
 
       {activeTab === "facturacion" && (
-        <section className="grid gap-6 lg:grid-cols-3">
-          <div className="space-y-6 lg:col-span-2">
-            <div className="rounded-2xl bg-white p-6 shadow-sm">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold text-slate-900">
-                    Numeración para facturas de venta
-                  </h3>
-                  <p className="text-sm text-slate-500">
-                    Esta numeración es local/visual (POS). La numeración electrónica DIAN se toma del rango activo
-                    de Factus sincronizado abajo.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleGuardarFacturacion}
-                  className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-blue-700"
-                >
-                  <Save size={16} /> Guardar
-                </button>
-              </div>
-
-              {mensajeFacturacion && (
-                <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
-                  {mensajeFacturacion}
-                </div>
-              )}
-
-              <div className="mt-6 grid gap-4 md:grid-cols-2">
-                <label className="space-y-2 text-sm font-medium text-slate-700">
-                  Prefijo
-                  <input
-                    value={facturacion.prefijo_factura}
-                    onChange={(event) =>
-                      setFacturacion((prev) => ({
-                        ...prev,
-                        prefijo_factura: event.target.value,
-                      }))
-                    }
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                  />
-                </label>
-                <label className="space-y-2 text-sm font-medium text-slate-700">
-                  Número
-                  <input
-                    type="number"
-                    value={facturacion.numero_factura}
-                    onChange={(event) =>
-                      setFacturacion((prev) => ({
-                        ...prev,
-                        numero_factura: Number(event.target.value),
-                      }))
-                    }
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                  />
-                </label>
-                <label className="space-y-2 text-sm font-medium text-slate-700">
-                  Prefijo remisión
-                  <input
-                    value={facturacion.prefijo_remision}
-                    onChange={(event) =>
-                      setFacturacion((prev) => ({
-                        ...prev,
-                        prefijo_remision: event.target.value,
-                      }))
-                    }
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                  />
-                </label>
-                <label className="space-y-2 text-sm font-medium text-slate-700">
-                  Número remisión
-                  <input
-                    type="number"
-                    value={facturacion.numero_remision}
-                    onChange={(event) =>
-                      setFacturacion((prev) => ({
-                        ...prev,
-                        numero_remision: Number(event.target.value),
-                      }))
-                    }
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                  />
-                </label>
-              </div>
-
-              <div className="mt-6 grid gap-4">
-                <label className="space-y-2 text-sm font-medium text-slate-700">
-                  Resolución
-                  <textarea
-                    value={facturacion.resolucion}
-                    onChange={(event) =>
-                      setFacturacion((prev) => ({
-                        ...prev,
-                        resolucion: event.target.value,
-                      }))
-                    }
-                    rows={4}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                  />
-                </label>
-                <label className="space-y-2 text-sm font-medium text-slate-700">
-                  Notas de la factura de venta
-                  <textarea
-                    value={facturacion.notas_factura}
-                    onChange={(event) =>
-                      setFacturacion((prev) => ({
-                        ...prev,
-                        notas_factura: event.target.value,
-                      }))
-                    }
-                    rows={3}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                  />
-                </label>
-              </div>
-
-              <FacturacionElectronicaAdmin isAdmin={isAdmin} />
-            </div>
-
+        <section className="rounded-2xl bg-white p-6 shadow-sm">
+          <div className="mb-4">
+            <h3 className="text-lg font-semibold text-slate-900">Configuración de facturación</h3>
+            <p className="text-sm text-slate-500">
+              Configuración separada entre numeración local, rangos electrónicos Factus/DIAN y remisiones locales.
+            </p>
           </div>
-
-          <div className="rounded-2xl bg-white p-6 shadow-sm">
-            <h4 className="text-sm font-semibold text-slate-500">
-              Estado actual
-            </h4>
-            <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50 p-4">
-              <p className="text-3xl font-semibold text-slate-900">0</p>
-              <p className="text-sm text-slate-500">Facturas registradas</p>
+          {mensajeFacturacion ? (
+            <div className="mb-3 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+              {mensajeFacturacion}
             </div>
-            <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-700">
-              Este panel tomará los datos reales cuando el backend entregue el
-              conteo de facturas.
-            </div>
-          </div>
+          ) : null}
+          <FacturacionElectronicaAdmin
+            isAdmin={isAdmin}
+            facturacion={facturacion}
+            onFacturacionChange={setFacturacion}
+            onSaveFacturacion={handleGuardarFacturacion}
+          />
         </section>
       )}
 

@@ -9,7 +9,12 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.facturacion.models import RangoNumeracionDIAN
-from apps.facturacion.services.factus_client import FactusClient
+from apps.facturacion.services.factus_client import (
+    FactusAPIError,
+    FactusAuthError,
+    FactusClient,
+    FactusValidationError,
+)
 from apps.facturacion.services.factus_environment import resolve_factus_environment
 
 DOCUMENT_CODE_MAP: dict[str, str] = {
@@ -119,10 +124,24 @@ def get_software_ranges() -> list[dict[str, Any]]:
     return []
 
 
+
+
+def get_software_ranges_resilient() -> dict[str, Any]:
+    try:
+        ranges = get_software_ranges()
+        return {'ranges': ranges, 'degraded': False, 'error': ''}
+    except (FactusAPIError, FactusAuthError, FactusValidationError) as exc:
+        return {
+            'ranges': [],
+            'degraded': True,
+            'error': str(exc),
+        }
+
 def sync_ranges_to_db() -> list[RangoNumeracionDIAN]:
     environment = resolve_factus_environment()
     ranges = list_ranges()
-    software_ranges = get_software_ranges()
+    software_status = get_software_ranges_resilient()
+    software_ranges = software_status['ranges']
     software_ids = {
         int(item.get('id') or item.get('numbering_range_id') or 0)
         for item in software_ranges

@@ -68,8 +68,7 @@ urlpatterns = [
     path('api/auth/login/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     
-    # API completa
-    path('api/', include(router.urls)),
+    # API específica de facturación/configuración (debe ir antes del router para evitar colisiones)
     path('api/configuracion/dian/', configuracion_dian_list, name='configuracion-dian'),
     path('api/configuracion/dian/rangos/', configuracion_dian_rangos, name='configuracion-dian-rangos'),
     path('api/configuracion/dian/rangos/sync/', configuracion_dian_rangos_sync, name='configuracion-dian-rangos-sync'),
@@ -104,6 +103,9 @@ urlpatterns = [
     path('api/notas-credito/<int:pk>/enviar-correo/', nota_credito_enviar_correo, name='nota-credito-enviar-correo'),
     path('api/notas-credito/<int:pk>/eliminar/', nota_credito_eliminar, name='nota-credito-eliminar'),
     
+    # API completa
+    path('api/', include(router.urls)),
+
     # Autenticación de DRF (para browsable API)
     path('api-auth/', include('rest_framework.urls')),
 ]

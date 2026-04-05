@@ -80,7 +80,22 @@ class UpdateConsecutivoSerializer(serializers.Serializer):
 
 
 class SelectActiveRangeSerializer(serializers.Serializer):
+    ELECTRONIC_DOCUMENT_CODES = {
+        'FACTURA_VENTA',
+        'NOTA_CREDITO',
+        'NOTA_DEBITO',
+        'DOCUMENTO_SOPORTE',
+        'NOTA_AJUSTE_DOCUMENTO_SOPORTE',
+    }
+
     document_code = serializers.ChoiceField(choices=RangoNumeracionDIAN.DOCUMENT_CODE_CHOICES)
+
+    def validate_document_code(self, value: str) -> str:
+        if value not in self.ELECTRONIC_DOCUMENT_CODES:
+            raise serializers.ValidationError(
+                'Solo se puede seleccionar numbering_range_id para documentos electrónicos.'
+            )
+        return value
 
 
 class RemisionNumeracionSerializer(serializers.ModelSerializer):

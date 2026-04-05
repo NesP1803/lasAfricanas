@@ -44,6 +44,27 @@ export type FacturacionRango = {
   is_near_expiration: boolean;
   last_synced_at: string | null;
 };
+
+export type SoftwareRangeComparison = {
+  remote: Record<string, unknown>;
+  local_match: FacturacionRango | null;
+  matches_local: boolean;
+  differences: string[];
+};
+
+export type SoftwareRangesResponse = {
+  status: 'ok' | 'degraded';
+  detail: string;
+  items: SoftwareRangeComparison[];
+};
+
+export type FactusHealthResponse = {
+  environment: 'SANDBOX' | 'PRODUCTION';
+  token_ok: boolean;
+  numbering_ranges_ok: boolean;
+  ranges_count: number;
+};
+
 const buildEmpresaFormData = (
   data: ConfiguracionEmpresa,
   logoFile?: File | null,
@@ -234,7 +255,11 @@ export const configuracionAPI = {
     return response.data;
   },
   obtenerRangosSoftware: async () => {
-    const response = await apiClient.get('/facturacion/rangos/software/');
+    const response = await apiClient.get<SoftwareRangesResponse>('/facturacion/rangos/software/');
+    return response.data;
+  },
+  obtenerFactusHealth: async () => {
+    const response = await apiClient.get<FactusHealthResponse>('/factus/health/');
     return response.data;
   },
   seleccionarActivoRangoFacturacion: async (id: number, documentCode: string) => {

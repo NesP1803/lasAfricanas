@@ -3184,3 +3184,54 @@ class CreditNoteEndpointsTests(TestCase):
         response = self.client.post(f'/api/notas-credito/{self.nota.id}/reintentar-conciliacion/', {}, format='json')
         self.assertEqual(response.status_code, 202)
         self.assertIn(response.data['estado_local'], {'PENDIENTE_DIAN', 'CONFLICTO_FACTUS'})
+
+class FacturacionRangosRoutingAndDegradedTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.admin = User.objects.create_user(
+            username='admin-facturacion-rangos',
+            password='1234',
+            tipo_usuario='ADMIN',
+            is_staff=True,
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(self.admin)
+        RangoNumeracionDIAN.objects.create(
+            factus_range_id=17,
+            factus_id=17,
+            environment='SANDBOX',
+            document_code='FACTURA_VENTA',
+            is_active_remote=True,
+            is_selected_local=True,
+            prefijo='SETP',
+            desde=1,
+            hasta=500,
+            resolucion='RES-17',
+            consecutivo_actual=10,
+            activo=True,
+        )
+
+    def test_endpoint_rangos_lista_no_colisiona_con_router_facturacion(self):
+        response = self.client.get('/api/facturacion/rangos/')
+        self.assertEqual(response.status_code, 200)
+        self.assertIsInstance(response.data, list)
+        self.assertGreaterEqual(len(response.data), 1)
+
+    @patch('apps.facturacion.views.get_software_ranges_resilient')
+    def test_endpoint_software_responde_modo_degradado(self, mocked_software):
+        mocked_software.return_value = {
+            'ranges': [],
+            'degraded': True,
+            'error': 'Factus temporalmente no disponible',
+        }
+        response = self.client.get('/api/facturacion/rangos/software/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['status'], 'degraded')
+        self.assertIn('Factus temporalmente no disponible', response.data['detail'])
+        self.assertEqual(response.data['items'], [])
+
+
+class FactusNumberingSoftwareEndpointTests(TestCase):
+    def test_default_endpoint_usa_dian(self):
+        client = FactusClient()
+        self.assertEqual(client.numbering_ranges_software_path, '/v1/numbering-ranges/dian')
