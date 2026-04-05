@@ -199,18 +199,6 @@ export default function Taller() {
   }, [activeTab, selectedMecanicoId]);
 
   useEffect(() => {
-    if (activeTab !== 'ordenes') return;
-    const delay = setTimeout(() => {
-      if (!searchRepuesto) {
-        setRepuestos([]);
-        return;
-      }
-      buscarRepuestos(searchRepuesto);
-    }, 300);
-    return () => clearTimeout(delay);
-  }, [searchRepuesto, activeTab]);
-
-  useEffect(() => {
     if (activeTab !== 'motos') return;
     const delay = setTimeout(() => {
       loadMotosListado();
@@ -365,6 +353,11 @@ export default function Taller() {
       return;
     }
     await buscarRepuestos(searchRepuesto);
+  };
+
+  const abrirBusquedaRepuestos = async () => {
+    await handleBuscarRepuestos();
+    setRepuestoModalOpen(true);
   };
 
   const closeRepuestoModal = () => {
@@ -898,29 +891,29 @@ export default function Taller() {
                     </h2>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 px-3 py-3">
-                    <div className="flex flex-1 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm">
-                      <Search size={14} className="text-slate-400" />
+                    <div className="flex flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm shadow-sm">
+                      <Search size={16} className="text-slate-400" />
                       <input
                         type="text"
                         value={searchRepuesto}
                         onChange={(event) => setSearchRepuesto(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault();
+                            void abrirBusquedaRepuestos();
+                          }
+                        }}
                         placeholder="Ej. Banda freno, 770..."
                         className="flex-1 bg-transparent text-xs text-slate-700 outline-none"
                       />
                     </div>
                     <button
                       type="button"
-                      onClick={() => {
-                        handleBuscarRepuestos();
-                        setRepuestoModalOpen(true);
-                      }}
-                      className="inline-flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-[11px] font-semibold text-blue-700 transition hover:bg-blue-100"
+                      onClick={() => void abrirBusquedaRepuestos()}
+                      className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-blue-700 shadow-sm transition hover:bg-blue-50"
                     >
-                      <Search size={14} />
-                      Buscar
+                      <Search size={18} />
                     </button>
-                    
-                    
                   </div>
                   <div className="border-t border-slate-200 px-3 py-2 text-[11px] text-slate-500">
                     {repuestos.length > 0
