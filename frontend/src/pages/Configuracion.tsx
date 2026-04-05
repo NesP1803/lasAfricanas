@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   CheckCircle2,
@@ -7,7 +7,6 @@ import {
   Lock,
   Plus,
   Save,
-  ShieldCheck,
   Trash2,
   UserCog,
   Users,
@@ -22,7 +21,6 @@ import type {
   AuditoriaRegistro,
   AuditoriaRetention,
   ConfiguracionEmpresa,
-  ConfiguracionFacturacion,
   Impuesto,
   UsuarioAdmin,
 } from "../types";
@@ -35,22 +33,11 @@ import {
   normalizeModuleAccess,
   type ModuleAccessState,
 } from "../store/moduleAccess";
-import FacturacionElectronicaAdmin from "../modules/facturacionConfig/components/FacturacionElectronicaAdmin";
-
 type ConfigTab =
-  | "facturacion"
   | "empresa"
   | "impuestos"
   | "auditoria"
   | "usuarios";
-
-type PlantillaField =
-  | "plantilla_factura_carta"
-  | "plantilla_factura_tirilla"
-  | "plantilla_remision_carta"
-  | "plantilla_remision_tirilla"
-  | "plantilla_nota_credito_carta"
-  | "plantilla_nota_credito_tirilla";
 
 const defaultEmpresa: ConfiguracionEmpresa = {
   id: 1,
@@ -69,24 +56,6 @@ const defaultEmpresa: ConfiguracionEmpresa = {
   logo: null,
 };
 
-const defaultFacturacion: ConfiguracionFacturacion = {
-  id: 1,
-  prefijo_factura: "FAC",
-  numero_factura: 100702,
-  prefijo_remision: "",
-  numero_remision: 154239,
-  resolucion:
-    "Resolución Facturación POS N°. 18764006081459 de 2020/10/22\nRango del 00001 al 50000.",
-  notas_factura:
-    "Para trámite de cambios y garantías, indispensable presentar la factura de venta. Tiene hasta 5 días para trámites. Los productos deben estar en perfecto estado y empaque original.",
-  plantilla_factura_carta: "",
-  plantilla_factura_tirilla: "",
-  plantilla_remision_carta: "",
-  plantilla_remision_tirilla: "",
-  plantilla_nota_credito_carta: "",
-  plantilla_nota_credito_tirilla: "",
-};
-
 const defaultImpuestos: Impuesto[] = [
   { id: -1, nombre: "IVA 0%", porcentaje: 0 },
   { id: -2, nombre: "IVA 19%", porcentaje: 19 },
@@ -99,7 +68,7 @@ export default function Configuracion() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const isAdmin = user?.role?.toUpperCase() === "ADMIN";
-  const defaultTab: ConfigTab = "facturacion";
+  const defaultTab: ConfigTab = "empresa";
   const rawTab = searchParams.get("tab");
   const initialTab =
     (rawTab === "clave" ? "usuarios" : (rawTab as ConfigTab)) || defaultTab;
@@ -109,11 +78,6 @@ export default function Configuracion() {
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoRemoved, setLogoRemoved] = useState(false);
-  const [facturacion, setFacturacion] =
-    useState<ConfiguracionFacturacion>(defaultFacturacion);
-  const [plantillaActiva] =
-    useState<PlantillaField>("plantilla_factura_carta");
-  const editorRef = useRef<HTMLDivElement | null>(null);
   const [impuestos, setImpuestos] = useState<Impuesto[]>(defaultImpuestos);
   const [auditoria, setAuditoria] = useState<AuditoriaRegistro[]>([]);
   const [auditoriaTotal, setAuditoriaTotal] = useState(0);
@@ -168,7 +132,6 @@ export default function Configuracion() {
   });
 
   const [mensajeEmpresa, setMensajeEmpresa] = useState("");
-  const [mensajeFacturacion, setMensajeFacturacion] = useState("");
   const [mensajeImpuesto, setMensajeImpuesto] = useState("");
   const [mensajeUsuario, setMensajeUsuario] = useState("");
   const [mensajeNuevoUsuario, setMensajeNuevoUsuario] = useState("");
@@ -192,21 +155,20 @@ export default function Configuracion() {
     MODULE_DEFINITIONS.find((moduleDef) => moduleDef.key === "configuracion")
       ?.sections ?? [];
   const tabs = useMemo(() => {
-    const visibleSections = isAdmin
+    const visibleSections = (isAdmin
       ? configuracionSections
       : configuracionSections.filter(
           (section) =>
             section.key !== "usuarios" &&
             isSectionEnabled(moduleAccess, "configuracion", section.key)
-        );
+        )
+    ).filter((section) => section.key !== "facturacion");
 
     return visibleSections.map((section) => ({
       id: section.key as ConfigTab,
       label: section.label,
       icon:
-        section.key === "facturacion" ? (
-          <ShieldCheck size={18} />
-        ) : section.key === "empresa" ? (
+        section.key === "empresa" ? (
           <UserCog size={18} />
         ) : section.key === "usuarios" ? (
           <Users size={18} />
@@ -265,15 +227,6 @@ export default function Configuracion() {
         console.error("Error cargando empresa:", error);
       }
 
-      try {
-        const data = await configuracionAPI.obtenerFacturacion();
-        if (data) {
-          setFacturacion(data);
-        }
-      } catch (error) {
-        console.error("Error cargando facturación:", error);
-      }
-
       if (canViewImpuestos) {
         try {
           const data = await configuracionAPI.obtenerImpuestos();
@@ -288,7 +241,7 @@ export default function Configuracion() {
     };
 
     cargarDatos();
-  }, [canViewAuditoria, canViewImpuestos, isAdmin]);
+  }, [canViewImpuestos]);
 
   useEffect(() => {
     if (!canViewAuditoria) {
@@ -422,13 +375,6 @@ export default function Configuracion() {
     };
   }, [logoFile]);
 
-  useEffect(() => {
-    if (!editorRef.current) {
-      return;
-    }
-    editorRef.current.innerHTML = facturacion[plantillaActiva] || "";
-  }, [facturacion, plantillaActiva]);
-
   const onTabChange = (tabId: ConfigTab) => {
     setActiveTab(tabId);
     setSearchParams({ tab: tabId });
@@ -456,20 +402,6 @@ export default function Configuracion() {
       setMensajeEmpresa(
         "No se pudo actualizar la información. Intenta nuevamente."
       );
-    }
-  };
-
-  const handleGuardarFacturacion = async () => {
-    try {
-      const data = await configuracionAPI.actualizarFacturacion(
-        facturacion.id,
-        facturacion
-      );
-      setFacturacion(data);
-      setMensajeFacturacion("Configuración de facturación actualizada.");
-    } catch (error) {
-      console.error("Error actualizando facturación:", error);
-      setMensajeFacturacion("No se pudo actualizar la facturación.");
     }
   };
 
@@ -907,28 +839,6 @@ export default function Configuracion() {
           ))}
         </div>
       </div>
-
-      {activeTab === "facturacion" && (
-        <section className="rounded-2xl bg-white p-6 shadow-sm">
-          <div className="mb-4">
-            <h3 className="text-lg font-semibold text-slate-900">Configuración de facturación</h3>
-            <p className="text-sm text-slate-500">
-              Configuración separada entre numeración local, rangos electrónicos Factus/DIAN y remisiones locales.
-            </p>
-          </div>
-          {mensajeFacturacion ? (
-            <div className="mb-3 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
-              {mensajeFacturacion}
-            </div>
-          ) : null}
-          <FacturacionElectronicaAdmin
-            isAdmin={isAdmin}
-            facturacion={facturacion}
-            onFacturacionChange={setFacturacion}
-            onSaveFacturacion={handleGuardarFacturacion}
-          />
-        </section>
-      )}
 
       {activeTab === "impuestos" && (
         <section className="rounded-2xl bg-white p-6 shadow-sm">
