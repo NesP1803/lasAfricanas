@@ -57,7 +57,7 @@ class NotaCreditoDetalleSerializer(serializers.ModelSerializer):
 
 
 class NotaCreditoListSerializer(serializers.ModelSerializer):
-    numero = serializers.CharField(source='number', read_only=True)
+    numero = serializers.SerializerMethodField()
     factura_asociada = serializers.CharField(source='factura.number', read_only=True)
     fecha = serializers.DateTimeField(source='created_at', read_only=True)
     estado = serializers.CharField(source='estado_local', read_only=True)
@@ -77,6 +77,9 @@ class NotaCreditoListSerializer(serializers.ModelSerializer):
         if obj.estado_local == 'RECHAZADA':
             return 'Documento rechazado electrónicamente.'
         return ''
+
+    def get_numero(self, obj: NotaCreditoElectronica) -> str:
+        return str(obj.number or '').strip()
 
     class Meta:
         model = NotaCreditoElectronica

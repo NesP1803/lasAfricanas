@@ -43,6 +43,8 @@ export default function DetalleNotaCreditoPage() {
 
   if (loading) return <div className="px-6 py-6">Cargando detalle de nota crédito…</div>;
   if (!nota) return <div className="px-6 py-6">No se encontró la nota crédito solicitada.</div>;
+  const numeroNota = nota.numero?.trim() || 'Pendiente de asignación';
+  const fileToken = nota.numero?.trim() || `sin-numero-${nota.id}`;
 
   return (
     <div className="space-y-4 px-6 py-6">
@@ -50,13 +52,13 @@ export default function DetalleNotaCreditoPage() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Notas crédito / Detalle</p>
-            <h2 className="text-2xl font-semibold text-slate-900">Nota crédito {nota.numero}</h2>
+            <h2 className="text-2xl font-semibold text-slate-900">Nota crédito {numeroNota}</h2>
             <p className="text-sm text-slate-500">Factura origen {nota.factura_asociada} · motivo: {nota.motivo}</p>
           </div>
           <div className="flex gap-2">
             <Link to="/listados/notas-credito" className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700">Volver</Link>
-            <button type="button" onClick={() => notasCreditoApi.descargarPDF(nota.id, nota.numero)} className="rounded-md bg-violet-600 px-3 py-2 text-sm font-semibold text-white">PDF</button>
-            <button type="button" onClick={() => notasCreditoApi.descargarXML(nota.id, nota.numero)} className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white">XML</button>
+            <button type="button" onClick={() => notasCreditoApi.descargarPDF(nota.id, fileToken)} className="rounded-md bg-violet-600 px-3 py-2 text-sm font-semibold text-white">PDF</button>
+            <button type="button" onClick={() => notasCreditoApi.descargarXML(nota.id, fileToken)} className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white">XML</button>
             <button type="button" onClick={async () => { await notasCreditoApi.sincronizarNotaCredito(nota.id); await refreshNota(); }} className="rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white">Sincronizar</button>
           </div>
         </div>
@@ -67,7 +69,7 @@ export default function DetalleNotaCreditoPage() {
           <section className="rounded-xl bg-white p-5 shadow">
             <h3 className="text-lg font-semibold text-slate-800">Cabecera y estados</h3>
             <div className="mt-3 grid gap-2 text-sm text-slate-700 sm:grid-cols-2">
-              <p><strong>Número:</strong> {nota.numero}</p>
+              <p><strong>Número:</strong> {numeroNota}</p>
               <p><strong>Factura origen:</strong> {nota.factura_asociada}</p>
               <p><strong>Tipo:</strong> {(nota.tipo_nota || 'PARCIAL').replaceAll('_', ' ')}</p>
               <p><strong>CUFE:</strong> {nota.cufe || 'No disponible'}</p>

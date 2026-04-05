@@ -411,7 +411,25 @@ class FactusClient:
         return self.list_credit_notes(reference_code=reference_code)
 
     def get_credit_note(self, number: str) -> dict[str, Any]:
-        return self.request('GET', self.credit_note_show_path.format(number=number))
+        try:
+            return self.request('GET', self.credit_note_show_path.format(number=number))
+        except FactusAPIError as exc:
+            detail = (exc.provider_detail or '').lower()
+            should_retry_with_show = (
+                exc.status_code == 404
+                and 'route' in detail
+                and '/credit-notes/' in detail
+                and '/show/' not in self.credit_note_show_path
+            )
+            if not should_retry_with_show:
+                raise
+            fallback_path = '/v1/credit-notes/show/{number}'
+            logger.warning(
+                'Factus credit_note_show_path=%s no encontrado; reintentando con endpoint %s',
+                self.credit_note_show_path,
+                fallback_path,
+            )
+            return self.request('GET', fallback_path.format(number=number))
 
     def download_credit_note_pdf(self, number: str) -> bytes:
         payload = self.request('GET', self.credit_note_download_pdf_path.format(number=number))
