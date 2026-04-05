@@ -45,6 +45,11 @@ export default function DetalleNotaCreditoPage() {
   if (!nota) return <div className="px-6 py-6">No se encontró la nota crédito solicitada.</div>;
   const numeroNota = nota.numero?.trim() || 'Pendiente de asignación';
   const fileToken = nota.numero?.trim() || `sin-numero-${nota.id}`;
+  const trazabilidadRango = {
+    numberingRangeId: nota.request_numbering_range_id ?? null,
+    prefix: nota.range_prefix?.trim() || '',
+    resolution: nota.range_resolution?.trim() || '',
+  };
 
   return (
     <div className="space-y-4 px-6 py-6">
@@ -112,6 +117,11 @@ export default function DetalleNotaCreditoPage() {
           <section className="rounded-xl bg-white p-5 shadow">
             <h3 className="text-lg font-semibold text-slate-800">Trazabilidad y observaciones</h3>
             <p className="mt-2 text-sm text-slate-700">Motivo: {nota.motivo}</p>
+            <div className="mt-3 grid gap-2 text-sm text-slate-700 sm:grid-cols-2">
+              <p><strong>Rango usado (Factus ID):</strong> {trazabilidadRango.numberingRangeId ?? 'No disponible'}</p>
+              <p><strong>Prefijo rango:</strong> {trazabilidadRango.prefix || 'No disponible'}</p>
+              <p className="sm:col-span-2"><strong>Resolución rango:</strong> {trazabilidadRango.resolution || 'No disponible'}</p>
+            </div>
             {(nota.codigo_error || nota.mensaje_error) && (
               <details className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
                 <summary className="cursor-pointer font-semibold">Ver detalle técnico</summary>

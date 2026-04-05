@@ -27,6 +27,8 @@ ACTIVE_CREDIT_LOCAL_STATES = {'BORRADOR', 'PENDIENTE_ENVIO', 'PENDIENTE_DIAN', '
 APPLIED_EFFECTS_STATES = {'ACEPTADA'}
 ALLOWED_INVOICE_STATES = {'ACEPTADA', 'ACEPTADA_CON_OBSERVACIONES'}
 CREDIT_NOTE_CUSTOMIZATION_ID = 20
+SYNC_REFERENCE_POLL_ATTEMPTS = 5
+SYNC_REFERENCE_POLL_SLEEP_SECONDS = 0.7
 CREDIT_NOTE_CONCEPT_CODE_MAP = {
     'ANULACION_TOTAL': 1,
     'DEVOLUCION_PARCIAL': 2,
@@ -276,6 +278,14 @@ def _map_payload_for_factus(factura: FacturaElectronica, motivo: str, preview_li
         raise CreditNoteValidationError('El rango activo de nota crédito no tiene factus_range_id válido.')
     concepto = 'ANULACION_TOTAL' if is_total else 'DEVOLUCION_PARCIAL'
     reference_code = _build_reference_code(factura, is_total=is_total)
+    logger.info(
+        'facturacion.nota_credito.payload.range_selected factura_id=%s reference_code=%s numbering_range_id=%s factus_range_id=%s range_prefix=%s',
+        factura.id,
+        reference_code,
+        numbering_range_id,
+        numbering_range.factus_range_id,
+        numbering_range.prefijo,
+    )
     items = []
     for line in preview_lines:
         detalle = DetalleVenta.objects.select_related('producto').get(pk=line['detalle_venta_original_id'], venta=factura.venta)
@@ -473,6 +483,65 @@ def _list_candidates(remote_list: dict[str, Any]) -> list[dict[str, Any]]:
     return []
 
 
+def _poll_remote_credit_note_candidate(
+    *,
+    client: FactusClient,
+    nota: NotaCreditoElectronica,
+    reference_code: str,
+    sync_meta: dict[str, Any],
+    attempts: int = SYNC_REFERENCE_POLL_ATTEMPTS,
+    sleep_seconds: float = SYNC_REFERENCE_POLL_SLEEP_SECONDS,
+) -> tuple[dict[str, Any] | None, str]:
+    bill_number = str(nota.factura.number or '')
+    number = str(nota.number or '')
+    list_error = ''
+    for attempt in range(attempts):
+        logger.info(
+            'facturacion.nota_credito.sync.poll_by_reference_code nota_credito_id=%s reference_code=%s poll_attempt=%s total_attempts=%s',
+            nota.id,
+            reference_code,
+            attempt + 1,
+            attempts,
+        )
+        try:
+            remote_list = client.get_credit_note_by_reference_code(reference_code, bill_number=nota.factura.number or None)
+            candidates = _list_candidates(remote_list)
+            logger.info(
+                'facturacion.nota_credito.sync.poll_response nota_credito_id=%s reference_code=%s poll_attempt=%s candidates=%s raw=%s',
+                nota.id,
+                reference_code,
+                attempt + 1,
+                len(candidates),
+                str(remote_list)[:1200],
+            )
+            sync_meta['last_lookup'] = 'list_credit_notes_polling'
+            sync_meta['last_lookup_result_count'] = len(candidates)
+            remote_candidate = _exact_match_remote_candidate(
+                candidates,
+                reference_code=reference_code,
+                bill_number=bill_number,
+                number=number,
+            )
+            if remote_candidate:
+                return remote_candidate, ''
+        except FactusAPIError as exc:
+            sync_meta['last_poll_error'] = str(exc)
+            logger.warning(
+                'facturacion.nota_credito.sync.poll_error nota_credito_id=%s reference_code=%s poll_attempt=%s status_code=%s error=%s',
+                nota.id,
+                reference_code,
+                attempt + 1,
+                exc.status_code,
+                str(exc),
+            )
+            if exc.status_code not in {404, 409}:
+                list_error = str(exc)
+                break
+        if attempt < attempts - 1:
+            time.sleep(sleep_seconds * (attempt + 1))
+    return None, list_error
+
+
 def _try_reconcile_from_remote(factura: FacturaElectronica, *, reference_code: str, tipo_nota: str, number: str = '') -> NotaCreditoElectronica | None:
     client = FactusClient()
     try:
@@ -539,6 +608,13 @@ def sincronizar_nota_credito(nota_credito_id: int, *, user=None, force_retry: bo
             )
             remote_list = client.get_credit_note_by_reference_code(reference_code, bill_number=nota.factura.number or None)
             candidates = _list_candidates(remote_list)
+            logger.info(
+                'facturacion.nota_credito.sync.lookup_response nota_credito_id=%s reference_code=%s candidates=%s raw=%s',
+                nota.id,
+                reference_code,
+                len(candidates),
+                str(remote_list)[:1200],
+            )
             remote_candidate = _exact_match_remote_candidate(
                 candidates,
                 reference_code=reference_code,
@@ -596,33 +672,17 @@ def sincronizar_nota_credito(nota_credito_id: int, *, user=None, force_retry: bo
                     raise
 
         if reference_code and nota.estado_local in {'PENDIENTE_ENVIO', 'PENDIENTE_DIAN', 'CONFLICTO_FACTUS'}:
-            for attempt in range(2):
-                logger.info(
-                    'facturacion.nota_credito.sync.poll_by_reference_code nota_credito_id=%s reference_code=%s poll_attempt=%s',
-                    nota.id,
-                    reference_code,
-                    attempt + 1,
-                )
-                try:
-                    remote_list = client.get_credit_note_by_reference_code(reference_code, bill_number=nota.factura.number or None)
-                    candidates = _list_candidates(remote_list)
-                    remote_candidate = _exact_match_remote_candidate(
-                        candidates,
-                        reference_code=reference_code,
-                        bill_number=str(nota.factura.number or ''),
-                        number=str(nota.number or ''),
-                    )
-                    if remote_candidate:
-                        sync_meta['last_lookup'] = 'list_credit_notes_polling'
-                        sync_meta['last_lookup_result_count'] = len(candidates)
-                        nota.sync_metadata = sync_meta
-                        return _update_note_from_remote(nota, {'data': {'credit_note': remote_candidate}})
-                except FactusAPIError as exc:
-                    sync_meta['last_poll_error'] = str(exc)
-                    if exc.status_code not in {404, 409}:
-                        list_error = str(exc)
-                        break
-                time.sleep(0.6)
+            remote_candidate, poll_error = _poll_remote_credit_note_candidate(
+                client=client,
+                nota=nota,
+                reference_code=reference_code,
+                sync_meta=sync_meta,
+            )
+            if remote_candidate:
+                nota.sync_metadata = sync_meta
+                return _update_note_from_remote(nota, {'data': {'credit_note': remote_candidate}})
+            if poll_error:
+                list_error = poll_error
 
         if isinstance(nota.request_json, dict) and nota.request_json:
             try:
@@ -636,6 +696,19 @@ def sincronizar_nota_credito(nota_credito_id: int, *, user=None, force_retry: bo
                 nota.sync_metadata = sync_meta
                 return _update_note_from_remote(nota, replay)
             except FactusPendingCreditNoteError:
+                remote_candidate, poll_error = _poll_remote_credit_note_candidate(
+                    client=client,
+                    nota=nota,
+                    reference_code=reference_code,
+                    sync_meta=sync_meta,
+                    attempts=SYNC_REFERENCE_POLL_ATTEMPTS + 1,
+                    sleep_seconds=0.8,
+                )
+                if remote_candidate:
+                    nota.sync_metadata = sync_meta
+                    return _update_note_from_remote(nota, {'data': {'credit_note': remote_candidate}})
+                if poll_error:
+                    list_error = poll_error
                 nota.estado_local = 'PENDIENTE_DIAN'
                 nota.codigo_error = 'FACTUS_409_PENDIENTE_DIAN'
                 nota.last_remote_error = 'Factus reporta nota pendiente por enviar/validar DIAN.'
@@ -746,6 +819,23 @@ def create_credit_note(*, factura: FacturaElectronica, motivo: str, lines: list[
     preview = build_credit_preview(factura, lines, is_total=is_total)
     payload = _map_payload_for_factus(factura, motivo, preview['lineas'], is_total=is_total, client=client)
     reference_code = str(payload.get('reference_code') or '')
+    range_trace = {
+        'numbering_range_id': payload.get('numbering_range_id'),
+        'document_code': 'NOTA_CREDITO',
+        'range_prefix': '',
+        'range_resolution': '',
+    }
+    try:
+        selected_range = resolve_numbering_range(document_code='NOTA_CREDITO')
+        range_trace['range_prefix'] = str(selected_range.prefijo or '')
+        range_trace['range_resolution'] = str(selected_range.resolucion or '')
+    except Exception:
+        logger.warning(
+            'facturacion.nota_credito.create.range_trace_unavailable factura_id=%s reference_code=%s',
+            factura.id,
+            reference_code,
+        )
+    payload['range_trace'] = range_trace
 
     with transaction.atomic():
         nota = NotaCreditoElectronica.objects.create(
@@ -761,7 +851,7 @@ def create_credit_note(*, factura: FacturaElectronica, motivo: str, lines: list[
             request_json=payload,
             response_json={},
             reference_code=reference_code,
-            sync_metadata={},
+            sync_metadata=range_trace,
         )
         for line in preview['lineas']:
             detalle = DetalleVenta.objects.get(pk=line['detalle_venta_original_id'])

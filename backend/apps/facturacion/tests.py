@@ -2800,6 +2800,16 @@ class CreditNoteWorkflowHardeningTests(TestCase):
         self.assertLessEqual(len(payload.get('observation', '')), 250)
         for field in ('credit_note_reason', 'bill_number', 'reference_code_bill', 'reference_cufe'):
             self.assertNotIn(field, payload)
+        self.assertEqual(payload['numbering_range_id'], 502)
+
+    @patch('apps.facturacion.services.credit_note_workflow.FactusClient.create_and_validate_credit_note')
+    def test_create_credit_note_guarda_trazabilidad_de_rango_en_request_y_sync_metadata(self, mocked_create):
+        mocked_create.return_value = {'data': {'credit_note': {'number': 'NC-TRACE-1', 'cufe': 'CUFE-TRACE', 'status': 'accepted'}}}
+        nota, _ = create_credit_note(factura=self.factura, motivo='trace', lines=self._lines(), is_total=False, user=self.user)
+        self.assertEqual(nota.request_json.get('numbering_range_id'), 502)
+        self.assertEqual(nota.request_json.get('range_trace', {}).get('document_code'), 'NOTA_CREDITO')
+        self.assertEqual(nota.sync_metadata.get('range_prefix'), 'NC')
+        self.assertEqual(nota.sync_metadata.get('range_resolution'), '18760000010')
 
     def test_extract_remote_fields_admite_number_bill(self):
         fields = extract_credit_note_remote_fields({'data': {'credit_note': {'number_bill': 'FV-ALT'}}})
@@ -3049,6 +3059,42 @@ class CreditNoteWorkflowHardeningTests(TestCase):
         self.assertEqual(synced.estado_local, 'PENDIENTE_DIAN')
         self.assertEqual(synced.estado_electronico, 'PENDIENTE_DIAN')
 
+    @patch('apps.facturacion.services.credit_note_workflow.FactusClient.list_credit_notes')
+    def test_sync_acepta_cuando_existe_number_ycufe_en_reference_code(self, mocked_list):
+        nota = NotaCreditoElectronica.objects.create(
+            factura=self.factura,
+            venta_origen=self.venta,
+            number='',
+            tipo_nota='PARCIAL',
+            estado_local='PENDIENTE_DIAN',
+            estado_electronico='PENDIENTE_DIAN',
+            status='PENDIENTE_DIAN',
+            request_json={'reference_code': 'NC-FINAL-OK'},
+            response_json={},
+            reference_code='NC-FINAL-OK',
+        )
+        mocked_list.return_value = {
+            'data': {
+                'credit_notes': [
+                    {
+                        'number': 'NC-FINAL-OK-1',
+                        'reference_code': 'NC-FINAL-OK',
+                        'uuid': 'UUID-FINAL-OK',
+                        'cufe': 'CUFE-FINAL-OK',
+                        'pdf_url': 'https://x/pdf',
+                        'xml_url': 'https://x/xml',
+                        'public_url': 'https://x/public',
+                        'status': 'processing',
+                    }
+                ]
+            }
+        }
+        synced = sincronizar_nota_credito(nota.id)
+        self.assertEqual(synced.estado_local, 'ACEPTADA')
+        self.assertEqual(synced.number, 'NC-FINAL-OK-1')
+        self.assertEqual(synced.cufe, 'CUFE-FINAL-OK')
+        self.assertEqual(synced.uuid, 'UUID-FINAL-OK')
+
     def test_map_credit_note_status_prioriza_evidencia_final(self):
         estado, raw = map_credit_note_status(
             {'data': {'credit_note': {'number': 'NC-FINAL', 'cufe': 'CUFE-FINAL', 'uuid': 'UUID-FINAL', 'status': 'processing'}}}
@@ -3073,6 +3119,9 @@ class CreditNoteWorkflowHardeningTests(TestCase):
         self.assertEqual(response.status_code, 200)
         result = next(item for item in response.data if item['id'] == nota.id)
         self.assertEqual(result['numero'], '')
+        self.assertIn('request_numbering_range_id', result)
+        self.assertIn('range_prefix', result)
+        self.assertIn('range_resolution', result)
         self.assertEqual(result['factura_asociada'], self.factura.number)
 
 

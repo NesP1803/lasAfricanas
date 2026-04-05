@@ -64,6 +64,9 @@ class NotaCreditoListSerializer(serializers.ModelSerializer):
     estado_dian = serializers.CharField(source='estado_electronico', read_only=True)
     can_sync = serializers.SerializerMethodField()
     estado_ui_mensaje = serializers.SerializerMethodField()
+    request_numbering_range_id = serializers.SerializerMethodField()
+    range_prefix = serializers.SerializerMethodField()
+    range_resolution = serializers.SerializerMethodField()
     detalles = NotaCreditoDetalleSerializer(many=True, read_only=True)
 
     def get_can_sync(self, obj: NotaCreditoElectronica) -> bool:
@@ -80,6 +83,26 @@ class NotaCreditoListSerializer(serializers.ModelSerializer):
 
     def get_numero(self, obj: NotaCreditoElectronica) -> str:
         return str(obj.number or '').strip()
+
+    def get_request_numbering_range_id(self, obj: NotaCreditoElectronica) -> int | None:
+        request_json = obj.request_json if isinstance(obj.request_json, dict) else {}
+        value = request_json.get('numbering_range_id')
+        try:
+            return int(value) if value not in (None, '') else None
+        except (TypeError, ValueError):
+            return None
+
+    def get_range_prefix(self, obj: NotaCreditoElectronica) -> str:
+        sync_meta = obj.sync_metadata if isinstance(obj.sync_metadata, dict) else {}
+        request_json = obj.request_json if isinstance(obj.request_json, dict) else {}
+        range_trace = request_json.get('range_trace') if isinstance(request_json.get('range_trace'), dict) else {}
+        return str(sync_meta.get('range_prefix') or range_trace.get('range_prefix') or '').strip()
+
+    def get_range_resolution(self, obj: NotaCreditoElectronica) -> str:
+        sync_meta = obj.sync_metadata if isinstance(obj.sync_metadata, dict) else {}
+        request_json = obj.request_json if isinstance(obj.request_json, dict) else {}
+        range_trace = request_json.get('range_trace') if isinstance(request_json.get('range_trace'), dict) else {}
+        return str(sync_meta.get('range_resolution') or range_trace.get('range_resolution') or '').strip()
 
     class Meta:
         model = NotaCreditoElectronica
@@ -112,6 +135,9 @@ class NotaCreditoListSerializer(serializers.ModelSerializer):
             'last_remote_error',
             'remote_identifier',
             'sync_metadata',
+            'request_numbering_range_id',
+            'range_prefix',
+            'range_resolution',
             'can_sync',
             'estado_ui_mensaje',
             'detalles',
