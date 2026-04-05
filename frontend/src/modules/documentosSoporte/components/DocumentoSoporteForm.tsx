@@ -278,6 +278,79 @@ export default function DocumentoSoporteForm({ onSubmit, loading }: DocumentoSop
         </label>
 
         <label className="flex flex-col gap-1 text-sm text-slate-700 md:col-span-2">
+          Artículo / Mercancía
+          <input
+            value={mercanciaBusqueda}
+            onChange={(event) => void handleMercanciaChange(event.target.value)}
+            onFocus={() => setMostrarSugerenciasMercancias(true)}
+            onBlur={() => window.setTimeout(() => setMostrarSugerenciasMercancias(false), 150)}
+            className="rounded-md border border-slate-300 px-3 py-2 outline-none ring-blue-200 focus:ring"
+            placeholder="Buscar en Artículos - Mercancías..."
+          />
+          {mostrarSugerenciasMercancias && (
+            <div className="z-20 mt-1 max-h-56 overflow-y-auto rounded-md border border-slate-200 bg-white shadow">
+              {buscandoMercancia ? (
+                <div className="px-3 py-2 text-xs text-slate-500">Buscando mercancías...</div>
+              ) : mercanciasSugeridas.length === 0 ? (
+                <div className="px-3 py-2 text-xs text-slate-500">Sin coincidencias.</div>
+              ) : (
+                mercanciasSugeridas.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onMouseDown={() => handleMercanciaSelect(item)}
+                    className="block w-full px-3 py-2 text-left text-xs hover:bg-slate-50"
+                  >
+                    <div className="font-semibold text-slate-700">{item.codigo} - {item.nombre}</div>
+                    <div className="text-slate-500">Costo: {item.precio_costo ?? '0'}</div>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </label>
+
+        <label className="flex flex-col gap-1 text-sm text-slate-700">
+          Código referencia
+          <input
+            value={codigoReferencia}
+            onChange={(event) => setCodigoReferencia(event.target.value)}
+            className="rounded-md border border-slate-300 px-3 py-2 outline-none ring-blue-200 focus:ring"
+            required
+          />
+        </label>
+
+        <label className="flex flex-col gap-1 text-sm text-slate-700">
+          Categoría
+          <input
+            value={categoriaMercancia}
+            onChange={(event) => setCategoriaMercancia(event.target.value)}
+            className="rounded-md border border-slate-300 px-3 py-2 outline-none ring-blue-200 focus:ring"
+            placeholder="Categoría del artículo"
+          />
+        </label>
+
+        <label className="flex flex-col gap-1 text-sm text-slate-700">
+          U/M
+          <input
+            value={unidadMedida}
+            onChange={(event) => setUnidadMedida(event.target.value)}
+            className="rounded-md border border-slate-300 px-3 py-2 outline-none ring-blue-200 focus:ring"
+            placeholder="Unidad de medida"
+          />
+        </label>
+
+        <label className="flex flex-col gap-1 text-sm text-slate-700">
+          IVA (%)
+          <input
+            value={ivaMercancia}
+            onChange={(event) => setIvaMercancia(event.target.value)}
+            className="rounded-md border border-slate-300 px-3 py-2 outline-none ring-blue-200 focus:ring"
+            placeholder="IVA del artículo"
+          />
+        </label>
+
+        <label className="flex flex-col gap-1 text-sm text-slate-700 md:col-span-2">
           Descripción
           <textarea
             value={descripcion}
