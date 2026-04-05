@@ -96,6 +96,8 @@ const extractStatusCode = (error: unknown): number | null => {
   return null;
 };
 
+const roundMoney = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+
 export default function CrearNotaCreditoPage() {
   const navigate = useNavigate();
   const { showNotification } = useNotification();
@@ -251,20 +253,32 @@ export default function CrearNotaCreditoPage() {
             .filter((linea) => linea.disponible > 0)
             .map((linea) => ({ ...linea, cantidadAcreditar: linea.disponible }))
         : selectedLines;
-    const subtotal = workingLines.reduce(
-      (acc, linea) => acc + linea.cantidadAcreditar * linea.precioUnitario,
-      0,
-    );
-    const impuestos = workingLines.reduce(
-      (acc, linea) =>
-        acc + linea.cantidadAcreditar * linea.precioUnitario * (linea.impuestoPorcentaje / 100),
+    const subtotal = workingLines.reduce((acc, linea) => {
+      const totalLineaBruto = roundMoney(linea.cantidadAcreditar * linea.precioUnitario);
+      const ivaRate = Math.max(0, linea.impuestoPorcentaje);
+      if (ivaRate <= 0) return acc + totalLineaBruto;
+      const divisor = 1 + ivaRate / 100;
+      const base = roundMoney(totalLineaBruto / divisor);
+      return acc + base;
+    }, 0);
+    const impuestos = workingLines.reduce((acc, linea) => {
+      const totalLineaBruto = roundMoney(linea.cantidadAcreditar * linea.precioUnitario);
+      const ivaRate = Math.max(0, linea.impuestoPorcentaje);
+      if (ivaRate <= 0) return acc;
+      const divisor = 1 + ivaRate / 100;
+      const base = roundMoney(totalLineaBruto / divisor);
+      const impuesto = roundMoney(totalLineaBruto - base);
+      return acc + impuesto;
+    }, 0);
+    const total = workingLines.reduce(
+      (acc, linea) => acc + roundMoney(linea.cantidadAcreditar * linea.precioUnitario),
       0,
     );
     const unidades = workingLines.reduce((acc, linea) => acc + linea.cantidadAcreditar, 0);
     return {
-      subtotal,
-      impuestos,
-      total: subtotal + impuestos,
+      subtotal: roundMoney(subtotal),
+      impuestos: roundMoney(impuestos),
+      total: roundMoney(total),
       lineas: workingLines.length,
       unidades,
       devuelveStock: workingLines.some((linea) => linea.afectaInventario),

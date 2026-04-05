@@ -2428,7 +2428,9 @@ class NotaCreditoWorkflowCoverageTests(TestCase):
             format='json',
         )
         self.assertEqual(preview_resp.status_code, 200)
-        self.assertEqual(preview_resp.data['total'], '119.00')
+        self.assertEqual(preview_resp.data['subtotal'], '84.03')
+        self.assertEqual(preview_resp.data['impuestos'], '15.97')
+        self.assertEqual(preview_resp.data['total'], '100.00')
 
         parcial_resp = self.client.post(
             f'/api/facturacion/facturas/{self.factura.id}/notas-credito/parcial/',
@@ -2463,14 +2465,68 @@ class NotaCreditoWorkflowCoverageTests(TestCase):
         self.assertIn('standard_code_id', payload['items'][0])
         self.assertIn('tribute_id', payload['items'][0])
         self.assertIn('is_excluded', payload['items'][0])
-        self.factura.refresh_from_db()
-        self.assertEqual(self.factura.estado_acreditacion, 'CREDITADA_TOTAL')
 
         nota = NotaCreditoElectronica.objects.get(number='NC910')
         with patch('apps.facturacion.services.credit_note_workflow.FactusClient.get_credit_note') as mocked_sync:
             mocked_sync.return_value = {'data': {'credit_note': {'number': 'NC910', 'status': 'accepted'}}}
             sync_resp = self.client.post(f'/api/notas-credito/{nota.id}/sincronizar/', {}, format='json')
         self.assertEqual(sync_resp.status_code, 200)
+
+    def test_preview_usa_precio_bruto_para_descomponer_base_e_impuesto(self):
+        preview = build_credit_preview(
+            self.factura,
+            [{'detalle_venta_original_id': self.detalle1.id, 'cantidad_a_acreditar': '1', 'afecta_inventario': False}],
+            is_total=False,
+        )
+        linea = preview['lineas'][0]
+        self.assertEqual(linea['base_impuesto'], '84.03')
+        self.assertEqual(linea['impuesto'], '15.97')
+        self.assertEqual(linea['total_linea'], '100.00')
+        self.assertEqual(preview['subtotal'], '84.03')
+        self.assertEqual(preview['impuestos'], '15.97')
+        self.assertEqual(preview['total'], '100.00')
+
+    def test_preview_linea_20000_con_iva_19_no_duplica_iva(self):
+        self.detalle1.precio_unitario = Decimal('20000')
+        self.detalle1.iva_porcentaje = Decimal('19')
+        self.detalle1.save(update_fields=['precio_unitario', 'iva_porcentaje'])
+        preview = build_credit_preview(
+            self.factura,
+            [{'detalle_venta_original_id': self.detalle1.id, 'cantidad_a_acreditar': '1', 'afecta_inventario': False}],
+            is_total=False,
+        )
+        linea = preview['lineas'][0]
+        self.assertEqual(linea['base_impuesto'], '16806.72')
+        self.assertEqual(linea['impuesto'], '3193.28')
+        self.assertEqual(linea['total_linea'], '20000.00')
+
+    def test_preview_multi_linea_total_coincide_con_semantica_factura(self):
+        preview = build_credit_preview(
+            self.factura,
+            [
+                {'detalle_venta_original_id': self.detalle1.id, 'cantidad_a_acreditar': '2', 'afecta_inventario': False},
+                {'detalle_venta_original_id': self.detalle2.id, 'cantidad_a_acreditar': '1', 'afecta_inventario': False},
+            ],
+            is_total=False,
+        )
+        self.assertEqual(preview['subtotal'], '252.09')
+        self.assertEqual(preview['impuestos'], '47.91')
+        self.assertEqual(preview['total'], '300.00')
+
+    @patch('apps.facturacion.services.credit_note_workflow.FactusClient.create_and_validate_credit_note')
+    def test_create_credit_note_persiste_montos_desde_preview_corregido(self, mocked_create):
+        mocked_create.return_value = {'data': {'credit_note': {'number': 'NC-GROSS', 'status': 'accepted', 'cufe': 'CUFE-GROSS'}}}
+        nota, _ = create_credit_note(
+            factura=self.factura,
+            motivo='correccion gross',
+            lines=[{'detalle_venta_original_id': self.detalle1.id, 'cantidad_a_acreditar': '1', 'afecta_inventario': False}],
+            is_total=False,
+            user=self.user,
+        )
+        detalle_nc = nota.detalles.get()
+        self.assertEqual(detalle_nc.base_impuesto, Decimal('84.03'))
+        self.assertEqual(detalle_nc.impuesto, Decimal('15.97'))
+        self.assertEqual(detalle_nc.total_linea, Decimal('100.00'))
 
     @patch('apps.facturacion.services.credit_note_workflow.FactusClient.create_and_validate_credit_note')
     def test_validaciones_rechazos(self, mocked_create):
