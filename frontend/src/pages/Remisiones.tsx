@@ -444,10 +444,10 @@ export default function Remisiones() {
             </div>
           )}
           <div className="overflow-x-auto overflow-y-visible">
-            <table className="min-w-[1450px] border-separate border-spacing-0 text-sm">
+            <table className="w-full min-w-[1400px] table-auto border-separate border-spacing-0 text-sm">
               <thead className="bg-sky-100 text-[11px] uppercase tracking-wide text-slate-700">
                 <tr>
-                  <th className="w-10 px-2 py-3 text-left whitespace-nowrap">
+                  <th className="min-w-10 px-2 py-3 text-left whitespace-nowrap">
                     <input
                       type="checkbox"
                       checked={
@@ -461,16 +461,16 @@ export default function Remisiones() {
                       }
                     />
                   </th>
-                  <th className="w-20 px-2 py-3 text-left whitespace-nowrap">Prefijo</th>
-                  <th className="w-24 px-2 py-3 text-left whitespace-nowrap">Remisión</th>
-                  <th className="w-36 px-2 py-3 text-left whitespace-nowrap">Fecha/Hora</th>
-                  <th className="w-28 px-2 py-3 text-left whitespace-nowrap">Estado</th>
-                  <th className="w-32 px-2 py-3 text-left whitespace-nowrap">Medio/Pago</th>
-                  <th className="w-28 px-2 py-3 text-right whitespace-nowrap">Total</th>
-                  <th className="w-32 px-2 py-3 text-left whitespace-nowrap">NIT/CC</th>
-                  <th className="w-56 px-2 py-3 text-left whitespace-nowrap">Cliente</th>
-                  <th className="w-40 px-2 py-3 text-left whitespace-nowrap">Usuario</th>
-                  <th className="w-56 px-2 py-3 text-left whitespace-nowrap">Acciones</th>
+                  <th className="min-w-20 px-2 py-3 text-left whitespace-nowrap">Prefijo</th>
+                  <th className="min-w-24 px-2 py-3 text-left whitespace-nowrap">Remisión</th>
+                  <th className="min-w-36 px-2 py-3 text-left whitespace-nowrap">Fecha/Hora</th>
+                  <th className="min-w-28 px-2 py-3 text-left whitespace-nowrap">Estado</th>
+                  <th className="min-w-32 px-2 py-3 text-left whitespace-nowrap">Medio/Pago</th>
+                  <th className="min-w-28 px-2 py-3 text-right whitespace-nowrap">Total</th>
+                  <th className="min-w-32 px-2 py-3 text-left whitespace-nowrap">NIT/CC</th>
+                  <th className="min-w-56 px-2 py-3 text-left whitespace-nowrap">Cliente</th>
+                  <th className="min-w-40 px-2 py-3 text-left whitespace-nowrap">Usuario</th>
+                  <th className="min-w-56 px-2 py-3 text-left whitespace-nowrap">Acciones</th>
                 </tr>
               </thead>
               <tbody>
