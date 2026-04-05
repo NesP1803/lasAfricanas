@@ -700,11 +700,22 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
     @action(detail=False, methods=['post'], url_path='documento-soporte')
     def documento_soporte(self, request):
         try:
-            documento = emitir_documento_soporte(request.data)
+            documento = emitir_documento_soporte(request.data, user=request.user)
         except DocumentoSoporteInvalido as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         except FactusValidationError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except (FactusAPIError, FactusAuthError) as exc:
+            if isinstance(exc, FactusAPIError) and int(getattr(exc, 'status_code', 0) or 0) == 409:
+                return Response(
+                    {
+                        'detail': str(exc),
+                        'result': 'PENDING_DIAN_CONFLICT',
+                        'warning': 'Existe un documento soporte en proceso DIAN en Factus. Sincronice y reintente.',
+                    },
+                    status=status.HTTP_202_ACCEPTED,
+                )
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
 
         return Response(
             {
@@ -1415,24 +1426,175 @@ class DocumentosSoporteViewSet(viewsets.GenericViewSet):
             return DocumentoSoporteCreateSerializer
         return DocumentoSoporteListSerializer
 
+    def _sync_pending_support_document_from_factus(self) -> DocumentoSoporteElectronico | None:
+        try:
+            payload = FactusClient().list_support_documents()
+        except Exception:
+            return None
+        data = payload.get('data', payload) if isinstance(payload, dict) else {}
+        candidates = []
+        if isinstance(data, dict):
+            if isinstance(data.get('data'), list):
+                candidates = data.get('data') or []
+            elif isinstance(data.get('support_documents'), list):
+                candidates = data.get('support_documents') or []
+            elif isinstance(data.get('support_document'), dict):
+                candidates = [data.get('support_document')]
+        elif isinstance(data, list):
+            candidates = data
+        if not candidates:
+            return None
+        candidate = candidates[0] if isinstance(candidates[0], dict) else None
+        if candidate is None:
+            return None
+        number = str(candidate.get('number') or '').strip()
+        if not number:
+            return None
+        detail_payload = payload
+        try:
+            detail_payload = FactusClient().get_support_document(number)
+        except Exception:
+            pass
+        detail_data = detail_payload.get('data', detail_payload) if isinstance(detail_payload, dict) else {}
+        support_document = detail_data.get('support_document', detail_data) if isinstance(detail_data, dict) else {}
+        status_electronic, _status_raw = map_factus_status(detail_payload if isinstance(detail_payload, dict) else payload)
+        documento, _created = DocumentoSoporteElectronico.objects.update_or_create(
+            number=number,
+            defaults={
+                'proveedor_nombre': str(
+                    support_document.get('supplier', {}).get('names')
+                    if isinstance(support_document.get('supplier'), dict)
+                    else ''
+                ).strip()
+                or 'Proveedor pendiente DIAN',
+                'proveedor_documento': str(
+                    support_document.get('supplier', {}).get('identification')
+                    if isinstance(support_document.get('supplier'), dict)
+                    else ''
+                ).strip(),
+                'proveedor_tipo_documento': str(
+                    support_document.get('supplier', {}).get('identification_document')
+                    if isinstance(support_document.get('supplier'), dict)
+                    else ''
+                ).strip()
+                or 'CC',
+                'cufe': str(support_document.get('cufe') or '').strip() or None,
+                'uuid': str(support_document.get('uuid') or '').strip() or None,
+                'status': status_electronic or 'EN_PROCESO',
+                'xml_url': str(support_document.get('xml_url') or '').strip() or None,
+                'pdf_url': str(support_document.get('pdf_url') or '').strip() or None,
+                'response_json': detail_payload if isinstance(detail_payload, dict) else payload,
+            },
+        )
+        return documento
+
     def list(self, request):
         queryset = DocumentoSoporteElectronico.objects.order_by('-created_at')
-        serializer = self.get_serializer(queryset, many=True)
+        documents = [self._auto_sync_if_needed(documento) for documento in queryset]
+        serializer = self.get_serializer(documents, many=True)
         return Response(serializer.data)
+
+    def retrieve(self, request, pk=None):
+        documento = DocumentoSoporteElectronico.objects.filter(pk=pk).first()
+        if documento is None:
+            return Response({'detail': 'Documento soporte no encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+        documento = self._auto_sync_if_needed(documento)
+        return Response(DocumentoSoporteListSerializer(documento).data)
+
+    def _auto_sync_if_needed(self, documento: DocumentoSoporteElectronico) -> DocumentoSoporteElectronico:
+        if str(documento.status or '').strip().upper() not in {'EN_PROCESO', 'PENDIENTE_DIAN', 'PENDIENTE', 'CONFLICTO_FACTUS'}:
+            return documento
+        if (timezone.now() - documento.created_at).total_seconds() < 30:
+            return documento
+        if not documento.number:
+            return documento
+        try:
+            remote = FactusClient().get_support_document(documento.number)
+            data = remote.get('data', remote) if isinstance(remote, dict) else {}
+            item = data.get('support_document', data) if isinstance(data, dict) else {}
+            estado, _estado_raw = map_factus_status(remote)
+            documento.status = estado or documento.status
+            documento.cufe = str(item.get('cufe') or documento.cufe or '').strip() or documento.cufe
+            documento.uuid = str(item.get('uuid') or documento.uuid or '').strip() or documento.uuid
+            documento.xml_url = str(item.get('xml_url') or documento.xml_url or '').strip() or documento.xml_url
+            documento.pdf_url = str(item.get('pdf_url') or documento.pdf_url or '').strip() or documento.pdf_url
+            documento.response_json = remote
+            documento.save(update_fields=['status', 'cufe', 'uuid', 'xml_url', 'pdf_url', 'response_json'])
+        except Exception:
+            return documento
+        return documento
 
     def create(self, request):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         try:
-            documento = emitir_documento_soporte(serializer.validated_data)
+            documento = emitir_documento_soporte(serializer.validated_data, user=request.user)
         except DocumentoSoporteInvalido as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         except FactusValidationError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except (FactusAPIError, FactusAuthError) as exc:
+            if isinstance(exc, FactusAPIError) and int(getattr(exc, 'status_code', 0) or 0) == 409:
+                pending_document = self._sync_pending_support_document_from_factus()
+                return Response(
+                    {
+                        'detail': str(exc),
+                        'result': 'PENDING_DIAN_CONFLICT',
+                        'warning': 'Existe un documento soporte en proceso DIAN en Factus. Sincronice y reintente.',
+                        'pending_document': (
+                            DocumentoSoporteListSerializer(pending_document).data
+                            if pending_document
+                            else None
+                        ),
+                    },
+                    status=status.HTTP_202_ACCEPTED,
+                )
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
 
         output = DocumentoSoporteListSerializer(documento)
         return Response(output.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'], url_path='sincronizar')
+    def sincronizar(self, request, pk=None):
+        documento = DocumentoSoporteElectronico.objects.filter(pk=pk).first()
+        if documento is None:
+            return Response({'detail': 'Documento soporte no encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+        if not documento.number:
+            return Response({'detail': 'El documento soporte aún no tiene número confirmado.'}, status=status.HTTP_409_CONFLICT)
+        try:
+            remote = FactusClient().get_support_document(documento.number)
+            data = remote.get('data', remote) if isinstance(remote, dict) else {}
+            item = data.get('support_document', data) if isinstance(data, dict) else {}
+            estado, _estado_raw = map_factus_status(remote)
+            documento.status = estado or documento.status
+            documento.cufe = str(item.get('cufe') or documento.cufe or '').strip() or documento.cufe
+            documento.uuid = str(item.get('uuid') or documento.uuid or '').strip() or documento.uuid
+            documento.xml_url = str(item.get('xml_url') or documento.xml_url or '').strip() or documento.xml_url
+            documento.pdf_url = str(item.get('pdf_url') or documento.pdf_url or '').strip() or documento.pdf_url
+            documento.response_json = remote
+            documento.save(update_fields=['status', 'cufe', 'uuid', 'xml_url', 'pdf_url', 'response_json'])
+        except (FactusValidationError, FactusAPIError, FactusAuthError) as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+
+        return Response(DocumentoSoporteListSerializer(documento).data)
+
+    @action(detail=True, methods=['get'], url_path='estado-remoto')
+    def estado_remoto(self, request, pk=None):
+        documento = DocumentoSoporteElectronico.objects.filter(pk=pk).first()
+        if documento is None:
+            return Response({'detail': 'Documento soporte no encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(
+            {
+                'id': documento.id,
+                'number': documento.number,
+                'status': documento.status,
+                'cufe': documento.cufe,
+                'uuid': documento.uuid,
+                'remote_response': documento.response_json or {},
+                'detail': 'Estado remoto consultado. Use sincronizar para refrescar datos.',
+            }
+        )
 
     @action(detail=False, methods=['get'], url_path=r'(?P<number>[^/.]+)/xml')
     def xml(self, request, number=None):
@@ -1477,3 +1639,77 @@ class DocumentosSoporteViewSet(viewsets.GenericViewSet):
         except DownloadResourceError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
         return _build_file_response(content, f'documento-soporte-{documento.number}.pdf', 'application/pdf')
+
+    @action(detail=True, methods=['get'], url_path='xml')
+    def xml_by_id(self, request, pk=None):
+        documento = DocumentoSoporteElectronico.objects.filter(pk=pk).first()
+        if documento is None:
+            return Response({'detail': 'Documento soporte no encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+        if not documento.number:
+            return Response({'detail': 'El documento soporte aún no tiene número confirmado.'}, status=status.HTTP_409_CONFLICT)
+        try:
+            content = FactusClient().download_support_document_xml(documento.number)
+        except Exception as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        filename = f'documento-soporte-{documento.number}.xml'
+        if str(request.query_params.get('base64', '')).strip().lower() in {'1', 'true', 'yes'}:
+            return Response(
+                {
+                    'file_name': filename,
+                    'xml_base_64_encoded': base64.b64encode(content).decode('ascii'),
+                }
+            )
+        return _build_file_response(content, filename, 'application/xml')
+
+    @action(detail=True, methods=['get'], url_path='pdf')
+    def pdf_by_id(self, request, pk=None):
+        documento = DocumentoSoporteElectronico.objects.filter(pk=pk).first()
+        if documento is None:
+            return Response({'detail': 'Documento soporte no encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+        if not documento.number:
+            return Response({'detail': 'El documento soporte aún no tiene número confirmado.'}, status=status.HTTP_409_CONFLICT)
+        try:
+            content = FactusClient().download_support_document_pdf(documento.number)
+        except Exception as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        filename = f'documento-soporte-{documento.number}.pdf'
+        if str(request.query_params.get('base64', '')).strip().lower() in {'1', 'true', 'yes'}:
+            return Response(
+                {
+                    'file_name': filename,
+                    'pdf_base_64_encoded': base64.b64encode(content).decode('ascii'),
+                }
+            )
+        return _build_file_response(content, filename, 'application/pdf')
+
+    @action(detail=True, methods=['post'], url_path='eliminar')
+    def eliminar(self, request, pk=None):
+        documento = DocumentoSoporteElectronico.objects.filter(pk=pk).first()
+        if documento is None:
+            return Response({'detail': 'Documento soporte no encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+        if str(documento.status or '').strip().upper() in {'ACEPTADA', 'ACEPTADA_CON_OBSERVACIONES'}:
+            return Response(
+                {'detail': 'No se permite eliminar documentos soporte aceptados fiscalmente.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+        payload = documento.response_json if isinstance(documento.response_json, dict) else {}
+        data = payload.get('data', payload) if isinstance(payload, dict) else {}
+        support_document = data.get('support_document', data) if isinstance(data, dict) else {}
+        reference_code = str(
+            support_document.get('reference_code')
+            or data.get('reference_code')
+            or payload.get('reference_code')
+            or documento.number
+            or ''
+        ).strip()
+        if not reference_code:
+            return Response({'detail': 'El documento no tiene referencia para eliminar en Factus.'}, status=status.HTTP_409_CONFLICT)
+        try:
+            provider_response = FactusClient().delete_support_document(reference_code)
+        except (FactusValidationError, FactusAPIError, FactusAuthError) as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        documento.delete()
+        return Response({'result': 'deleted', 'reference_code': reference_code, 'provider': provider_response})
+
+    def destroy(self, request, pk=None):
+        return self.eliminar(request, pk=pk)

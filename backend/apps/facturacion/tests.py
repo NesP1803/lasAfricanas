@@ -63,7 +63,7 @@ from apps.facturacion.services.persistence_safety import (
     safe_assign_json,
 )
 from apps.core.models import Impuesto
-from apps.inventario.models import Categoria, Producto, Proveedor
+from apps.inventario.models import Categoria, MovimientoInventario, Producto, Proveedor
 from apps.ventas.models import Cliente, DetalleVenta, Venta
 from apps.ventas.services.anular_venta import anular_venta
 from apps.facturacion.models import RangoNumeracionDIAN
@@ -1042,7 +1042,19 @@ class DocumentoSoporteBuilderTests(TestCase):
                 }
             )
 
-    def test_normaliza_tipo_documento_proveedor_cc_y_homologa_id(self):
+    @patch('apps.facturacion.services.support_document_payload_builder.resolve_numbering_range')
+    def test_normaliza_tipo_documento_proveedor_cc_y_homologa_id(self, mocked_resolve_range):
+        mocked_resolve_range.return_value = RangoNumeracionDIAN(
+            factus_range_id=148,
+            factus_id=148,
+            prefijo='DS',
+            desde=1,
+            hasta=999999,
+            consecutivo_actual=1,
+            resolucion='TEST',
+            document_code='DOCUMENTO_SOPORTE',
+            environment='SANDBOX',
+        )
         payload = build_support_document_payload(
             {
                 'proveedor_nombre': 'Juan Perez',
@@ -1052,8 +1064,9 @@ class DocumentoSoporteBuilderTests(TestCase):
                 'items': [{'descripcion': 'Servicio', 'cantidad': 1, 'precio': 15000}],
             }
         )
-        self.assertEqual(payload['supplier']['identification_type'], 'CC')
-        self.assertEqual(payload['supplier']['identification_document_id'], 3)
+        self.assertEqual(payload['provider']['identification_document_id'], 3)
+        self.assertEqual(payload['provider']['identification'], '123')
+        self.assertTrue(payload.get('reference_code'))
 
 
 class FactusCatalogLookupHomologationTests(TestCase):
@@ -1105,6 +1118,135 @@ class DocumentoSoporteEndpointTests(TestCase):
         self.assertEqual(response.data['numero'], 'DS123')
         self.assertEqual(response.data['cufe'], 'CUFE-DS-1')
         self.assertEqual(response.data['estado'], 'ACEPTADA')
+
+
+class DocumentoSoporteInventarioTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(username='doc-stock', password='1234')
+        self.categoria = Categoria.objects.create(nombre='Repuestos DS')
+        self.producto = Producto.objects.create(
+            codigo='DS-PROD-1',
+            nombre='Aceite 20W50',
+            categoria=self.categoria,
+            precio_costo=Decimal('10000'),
+            precio_venta=Decimal('12000'),
+            precio_venta_minimo=Decimal('11000'),
+            stock=Decimal('5'),
+            stock_minimo=Decimal('1'),
+        )
+
+    @patch('apps.facturacion.services.emitir_documento_soporte.FactusClient.create_and_validate_support_document')
+    @patch('apps.facturacion.services.support_document_payload_builder.resolve_numbering_range')
+    def test_emitir_documento_soporte_actualiza_mercancia(self, mocked_resolve_range, mocked_create):
+        mocked_resolve_range.return_value = RangoNumeracionDIAN(
+            factus_range_id=501,
+            factus_id=501,
+            prefijo='DS',
+            desde=1,
+            hasta=999999,
+            consecutivo_actual=1,
+            resolucion='RES-DS',
+            document_code='DOCUMENTO_SOPORTE',
+            environment='SANDBOX',
+        )
+        mocked_create.return_value = {
+            'data': {
+                'support_document': {
+                    'number': 'DS-501',
+                    'uuid': 'UUID-DS-501',
+                    'cufe': 'CUFE-DS-501',
+                    'status': 'valid',
+                }
+            }
+        }
+        payload = {
+            'proveedor_nombre': 'Proveedor test',
+            'proveedor_documento': '900123456',
+            'proveedor_tipo_documento': 'NIT',
+            'provider_address': 'CRA 1 # 1-01',
+            'provider_email': 'proveedor@test.com',
+            'items': [
+                {
+                    'producto_id': self.producto.id,
+                    'codigo_referencia': self.producto.codigo,
+                    'descripcion': self.producto.nombre,
+                    'cantidad': 3,
+                    'precio': 15000,
+                }
+            ],
+        }
+
+        from apps.facturacion.services.emitir_documento_soporte import emitir_documento_soporte
+
+        documento = emitir_documento_soporte(payload, user=self.user)
+
+        self.producto.refresh_from_db()
+        self.assertEqual(self.producto.stock, Decimal('8'))
+        self.assertEqual(self.producto.precio_costo, Decimal('15000'))
+        self.assertTrue(
+            MovimientoInventario.objects.filter(
+                producto=self.producto,
+                tipo='ENTRADA',
+                referencia=f'DOC-SOP-{documento.number}',
+            ).exists()
+        )
+
+    @patch('apps.facturacion.services.emitir_documento_soporte.FactusClient.create_and_validate_support_document')
+    @patch('apps.facturacion.services.support_document_payload_builder.resolve_numbering_range')
+    def test_emitir_documento_soporte_crea_articulo_si_no_existe_producto_id(self, mocked_resolve_range, mocked_create):
+        mocked_resolve_range.return_value = RangoNumeracionDIAN(
+            factus_range_id=502,
+            factus_id=502,
+            prefijo='DS',
+            desde=1,
+            hasta=999999,
+            consecutivo_actual=1,
+            resolucion='RES-DS',
+            document_code='DOCUMENTO_SOPORTE',
+            environment='SANDBOX',
+        )
+        mocked_create.return_value = {
+            'data': {
+                'support_document': {
+                    'number': 'DS-502',
+                    'uuid': 'UUID-DS-502',
+                    'cufe': 'CUFE-DS-502',
+                    'status': 'valid',
+                }
+            }
+        }
+        payload = {
+            'proveedor_nombre': 'Proveedor test',
+            'proveedor_documento': '900123456',
+            'proveedor_tipo_documento': 'NIT',
+            'provider_address': 'CRA 1 # 1-01',
+            'provider_email': 'proveedor@test.com',
+            'items': [
+                {
+                    'codigo_referencia': 'ART-DS-NEW',
+                    'descripcion': 'Filtro de aceite',
+                    'categoria_id': self.categoria.id,
+                    'unidad_medida': 'N/A',
+                    'iva_porcentaje': '19',
+                    'cantidad': 2,
+                    'precio': 20000,
+                }
+            ],
+        }
+        from apps.facturacion.services.emitir_documento_soporte import emitir_documento_soporte
+
+        documento = emitir_documento_soporte(payload, user=self.user)
+        producto_nuevo = Producto.objects.filter(codigo='ART-DS-NEW').first()
+        self.assertIsNotNone(producto_nuevo)
+        self.assertEqual(producto_nuevo.stock, Decimal('2'))
+        self.assertTrue(
+            MovimientoInventario.objects.filter(
+                producto=producto_nuevo,
+                tipo='ENTRADA',
+                referencia=f'DOC-SOP-{documento.number}',
+            ).exists()
+        )
 
 
 class SyncInvoiceStatusCommandTests(TestCase):
@@ -1477,6 +1619,7 @@ class DocumentosSoporteResourceEndpointsTests(TestCase):
         self.assertEqual(len(response.data), 1)
         self.assertEqual(response.data[0]['numero'], 'DS-001')
         self.assertEqual(response.data[0]['estado'], 'ACEPTADA')
+        self.assertEqual(response.data[0]['reference_code'], 'DS-001')
 
     @patch('apps.facturacion.views.emitir_documento_soporte')
     def test_create_endpoint(self, mocked_emitir):
@@ -1490,6 +1633,23 @@ class DocumentosSoporteResourceEndpointsTests(TestCase):
         response = self.client.post('/api/documentos-soporte/', payload, format='json')
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data['numero'], 'DS-001')
+
+    @patch('apps.facturacion.views.emitir_documento_soporte')
+    def test_create_endpoint_conflicto_pendiente_dian_retorna_202(self, mocked_emitir):
+        mocked_emitir.side_effect = FactusAPIError(
+            'Se encontró un documento soporte por enviar a la DIAN',
+            status_code=409,
+            provider_detail='Conflict',
+        )
+        payload = {
+            'proveedor_nombre': 'Proveedor Nuevo',
+            'proveedor_documento': '123',
+            'proveedor_tipo_documento': 'CC',
+            'items': [{'descripcion': 'Servicio', 'cantidad': 1, 'precio': 50000}],
+        }
+        response = self.client.post('/api/documentos-soporte/', payload, format='json')
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response.data['result'], 'PENDING_DIAN_CONFLICT')
 
     @patch('apps.facturacion.views.download_remote_file', return_value=b'<xml>ds</xml>')
     def test_xml_endpoint(self, mocked_download):
@@ -1506,6 +1666,57 @@ class DocumentosSoporteResourceEndpointsTests(TestCase):
         self.assertEqual(response['Content-Type'], 'application/pdf')
         self.assertEqual(response.content, b'%PDF-ds')
         mocked_download.assert_called_once()
+
+    def test_retrieve_endpoint(self):
+        response = self.client.get(f'/api/documentos-soporte/{self.documento.id}/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['numero'], 'DS-001')
+
+    @patch('apps.facturacion.views.FactusClient.get_support_document')
+    def test_sincronizar_endpoint(self, mocked_get_support):
+        self.documento.status = 'EN_PROCESO'
+        self.documento.save(update_fields=['status'])
+        mocked_get_support.return_value = {
+            'data': {
+                'support_document': {
+                    'number': 'DS-001',
+                    'cufe': 'CUFE-DS-1-UPD',
+                    'uuid': 'UUID-DS-1-UPD',
+                    'xml_url': 'https://example.com/ds-001-upd.xml',
+                    'pdf_url': 'https://example.com/ds-001-upd.pdf',
+                },
+                'status': 'valid',
+            }
+        }
+        response = self.client.post(f'/api/documentos-soporte/{self.documento.id}/sincronizar/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['estado_dian'], 'ACEPTADA')
+        self.documento.refresh_from_db()
+        self.assertEqual(self.documento.status, 'ACEPTADA')
+
+    @patch('apps.facturacion.views.FactusClient.download_support_document_xml', return_value=b'<xml>ds-id</xml>')
+    def test_xml_by_id_endpoint(self, _mocked_download):
+        response = self.client.get(f'/api/documentos-soporte/{self.documento.id}/xml/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/xml')
+        self.assertEqual(response.content, b'<xml>ds-id</xml>')
+
+    @patch('apps.facturacion.views.FactusClient.download_support_document_pdf', return_value=b'%PDF-ds-id')
+    def test_pdf_by_id_endpoint(self, _mocked_download):
+        response = self.client.get(f'/api/documentos-soporte/{self.documento.id}/pdf/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/pdf')
+        self.assertEqual(response.content, b'%PDF-ds-id')
+
+    @patch('apps.facturacion.views.FactusClient.delete_support_document', return_value={'ok': True})
+    def test_delete_endpoint(self, mocked_delete):
+        self.documento.status = 'RECHAZADA'
+        self.documento.save(update_fields=['status'])
+        response = self.client.delete(f'/api/documentos-soporte/{self.documento.id}/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['result'], 'deleted')
+        mocked_delete.assert_called_once_with('DS-001')
+        self.assertFalse(DocumentoSoporteElectronico.objects.filter(pk=self.documento.id).exists())
 
 
 class FacturaEstadoContratoTests(TestCase):
