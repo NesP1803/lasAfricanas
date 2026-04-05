@@ -16,6 +16,13 @@ class DocumentoSoporteCreateSerializer(serializers.Serializer):
     proveedor_nombre = serializers.CharField()
     proveedor_documento = serializers.CharField()
     proveedor_tipo_documento = serializers.CharField(required=False, allow_blank=True, default='CC')
+    proveedor_id = serializers.IntegerField(required=False)
+    provider_address = serializers.CharField(required=False, allow_blank=True, default='')
+    provider_email = serializers.EmailField(required=False, allow_blank=True, default='')
+    provider_phone = serializers.CharField(required=False, allow_blank=True, default='')
+    provider_country_code = serializers.CharField(required=False, allow_blank=True, default='CO')
+    provider_municipality_id = serializers.IntegerField(required=False)
+    observation = serializers.CharField(required=False, allow_blank=True, default='')
     items = serializers.ListField(child=serializers.DictField(), allow_empty=False)
 
 
@@ -27,6 +34,8 @@ class DocumentoSoporteListSerializer(serializers.ModelSerializer):
     estado = serializers.CharField(source='status', read_only=True)
     estado_dian = serializers.CharField(source='status', read_only=True)
     total = serializers.SerializerMethodField()
+    can_sync = serializers.SerializerMethodField()
+    reference_code = serializers.SerializerMethodField()
 
     class Meta:
         model = DocumentoSoporteElectronico
@@ -44,6 +53,8 @@ class DocumentoSoporteListSerializer(serializers.ModelSerializer):
             'uuid',
             'xml_url',
             'pdf_url',
+            'reference_code',
+            'can_sync',
         ]
         read_only_fields = fields
 
@@ -66,3 +77,18 @@ class DocumentoSoporteListSerializer(serializers.ModelSerializer):
             except (InvalidOperation, TypeError, ValueError):
                 continue
         return 0.0
+
+    def get_can_sync(self, obj: DocumentoSoporteElectronico) -> bool:
+        return str(obj.status or '').strip().upper() in {'EN_PROCESO', 'PENDIENTE_DIAN', 'PENDIENTE', 'CONFLICTO_FACTUS'}
+
+    def get_reference_code(self, obj: DocumentoSoporteElectronico) -> str:
+        payload: dict[str, Any] = obj.response_json or {}
+        data = payload.get('data', payload) if isinstance(payload, dict) else {}
+        support_document = data.get('support_document', data) if isinstance(data, dict) else {}
+        return str(
+            support_document.get('reference_code')
+            or data.get('reference_code')
+            or payload.get('reference_code')
+            or obj.number
+            or ''
+        ).strip()

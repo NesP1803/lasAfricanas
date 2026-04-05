@@ -8,8 +8,9 @@ from django.db import transaction
 
 from apps.facturacion.models import DocumentoSoporteElectronico
 from apps.facturacion.services.facturar_venta import map_factus_status
-from apps.facturacion.services.factus_client import FactusClient
+from apps.facturacion.services.factus_client import FactusAPIError, FactusClient, FactusValidationError
 from apps.facturacion.services.support_document_payload_builder import build_support_document_payload
+from apps.inventario.models import Proveedor
 
 
 def _extract_support_document_data(response_json: dict[str, Any]) -> dict[str, str]:
@@ -21,21 +22,39 @@ def _extract_support_document_data(response_json: dict[str, Any]) -> dict[str, s
         'number': str(support_document.get('number', '')).strip(),
         'xml_url': str(support_document.get('xml_url', '')).strip(),
         'pdf_url': str(support_document.get('pdf_url', '')).strip(),
-        'status': map_factus_status(response_json),
+        'status': map_factus_status(response_json)[0],
     }
 
 
 def emitir_documento_soporte(data: dict[str, Any]) -> DocumentoSoporteElectronico:
-    payload = build_support_document_payload(data)
-    response_json = FactusClient().send_support_document(payload)
+    payload_data = dict(data)
+    proveedor_id = payload_data.get('proveedor_id')
+    if proveedor_id:
+        proveedor = Proveedor.objects.filter(pk=proveedor_id, is_active=True).first()
+        if proveedor:
+            payload_data.setdefault('proveedor_nombre', proveedor.nombre)
+            payload_data.setdefault('proveedor_documento', proveedor.nit)
+            payload_data.setdefault('proveedor_tipo_documento', 'NIT' if str(proveedor.nit or '').strip() else 'CC')
+            payload_data.setdefault('provider_address', proveedor.direccion)
+            payload_data.setdefault('provider_email', proveedor.email)
+            payload_data.setdefault('provider_phone', proveedor.telefono)
+            payload_data.setdefault('provider_city', proveedor.ciudad)
+
+    payload = build_support_document_payload(payload_data)
+    try:
+        response_json = FactusClient().create_and_validate_support_document(payload)
+    except FactusAPIError as exc:
+        if exc.status_code == 422:
+            raise FactusValidationError(f'Factus rechazó el documento soporte por validación: {exc.provider_detail}') from exc
+        raise
     fields = _extract_support_document_data(response_json)
 
     with transaction.atomic():
         documento = DocumentoSoporteElectronico.objects.create(
-            number=fields['number'] or str(data.get('number', 'DS-PENDIENTE')).strip(),
-            proveedor_nombre=str(data.get('proveedor_nombre', '')).strip(),
-            proveedor_documento=str(data.get('proveedor_documento', '')).strip(),
-            proveedor_tipo_documento=str(data.get('proveedor_tipo_documento', '')).strip(),
+            number=fields['number'] or str(payload_data.get('number', 'DS-PENDIENTE')).strip(),
+            proveedor_nombre=str(payload_data.get('proveedor_nombre', '')).strip(),
+            proveedor_documento=str(payload_data.get('proveedor_documento', '')).strip(),
+            proveedor_tipo_documento=str(payload_data.get('proveedor_tipo_documento', '')).strip(),
             cufe=fields['cufe'] or None,
             uuid=fields['uuid'] or None,
             status=fields['status'],
