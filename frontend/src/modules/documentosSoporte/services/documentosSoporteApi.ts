@@ -16,17 +16,47 @@ export interface DocumentoSoporte {
   uuid?: string;
   xml_url?: string;
   pdf_url?: string;
+  reference_code?: string;
+  can_sync?: boolean;
 }
 
 export interface CrearDocumentoSoportePayload {
   proveedor_nombre: string;
   proveedor_documento: string;
   proveedor_tipo_documento: string;
+  proveedor_id?: number;
+  provider_address?: string;
+  provider_email?: string;
+  provider_phone?: string;
+  provider_country_code?: string;
+  provider_municipality_id?: number;
+  observation?: string;
   items: Array<{
+    producto_id?: number;
+    codigo_referencia?: string;
     descripcion: string;
     cantidad: number;
     precio: number;
   }>;
+}
+
+export interface ProveedorSugerencia {
+  id: number;
+  nombre: string;
+  nit?: string;
+  direccion?: string;
+  email?: string;
+  telefono?: string;
+  ciudad?: string;
+}
+
+export interface MercanciaSugerencia {
+  id: number;
+  codigo: string;
+  nombre: string;
+  precio_costo?: string;
+  precio_venta?: string;
+  iva_porcentaje?: string;
 }
 
 const crearArchivoDescargable = (blob: Blob, fileName: string) => {
@@ -42,6 +72,28 @@ const crearArchivoDescargable = (blob: Blob, fileName: string) => {
 };
 
 export const documentosSoporteApi = {
+  async buscarProveedores(search: string) {
+    const response = await apiClient.get<{ results?: ProveedorSugerencia[] } | ProveedorSugerencia[]>(
+      '/proveedores/',
+      {
+        params: { is_active: true, search, page_size: 20 },
+      },
+    );
+    const payload = response.data;
+    return Array.isArray(payload) ? payload : (payload.results ?? []);
+  },
+
+  async buscarMercancias(search: string) {
+    const response = await apiClient.get<{ results?: MercanciaSugerencia[] } | MercanciaSugerencia[]>(
+      '/productos/',
+      {
+        params: { is_active: true, es_servicio: false, search, page_size: 20 },
+      },
+    );
+    const payload = response.data;
+    return Array.isArray(payload) ? payload : (payload.results ?? []);
+  },
+
   async getDocumentosSoporte() {
     const response = await apiClient.get<DocumentoSoporte[]>('/documentos-soporte/');
     return response.data;
@@ -52,17 +104,37 @@ export const documentosSoporteApi = {
     return response.data;
   },
 
-  async descargarXML(numero: string) {
-    const response = await apiClient.get<Blob>(`/documentos-soporte/${encodeURIComponent(numero)}/xml/`, {
+  async descargarXML(id: number, numero: string) {
+    const response = await apiClient.get<Blob>(`/documentos-soporte/${id}/xml/`, {
       responseType: 'blob',
     });
     crearArchivoDescargable(response.data, `documento-soporte-${encodeURIComponent(numero)}.xml`);
   },
 
-  async descargarPDF(numero: string) {
-    const response = await apiClient.get<Blob>(`/documentos-soporte/${encodeURIComponent(numero)}/pdf/`, {
+  async descargarPDF(id: number, numero: string) {
+    const response = await apiClient.get<Blob>(`/documentos-soporte/${id}/pdf/`, {
       responseType: 'blob',
     });
     crearArchivoDescargable(response.data, `documento-soporte-${encodeURIComponent(numero)}.pdf`);
+  },
+
+  async getDocumentoSoporte(id: number) {
+    const response = await apiClient.get<DocumentoSoporte>(`/documentos-soporte/${id}/`);
+    return response.data;
+  },
+
+  async sincronizarDocumentoSoporte(id: number) {
+    const response = await apiClient.post<DocumentoSoporte>(`/documentos-soporte/${id}/sincronizar/`);
+    return response.data;
+  },
+
+  async estadoRemotoDocumentoSoporte(id: number) {
+    const response = await apiClient.get(`/documentos-soporte/${id}/estado-remoto/`);
+    return response.data;
+  },
+
+  async eliminarDocumentoSoporte(id: number) {
+    const response = await apiClient.delete(`/documentos-soporte/${id}/`);
+    return response.data;
   },
 };

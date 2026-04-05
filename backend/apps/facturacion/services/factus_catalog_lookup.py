@@ -65,6 +65,10 @@ def _bootstrap_minimum_catalogs() -> None:
         factus_id=3,
         defaults={'codigo': '13', 'nombre': 'Cédula de ciudadanía', 'is_active': True},
     )
+    DocumentoIdentificacionFactus.objects.update_or_create(
+        factus_id=6,
+        defaults={'codigo': '31', 'nombre': 'NIT', 'is_active': True},
+    )
     MetodoPagoFactus.objects.update_or_create(
         factus_id=10,
         defaults={'codigo': '10', 'nombre': 'Efectivo', 'is_active': True},

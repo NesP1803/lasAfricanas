@@ -85,6 +85,20 @@ class FactusClient:
             default='/v1/credit-notes/reference/{reference_code}',
         )
         self.support_document_path = config('FACTUS_SUPPORT_DOCUMENT_PATH', default='/support-documents/validate')
+        self.support_document_list_path = config('FACTUS_SUPPORT_DOCUMENT_LIST_PATH', default='/v1/support-documents')
+        self.support_document_show_path = config('FACTUS_SUPPORT_DOCUMENT_SHOW_PATH', default='/v1/support-documents/{number}')
+        self.support_document_download_pdf_path = config(
+            'FACTUS_SUPPORT_DOCUMENT_DOWNLOAD_PDF_PATH',
+            default='/v1/support-documents/download-pdf/{number}',
+        )
+        self.support_document_download_xml_path = config(
+            'FACTUS_SUPPORT_DOCUMENT_DOWNLOAD_XML_PATH',
+            default='/v1/support-documents/download-xml/{number}',
+        )
+        self.support_document_delete_path = config(
+            'FACTUS_SUPPORT_DOCUMENT_DELETE_PATH',
+            default='/v1/support-documents/reference/{reference_code}',
+        )
         self.support_document_adjustment_path = config(
             'FACTUS_SUPPORT_DOCUMENT_ADJUSTMENT_PATH',
             default='/support-document-adjustment-notes/validate',
@@ -508,11 +522,71 @@ class FactusClient:
         return self.request('DELETE', self.credit_note_delete_path.format(reference_code=reference_code))
 
     def send_support_document(self, payload: dict[str, Any]) -> dict[str, Any]:
-        if not payload.get('supplier'):
-            raise FactusValidationError('El documento soporte debe incluir supplier para enviar a Factus.')
+        if not payload.get('provider'):
+            raise FactusValidationError('El documento soporte debe incluir provider para enviar a Factus.')
         if not payload.get('items'):
             raise FactusValidationError('El documento soporte no contiene ítems para enviar a Factus.')
         return self.request('POST', self.support_document_path, json=payload)
+
+    def create_and_validate_support_document(self, payload: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return self.send_support_document(payload)
+        except FactusAPIError as exc:
+            detail = (exc.provider_detail or '').lower()
+            should_retry_with_v1 = (
+                exc.status_code == 404
+                and 'route' in detail
+                and 'support-documents/validate' in detail
+                and self.support_document_path != '/v1/support-documents/validate'
+            )
+            if not should_retry_with_v1:
+                raise
+            original_path = self.support_document_path
+            try:
+                self.support_document_path = '/v1/support-documents/validate'
+                return self.send_support_document(payload)
+            finally:
+                self.support_document_path = original_path
+
+    def list_support_documents(self, **params: Any) -> dict[str, Any]:
+        translated_params: dict[str, Any] = {}
+        mapping = {
+            'number': 'filter[number]',
+            'status': 'filter[status]',
+            'prefix': 'filter[prefix]',
+            'identification': 'filter[identification]',
+            'names': 'filter[names]',
+            'reference_code': 'filter[reference_code]',
+        }
+        for key, value in (params or {}).items():
+            if value in (None, ''):
+                continue
+            translated_params[mapping.get(key, key)] = value
+        return self.request('GET', self.support_document_list_path, params=translated_params or None)
+
+    def get_support_document(self, number: str) -> dict[str, Any]:
+        return self.request('GET', self.support_document_show_path.format(number=number))
+
+    def download_support_document_pdf(self, number: str) -> bytes:
+        path = self.support_document_download_pdf_path.format(number=number)
+        payload = self.request('GET', path)
+        content = self._decode_base64_payload(payload, field='pdf_base_64_encoded')
+        if content:
+            return content
+        fallback, _ = self.download_resource(path)
+        return fallback
+
+    def download_support_document_xml(self, number: str) -> bytes:
+        path = self.support_document_download_xml_path.format(number=number)
+        payload = self.request('GET', path)
+        content = self._decode_base64_payload(payload, field='xml_base_64_encoded')
+        if content:
+            return content
+        fallback, _ = self.download_resource(path)
+        return fallback
+
+    def delete_support_document(self, reference_code: str) -> dict[str, Any]:
+        return self.request('DELETE', self.support_document_delete_path.format(reference_code=reference_code))
 
 
     def send_support_document_adjustment(self, payload: dict[str, Any]) -> dict[str, Any]:

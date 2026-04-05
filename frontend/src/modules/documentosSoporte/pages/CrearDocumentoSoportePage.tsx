@@ -1,5 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
+import axios from 'axios';
 import { useNotification } from '../../../contexts/NotificationContext';
 import DocumentoSoporteForm from '../components/DocumentoSoporteForm';
 import { documentosSoporteApi, type CrearDocumentoSoportePayload } from '../services/documentosSoporteApi';
@@ -18,9 +19,13 @@ export default function CrearDocumentoSoportePage() {
         type: 'success',
       });
       navigate('/listados/documentos-soporte');
-    } catch {
+    } catch (error) {
+      const detail =
+        axios.isAxiosError<{ detail?: string }>(error)
+          ? error.response?.data?.detail
+          : undefined;
       showNotification({
-        message: 'No fue posible emitir el documento soporte.',
+        message: detail || 'No fue posible emitir el documento soporte.',
         type: 'error',
       });
     } finally {
