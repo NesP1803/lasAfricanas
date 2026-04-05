@@ -413,6 +413,8 @@ export default function Layout() {
       {
         const facturacionItems: MenuItem[] = [];
         const facturacionListadosItems: MenuItem[] = [];
+        const listadosMaestrosItems: MenuItem[] = [];
+        const listadosSections = getSystemModuleByKey("listados")?.sections ?? [];
         const facturacionSections = getSystemModuleByKey("facturacion")?.sections ?? [];
         const ventaRapidaSection = facturacionSections.find(
           (section) => section.key === "venta_rapida"
@@ -436,6 +438,26 @@ export default function Layout() {
         const canAccessDocumentosSoporteListado =
           isAdmin ||
           sectionEnabled("listados", "documentos_soporte");
+
+        const maestrosKeys = [
+          "clientes",
+          "proveedores",
+          "empleados",
+          "categorias",
+          "mecanicos",
+        ] as const;
+        maestrosKeys.forEach((key) => {
+          const section = listadosSections.find((item) => item.key === key);
+          if (!section?.path) {
+            return;
+          }
+          if (isAdmin || sectionEnabled("listados", key)) {
+            listadosMaestrosItems.push({
+              label: section.label,
+              path: section.path,
+            });
+          }
+        });
 
         if (
           ventaRapidaSection?.path &&
@@ -508,10 +530,23 @@ export default function Layout() {
           });
         }
         if (facturacionListadosItems.length > 0) {
+          const listadosItemsForMenu = [...facturacionListadosItems];
+          if (listadosMaestrosItems.length > 0) {
+            listadosItemsForMenu.unshift({
+              label: "Maestros",
+              items: listadosMaestrosItems,
+            });
+          }
           items.push({
             label: "Listados",
             icon: <ClipboardList size={18} />,
-            items: facturacionListadosItems,
+            items: listadosItemsForMenu,
+          });
+        } else if (listadosMaestrosItems.length > 0) {
+          items.push({
+            label: "Listados",
+            icon: <ClipboardList size={18} />,
+            items: listadosMaestrosItems,
           });
         }
         if (facturacionItems.length > 0) {
