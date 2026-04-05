@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import os
+from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 from io import StringIO
@@ -13,13 +14,20 @@ from django.core.management import call_command
 from django.contrib.auth import get_user_model
 from django.db import DataError
 from django.test import TestCase, override_settings
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.facturacion.models import DocumentoSoporteElectronico, FacturaElectronica, NotaCreditoElectronica
 from apps.facturacion_electronica.catalogos.models import DocumentoIdentificacionFactus
 from apps.facturacion.services.download_invoice_files import download_pdf, download_xml
 from apps.facturacion.services.electronic_state_machine import map_factus_status, resolve_actions
-from apps.facturacion.services.facturar_venta import facturar_venta
+from apps.facturacion.services.facturar_venta import (
+    DOCUMENT_CONCILIATION_ERROR_CODE,
+    _assert_document_conciliation,
+    _generate_unique_reference_code,
+    _resolve_reference_code,
+    facturar_venta,
+)
 from apps.facturacion.services.upload_custom_pdf_to_factus import upload_custom_pdf_to_factus
 from apps.facturacion.services.consecutivo_service import resolve_numbering_range
 from apps.facturacion.services.factus_catalog_lookup import (
@@ -137,6 +145,131 @@ class FacturaDownloadFilesTests(TestCase):
         self.factura.save(update_fields=['number'])
         with self.assertRaises(DescargaFacturaError):
             download_pdf(self.factura)
+
+
+class FacturarVentaReferenceCodeTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(username='refcode-user', password='1234')
+        self.cliente = Cliente.objects.create(numero_documento='123456789', nombre='Cliente RefCode', tipo_documento='CC')
+        categoria = Categoria.objects.create(nombre='Cat RefCode')
+        proveedor = Proveedor.objects.create(nombre='Proveedor RefCode')
+        self.producto = Producto.objects.create(
+            codigo='PR-REF-1',
+            nombre='Producto RefCode',
+            categoria=categoria,
+            proveedor=proveedor,
+            precio_costo=Decimal('10000.00'),
+            precio_venta=Decimal('15000.00'),
+            precio_venta_minimo=Decimal('12000.00'),
+            stock=Decimal('10.00'),
+            stock_minimo=Decimal('1.00'),
+            iva_porcentaje=Decimal('19.00'),
+            iva_exento=False,
+        )
+        self.venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            numero_comprobante='FAC-100001',
+            cliente=self.cliente,
+            vendedor=self.user,
+            subtotal=Decimal('25210.08'),
+            descuento_porcentaje=Decimal('0.00'),
+            descuento_valor=Decimal('0.00'),
+            iva=Decimal('4789.92'),
+            total=Decimal('30000.00'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('30000.00'),
+            cambio=Decimal('0.00'),
+            estado='FACTURADA',
+        )
+        DetalleVenta.objects.create(
+            venta=self.venta,
+            producto=self.producto,
+            cantidad=Decimal('1.00'),
+            precio_unitario=Decimal('15000.00'),
+            descuento_unitario=Decimal('0.00'),
+            iva_porcentaje=Decimal('19.00'),
+            subtotal=Decimal('12605.04'),
+            total=Decimal('15000.00'),
+        )
+        DetalleVenta.objects.create(
+            venta=self.venta,
+            producto=self.producto,
+            cantidad=Decimal('1.00'),
+            precio_unitario=Decimal('15000.00'),
+            descuento_unitario=Decimal('0.00'),
+            iva_porcentaje=Decimal('19.00'),
+            subtotal=Decimal('12605.04'),
+            total=Decimal('15000.00'),
+        )
+
+    @patch('apps.facturacion.services.facturar_venta.uuid.uuid4')
+    @patch('apps.facturacion.services.facturar_venta.timezone.now')
+    def test_generate_unique_reference_code_usa_numero_visible_como_prefijo(self, mocked_now, mocked_uuid4):
+        mocked_now.return_value = timezone.make_aware(datetime(2026, 4, 5, 12, 30, 45))
+        mocked_uuid4.return_value = MagicMock(hex='ABCDEF1234567890')
+
+        code = _generate_unique_reference_code(self.venta.id, self.venta.numero_comprobante)
+
+        self.assertEqual(code, 'FAC-100001-20260405123045-ABCDEF12')
+
+    def test_resolve_reference_code_reutiliza_factura_existente_en_reintentos(self):
+        factura_existente = FacturaElectronica.objects.create(
+            venta=self.venta,
+            reference_code='FAC-100001-20260405123045-ABCDEF12',
+            status='PENDIENTE_REINTENTO',
+            estado_electronico='PENDIENTE_REINTENTO',
+        )
+
+        resolved = _resolve_reference_code(
+            venta=self.venta,
+            factura_existente=factura_existente,
+            numero=self.venta.numero_comprobante,
+        )
+        self.assertEqual(resolved, 'FAC-100001-20260405123045-ABCDEF12')
+
+    def test_conciliacion_documental_reporta_colision_reference_code_reutilizado(self):
+        request_payload = {
+            'reference_code': 'FAC-100001-20260405123045-ABCDEF12',
+            'customer': {'identification': self.cliente.numero_documento},
+            'items': [
+                {
+                    'quantity': 1,
+                    'price': 15000,
+                    'discount_rate': 0,
+                    'tax_rate': 19,
+                    'is_excluded': 0,
+                },
+                {
+                    'quantity': 1,
+                    'price': 15000,
+                    'discount_rate': 0,
+                    'tax_rate': 19,
+                    'is_excluded': 0,
+                },
+            ],
+        }
+        response_payload = {
+            'data': {
+                'bill': {
+                    'number': 'SETP990029018',
+                    'reference_code': 'FAC-100001-20260405123045-ABCDEF12',
+                    'customer': {'identification': self.cliente.numero_documento},
+                    'totals': {'total': '10000.00', 'tax_amount': '0.00', 'taxable_amount': '10000.00'},
+                    'items': [{'code_reference': 'PR-OLD'}],
+                }
+            }
+        }
+
+        with self.assertRaises(FactusValidationError) as exc:
+            _assert_document_conciliation(
+                venta=self.venta,
+                request_payload=request_payload,
+                response_payload=response_payload,
+                logger_context={'number': 'SETP990029018', 'reference_code': request_payload['reference_code']},
+            )
+        self.assertIn(DOCUMENT_CONCILIATION_ERROR_CODE, str(exc.exception))
+        self.assertIn('Posible colisión por reuse de reference_code', str(exc.exception))
 
 
 class FacturaHybridPdfFlowTests(TestCase):
