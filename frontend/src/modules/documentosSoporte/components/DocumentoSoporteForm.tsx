@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
+  type CategoriaOption,
   documentosSoporteApi,
   type CrearDocumentoSoportePayload,
-  type MercanciaSugerencia,
+  type ImpuestoOption,
   type ProveedorSugerencia,
 } from '../services/documentosSoporteApi';
 
@@ -24,14 +25,11 @@ export default function DocumentoSoporteForm({ onSubmit, loading }: DocumentoSop
   const [telefonoProveedor, setTelefonoProveedor] = useState('');
   const [descripcion, setDescripcion] = useState('');
   const [codigoReferencia, setCodigoReferencia] = useState('');
-  const [mercanciaId, setMercanciaId] = useState<number | undefined>(undefined);
-  const [mercanciaBusqueda, setMercanciaBusqueda] = useState('');
-  const [mercanciasSugeridas, setMercanciasSugeridas] = useState<MercanciaSugerencia[]>([]);
-  const [mostrarSugerenciasMercancias, setMostrarSugerenciasMercancias] = useState(false);
-  const [buscandoMercancia, setBuscandoMercancia] = useState(false);
-  const [categoriaMercancia, setCategoriaMercancia] = useState('');
-  const [unidadMedida, setUnidadMedida] = useState('');
-  const [ivaMercancia, setIvaMercancia] = useState('');
+  const [categoriaId, setCategoriaId] = useState('');
+  const [categorias, setCategorias] = useState<CategoriaOption[]>([]);
+  const [unidadMedida, setUnidadMedida] = useState('N/A');
+  const [impuestos, setImpuestos] = useState<ImpuestoOption[]>([]);
+  const [ivaMercancia, setIvaMercancia] = useState('0');
   const [cantidad, setCantidad] = useState('1');
   const [valorUnitario, setValorUnitario] = useState('');
   const [observacion, setObservacion] = useState('');
@@ -77,45 +75,22 @@ export default function DocumentoSoporteForm({ onSubmit, loading }: DocumentoSop
     }
   };
 
-  const handleMercanciaSelect = async (mercancia: MercanciaSugerencia) => {
-    setMercanciaId(mercancia.id);
-    setMercanciaBusqueda(`${mercancia.codigo} - ${mercancia.nombre}`);
-    setDescripcion(mercancia.nombre);
-    setCodigoReferencia(mercancia.codigo);
-    const costo = Number(mercancia.precio_costo ?? 0);
-    if (Number.isFinite(costo) && costo > 0) {
-      setValorUnitario(String(costo));
-    }
-    setCategoriaMercancia(mercancia.categoria_nombre ?? '');
-    setUnidadMedida(mercancia.unidad_medida ?? '');
-    setIvaMercancia(mercancia.iva_porcentaje ?? '');
-    try {
-      const detalle = await documentosSoporteApi.getMercancia(mercancia.id);
-      setCategoriaMercancia(detalle.categoria_nombre ?? mercancia.categoria_nombre ?? '');
-      setUnidadMedida(detalle.unidad_medida ?? mercancia.unidad_medida ?? '');
-      setIvaMercancia(detalle.iva_porcentaje ?? mercancia.iva_porcentaje ?? '');
-    } catch {
-      // Si falla detalle, mantenemos la info disponible del listado.
-    }
-    setMostrarSugerenciasMercancias(false);
-  };
-
-  const handleMercanciaChange = async (value: string) => {
-    setMercanciaBusqueda(value);
-    setMercanciaId(undefined);
-    setMostrarSugerenciasMercancias(true);
-    if (!value.trim()) {
-      setMercanciasSugeridas([]);
-      return;
-    }
-    setBuscandoMercancia(true);
-    try {
-      const resultados = await documentosSoporteApi.buscarMercancias(value.trim());
-      setMercanciasSugeridas(resultados);
-    } finally {
-      setBuscandoMercancia(false);
-    }
-  };
+  useEffect(() => {
+    const loadCatalogosArticulo = async () => {
+      try {
+        const [categoriasData, impuestosData] = await Promise.all([
+          documentosSoporteApi.getCategorias(),
+          documentosSoporteApi.getImpuestos(),
+        ]);
+        setCategorias(categoriasData);
+        setImpuestos(impuestosData);
+      } catch {
+        setCategorias([]);
+        setImpuestos([]);
+      }
+    };
+    loadCatalogosArticulo();
+  }, []);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -134,8 +109,8 @@ export default function DocumentoSoporteForm({ onSubmit, loading }: DocumentoSop
       observation: observacion.trim(),
       items: [
         {
-          producto_id: mercanciaId,
           codigo_referencia: codigoReferencia.trim(),
+          categoria_id: categoriaId ? Number(categoriaId) : undefined,
           descripcion: descripcion.trim(),
           cantidad: Number(cantidad),
           precio: Number(valorUnitario),
@@ -240,6 +215,65 @@ export default function DocumentoSoporteForm({ onSubmit, loading }: DocumentoSop
             <option value="CE">CE</option>
             <option value="NIT">NIT</option>
             <option value="PASAPORTE">Pasaporte</option>
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-1 text-sm text-slate-700">
+          Código referencia
+          <input
+            value={codigoReferencia}
+            onChange={(event) => setCodigoReferencia(event.target.value)}
+            className="rounded-md border border-slate-300 px-3 py-2 outline-none ring-blue-200 focus:ring"
+            required
+          />
+        </label>
+
+        <label className="flex flex-col gap-1 text-sm text-slate-700">
+          Categoría
+          <select
+            value={categoriaId}
+            onChange={(event) => setCategoriaId(event.target.value)}
+            className="rounded-md border border-slate-300 px-3 py-2 outline-none ring-blue-200 focus:ring"
+            required
+          >
+            <option value="">Seleccione una categoría</option>
+            {categorias.map((categoria) => (
+              <option key={categoria.id} value={categoria.id}>
+                {categoria.nombre}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-1 text-sm text-slate-700">
+          U/M
+          <select
+            value={unidadMedida}
+            onChange={(event) => setUnidadMedida(event.target.value)}
+            className="rounded-md border border-slate-300 px-3 py-2 outline-none ring-blue-200 focus:ring"
+            required
+          >
+            <option value="N/A">N/A</option>
+            <option value="KG">KG</option>
+            <option value="LT">LT</option>
+            <option value="MT">MT</option>
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-1 text-sm text-slate-700">
+          IVA (%)
+          <select
+            value={ivaMercancia}
+            onChange={(event) => setIvaMercancia(event.target.value)}
+            className="rounded-md border border-slate-300 px-3 py-2 outline-none ring-blue-200 focus:ring"
+            required
+          >
+            <option value="0">Exento (0%)</option>
+            {impuestos.map((impuesto) => (
+              <option key={impuesto.id} value={impuesto.porcentaje}>
+                {impuesto.nombre}
+              </option>
+            ))}
           </select>
         </label>
 

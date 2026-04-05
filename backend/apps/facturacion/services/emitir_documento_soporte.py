@@ -37,16 +37,39 @@ def _afectar_inventario_desde_documento_soporte(
     if not items:
         return
     for item in items:
-        producto_id = item.get('producto_id')
-        if not producto_id:
-            continue
-        producto = Producto.objects.filter(pk=producto_id, is_active=True).first()
-        if producto is None:
-            continue
         cantidad = Decimal(str(item.get('cantidad') or '0'))
-        costo_unitario = Decimal(str(item.get('precio') or producto.precio_costo or '0'))
         if cantidad <= 0:
             continue
+        producto_id = item.get('producto_id')
+        producto = Producto.objects.filter(pk=producto_id, is_active=True).first() if producto_id else None
+        costo_unitario = Decimal(str(item.get('precio') or (producto.precio_costo if producto else '0') or '0'))
+        if producto is None:
+            codigo = str(item.get('codigo_referencia') or '').strip()
+            nombre = str(item.get('descripcion') or '').strip()
+            categoria_id = item.get('categoria_id')
+            if not codigo or not nombre or not categoria_id:
+                continue
+            proveedor = None
+            if payload_data.get('proveedor_id'):
+                proveedor = Proveedor.objects.filter(pk=payload_data.get('proveedor_id'), is_active=True).first()
+            iva_porcentaje = Decimal(str(item.get('iva_porcentaje') or '0'))
+            precio_venta = costo_unitario + (costo_unitario * iva_porcentaje / Decimal('100'))
+            producto = Producto.objects.filter(codigo=codigo).first()
+            if producto is None:
+                producto = Producto.objects.create(
+                    codigo=codigo,
+                    nombre=nombre,
+                    categoria_id=int(categoria_id),
+                    proveedor=proveedor,
+                    precio_costo=costo_unitario,
+                    precio_venta=precio_venta,
+                    precio_venta_minimo=precio_venta,
+                    stock=Decimal('0'),
+                    stock_minimo=Decimal('1'),
+                    unidad_medida=str(item.get('unidad_medida') or 'N/A')[:20] or 'N/A',
+                    iva_porcentaje=iva_porcentaje,
+                    iva_exento=iva_porcentaje == Decimal('0'),
+                )
         stock_anterior = Decimal(str(producto.stock or '0'))
         stock_nuevo = stock_anterior + cantidad
         producto.stock = stock_nuevo

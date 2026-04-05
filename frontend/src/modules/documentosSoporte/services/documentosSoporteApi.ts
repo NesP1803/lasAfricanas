@@ -34,6 +34,7 @@ export interface CrearDocumentoSoportePayload {
   items: Array<{
     producto_id?: number;
     codigo_referencia?: string;
+    categoria_id?: number;
     descripcion: string;
     cantidad: number;
     precio: number;
@@ -63,6 +64,19 @@ export interface MercanciaSugerencia {
   iva_porcentaje?: string;
 }
 
+export interface CategoriaOption {
+  id: number;
+  nombre: string;
+  is_active?: boolean;
+}
+
+export interface ImpuestoOption {
+  id: number;
+  nombre: string;
+  porcentaje: string;
+  is_active?: boolean;
+}
+
 const crearArchivoDescargable = (blob: Blob, fileName: string) => {
   const url = window.URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -87,20 +101,20 @@ export const documentosSoporteApi = {
     return Array.isArray(payload) ? payload : (payload.results ?? []);
   },
 
-  async buscarMercancias(search: string) {
-    const response = await apiClient.get<{ results?: MercanciaSugerencia[] } | MercanciaSugerencia[]>(
-      '/productos/',
-      {
-        params: { is_active: true, es_servicio: false, search, page_size: 20 },
-      },
-    );
+  async getCategorias() {
+    const response = await apiClient.get<{ results?: CategoriaOption[] } | CategoriaOption[]>('/categorias/', {
+      params: { is_active: true, page_size: 200 },
+    });
     const payload = response.data;
     return Array.isArray(payload) ? payload : (payload.results ?? []);
   },
 
-  async getMercancia(id: number) {
-    const response = await apiClient.get<MercanciaSugerencia>(`/productos/${id}/`);
-    return response.data;
+  async getImpuestos() {
+    const response = await apiClient.get<{ results?: ImpuestoOption[] } | ImpuestoOption[]>('/impuestos/', {
+      params: { is_active: true, page_size: 200 },
+    });
+    const payload = response.data;
+    return Array.isArray(payload) ? payload : (payload.results ?? []);
   },
 
   async getDocumentosSoporte() {

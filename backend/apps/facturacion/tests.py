@@ -1192,6 +1192,62 @@ class DocumentoSoporteInventarioTests(TestCase):
             ).exists()
         )
 
+    @patch('apps.facturacion.services.emitir_documento_soporte.FactusClient.create_and_validate_support_document')
+    @patch('apps.facturacion.services.support_document_payload_builder.resolve_numbering_range')
+    def test_emitir_documento_soporte_crea_articulo_si_no_existe_producto_id(self, mocked_resolve_range, mocked_create):
+        mocked_resolve_range.return_value = RangoNumeracionDIAN(
+            factus_range_id=502,
+            factus_id=502,
+            prefijo='DS',
+            desde=1,
+            hasta=999999,
+            consecutivo_actual=1,
+            resolucion='RES-DS',
+            document_code='DOCUMENTO_SOPORTE',
+            environment='SANDBOX',
+        )
+        mocked_create.return_value = {
+            'data': {
+                'support_document': {
+                    'number': 'DS-502',
+                    'uuid': 'UUID-DS-502',
+                    'cufe': 'CUFE-DS-502',
+                    'status': 'valid',
+                }
+            }
+        }
+        payload = {
+            'proveedor_nombre': 'Proveedor test',
+            'proveedor_documento': '900123456',
+            'proveedor_tipo_documento': 'NIT',
+            'provider_address': 'CRA 1 # 1-01',
+            'provider_email': 'proveedor@test.com',
+            'items': [
+                {
+                    'codigo_referencia': 'ART-DS-NEW',
+                    'descripcion': 'Filtro de aceite',
+                    'categoria_id': self.categoria.id,
+                    'unidad_medida': 'N/A',
+                    'iva_porcentaje': '19',
+                    'cantidad': 2,
+                    'precio': 20000,
+                }
+            ],
+        }
+        from apps.facturacion.services.emitir_documento_soporte import emitir_documento_soporte
+
+        documento = emitir_documento_soporte(payload, user=self.user)
+        producto_nuevo = Producto.objects.filter(codigo='ART-DS-NEW').first()
+        self.assertIsNotNone(producto_nuevo)
+        self.assertEqual(producto_nuevo.stock, Decimal('2'))
+        self.assertTrue(
+            MovimientoInventario.objects.filter(
+                producto=producto_nuevo,
+                tipo='ENTRADA',
+                referencia=f'DOC-SOP-{documento.number}',
+            ).exists()
+        )
+
 
 class SyncInvoiceStatusCommandTests(TestCase):
     def setUp(self):
