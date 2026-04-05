@@ -55,7 +55,10 @@ def build_support_document_payload(data: dict[str, Any]) -> dict[str, Any]:
                 'quantity': cantidad_entera,
                 'discount_rate': float(_to_decimal(item.get('descuento_porcentaje', 0))),
                 'price': float(precio),
-                'unit_measure_id': int(item.get('unit_measure_id') or get_unit_measure_id('94', default=70)),
+                'unit_measure_id': int(
+                    item.get('unit_measure_id')
+                    or get_unit_measure_id(str(item.get('unidad_medida') or '94'), default=70)
+                ),
                 'standard_code_id': int(item.get('standard_code_id') or 1),
             }
         )

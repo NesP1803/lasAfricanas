@@ -533,6 +533,14 @@ class FactusClient:
             return self.send_support_document(payload)
         except FactusAPIError as exc:
             detail = (exc.provider_detail or '').lower()
+            if exc.status_code == 409 and 'documento soporte por enviar a la dian' in detail:
+                raise FactusPendingDianError(
+                    'Ya existe un documento soporte pendiente de envío/validación ante DIAN en Factus. '
+                    'Debe esperar o sincronizar antes de emitir uno nuevo.',
+                    status_code=409,
+                    provider_detail=exc.provider_detail,
+                    provider_payload=exc.provider_payload,
+                ) from exc
             should_retry_with_v1 = (
                 exc.status_code == 404
                 and 'route' in detail

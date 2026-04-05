@@ -29,6 +29,9 @@ export default function DocumentoSoporteForm({ onSubmit, loading }: DocumentoSop
   const [mercanciasSugeridas, setMercanciasSugeridas] = useState<MercanciaSugerencia[]>([]);
   const [mostrarSugerenciasMercancias, setMostrarSugerenciasMercancias] = useState(false);
   const [buscandoMercancia, setBuscandoMercancia] = useState(false);
+  const [categoriaMercancia, setCategoriaMercancia] = useState('');
+  const [unidadMedida, setUnidadMedida] = useState('');
+  const [ivaMercancia, setIvaMercancia] = useState('');
   const [cantidad, setCantidad] = useState('1');
   const [valorUnitario, setValorUnitario] = useState('');
   const [observacion, setObservacion] = useState('');
@@ -74,7 +77,7 @@ export default function DocumentoSoporteForm({ onSubmit, loading }: DocumentoSop
     }
   };
 
-  const handleMercanciaSelect = (mercancia: MercanciaSugerencia) => {
+  const handleMercanciaSelect = async (mercancia: MercanciaSugerencia) => {
     setMercanciaId(mercancia.id);
     setMercanciaBusqueda(`${mercancia.codigo} - ${mercancia.nombre}`);
     setDescripcion(mercancia.nombre);
@@ -82,6 +85,17 @@ export default function DocumentoSoporteForm({ onSubmit, loading }: DocumentoSop
     const costo = Number(mercancia.precio_costo ?? 0);
     if (Number.isFinite(costo) && costo > 0) {
       setValorUnitario(String(costo));
+    }
+    setCategoriaMercancia(mercancia.categoria_nombre ?? '');
+    setUnidadMedida(mercancia.unidad_medida ?? '');
+    setIvaMercancia(mercancia.iva_porcentaje ?? '');
+    try {
+      const detalle = await documentosSoporteApi.getMercancia(mercancia.id);
+      setCategoriaMercancia(detalle.categoria_nombre ?? mercancia.categoria_nombre ?? '');
+      setUnidadMedida(detalle.unidad_medida ?? mercancia.unidad_medida ?? '');
+      setIvaMercancia(detalle.iva_porcentaje ?? mercancia.iva_porcentaje ?? '');
+    } catch {
+      // Si falla detalle, mantenemos la info disponible del listado.
     }
     setMostrarSugerenciasMercancias(false);
   };
@@ -125,6 +139,8 @@ export default function DocumentoSoporteForm({ onSubmit, loading }: DocumentoSop
           descripcion: descripcion.trim(),
           cantidad: Number(cantidad),
           precio: Number(valorUnitario),
+          unidad_medida: unidadMedida.trim(),
+          iva_porcentaje: ivaMercancia.trim(),
         },
       ],
     });
@@ -267,6 +283,36 @@ export default function DocumentoSoporteForm({ onSubmit, loading }: DocumentoSop
             onChange={(event) => setCodigoReferencia(event.target.value)}
             className="rounded-md border border-slate-300 px-3 py-2 outline-none ring-blue-200 focus:ring"
             required
+          />
+        </label>
+
+        <label className="flex flex-col gap-1 text-sm text-slate-700">
+          Categoría
+          <input
+            value={categoriaMercancia}
+            onChange={(event) => setCategoriaMercancia(event.target.value)}
+            className="rounded-md border border-slate-300 px-3 py-2 outline-none ring-blue-200 focus:ring"
+            placeholder="Categoría del artículo"
+          />
+        </label>
+
+        <label className="flex flex-col gap-1 text-sm text-slate-700">
+          U/M
+          <input
+            value={unidadMedida}
+            onChange={(event) => setUnidadMedida(event.target.value)}
+            className="rounded-md border border-slate-300 px-3 py-2 outline-none ring-blue-200 focus:ring"
+            placeholder="Unidad de medida"
+          />
+        </label>
+
+        <label className="flex flex-col gap-1 text-sm text-slate-700">
+          IVA (%)
+          <input
+            value={ivaMercancia}
+            onChange={(event) => setIvaMercancia(event.target.value)}
+            className="rounded-md border border-slate-300 px-3 py-2 outline-none ring-blue-200 focus:ring"
+            placeholder="IVA del artículo"
           />
         </label>
 

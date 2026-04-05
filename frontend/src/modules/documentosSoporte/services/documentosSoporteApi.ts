@@ -37,6 +37,8 @@ export interface CrearDocumentoSoportePayload {
     descripcion: string;
     cantidad: number;
     precio: number;
+    unidad_medida?: string;
+    iva_porcentaje?: string;
   }>;
 }
 
@@ -54,6 +56,8 @@ export interface MercanciaSugerencia {
   id: number;
   codigo: string;
   nombre: string;
+  categoria_nombre?: string;
+  unidad_medida?: string;
   precio_costo?: string;
   precio_venta?: string;
   iva_porcentaje?: string;
@@ -92,6 +96,11 @@ export const documentosSoporteApi = {
     );
     const payload = response.data;
     return Array.isArray(payload) ? payload : (payload.results ?? []);
+  },
+
+  async getMercancia(id: number) {
+    const response = await apiClient.get<MercanciaSugerencia>(`/productos/${id}/`);
+    return response.data;
   },
 
   async getDocumentosSoporte() {
