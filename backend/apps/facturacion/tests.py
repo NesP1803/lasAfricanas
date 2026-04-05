@@ -48,6 +48,7 @@ from apps.facturacion.services.sync_numbering_ranges import _resolve_document_co
 from apps.facturacion.services.credit_note_workflow import (
     _map_payload_for_factus,
     extract_credit_note_remote_fields,
+    map_credit_note_status,
     sincronizar_nota_credito,
 )
 from apps.facturacion.services.credit_note_service import build_credit_preview, create_credit_note
@@ -2635,6 +2636,22 @@ class FactusClientCreditNoteFallbackTests(TestCase):
         self.assertEqual(response['data']['credit_note']['number'], 'NC-OK')
         self.assertEqual(mocked_send.call_count, 2)
 
+    @patch('apps.facturacion.services.factus_client.FactusClient.request')
+    def test_retry_credit_note_show_with_show_endpoint_when_route_not_found(self, mocked_request):
+        client = FactusClient()
+        client.credit_note_show_path = '/v1/credit-notes/{number}'
+        mocked_request.side_effect = [
+            FactusAPIError(
+                "Factus rechazó la factura. Detalle: {'message': 'The route v1/credit-notes/NC-001 could not be found.'}",
+                status_code=404,
+                provider_detail="{'message': 'The route v1/credit-notes/NC-001 could not be found.'}",
+            ),
+            {'data': {'credit_note': {'number': 'NC-001'}}},
+        ]
+        payload = client.get_credit_note('NC-001')
+        self.assertEqual(payload['data']['credit_note']['number'], 'NC-001')
+        self.assertEqual(mocked_request.call_count, 2)
+
 
 class CreditNoteWorkflowHardeningTests(TestCase):
     def setUp(self):
@@ -2938,6 +2955,69 @@ class CreditNoteWorkflowHardeningTests(TestCase):
         second = sincronizar_nota_credito(nota.id)
         self.assertEqual(first.id, second.id)
         self.assertEqual(NotaCreditoElectronica.objects.filter(reference_code='NC-IDEMP').count(), 1)
+
+    @patch('apps.facturacion.services.credit_note_workflow.FactusClient.list_credit_notes')
+    @patch('apps.facturacion.services.credit_note_workflow.FactusClient.create_and_validate_credit_note')
+    def test_409_pendiente_luego_sync_por_reference_code_pasa_a_aceptada(self, mocked_create, mocked_list):
+        mocked_create.side_effect = FactusPendingCreditNoteError('409', status_code=409)
+        mocked_list.side_effect = [
+            {'data': {'credit_notes': [{'number': '', 'reference_code': 'NC-REF-409', 'status': 'pending'}]}},
+            {'data': {'credit_notes': [{'number': 'NC-REF-409-1', 'reference_code': 'NC-REF-409', 'uuid': 'UUID-409', 'cufe': 'CUFE-409', 'pdf_url': 'https://x/pdf', 'xml_url': 'https://x/xml', 'public_url': 'https://x/public', 'status': 'processing'}]}},
+        ]
+        with patch('apps.facturacion.services.credit_note_workflow._build_reference_code', return_value='NC-REF-409'):
+            nota, _ = create_credit_note(factura=self.factura, motivo='x', lines=self._lines(), is_total=False, user=self.user)
+        self.assertEqual(nota.estado_local, 'ACEPTADA')
+        self.assertEqual(nota.number, 'NC-REF-409-1')
+        self.assertEqual(nota.cufe, 'CUFE-409')
+        self.assertEqual(nota.uuid, 'UUID-409')
+        self.assertEqual(nota.pdf_url, 'https://x/pdf')
+        self.assertEqual(nota.xml_url, 'https://x/xml')
+        self.assertEqual(nota.public_url, 'https://x/public')
+
+    @patch('apps.facturacion.services.credit_note_workflow.FactusClient.list_credit_notes')
+    def test_sync_permanece_pendiente_sin_evidencia_final(self, mocked_list):
+        nota = NotaCreditoElectronica.objects.create(
+            factura=self.factura,
+            venta_origen=self.venta,
+            number='',
+            tipo_nota='PARCIAL',
+            estado_local='PENDIENTE_DIAN',
+            estado_electronico='PENDIENTE_DIAN',
+            status='PENDIENTE_DIAN',
+            request_json={},
+            response_json={},
+            reference_code='NC-SIN-FINAL',
+        )
+        mocked_list.return_value = {'data': {'credit_notes': [{'reference_code': 'NC-SIN-FINAL', 'status': 'pending'}]}}
+        synced = sincronizar_nota_credito(nota.id)
+        self.assertEqual(synced.estado_local, 'PENDIENTE_DIAN')
+        self.assertEqual(synced.estado_electronico, 'PENDIENTE_DIAN')
+
+    def test_map_credit_note_status_prioriza_evidencia_final(self):
+        estado, raw = map_credit_note_status(
+            {'data': {'credit_note': {'number': 'NC-FINAL', 'cufe': 'CUFE-FINAL', 'uuid': 'UUID-FINAL', 'status': 'processing'}}}
+        )
+        self.assertEqual(estado, 'ACEPTADA')
+        self.assertEqual(raw, 'processing')
+
+    def test_serializer_numero_nota_no_usa_numero_factura_como_fallback(self):
+        nota = NotaCreditoElectronica.objects.create(
+            factura=self.factura,
+            venta_origen=self.venta,
+            number='',
+            tipo_nota='PARCIAL',
+            estado_local='PENDIENTE_DIAN',
+            estado_electronico='PENDIENTE_DIAN',
+            status='PENDIENTE_DIAN',
+            request_json={},
+            response_json={},
+            reference_code='NC-SERIALIZER',
+        )
+        response = self.client.get('/api/notas-credito/')
+        self.assertEqual(response.status_code, 200)
+        result = next(item for item in response.data if item['id'] == nota.id)
+        self.assertEqual(result['numero'], '')
+        self.assertEqual(result['factura_asociada'], self.factura.number)
 
 
 class CreditNoteEndpointsTests(TestCase):

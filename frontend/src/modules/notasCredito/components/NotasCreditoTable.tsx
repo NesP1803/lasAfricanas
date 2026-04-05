@@ -25,6 +25,8 @@ const formatFecha = (fecha: string) => {
 const getTotalNota = (nota: NotaCredito) =>
   (nota.detalles || []).reduce((acc, line) => acc + Number(line.total_linea || 0), 0);
 
+const getNumeroNota = (nota: NotaCredito) => nota.numero?.trim() || 'Pendiente de asignación';
+
 export default function NotasCreditoTable({ notasCredito, loading, onRefresh }: NotasCreditoTableProps) {
   const [rowLoading, setRowLoading] = useState<Record<string, string | null>>({});
   const [query, setQuery] = useState('');
@@ -35,7 +37,7 @@ export default function NotasCreditoTable({ notasCredito, loading, onRefresh }: 
 
   const filteredNotas = useMemo(() => {
     return notasCredito.filter((nota) => {
-      const text = `${nota.numero} ${nota.factura_asociada} ${nota.motivo}`.toLowerCase();
+      const text = `${nota.numero || ''} ${nota.factura_asociada} ${nota.motivo}`.toLowerCase();
       const q = query.trim().toLowerCase();
       const estado = resolveEstadoNota(nota);
       const fecha = new Date(nota.fecha).getTime();
@@ -50,24 +52,24 @@ export default function NotasCreditoTable({ notasCredito, loading, onRefresh }: 
     });
   }, [notasCredito, query, estadoFilter, desde, hasta]);
 
-  const setActionLoading = (numero: string, action: string | null) => {
-    setRowLoading((prev) => ({ ...prev, [numero]: action }));
+  const setActionLoading = (notaId: number, action: string | null) => {
+    setRowLoading((prev) => ({ ...prev, [String(notaId)]: action }));
   };
 
   const handleDescargar = async (nota: NotaCredito, tipo: 'xml' | 'pdf') => {
-    setActionLoading(nota.numero, tipo);
+    setActionLoading(nota.id, tipo);
     try {
       if (tipo === 'xml') await notasCreditoApi.descargarXML(nota.id, nota.numero);
       else await notasCreditoApi.descargarPDF(nota.id, nota.numero);
     } catch {
       showNotification({ message: `No fue posible descargar ${tipo.toUpperCase()} de ${nota.numero}. Intente sincronizar primero.`, type: 'error' });
     } finally {
-      setActionLoading(nota.numero, null);
+      setActionLoading(nota.id, null);
     }
   };
 
   const handleCorreo = async (nota: NotaCredito) => {
-    setActionLoading(nota.numero, 'correo');
+    setActionLoading(nota.id, 'correo');
     try {
       await notasCreditoApi.enviarCorreo(nota.id);
       await onRefresh();
@@ -75,13 +77,13 @@ export default function NotasCreditoTable({ notasCredito, loading, onRefresh }: 
     } catch {
       showNotification({ message: 'No fue posible enviar correo de la nota crédito.', type: 'error' });
     } finally {
-      setActionLoading(nota.numero, null);
+      setActionLoading(nota.id, null);
     }
   };
 
   const handleEliminar = async (nota: NotaCredito) => {
     if (!window.confirm(`¿Eliminar la nota crédito ${nota.numero}? Esta acción no se puede deshacer.`)) return;
-    setActionLoading(nota.numero, 'eliminar');
+    setActionLoading(nota.id, 'eliminar');
     try {
       await notasCreditoApi.eliminarNotaCredito(nota.id);
       await onRefresh();
@@ -89,7 +91,7 @@ export default function NotasCreditoTable({ notasCredito, loading, onRefresh }: 
     } catch {
       showNotification({ message: 'No fue posible eliminar la nota crédito.', type: 'error' });
     } finally {
-      setActionLoading(nota.numero, null);
+      setActionLoading(nota.id, null);
     }
   };
 
@@ -146,12 +148,12 @@ export default function NotasCreditoTable({ notasCredito, loading, onRefresh }: 
               </tr>
             ) : (
               filteredNotas.map((nota) => {
-                const loadingAction = rowLoading[nota.numero];
+                const loadingAction = rowLoading[String(nota.id)];
                 const total = getTotalNota(nota);
                 const estado = resolveEstadoNota(nota);
                 return (
                   <tr key={nota.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 font-semibold text-slate-800">{nota.numero}</td>
+                    <td className="px-4 py-3 font-semibold text-slate-800">{getNumeroNota(nota)}</td>
                     <td className="px-4 py-3 text-slate-700">{nota.factura_asociada}</td>
                     <td className="px-4 py-3 text-slate-700">—</td>
                     <td className="px-4 py-3 text-slate-600">{formatFecha(nota.fecha)}</td>
