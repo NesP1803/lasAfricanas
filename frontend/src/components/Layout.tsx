@@ -267,11 +267,11 @@ export default function Layout() {
       }
 
       if (pathname.startsWith("/ventas/detalles-cuentas")) {
-        return { moduleKey: "facturacion", sectionKey: "cuentas" };
+        return { moduleKey: "listados", sectionKey: "detalles_cuentas" };
       }
 
       if (pathname.startsWith("/ventas/cuentas-dia")) {
-        return { moduleKey: "facturacion", sectionKey: "cuentas" };
+        return { moduleKey: "listados", sectionKey: "cuentas_dia" };
       }
 
 
@@ -289,12 +289,39 @@ export default function Layout() {
         pathname.startsWith("/facturacion-electronica") ||
         pathname.startsWith("/listados/notas-credito") ||
         pathname.startsWith("/listados/documentos-soporte") ||
-        pathname.startsWith("/facturacion/nota-credito") ||
-        pathname.startsWith("/facturacion/documento-soporte") ||
         pathname.startsWith("/notas-credito") ||
         pathname.startsWith("/documentos-soporte")
       ) {
-        return { moduleKey: "facturacion", sectionKey: "listados" };
+        if (pathname.startsWith("/facturacion/facturas")) {
+          return { moduleKey: "listados", sectionKey: "facturas" };
+        }
+        if (pathname.startsWith("/facturacion/remisiones")) {
+          return { moduleKey: "listados", sectionKey: "remisiones" };
+        }
+        if (pathname.startsWith("/facturacion-electronica")) {
+          return { moduleKey: "listados", sectionKey: "facturas" };
+        }
+        if (
+          pathname.startsWith("/listados/notas-credito") ||
+          pathname.startsWith("/notas-credito")
+        ) {
+          return { moduleKey: "listados", sectionKey: "notas_credito" };
+        }
+        if (
+          pathname.startsWith("/listados/documentos-soporte") ||
+          pathname.startsWith("/documentos-soporte")
+        ) {
+          return { moduleKey: "listados", sectionKey: "documentos_soporte" };
+        }
+        return null;
+      }
+
+      if (pathname.startsWith("/facturacion/nota-credito")) {
+        return { moduleKey: "facturacion", sectionKey: "nota_credito" };
+      }
+
+      if (pathname.startsWith("/facturacion/documento-soporte")) {
+        return { moduleKey: "facturacion", sectionKey: "documento_soporte" };
       }
 
       return null;
@@ -308,37 +335,9 @@ export default function Layout() {
       return;
     }
 
-    const hasFacturacionListados =
-      sectionEnabled("facturacion", "listados") ||
-      sectionEnabled("listados", "listados");
-    const hasNotasCreditoConsulta =
-      hasFacturacionListados || sectionEnabled("listados", "notas_credito");
-    const hasDocumentosSoporteConsulta =
-      hasFacturacionListados ||
-      sectionEnabled("listados", "documentos_soporte");
-    const hasFacturacionDiligenciamiento = sectionEnabled(
-      "facturacion",
-      "listados"
-    );
-
     let allowed = requirement.sectionKey
       ? sectionEnabled(requirement.moduleKey, requirement.sectionKey)
       : moduleEnabled(requirement.moduleKey);
-
-    if (location.pathname.startsWith("/listados/notas-credito")) {
-      allowed = hasNotasCreditoConsulta;
-    }
-
-    if (location.pathname.startsWith("/listados/documentos-soporte")) {
-      allowed = hasDocumentosSoporteConsulta;
-    }
-
-    if (
-      location.pathname.startsWith("/facturacion/nota-credito") ||
-      location.pathname.startsWith("/facturacion/documento-soporte")
-    ) {
-      allowed = hasFacturacionDiligenciamiento;
-    }
 
     if (!allowed) {
       navigate("/");
@@ -421,21 +420,21 @@ export default function Layout() {
         const cajaSection = facturacionSections.find(
           (section) => section.key === "caja"
         );
+        const notaCreditoSection = facturacionSections.find(
+          (section) => section.key === "nota_credito"
+        );
+        const documentoSoporteSection = facturacionSections.find(
+          (section) => section.key === "documento_soporte"
+        );
         const canAccessCuentas =
           isAdmin ||
-          sectionEnabled("facturacion", "cuentas") ||
-          sectionEnabled("listados", "cuentas");
-        const canAccessListados =
-          isAdmin ||
-          sectionEnabled("facturacion", "listados") ||
-          sectionEnabled("listados", "listados");
+          sectionEnabled("listados", "cuentas_dia") ||
+          sectionEnabled("listados", "detalles_cuentas");
         const canAccessNotasCreditoListado =
           isAdmin ||
-          sectionEnabled("facturacion", "listados") ||
           sectionEnabled("listados", "notas_credito");
         const canAccessDocumentosSoporteListado =
           isAdmin ||
-          sectionEnabled("facturacion", "listados") ||
           sectionEnabled("listados", "documentos_soporte");
 
         if (
@@ -453,14 +452,22 @@ export default function Layout() {
             path: cajaSection.path,
           });
         }
-        if (isAdmin || sectionEnabled("facturacion", "listados")) {
+        if (
+          notaCreditoSection?.path &&
+          (isAdmin || sectionEnabled("facturacion", "nota_credito"))
+        ) {
           facturacionItems.push({
-            label: "Nota crédito",
-            path: "/facturacion/nota-credito",
+            label: notaCreditoSection.label,
+            path: notaCreditoSection.path,
           });
+        }
+        if (
+          documentoSoporteSection?.path &&
+          (isAdmin || sectionEnabled("facturacion", "documento_soporte"))
+        ) {
           facturacionItems.push({
-            label: "Documento soporte",
-            path: "/facturacion/documento-soporte",
+            label: documentoSoporteSection.label,
+            path: documentoSoporteSection.path,
           });
         }
         if (canAccessCuentas) {
@@ -476,11 +483,11 @@ export default function Layout() {
           });
         }
         const listadosItems: MenuItem[] = [];
-        if (canAccessListados) {
-          listadosItems.push(
-            { label: "Facturas", path: "/facturacion/facturas" },
-            { label: "Remisiones", path: "/facturacion/remisiones" }
-          );
+        if (isAdmin || sectionEnabled("listados", "facturas")) {
+          listadosItems.push({ label: "Facturas", path: "/facturacion/facturas" });
+        }
+        if (isAdmin || sectionEnabled("listados", "remisiones")) {
+          listadosItems.push({ label: "Remisiones", path: "/facturacion/remisiones" });
         }
         if (canAccessNotasCreditoListado) {
           listadosItems.push({

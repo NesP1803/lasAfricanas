@@ -28,15 +28,12 @@ export const SYSTEM_MODULES: SystemModule[] = [
     key: "listados",
     label: "Listados",
     description:
-      "Acceso a clientes, proveedores, empleados, categorías y consultas de facturación.",
+      "Consultas de cuentas, facturas, remisiones y documentos.",
     sections: [
-      { key: "clientes", label: "Clientes" },
-      { key: "proveedores", label: "Proveedores" },
-      { key: "empleados", label: "Empleados" },
-      { key: "categorias", label: "Categorías" },
-      { key: "mecanicos", label: "Mecánicos" },
-      { key: "cuentas", label: "Cuentas" },
-      { key: "listados", label: "Facturas y remisiones" },
+      { key: "cuentas_dia", label: "Cuentas del día" },
+      { key: "detalles_cuentas", label: "Detalles cuentas" },
+      { key: "facturas", label: "Facturas" },
+      { key: "remisiones", label: "Remisiones" },
       { key: "notas_credito", label: "Notas crédito" },
       { key: "documentos_soporte", label: "Documentos soporte" },
     ],
@@ -62,12 +59,16 @@ export const SYSTEM_MODULES: SystemModule[] = [
   {
     key: "facturacion",
     label: "Facturación",
-    description: "Venta rápida, cuentas y listados de facturas.",
+    description: "Venta rápida, caja y diligenciamiento de documentos.",
     sections: [
       { key: "venta_rapida", label: "Venta rápida", path: "/ventas" },
       { key: "caja", label: "Caja", path: "/facturacion/caja" },
-      { key: "cuentas", label: "Cuentas" },
-      { key: "listados", label: "Listados" },
+      { key: "nota_credito", label: "Nota crédito", path: "/facturacion/nota-credito" },
+      {
+        key: "documento_soporte",
+        label: "Documento soporte",
+        path: "/facturacion/documento-soporte",
+      },
     ],
   },
 ];

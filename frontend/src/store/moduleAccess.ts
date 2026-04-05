@@ -207,6 +207,60 @@ export const normalizeModuleAccess = (
         moduleState.enabled = true;
       }
     }
+
+    if (moduleDef.key === "listados") {
+      const legacyCuentasEnabled =
+        typeof incoming === "object" &&
+        !Array.isArray(incoming) &&
+        Boolean(
+          (incoming as Record<string, unknown>).cuentas ||
+            ((incoming as Record<string, unknown>).sections as Record<
+              string,
+              boolean | undefined
+            > | null)?.cuentas
+        );
+      const legacyListadosEnabled =
+        typeof incoming === "object" &&
+        !Array.isArray(incoming) &&
+        Boolean(
+          (incoming as Record<string, unknown>).listados ||
+            ((incoming as Record<string, unknown>).sections as Record<
+              string,
+              boolean | undefined
+            > | null)?.listados
+        );
+
+      if (legacyCuentasEnabled) {
+        moduleState.sections.cuentas_dia = true;
+        moduleState.sections.detalles_cuentas = true;
+      }
+      if (legacyListadosEnabled) {
+        moduleState.sections.facturas = true;
+        moduleState.sections.remisiones = true;
+      }
+    }
+
+    if (moduleDef.key === "facturacion") {
+      const legacyListadosEnabled =
+        typeof incoming === "object" &&
+        !Array.isArray(incoming) &&
+        Boolean(
+          (incoming as Record<string, unknown>).listados ||
+            ((incoming as Record<string, unknown>).sections as Record<
+              string,
+              boolean | undefined
+            > | null)?.listados
+        );
+
+      if (legacyListadosEnabled) {
+        moduleState.sections.nota_credito = true;
+        moduleState.sections.documento_soporte = true;
+      }
+    }
+
+    if (Object.values(moduleState.sections).some(Boolean)) {
+      moduleState.enabled = true;
+    }
   });
 
   return normalized;
