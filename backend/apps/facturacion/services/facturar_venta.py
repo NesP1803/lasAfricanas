@@ -1549,9 +1549,9 @@ def facturar_venta(
     if not fields.get('uuid'):
         fields['uuid'] = fields.get('cufe') or fields.get('reference_code') or fields['number']
     if not fields.get('xml_url'):
-        fields['xml_url'] = f'{client.base_url}/v1/bills/download-xml/{fields["number"]}'
+        fields['xml_url'] = f'{client.base_url}{client.bill_download_xml_path.format(number=fields["number"])}'
     if not fields.get('pdf_url'):
-        fields['pdf_url'] = f'{client.base_url}/v1/bills/download-pdf/{fields["number"]}'
+        fields['pdf_url'] = f'{client.base_url}{client.bill_download_pdf_path.format(number=fields["number"])}'
 
     required_fields = ['cufe', 'number', 'uuid', 'xml_url', 'pdf_url']
     missing_fields = [field for field in required_fields if not fields[field]]

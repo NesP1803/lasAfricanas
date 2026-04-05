@@ -102,6 +102,7 @@ DATABASE_PORT=5432
 
 Para Factus puedes partir de uno de estos templates:
 
+- `backend/.env.example` (catálogo completo de variables Factus)
 - `backend/.env.sandbox.example`
 - `backend/.env.production.example`
 
@@ -109,17 +110,21 @@ Variables mínimas de Factus:
 
 ```env
 FACTUS_ENV=sandbox
-# FACTUS_API_URL=...   # opcional como override
+FACTUS_API_URL=https://api-sandbox.factus.com.co
 FACTUS_AUTH_PATH=/oauth/token
-FACTUS_NUMBERING_RANGES_PATH=/v1/numbering-ranges
+FACTUS_REFRESH_TOKEN_PATH=/oauth/token
 FACTUS_INVOICE_PATH=/v1/bills/validate
+FACTUS_BILL_SHOW_PATH=/v1/bills/show/{number}
 FACTUS_CREDIT_NOTE_PATH=/v1/credit-notes/validate
+FACTUS_SUPPORT_DOCUMENT_VALIDATE_PATH=/v1/support-documents/validate
+FACTUS_NUMBERING_RANGES_PATH=/v1/numbering-ranges
 ```
 
 Para pasar a producción normalmente basta con cambiar:
 
 ```env
 FACTUS_ENV=production
+FACTUS_API_URL=https://api.factus.com.co
 ```
 
 ### 4) Crear la base de datos
