@@ -383,6 +383,18 @@ export default function Taller() {
     await openEditMoto(selected);
   };
 
+  const handleQuitarMotoSeleccionada = async () => {
+    const selected = motosPorMecanico.find((moto) => moto.id === selectedMotoId);
+    if (!selected) {
+      showNotification({
+        message: 'Selecciona una moto para quitar.',
+        type: 'error',
+      });
+      return;
+    }
+    await handleQuitarMotoAsignada(selected);
+  };
+
   const handleQuitarMotoAsignada = async (moto: Moto) => {
     if (!selectedMecanicoId) return;
 
@@ -699,6 +711,47 @@ export default function Taller() {
             <p className="text-xs font-semibold uppercase text-blue-500">Taller</p>
             <h1 className="text-xl font-semibold text-slate-900">{activeTabConfig.label}</h1>
             <p className="text-sm text-slate-500">{activeTabConfig.description}</p>
+            {activeTab === 'ordenes' && (
+              <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2">
+                <h2 className="text-xs font-semibold uppercase text-blue-800">Registro de motos</h2>
+                <p className="text-[11px] text-blue-600">Crear o editar motos del taller</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={openCreateMoto}
+                    className="inline-flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-[11px] font-semibold text-blue-700 transition hover:bg-blue-100"
+                  >
+                    <Plus size={14} />
+                    Registrar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleEditMotoSeleccionada}
+                    className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 transition hover:border-blue-200 hover:text-blue-600"
+                  >
+                    <Pencil size={14} />
+                    Editar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleQuitarMotoSeleccionada}
+                    disabled={!selectedMecanicoId}
+                    className="inline-flex items-center gap-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <X size={14} />
+                    Quitar moto
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSearchParams({ tab: 'motos' })}
+                    className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 transition hover:border-blue-200 hover:text-blue-600"
+                  >
+                    <Bike size={14} />
+                    Ver listado
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -851,38 +904,6 @@ export default function Taller() {
                   </div>
                 </div>
 
-                <div className="border border-slate-200 bg-white shadow-sm">
-                  <div className="border-b border-blue-100 bg-blue-50 px-3 py-2">
-                    <h2 className="text-xs font-semibold uppercase text-blue-800">Registro de motos</h2>
-                    <p className="text-[11px] text-blue-600">Crear o editar motos del taller</p>
-                  </div>
-                  <div className="flex flex-wrap gap-2 px-3 py-3">
-                    <button
-                      type="button"
-                      onClick={openCreateMoto}
-                      className="inline-flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-[11px] font-semibold text-blue-700 transition hover:bg-blue-100"
-                    >
-                      <Plus size={14} />
-                      Registrar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleEditMotoSeleccionada}
-                      className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 transition hover:border-blue-200 hover:text-blue-600"
-                    >
-                      <Pencil size={14} />
-                      Editar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSearchParams({ tab: 'motos' })}
-                      className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 transition hover:border-blue-200 hover:text-blue-600"
-                    >
-                      <Bike size={14} />
-                      Ver listado
-                    </button>
-                  </div>
-                </div>
               </section>
 
               <section className="space-y-4">
