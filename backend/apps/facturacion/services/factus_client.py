@@ -573,7 +573,31 @@ class FactusClient:
         return self.request('GET', self.support_document_list_path, params=translated_params or None)
 
     def get_support_document(self, number: str) -> dict[str, Any]:
-        return self.request('GET', self.support_document_show_path.format(number=number))
+        try:
+            return self.request('GET', self.support_document_show_path.format(number=number))
+        except FactusAPIError as exc:
+            detail = (exc.provider_detail or '').lower()
+            should_retry_with_show = (
+                (
+                    exc.status_code == 404
+                    and 'route' in detail
+                    and '/support-documents/' in detail
+                )
+                or (
+                    exc.status_code == 405
+                    and 'method not allowed' in detail
+                    and 'supported methods' in detail
+                )
+            ) and '/show/' not in self.support_document_show_path
+            if not should_retry_with_show:
+                raise
+            fallback_path = '/v1/support-documents/show/{number}'
+            logger.warning(
+                'Factus support_document_show_path=%s rechazado; reintentando con endpoint %s',
+                self.support_document_show_path,
+                fallback_path,
+            )
+            return self.request('GET', fallback_path.format(number=number))
 
     def download_support_document_pdf(self, number: str) -> bytes:
         path = self.support_document_download_pdf_path.format(number=number)

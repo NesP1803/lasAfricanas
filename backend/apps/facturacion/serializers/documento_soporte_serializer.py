@@ -31,7 +31,7 @@ class DocumentoSoporteListSerializer(serializers.ModelSerializer):
 
     numero = serializers.CharField(source='number', read_only=True)
     fecha = serializers.DateTimeField(source='created_at', read_only=True)
-    estado = serializers.CharField(source='status', read_only=True)
+    estado = serializers.SerializerMethodField()
     estado_dian = serializers.CharField(source='status', read_only=True)
     total = serializers.SerializerMethodField()
     can_sync = serializers.SerializerMethodField()
@@ -57,6 +57,12 @@ class DocumentoSoporteListSerializer(serializers.ModelSerializer):
             'can_sync',
         ]
         read_only_fields = fields
+
+    def get_estado(self, obj: DocumentoSoporteElectronico) -> str:
+        raw = str(obj.status or '').strip().upper()
+        if raw in {'EN_PROCESO', 'PENDIENTE_DIAN', 'PENDIENTE', 'CONFLICTO_FACTUS', 'PENDIENTE_REINTENTO'}:
+            return 'CREADO'
+        return raw or 'ERROR'
 
     def get_total(self, obj: DocumentoSoporteElectronico) -> float:
         payload: dict[str, Any] = obj.response_json or {}
