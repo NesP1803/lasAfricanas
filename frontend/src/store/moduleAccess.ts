@@ -1,4 +1,5 @@
 import type { ModulosPermitidos } from "../types";
+import { SYSTEM_MODULES } from "../config/systemModules";
 
 export type ModuleSection = {
   key: string;
@@ -19,64 +20,96 @@ export type ModuleAccessEntry = {
 
 export type ModuleAccessState = Record<string, ModuleAccessEntry>;
 
-export const MODULE_DEFINITIONS: ModuleDefinition[] = [
-  {
-    key: "configuracion",
-    label: "Configuración",
-    description: "Permite acceder a la información y ajustes del sistema.",
-    sections: [
-      { key: "facturacion", label: "Facturación" },
-      { key: "empresa", label: "Empresa" },
-      { key: "usuarios", label: "Usuarios" },
-      { key: "impuestos", label: "Impuestos" },
-      { key: "auditoria", label: "Auditoría" },
-    ],
-  },
-  {
-    key: "listados",
-    label: "Listados",
-    description: "Acceso a clientes, proveedores, empleados y categorías.",
-    sections: [
-      { key: "clientes", label: "Clientes" },
-      { key: "proveedores", label: "Proveedores" },
-      { key: "empleados", label: "Empleados" },
-      { key: "categorias", label: "Categorías" },
-      { key: "mecanicos", label: "Mecánicos" },
-    ],
-  },
-  {
-    key: "articulos",
-    label: "Artículos",
-    description: "Inventario, stock y bajas de mercancía.",
-    sections: [
-      { key: "mercancia", label: "Mercancía" },
-      { key: "stock_bajo", label: "Stock bajo" },
-    ],
-  },
-  {
-    key: "taller",
-    label: "Taller",
-    description: "Operaciones y registro de motos del taller.",
-    sections: [
-      { key: "ordenes", label: "Operaciones" },
-      { key: "motos", label: "Registro de motos" },
-    ],
-  },
-  {
-    key: "facturacion",
-    label: "Facturación",
-    description: "Venta rápida, cuentas y listados de facturas.",
-    sections: [
-      { key: "venta_rapida", label: "Venta rápida" },
-      { key: "caja", label: "Caja" },
-      { key: "cuentas", label: "Cuentas" },
-      { key: "listados", label: "Listados" },
-    ],
-  },
-];
+export const MODULE_DEFINITIONS: ModuleDefinition[] = SYSTEM_MODULES.map(
+  ({ key, label, description, sections }) => ({
+    key,
+    label,
+    description,
+    sections: sections.map((section) => ({
+      key: section.key,
+      label: section.label,
+    })),
+  })
+);
 
-export const createEmptyModuleAccess = (): ModuleAccessState => {
-  return MODULE_DEFINITIONS.reduce<ModuleAccessState>((acc, moduleDef) => {
+const prettifyLabel = (value: string): string =>
+  value
+    .split(/[_-]/)
+    .filter(Boolean)
+    .map((chunk) => chunk.charAt(0).toUpperCase() + chunk.slice(1))
+    .join(" ");
+
+const inferSectionsFromIncoming = (incoming: unknown): ModuleSection[] => {
+  const sectionKeys = new Set<string>();
+
+  if (Array.isArray(incoming)) {
+    incoming.forEach((item) => {
+      if (typeof item === "string" && item.trim()) {
+        sectionKeys.add(item);
+      }
+    });
+  } else if (incoming && typeof incoming === "object") {
+    const record = incoming as Record<string, unknown>;
+    const recordSections = record.sections;
+
+    if (Array.isArray(recordSections)) {
+      recordSections.forEach((item) => {
+        if (typeof item === "string" && item.trim()) {
+          sectionKeys.add(item);
+        }
+      });
+    } else if (recordSections && typeof recordSections === "object") {
+      Object.keys(recordSections).forEach((key) => {
+        if (key.trim()) {
+          sectionKeys.add(key);
+        }
+      });
+    }
+
+    Object.keys(record).forEach((key) => {
+      if (key !== "enabled" && key !== "sections" && key.trim()) {
+        sectionKeys.add(key);
+      }
+    });
+  }
+
+  return Array.from(sectionKeys).map((sectionKey) => ({
+    key: sectionKey,
+    label: prettifyLabel(sectionKey),
+  }));
+};
+
+export const getModuleDefinitions = (
+  access?: ModulosPermitidos | null
+): ModuleDefinition[] => {
+  if (!access) {
+    return MODULE_DEFINITIONS;
+  }
+
+  const knownByKey = new Map(
+    MODULE_DEFINITIONS.map((moduleDef) => [moduleDef.key, moduleDef])
+  );
+  const dynamicDefinitions: ModuleDefinition[] = [];
+
+  Object.entries(access).forEach(([moduleKey, incoming]) => {
+    if (knownByKey.has(moduleKey)) {
+      return;
+    }
+    dynamicDefinitions.push({
+      key: moduleKey,
+      label: prettifyLabel(moduleKey),
+      description: "Módulo agregado dinámicamente.",
+      sections: inferSectionsFromIncoming(incoming),
+    });
+  });
+
+  return [...MODULE_DEFINITIONS, ...dynamicDefinitions];
+};
+
+export const createEmptyModuleAccess = (
+  moduleDefinitions: ModuleDefinition[] = MODULE_DEFINITIONS
+): ModuleAccessState => {
+  return moduleDefinitions.reduce<ModuleAccessState>((acc, moduleDef) => {
     const sections = (moduleDef.sections ?? []).reduce<Record<string, boolean>>(
       (sectionAcc, section) => {
         sectionAcc[section.key] = false;
@@ -112,13 +145,16 @@ export const createFullModuleAccess = (): ModuleAccessState => {
 export const normalizeModuleAccess = (
   access?: ModulosPermitidos | null
 ): ModuleAccessState => {
-  const normalized = createEmptyModuleAccess();
+  const moduleDefinitions = getModuleDefinitions(access);
+  const normalized = createEmptyModuleAccess(moduleDefinitions);
   if (!access) {
     return normalized;
   }
 
-  MODULE_DEFINITIONS.forEach((moduleDef) => {
-    const incoming = access[moduleDef.key];
+  moduleDefinitions.forEach((moduleDef) => {
+    const fallbackIncoming =
+      moduleDef.key === "reportes" ? access.listados : undefined;
+    const incoming = access[moduleDef.key] ?? fallbackIncoming;
     if (!incoming) {
       return;
     }
@@ -172,6 +208,60 @@ export const normalizeModuleAccess = (
       if (Object.values(moduleState.sections).some(Boolean)) {
         moduleState.enabled = true;
       }
+    }
+
+    if (moduleDef.key === "reportes") {
+      const legacyCuentasEnabled =
+        typeof incoming === "object" &&
+        !Array.isArray(incoming) &&
+        Boolean(
+          (incoming as Record<string, unknown>).cuentas ||
+            ((incoming as Record<string, unknown>).sections as Record<
+              string,
+              boolean | undefined
+            > | null)?.cuentas
+        );
+      const legacyListadosEnabled =
+        typeof incoming === "object" &&
+        !Array.isArray(incoming) &&
+        Boolean(
+          (incoming as Record<string, unknown>).listados ||
+            ((incoming as Record<string, unknown>).sections as Record<
+              string,
+              boolean | undefined
+            > | null)?.listados
+        );
+
+      if (legacyCuentasEnabled) {
+        moduleState.sections.cuentas_dia = true;
+        moduleState.sections.detalles_cuentas = true;
+      }
+      if (legacyListadosEnabled) {
+        moduleState.sections.facturas = true;
+        moduleState.sections.remisiones = true;
+      }
+    }
+
+    if (moduleDef.key === "facturacion") {
+      const legacyListadosEnabled =
+        typeof incoming === "object" &&
+        !Array.isArray(incoming) &&
+        Boolean(
+          (incoming as Record<string, unknown>).listados ||
+            ((incoming as Record<string, unknown>).sections as Record<
+              string,
+              boolean | undefined
+            > | null)?.listados
+        );
+
+      if (legacyListadosEnabled) {
+        moduleState.sections.nota_credito = true;
+        moduleState.sections.documento_soporte = true;
+      }
+    }
+
+    if (Object.values(moduleState.sections).some(Boolean)) {
+      moduleState.enabled = true;
     }
   });
 
