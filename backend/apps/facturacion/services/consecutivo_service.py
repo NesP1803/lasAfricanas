@@ -51,27 +51,36 @@ def resolve_numbering_range(document_code: str = 'FACTURA_VENTA') -> RangoNumera
             f'No hay rangos sincronizados para {document_label} en {env_label}. Debe sincronizar/configurar el rango antes de emitir.'
         )
 
-    selected = base_queryset.filter(is_selected_local=True)
+    selected = base_queryset.filter(is_selected_local=True, activo=True)
     if selected.count() > 1:
         raise FactusValidationError(
             f'Hay múltiples rangos seleccionados localmente para {document_label}. Debe dejar solo uno activo.'
         )
     if selected.count() == 1:
         selected_range = selected.first()
-        if not selected_range.is_active_remote:
-            env_label = 'producción' if environment == 'PRODUCTION' else 'sandbox'
+        if not (selected_range.factus_id or selected_range.factus_range_id):
             raise FactusValidationError(
-                f'No hay rango local activo configurado para {document_label} en {env_label}. Debe sincronizar/configurar el rango antes de emitir.'
+                f'El rango local seleccionado para {document_label} no tiene ID de Factus (numbering_range_id). '
+                'Debe seleccionar/importar un rango autorizado asociado al software antes de emitir.'
+            )
+        if selected_range.is_expired_remote:
+            raise FactusValidationError(
+                f'El rango local seleccionado para {document_label} está vencido. Seleccione otro rango vigente.'
             )
         return selected_range
 
-    active_ranges = list(base_queryset.filter(is_active_remote=True).order_by('id'))
+    active_ranges = list(base_queryset.filter(activo=True, is_expired_remote=False).order_by('id'))
     if not active_ranges:
         env_label = 'sandbox' if environment == 'SANDBOX' else 'producción'
         raise FactusValidationError(
             f'No hay rangos sincronizados para {document_label} en {env_label}. Debe sincronizar/configurar el rango antes de emitir.'
         )
     if len(active_ranges) == 1:
+        if not (active_ranges[0].factus_id or active_ranges[0].factus_range_id):
+            raise FactusValidationError(
+                f'El único rango activo para {document_label} no tiene ID de Factus (numbering_range_id). '
+                'Debe sincronizar/importar un rango autorizado antes de emitir.'
+            )
         return active_ranges[0]
 
     raise FactusValidationError(
@@ -99,7 +108,7 @@ def get_next_document_sequence(document_code: str) -> InvoiceSequence:
 
     return InvoiceSequence(
         number=f'{rango.prefijo}{siguiente:06d}',
-        numbering_range_id=int(rango.factus_range_id or 0),
+        numbering_range_id=int(rango.factus_range_id or rango.factus_id or 0),
     )
 
 
