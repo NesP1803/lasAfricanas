@@ -34,6 +34,7 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
   const [errors, setErrors] = useState<any>({});
   const [confirmCloseOpen, setConfirmCloseOpen] = useState(false);
   const [confirmSaveOpen, setConfirmSaveOpen] = useState(false);
+  const proveedorSearchRequestId = useRef(0);
 
   const normalizeIva = (value: string | number) => {
     const numericValue = Number(value);
@@ -61,7 +62,7 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
 
   useEffect(() => {
     loadCategorias();
-    loadProveedores();
+    void loadProveedores();
     loadImpuestos();
 
     if (producto) {
@@ -83,6 +84,14 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
       setProveedorNombre(producto.proveedor_nombre ?? '');
     }
   }, [producto]);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      void loadProveedores(proveedorNombre.trim());
+    }, 200);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [proveedorNombre]);
 
   const formatPorcentaje = (porcentaje: string) => {
     const numeric = Number(porcentaje);
@@ -161,12 +170,17 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
     }
   };
 
-  const loadProveedores = async () => {
+  const loadProveedores = async (search: string = '') => {
+    const requestId = proveedorSearchRequestId.current + 1;
+    proveedorSearchRequestId.current = requestId;
     try {
-      const data = await inventarioApi.getProveedores({ is_active: true });
-      setProveedores(Array.isArray(data) ? data : data.results);
-      if (!producto) {
-        setProveedorNombre('');
+      const data = await inventarioApi.getProveedores({
+        is_active: true,
+        search: search || undefined,
+        ordering: 'nombre',
+      });
+      if (requestId === proveedorSearchRequestId.current) {
+        setProveedores(Array.isArray(data) ? data : data.results);
       }
     } catch (error) {
       console.error('Error al cargar proveedores:', error);
@@ -221,6 +235,10 @@ export default function ProductoForm({ producto, onClose, onSuccess }: ProductoF
   const handleProveedorNombreChange = (value: string) => {
     setProveedorNombre(value);
     setMostrarListaProveedores(true);
+    if (!value.trim()) {
+      setFormData((prev) => ({ ...prev, proveedor: '' }));
+      return;
+    }
     const match = proveedores.find(
       (prov) => prov.nombre.toLowerCase() === value.trim().toLowerCase()
     );
