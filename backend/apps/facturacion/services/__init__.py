@@ -40,6 +40,7 @@ from .numbering_range_admin_service import (
     delete_range,
     get_range,
     get_software_ranges,
+    get_software_ranges_resilient,
     list_ranges,
     sync_ranges_to_db,
     update_range_current,
@@ -92,5 +93,6 @@ __all__ = [
     'delete_range',
     'update_range_current',
     'get_software_ranges',
+    'get_software_ranges_resilient',
     'sync_ranges_to_db',
 ]

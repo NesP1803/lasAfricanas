@@ -75,7 +75,7 @@ from apps.facturacion.services import (
     create_range,
     delete_range,
     get_range,
-    get_software_ranges,
+    get_software_ranges_resilient,
     sync_ranges_to_db,
     update_range_current,
 )
@@ -898,7 +898,8 @@ class FacturacionRangosViewSet(viewsets.GenericViewSet):
 
     @action(detail=False, methods=['get'], url_path='software')
     def software(self, request):
-        software_ranges = get_software_ranges()
+        software_status = get_software_ranges_resilient()
+        software_ranges = software_status['ranges']
         local_by_id = {int(item.factus_id or item.factus_range_id or 0): item for item in self._base_queryset()}
         comparisons = []
         for item in software_ranges:
@@ -912,7 +913,13 @@ class FacturacionRangosViewSet(viewsets.GenericViewSet):
                     'differences': [] if not local else _compare_software_vs_local(item, local),
                 }
             )
-        return Response(comparisons)
+        return Response(
+            {
+                'status': 'degraded' if software_status['degraded'] else 'ok',
+                'detail': software_status['error'],
+                'items': comparisons,
+            }
+        )
 
     @action(detail=True, methods=['patch'], url_path='seleccionar-activo')
     def seleccionar_activo(self, request, pk=None):

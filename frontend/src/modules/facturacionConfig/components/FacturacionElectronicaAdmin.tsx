@@ -1,109 +1,186 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, RefreshCw, Save, Trash2 } from 'lucide-react';
-import { configuracionAPI, type FacturacionRango } from '../../../api/configuracion';
+import { Eye, RefreshCw, Save, Trash2 } from 'lucide-react';
+import {
+  configuracionAPI,
+  type FacturacionRango,
+  type SoftwareRangesResponse,
+  type FactusHealthResponse,
+} from '../../../api/configuracion';
+import type { ConfiguracionFacturacion } from '../../../types';
 
-type TabKey = 'resumen' | 'rangos' | 'resoluciones' | 'consecutivos' | 'software' | 'remisiones' | 'historial';
+type TabKey = 'resumen' | 'rangos' | 'consecutivos' | 'remisiones';
 
 const tabs: Array<{ key: TabKey; label: string }> = [
   { key: 'resumen', label: 'Resumen' },
-  { key: 'rangos', label: 'Rangos electrónicos' },
-  { key: 'resoluciones', label: 'Resoluciones' },
+  { key: 'rangos', label: 'Rangos Factus' },
   { key: 'consecutivos', label: 'Consecutivos' },
-  { key: 'software', label: 'Software DIAN' },
   { key: 'remisiones', label: 'Remisiones' },
-  { key: 'historial', label: 'Historial / auditoría' },
 ];
 
-const documentLabels: Record<string, string> = {
-  FACTURA_VENTA: 'Factura de venta',
-  NOTA_CREDITO: 'Nota crédito',
-  NOTA_DEBITO: 'Nota débito',
-  DOCUMENTO_SOPORTE: 'Documento soporte',
-  NOTA_AJUSTE_DOCUMENTO_SOPORTE: 'Nota ajuste doc soporte',
+type RemisionNumeracionPayload = {
+  prefix?: string;
+  current?: number;
+  range_from?: number;
+  range_to?: number;
+  resolution_reference?: string;
+  notes?: string;
 };
 
-export default function FacturacionElectronicaAdmin({ isAdmin }: { isAdmin: boolean }) {
+const getApiErrorMessage = (error: unknown): string | undefined => {
+  if (!error || typeof error !== 'object' || !('response' in error)) return undefined;
+  const response = (error as { response?: { data?: { detail?: string } } }).response;
+  return response?.data?.detail;
+};
+
+type Props = {
+  isAdmin: boolean;
+  facturacion: ConfiguracionFacturacion;
+  onFacturacionChange: (next: ConfiguracionFacturacion) => void;
+  onSaveFacturacion: () => Promise<void>;
+};
+
+export default function FacturacionElectronicaAdmin({
+  isAdmin,
+  facturacion,
+  onFacturacionChange,
+  onSaveFacturacion,
+}: Props) {
   const [activeTab, setActiveTab] = useState<TabKey>('resumen');
   const [rangos, setRangos] = useState<FacturacionRango[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [softwareRows, setSoftwareRows] = useState<any[]>([]);
-  const [remision, setRemision] = useState<any>({});
-  const [historialRemision, setHistorialRemision] = useState<any[]>([]);
+  const [degradedWarning, setDegradedWarning] = useState('');
+  const [factusHealth, setFactusHealth] = useState<FactusHealthResponse | null>(null);
+  const [softwareRows, setSoftwareRows] = useState<SoftwareRangesResponse['items']>([]);
+  const [remision, setRemision] = useState<RemisionNumeracionPayload>({});
+  const [detalleRango, setDetalleRango] = useState<unknown>(null);
+  const [actionMessage, setActionMessage] = useState('');
 
   const loadData = async () => {
     setLoading(true);
     setError('');
-    try {
-      const [rangosData, softwareData, remisionData, remisionHistorial] = await Promise.all([
-        configuracionAPI.listarRangosFacturacion(),
-        configuracionAPI.obtenerRangosSoftware(),
-        configuracionAPI.obtenerNumeracionRemision(),
-        configuracionAPI.obtenerHistorialRemision(),
-      ]);
-      setRangos(rangosData);
-      setSoftwareRows(Array.isArray(softwareData) ? softwareData : []);
-      setRemision(remisionData || {});
-      setHistorialRemision(Array.isArray(remisionHistorial) ? remisionHistorial : []);
-    } catch (e: any) {
-      setError(e?.response?.data?.detail || 'No fue posible cargar la configuración de facturación.');
-    } finally {
-      setLoading(false);
+    setDegradedWarning('');
+
+    const [rangosRes, softwareRes, remisionRes, healthRes] = await Promise.allSettled([
+      configuracionAPI.listarRangosFacturacion(),
+      configuracionAPI.obtenerRangosSoftware(),
+      configuracionAPI.obtenerNumeracionRemision(),
+      configuracionAPI.obtenerFactusHealth(),
+    ]);
+
+    if (rangosRes.status === 'fulfilled') {
+      setRangos(rangosRes.value);
+    } else {
+      setError(rangosRes.reason?.response?.data?.detail || 'No fue posible cargar los rangos de facturación.');
     }
+
+    if (softwareRes.status === 'fulfilled') {
+      setSoftwareRows(Array.isArray(softwareRes.value.items) ? softwareRes.value.items : []);
+      if (softwareRes.value.status === 'degraded') {
+        setDegradedWarning(
+          softwareRes.value.detail ||
+            'No fue posible consultar rangos asociados en Factus/DIAN. Se muestra estado degradado con datos locales.'
+        );
+      }
+    } else {
+      setDegradedWarning('No fue posible consultar rangos asociados en Factus/DIAN. Se muestra estado degradado con datos locales.');
+      setSoftwareRows([]);
+    }
+
+    if (remisionRes.status === 'fulfilled') {
+      setRemision(remisionRes.value || {});
+    } else {
+      setRemision({});
+    }
+
+    if (healthRes.status === 'fulfilled') {
+      setFactusHealth(healthRes.value);
+    } else {
+      setFactusHealth(null);
+    }
+
+    setLoading(false);
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadData();
   }, []);
 
   const stats = useMemo(() => {
     const active = rangos.filter((r) => r.is_active_remote).length;
     const expired = rangos.filter((r) => r.is_expired_remote).length;
-    const near = rangos.filter((r) => r.is_near_expiration).length;
-    const desync = rangos.filter((r) => !r.is_associated_to_software).length;
-    return { active, expired, near, desync };
+    const lastSync = rangos
+      .map((r) => r.last_synced_at)
+      .filter(Boolean)
+      .sort()
+      .at(-1);
+    return { active, expired, lastSync };
   }, [rangos]);
 
   const handleSelect = async (rango: FacturacionRango) => {
-    await configuracionAPI.seleccionarActivoRangoFacturacion(rango.id, rango.document_code);
-    await loadData();
+    setActionMessage('');
+    try {
+      await configuracionAPI.seleccionarActivoRangoFacturacion(rango.id, rango.document_code);
+      setActionMessage(`Rango ${rango.prefijo} seleccionado para ${rango.document_code_label}.`);
+      await loadData();
+    } catch (e: unknown) {
+      setActionMessage(getApiErrorMessage(e) || 'No fue posible seleccionar el rango.');
+    }
   };
 
   const handleDelete = async (rango: FacturacionRango) => {
-    await configuracionAPI.eliminarRangoFacturacion(rango.id);
-    await loadData();
+    if (!window.confirm(`¿Eliminar rango ${rango.prefijo} (${rango.document_code_label})?`)) {
+      return;
+    }
+    setActionMessage('');
+    try {
+      await configuracionAPI.eliminarRangoFacturacion(rango.id);
+      setActionMessage('Rango eliminado correctamente.');
+      await loadData();
+    } catch (e: unknown) {
+      setActionMessage(getApiErrorMessage(e) || 'No fue posible eliminar el rango.');
+    }
   };
 
   const handleUpdateCurrent = async (rango: FacturacionRango) => {
     const value = window.prompt('Nuevo consecutivo', String(rango.consecutivo_actual));
     if (!value) return;
-    await configuracionAPI.actualizarConsecutivoRango(rango.id, { current: Number(value), sync_local: true });
-    await loadData();
+    setActionMessage('');
+    try {
+      await configuracionAPI.actualizarConsecutivoRango(rango.id, { current: Number(value), sync_local: true });
+      setActionMessage(`Consecutivo actualizado para ${rango.prefijo}.`);
+      await loadData();
+    } catch (e: unknown) {
+      setActionMessage(getApiErrorMessage(e) || 'No fue posible actualizar el consecutivo.');
+    }
   };
 
-  const groupedResolutions = useMemo(() => {
-    const map = new Map<string, FacturacionRango[]>();
-    rangos.forEach((r) => {
-      const key = r.resolucion || 'Sin resolución';
-      map.set(key, [...(map.get(key) || []), r]);
-    });
-    return Array.from(map.entries());
-  }, [rangos]);
+  const syncAllRanges = async () => {
+    setActionMessage('');
+    try {
+      await configuracionAPI.sincronizarRangosFacturacion();
+      setActionMessage('Sincronización completada.');
+      await loadData();
+    } catch (e: unknown) {
+      setActionMessage(getApiErrorMessage(e) || 'No fue posible sincronizar los rangos.');
+    }
+  };
 
   return (
-    <div className="mt-8 rounded-xl border border-slate-200 bg-white p-4">
+    <div className="mt-6 rounded-xl border border-slate-200 bg-white p-4">
       <div className="grid gap-3 md:grid-cols-6">
+        <Stat title="Entorno Factus" value={factusHealth?.environment || 'Desconocido'} />
+        <Stat title="Estado token" value={factusHealth?.token_ok ? 'OK' : 'Sin validar'} />
+        <Stat
+          title="Última sincronización"
+          value={stats.lastSync ? new Date(stats.lastSync).toLocaleString() : 'Sin datos'}
+        />
         <Stat title="Rangos activos" value={stats.active} />
         <Stat title="Rangos vencidos" value={stats.expired} />
-        <Stat title="Por vencer" value={stats.near} />
-        <Stat title="Desincronizados" value={stats.desync} />
-        <Stat title="Token" value={error ? 'Error' : 'OK'} />
         <button
           type="button"
-          onClick={async () => {
-            await configuracionAPI.sincronizarRangosFacturacion();
-            await loadData();
-          }}
+          onClick={syncAllRanges}
           disabled={!isAdmin || loading}
           className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold"
         >
@@ -125,47 +202,109 @@ export default function FacturacionElectronicaAdmin({ isAdmin }: { isAdmin: bool
         ))}
       </div>
 
-      {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
+      {error ? <p className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-600">{error}</p> : null}
+      {degradedWarning ? (
+        <p className="mt-3 rounded border border-amber-200 bg-amber-50 p-2 text-sm text-amber-700">{degradedWarning}</p>
+      ) : null}
+      {actionMessage ? <p className="mt-3 rounded border border-blue-200 bg-blue-50 p-2 text-sm text-blue-700">{actionMessage}</p> : null}
       {loading ? <p className="mt-3 text-sm text-slate-600">Cargando...</p> : null}
 
-      {activeTab === 'resumen' && (
-        <div className="mt-4 grid gap-3 md:grid-cols-4">
-          {['FACTURA_VENTA', 'NOTA_CREDITO', 'NOTA_DEBITO', 'DOCUMENTO_SOPORTE'].map((code) => {
-            const selected = rangos.find((item) => item.document_code === code && item.is_selected_local);
-            return (
-              <div key={code} className="rounded-lg border border-slate-200 p-3">
-                <p className="text-xs text-slate-500">{documentLabels[code]}</p>
-                <p className="font-semibold">{selected ? `${selected.prefijo} (${selected.consecutivo_actual})` : 'Sin selección local'}</p>
-              </div>
-            );
-          })}
+      {(activeTab === 'resumen' || activeTab === 'consecutivos') && (
+        <div className="mt-4 rounded-lg border border-slate-200 p-3">
+          <p className="mb-3 text-sm font-semibold text-slate-800">Numeración local del sistema</p>
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="text-xs font-semibold text-slate-600">
+              Prefijo factura local
+              <input
+                className="mt-1 w-full rounded border px-2 py-1"
+                value={facturacion.prefijo_factura}
+                onChange={(e) => onFacturacionChange({ ...facturacion, prefijo_factura: e.target.value })}
+              />
+            </label>
+            <label className="text-xs font-semibold text-slate-600">
+              Consecutivo factura local
+              <input
+                className="mt-1 w-full rounded border px-2 py-1"
+                type="number"
+                value={facturacion.numero_factura}
+                onChange={(e) => onFacturacionChange({ ...facturacion, numero_factura: Number(e.target.value) })}
+              />
+            </label>
+          </div>
+          <button
+            type="button"
+            onClick={onSaveFacturacion}
+            className="mt-3 inline-flex items-center gap-2 rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white"
+          >
+            <Save size={14} /> Guardar numeración local
+          </button>
         </div>
       )}
 
-      {activeTab === 'rangos' && (
-        <div className="mt-4 overflow-auto">
+      {activeTab === 'remisiones' && (
+        <div className="mt-4 rounded-lg border border-slate-200 p-3">
+          <p className="mb-2 text-sm font-semibold">Numeración local de remisiones</p>
+          <div className="grid gap-2 md:grid-cols-2">
+            <input className="rounded border px-2 py-1" placeholder="Prefijo remisión" value={remision.prefix || ''} onChange={(e) => setRemision((prev) => ({ ...prev, prefix: e.target.value }))} />
+            <input className="rounded border px-2 py-1" type="number" placeholder="Consecutivo remisión" value={remision.current || 1} onChange={(e) => setRemision((prev) => ({ ...prev, current: Number(e.target.value) }))} />
+            <input className="rounded border px-2 py-1" type="number" placeholder="Desde" value={remision.range_from || 1} onChange={(e) => setRemision((prev) => ({ ...prev, range_from: Number(e.target.value) }))} />
+            <input className="rounded border px-2 py-1" type="number" placeholder="Hasta" value={remision.range_to || 99999999} onChange={(e) => setRemision((prev) => ({ ...prev, range_to: Number(e.target.value) }))} />
+            <input className="rounded border px-2 py-1 md:col-span-2" placeholder="Referencia administrativa" value={remision.resolution_reference || ''} onChange={(e) => setRemision((prev) => ({ ...prev, resolution_reference: e.target.value }))} />
+            <textarea className="rounded border px-2 py-1 md:col-span-2" placeholder="Observaciones" value={remision.notes || ''} onChange={(e) => setRemision((prev) => ({ ...prev, notes: e.target.value }))} />
+          </div>
+          <button
+            className="mt-3 inline-flex items-center gap-2 rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white"
+            onClick={async () => {
+              setActionMessage('');
+              try {
+                await configuracionAPI.actualizarNumeracionRemision(remision);
+                setActionMessage('Numeración de remisiones guardada.');
+                await loadData();
+              } catch (e: unknown) {
+                setActionMessage(getApiErrorMessage(e) || 'No fue posible guardar la numeración de remisiones.');
+              }
+            }}
+            disabled={!isAdmin}
+          ><Save size={14} /> Guardar</button>
+        </div>
+      )}
+
+      {(activeTab === 'rangos' || activeTab === 'consecutivos' || activeTab === 'resumen') && (
+        <div className="mt-4 overflow-auto rounded-lg border border-slate-200">
           <table className="min-w-full text-xs">
-            <thead>
+            <thead className="bg-slate-50">
               <tr className="text-left text-slate-500">
-                <th>ID</th><th>Documento</th><th>Prefijo</th><th>Resolución</th><th>Desde</th><th>Hasta</th><th>Current</th><th>Estado</th><th>Acciones</th>
+                <th className="px-2 py-2">Tipo documento</th>
+                <th className="px-2 py-2">Prefijo</th>
+                <th className="px-2 py-2">Resolución</th>
+                <th className="px-2 py-2">Desde</th>
+                <th className="px-2 py-2">Hasta</th>
+                <th className="px-2 py-2">Actual</th>
+                <th className="px-2 py-2">Fecha vencimiento</th>
+                <th className="px-2 py-2">Estado</th>
+                <th className="px-2 py-2">Seleccionado local</th>
+                <th className="px-2 py-2">Acciones</th>
               </tr>
             </thead>
             <tbody>
               {rangos.map((rango) => (
                 <tr key={rango.id} className="border-t border-slate-100">
-                  <td>{rango.id_factus}</td>
-                  <td>{rango.document_name}</td>
-                  <td>{rango.prefijo}</td>
-                  <td>{rango.resolucion || '-'}</td>
-                  <td>{rango.desde}</td>
-                  <td>{rango.hasta}</td>
-                  <td>{rango.consecutivo_actual}</td>
-                  <td>{rango.is_expired_remote ? 'Vencido' : rango.is_active_remote ? 'Activo' : 'Inactivo'}</td>
-                  <td>
-                    <div className="flex gap-1">
-                      <button className="rounded bg-slate-100 px-2" onClick={() => handleSelect(rango)} disabled={!isAdmin}>Seleccionar</button>
-                      <button className="rounded bg-slate-100 px-2" onClick={() => handleUpdateCurrent(rango)} disabled={!isAdmin}>Consecutivo</button>
-                      <button className="rounded bg-red-100 px-2 text-red-700" onClick={() => handleDelete(rango)} disabled={!isAdmin}><Trash2 size={12} /></button>
+                  <td className="px-2 py-2">{rango.document_code_label}</td>
+                  <td className="px-2 py-2">{rango.prefijo}</td>
+                  <td className="px-2 py-2">{rango.resolucion || '-'}</td>
+                  <td className="px-2 py-2">{rango.desde}</td>
+                  <td className="px-2 py-2">{rango.hasta}</td>
+                  <td className="px-2 py-2">{rango.consecutivo_actual}</td>
+                  <td className="px-2 py-2">{rango.fecha_expiracion || '-'}</td>
+                  <td className="px-2 py-2">{rango.is_expired_remote ? 'Vencido' : rango.is_active_remote ? 'Activo' : 'Inactivo'}</td>
+                  <td className="px-2 py-2">{rango.is_selected_local ? 'Sí' : 'No'}</td>
+                  <td className="px-2 py-2">
+                    <div className="flex flex-wrap gap-1">
+                      <button className="rounded bg-slate-100 px-2 py-1" onClick={async () => setDetalleRango(await configuracionAPI.obtenerDetalleRangoFacturacion(rango.id))}><Eye size={12} /></button>
+                      <button className="rounded bg-slate-100 px-2 py-1" onClick={() => handleSelect(rango)} disabled={!isAdmin}>Seleccionar activo</button>
+                      <button className="rounded bg-slate-100 px-2 py-1" onClick={() => handleUpdateCurrent(rango)} disabled={!isAdmin}>Actualizar consecutivo</button>
+                      <button className="rounded bg-slate-100 px-2 py-1" onClick={syncAllRanges} disabled={!isAdmin}>Sincronizar</button>
+                      <button className="rounded bg-red-100 px-2 py-1 text-red-700" onClick={() => handleDelete(rango)} disabled={!isAdmin}><Trash2 size={12} /></button>
                     </div>
                   </td>
                 </tr>
@@ -175,79 +314,22 @@ export default function FacturacionElectronicaAdmin({ isAdmin }: { isAdmin: bool
         </div>
       )}
 
-      {activeTab === 'resoluciones' && (
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
-          {groupedResolutions.map(([resolution, rows]) => (
-            <div key={resolution} className="rounded-lg border border-slate-200 p-3">
-              <p className="font-semibold">Resolución {resolution}</p>
-              <p className="text-xs text-slate-500">Rangos: {rows.length}</p>
-              <p className="text-xs text-slate-500">Prefijos: {rows.map((r) => r.prefijo).join(', ')}</p>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {activeTab === 'consecutivos' && (
-        <div className="mt-4 space-y-2">
-          {rangos.map((rango) => (
-            <div key={rango.id} className="flex items-center justify-between rounded border border-slate-200 p-2 text-sm">
-              <div>
-                <p className="font-medium">{rango.prefijo} · {rango.document_name}</p>
-                <p className="text-xs text-slate-500">Remoto/local actual: {rango.consecutivo_actual}</p>
-              </div>
-              <button className="rounded bg-slate-100 px-2 py-1 text-xs" onClick={() => handleUpdateCurrent(rango)} disabled={!isAdmin}>Actualizar consecutivo</button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {activeTab === 'software' && (
-        <div className="mt-4 space-y-2 text-xs">
-          {softwareRows.map((row, index) => (
-            <div key={index} className="rounded border border-slate-200 p-2">
-              <p className="font-semibold">{row?.remote?.prefix || '-'}</p>
-              <p>Resolución: {row?.remote?.resolution_number || '-'}</p>
-              <p>Coincidencia local: {row?.matches_local ? 'Sí' : 'No'}</p>
-              {Array.isArray(row?.differences) && row.differences.length > 0 ? (
-                <p className="text-amber-700 inline-flex items-center gap-1"><AlertTriangle size={12} /> Diferencias: {row.differences.join(', ')}</p>
-              ) : null}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {activeTab === 'remisiones' && (
-        <div className="mt-4 rounded-lg border border-slate-200 p-3">
-          <p className="mb-2 text-sm font-semibold">Numeración local de remisiones (independiente de Factus)</p>
-          <div className="grid gap-2 md:grid-cols-2">
-            <input className="rounded border px-2 py-1" placeholder="Prefijo" value={remision.prefix || ''} onChange={(e) => setRemision((prev: any) => ({ ...prev, prefix: e.target.value }))} />
-            <input className="rounded border px-2 py-1" type="number" placeholder="Consecutivo" value={remision.current || 1} onChange={(e) => setRemision((prev: any) => ({ ...prev, current: Number(e.target.value) }))} />
-            <input className="rounded border px-2 py-1" type="number" placeholder="Desde" value={remision.range_from || 1} onChange={(e) => setRemision((prev: any) => ({ ...prev, range_from: Number(e.target.value) }))} />
-            <input className="rounded border px-2 py-1" type="number" placeholder="Hasta" value={remision.range_to || 99999999} onChange={(e) => setRemision((prev: any) => ({ ...prev, range_to: Number(e.target.value) }))} />
-            <input className="rounded border px-2 py-1 md:col-span-2" placeholder="Referencia resolución interna" value={remision.resolution_reference || ''} onChange={(e) => setRemision((prev: any) => ({ ...prev, resolution_reference: e.target.value }))} />
-            <textarea className="rounded border px-2 py-1 md:col-span-2" placeholder="Notas" value={remision.notes || ''} onChange={(e) => setRemision((prev: any) => ({ ...prev, notes: e.target.value }))} />
+      {detalleRango ? (
+        <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="font-semibold">Detalle rango seleccionado</p>
+            <button className="rounded bg-white px-2 py-1" onClick={() => setDetalleRango(null)}>Cerrar</button>
           </div>
-          <button
-            className="mt-3 inline-flex items-center gap-2 rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white"
-            onClick={async () => {
-              await configuracionAPI.actualizarNumeracionRemision(remision);
-              await loadData();
-            }}
-            disabled={!isAdmin}
-          ><Save size={14} /> Guardar remisión</button>
+          <pre className="overflow-auto rounded bg-white p-2">{JSON.stringify(detalleRango, null, 2)}</pre>
         </div>
-      )}
+      ) : null}
 
-      {activeTab === 'historial' && (
-        <div className="mt-4 space-y-2 text-xs">
-          {historialRemision.map((item) => (
-            <div key={item.id} className="rounded border border-slate-200 p-2">
-              <p className="font-semibold">{item.changed_by_name || 'Sistema'}</p>
-              <p>{new Date(item.changed_at).toLocaleString()}</p>
-            </div>
-          ))}
+      {softwareRows.length > 0 ? (
+        <div className="mt-4 rounded-lg border border-slate-200 p-3 text-xs">
+          <p className="font-semibold">Rangos asociados a software en Factus/DIAN</p>
+          <p className="text-slate-500">Registros disponibles: {softwareRows.length}</p>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -256,7 +338,7 @@ function Stat({ title, value }: { title: string; value: string | number }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50 p-2">
       <p className="text-xs text-slate-500">{title}</p>
-      <p className="text-lg font-semibold">{value}</p>
+      <p className="text-sm font-semibold">{value}</p>
     </div>
   );
 }

@@ -104,7 +104,7 @@ class FactusClient:
         )
         self.numbering_ranges_software_path = config(
             'FACTUS_NUMBERING_RANGES_SOFTWARE_PATH',
-            default='/v1/numbering-ranges/software',
+            default='/v1/numbering-ranges/dian',
         )
         self.invoice_show_path = config('FACTUS_INVOICE_SHOW_PATH', default='/v1/bills/show/{number}')
         self.invoice_list_path = config('FACTUS_INVOICE_LIST_PATH', default='/v1/bills')
