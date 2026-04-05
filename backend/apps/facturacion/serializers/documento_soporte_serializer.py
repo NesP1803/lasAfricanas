@@ -16,6 +16,13 @@ class DocumentoSoporteCreateSerializer(serializers.Serializer):
     proveedor_nombre = serializers.CharField()
     proveedor_documento = serializers.CharField()
     proveedor_tipo_documento = serializers.CharField(required=False, allow_blank=True, default='CC')
+    proveedor_id = serializers.IntegerField(required=False)
+    provider_address = serializers.CharField(required=False, allow_blank=True, default='')
+    provider_email = serializers.EmailField(required=False, allow_blank=True, default='')
+    provider_phone = serializers.CharField(required=False, allow_blank=True, default='')
+    provider_country_code = serializers.CharField(required=False, allow_blank=True, default='CO')
+    provider_municipality_id = serializers.IntegerField(required=False)
+    observation = serializers.CharField(required=False, allow_blank=True, default='')
     items = serializers.ListField(child=serializers.DictField(), allow_empty=False)
 
 

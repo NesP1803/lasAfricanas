@@ -1042,7 +1042,19 @@ class DocumentoSoporteBuilderTests(TestCase):
                 }
             )
 
-    def test_normaliza_tipo_documento_proveedor_cc_y_homologa_id(self):
+    @patch('apps.facturacion.services.support_document_payload_builder.resolve_numbering_range')
+    def test_normaliza_tipo_documento_proveedor_cc_y_homologa_id(self, mocked_resolve_range):
+        mocked_resolve_range.return_value = RangoNumeracionDIAN(
+            factus_range_id=148,
+            factus_id=148,
+            prefijo='DS',
+            desde=1,
+            hasta=999999,
+            consecutivo_actual=1,
+            resolucion='TEST',
+            document_code='DOCUMENTO_SOPORTE',
+            environment='SANDBOX',
+        )
         payload = build_support_document_payload(
             {
                 'proveedor_nombre': 'Juan Perez',
@@ -1052,8 +1064,9 @@ class DocumentoSoporteBuilderTests(TestCase):
                 'items': [{'descripcion': 'Servicio', 'cantidad': 1, 'precio': 15000}],
             }
         )
-        self.assertEqual(payload['supplier']['identification_type'], 'CC')
-        self.assertEqual(payload['supplier']['identification_document_id'], 3)
+        self.assertEqual(payload['provider']['identification_document_id'], 3)
+        self.assertEqual(payload['provider']['identification'], '123')
+        self.assertTrue(payload.get('reference_code'))
 
 
 class FactusCatalogLookupHomologationTests(TestCase):

@@ -705,6 +705,8 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         except FactusValidationError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except (FactusAPIError, FactusAuthError) as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
 
         return Response(
             {
@@ -1461,6 +1463,8 @@ class DocumentosSoporteViewSet(viewsets.GenericViewSet):
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         except FactusValidationError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except (FactusAPIError, FactusAuthError) as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
 
         output = DocumentoSoporteListSerializer(documento)
         return Response(output.data, status=status.HTTP_201_CREATED)

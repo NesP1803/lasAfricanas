@@ -24,11 +24,28 @@ export interface CrearDocumentoSoportePayload {
   proveedor_nombre: string;
   proveedor_documento: string;
   proveedor_tipo_documento: string;
+  proveedor_id?: number;
+  provider_address?: string;
+  provider_email?: string;
+  provider_phone?: string;
+  provider_country_code?: string;
+  provider_municipality_id?: number;
+  observation?: string;
   items: Array<{
     descripcion: string;
     cantidad: number;
     precio: number;
   }>;
+}
+
+export interface ProveedorSugerencia {
+  id: number;
+  nombre: string;
+  nit?: string;
+  direccion?: string;
+  email?: string;
+  telefono?: string;
+  ciudad?: string;
 }
 
 const crearArchivoDescargable = (blob: Blob, fileName: string) => {
@@ -44,6 +61,17 @@ const crearArchivoDescargable = (blob: Blob, fileName: string) => {
 };
 
 export const documentosSoporteApi = {
+  async buscarProveedores(search: string) {
+    const response = await apiClient.get<{ results?: ProveedorSugerencia[] } | ProveedorSugerencia[]>(
+      '/proveedores/',
+      {
+        params: { is_active: true, search, page_size: 20 },
+      },
+    );
+    const payload = response.data;
+    return Array.isArray(payload) ? payload : (payload.results ?? []);
+  },
+
   async getDocumentosSoporte() {
     const response = await apiClient.get<DocumentoSoporte[]>('/documentos-soporte/');
     return response.data;
