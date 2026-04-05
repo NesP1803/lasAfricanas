@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useNotification } from '../../../contexts/NotificationContext';
 import DocumentosSoporteTable from '../components/DocumentosSoporteTable';
@@ -9,25 +9,25 @@ export default function DocumentosSoportePage() {
   const [loading, setLoading] = useState(false);
   const { showNotification } = useNotification();
 
-  useEffect(() => {
-    const cargarDocumentos = async () => {
-      setLoading(true);
-      try {
-        const data = await documentosSoporteApi.getDocumentosSoporte();
-        setDocumentos(data);
-      } catch {
-        setDocumentos([]);
-        showNotification({
-          message: 'No fue posible cargar los documentos soporte.',
-          type: 'error',
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    cargarDocumentos();
+  const cargarDocumentos = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await documentosSoporteApi.getDocumentosSoporte();
+      setDocumentos(data);
+    } catch {
+      setDocumentos([]);
+      showNotification({
+        message: 'No fue posible cargar los documentos soporte.',
+        type: 'error',
+      });
+    } finally {
+      setLoading(false);
+    }
   }, [showNotification]);
+
+  useEffect(() => {
+    cargarDocumentos();
+  }, [cargarDocumentos]);
 
   return (
     <div className="space-y-4 px-6 py-6">
@@ -46,7 +46,7 @@ export default function DocumentosSoportePage() {
         </Link>
       </div>
 
-      <DocumentosSoporteTable documentos={documentos} loading={loading} />
+      <DocumentosSoporteTable documentos={documentos} loading={loading} onRefresh={cargarDocumentos} />
     </div>
   );
 }
