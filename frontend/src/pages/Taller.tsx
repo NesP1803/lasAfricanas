@@ -710,48 +710,6 @@ export default function Taller() {
           <div>
             <p className="text-xs font-semibold uppercase text-blue-500">Taller</p>
             <h1 className="text-xl font-semibold text-slate-900">{activeTabConfig.label}</h1>
-            <p className="text-sm text-slate-500">{activeTabConfig.description}</p>
-            {activeTab === 'ordenes' && (
-              <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2">
-                <h2 className="text-xs font-semibold uppercase text-blue-800">Registro de motos</h2>
-                <p className="text-[11px] text-blue-600">Crear o editar motos del taller</p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={openCreateMoto}
-                    className="inline-flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-[11px] font-semibold text-blue-700 transition hover:bg-blue-100"
-                  >
-                    <Plus size={14} />
-                    Registrar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleEditMotoSeleccionada}
-                    className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 transition hover:border-blue-200 hover:text-blue-600"
-                  >
-                    <Pencil size={14} />
-                    Editar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleQuitarMotoSeleccionada}
-                    disabled={!selectedMecanicoId}
-                    className="inline-flex items-center gap-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    <X size={14} />
-                    Quitar moto
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSearchParams({ tab: 'motos' })}
-                    className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 transition hover:border-blue-200 hover:text-blue-600"
-                  >
-                    <Bike size={14} />
-                    Ver listado
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -795,118 +753,144 @@ export default function Taller() {
 
         {activeTab === 'ordenes' ? (
           <div className="space-y-4 px-4 py-4">
-            <div className="grid gap-4 xl:grid-cols-[260px_1fr]">
-              <section className="space-y-4">
-                <div className="border border-slate-200 bg-white shadow-sm">
-                  <div className="flex items-center justify-between border-b border-blue-100 bg-blue-50 px-3 py-2">
-                    <div>
-                      <h2 className="text-xs font-semibold uppercase text-blue-800">
-                        Seleccione mecánico
-                      </h2>
-                      <p className="text-[11px] text-blue-600">Lista de técnicos disponibles</p>
-                    </div>
-                    <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-blue-700 shadow-sm">
-                      {mecanicos.length}
-                    </span>
+            <div className="grid gap-4 lg:grid-cols-3">
+              <section className="border border-slate-200 bg-white shadow-sm">
+                <div className="flex items-center justify-between border-b border-blue-100 bg-blue-50 px-3 py-2">
+                  <div>
+                    <h2 className="text-xs font-semibold uppercase text-blue-800">
+                      Seleccione mecánico
+                    </h2>
+                    <p className="text-[11px] text-blue-600">Lista de técnicos disponibles</p>
                   </div>
-                  <div className="px-3 py-3">
-                    {mecanicos.length === 0 ? (
-                      <div className="border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-500">
-                        No hay mecánicos.
-                      </div>
-                    ) : (
-                      <label className="flex flex-col gap-2 text-xs font-semibold text-slate-700">
-                        Mecánico en turno
-                        <select
-                          value={selectedMecanicoId ?? ''}
-                          onChange={(event) => {
-                            const value = event.target.value;
-                            setSelectedMecanicoId(value ? Number(value) : null);
-                          }}
-                          className="rounded-md border border-slate-200 px-2 py-2 text-sm text-slate-700 shadow-sm outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
-                        >
-                          <option value="" disabled>
-                            Selecciona un mecánico
+                  <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-blue-700 shadow-sm">
+                    {mecanicos.length}
+                  </span>
+                </div>
+                <div className="px-3 py-3">
+                  {mecanicos.length === 0 ? (
+                    <div className="border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-500">
+                      No hay mecánicos.
+                    </div>
+                  ) : (
+                    <label className="flex flex-col gap-2 text-xs font-semibold text-slate-700">
+                      Mecánico en turno
+                      <select
+                        value={selectedMecanicoId ?? ''}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          setSelectedMecanicoId(value ? Number(value) : null);
+                        }}
+                        className="rounded-md border border-slate-200 px-2 py-2 text-sm text-slate-700 shadow-sm outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+                      >
+                        <option value="" disabled>
+                          Selecciona un mecánico
+                        </option>
+                        {mecanicos.map((mecanico) => (
+                          <option key={mecanico.id} value={mecanico.id}>
+                            {mecanico.nombre}
                           </option>
-                          {mecanicos.map((mecanico) => (
-                            <option key={mecanico.id} value={mecanico.id}>
-                              {mecanico.nombre}
-                            </option>
-                          ))}
-                        </select>
-                        {selectedMecanicoId && (
-                          <div className="border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] text-slate-500">
-                            {mecanicos.find((mecanico) => mecanico.id === selectedMecanicoId)?.telefono ||
-                              'Sin teléfono'}
-                          </div>
-                        )}
-                      </label>
-                    )}
-                  </div>
+                        ))}
+                      </select>
+                      {selectedMecanicoId && (
+                        <div className="border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] text-slate-500">
+                          {mecanicos.find((mecanico) => mecanico.id === selectedMecanicoId)?.telefono ||
+                            'Sin teléfono'}
+                        </div>
+                      )}
+                    </label>
+                  )}
                 </div>
-
-                <div className="border border-slate-200 bg-white shadow-sm">
-                  <div className="flex items-center justify-between border-b border-blue-100 bg-blue-50 px-3 py-2">
-                    <div>
-                      <h2 className="text-xs font-semibold uppercase text-blue-800">Motos asociadas</h2>
-                      <p className="text-[11px] text-blue-600">Doble clic para abrir la orden</p>
-                    </div>
-                    <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-blue-700 shadow-sm">
-                      {motosPorMecanico.length}
-                    </span>
-                  </div>
-                  <div className="max-h-[360px] overflow-y-auto">
-                    {motosPorMecanico.length === 0 ? (
-                      <div className="p-3 text-center text-xs text-slate-500">
-                        No hay motos asignadas.
-                      </div>
-                    ) : (
-                      <table className="w-full text-xs">
-                        <thead className="bg-slate-100 text-left text-[11px] font-semibold uppercase text-slate-500">
-                          <tr>
-                            <th className="px-3 py-2">Placa</th>
-                            <th className="px-3 py-2">Marca</th>
-                            <th className="px-3 py-2">Modelo</th>
-                            <th className="px-3 py-2 text-right">Acción</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {motosPorMecanico.map((moto) => (
-                            <tr
-                              key={moto.id}
-                              className={`cursor-pointer transition ${
-                                selectedMotoId === moto.id ? 'bg-blue-100' : 'hover:bg-slate-50'
-                              }`}
-                              onClick={() => handleSelectMoto(moto)}
-                              onDoubleClick={() => handleSelectMoto(moto)}
-                            >
-                              <td className="px-3 py-2 font-semibold text-slate-800">{moto.placa}</td>
-                              <td className="px-3 py-2">{moto.marca}</td>
-                              <td className="px-3 py-2">{moto.modelo || '—'}</td>
-                              <td className="px-3 py-2 text-right">
-                                <button
-                                  type="button"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    void handleQuitarMotoAsignada(moto);
-                                  }}
-                                  className="inline-flex items-center gap-1 rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-700 transition hover:bg-rose-100"
-                                >
-                                  <X size={12} />
-                                  Quitar
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
-                  </div>
-                </div>
-
               </section>
 
-              <section className="space-y-4">
+              <section className="border border-slate-200 bg-white shadow-sm">
+                <div className="flex items-center justify-between border-b border-blue-100 bg-blue-50 px-3 py-2">
+                  <div>
+                    <h2 className="text-xs font-semibold uppercase text-blue-800">Motos asociadas</h2>
+                    <p className="text-[11px] text-blue-600">Doble clic para abrir la orden</p>
+                  </div>
+                  <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-blue-700 shadow-sm">
+                    {motosPorMecanico.length}
+                  </span>
+                </div>
+                <div className="max-h-[360px] overflow-y-auto">
+                  {motosPorMecanico.length === 0 ? (
+                    <div className="p-3 text-center text-xs text-slate-500">
+                      No hay motos asignadas.
+                    </div>
+                  ) : (
+                    <table className="w-full text-xs">
+                      <thead className="bg-slate-100 text-left text-[11px] font-semibold uppercase text-slate-500">
+                        <tr>
+                          <th className="px-3 py-2">Placa</th>
+                          <th className="px-3 py-2">Marca</th>
+                          <th className="px-3 py-2">Modelo</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {motosPorMecanico.map((moto) => (
+                          <tr
+                            key={moto.id}
+                            className={`cursor-pointer transition ${
+                              selectedMotoId === moto.id ? 'bg-blue-100' : 'hover:bg-slate-50'
+                            }`}
+                            onClick={() => handleSelectMoto(moto)}
+                            onDoubleClick={() => handleSelectMoto(moto)}
+                          >
+                            <td className="px-3 py-2 font-semibold text-slate-800">{moto.placa}</td>
+                            <td className="px-3 py-2">{moto.marca}</td>
+                            <td className="px-3 py-2">{moto.modelo || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </section>
+
+              <section className="border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-blue-100 bg-blue-50 px-3 py-2">
+                  <h2 className="text-xs font-semibold uppercase text-blue-800">Registro de motos</h2>
+                  <p className="text-[11px] text-blue-600">Crear o editar motos del taller</p>
+                </div>
+                <div className="flex flex-wrap gap-2 px-3 py-3">
+                  <button
+                    type="button"
+                    onClick={openCreateMoto}
+                    className="inline-flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-[11px] font-semibold text-blue-700 transition hover:bg-blue-100"
+                  >
+                    <Plus size={14} />
+                    Registrar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleEditMotoSeleccionada}
+                    className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 transition hover:border-blue-200 hover:text-blue-600"
+                  >
+                    <Pencil size={14} />
+                    Editar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleQuitarMotoSeleccionada}
+                    disabled={!selectedMecanicoId}
+                    className="inline-flex items-center gap-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <X size={14} />
+                    Quitar moto
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSearchParams({ tab: 'motos' })}
+                    className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 transition hover:border-blue-200 hover:text-blue-600"
+                  >
+                    <Bike size={14} />
+                    Ver listado
+                  </button>
+                </div>
+              </section>
+            </div>
+
+            <div className="grid gap-4">
                 <div className="border border-slate-200 bg-white shadow-sm">
                   <div className="border-b border-blue-100 bg-blue-50 px-3 py-2">
                     <h2 className="text-xs font-semibold uppercase text-blue-800">
@@ -1043,7 +1027,6 @@ export default function Taller() {
                     )}
                   </div>
                 </div>
-              </section>
             </div>
           </div>
         ) : (
