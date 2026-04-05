@@ -134,6 +134,7 @@ from .nota_credito_serializer import (
 )
 from .numbering_ranges_serializer import (
     CreateRangoFactusSerializer,
+    LocalRangoNumeracionSerializer,
     RangoNumeracionDIANSerializer,
     RemisionNumeracionHistorialSerializer,
     RemisionNumeracionSerializer,
@@ -153,6 +154,7 @@ __all__ = [
     'DocumentoSoporteListSerializer',
     'RangoNumeracionDIANSerializer',
     'CreateRangoFactusSerializer',
+    'LocalRangoNumeracionSerializer',
     'UpdateConsecutivoSerializer',
     'SelectActiveRangeSerializer',
     'RemisionNumeracionSerializer',

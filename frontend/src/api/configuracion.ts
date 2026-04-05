@@ -209,6 +209,7 @@ export const configuracionAPI = {
     document_code?: string;
     prefijo?: string;
     resolucion?: string;
+    estado?: string;
   }) => {
     const response = await apiClient.get<FacturacionRango[]>(
       '/facturacion/rangos/',
@@ -227,17 +228,28 @@ export const configuracionAPI = {
     return response.data;
   },
   crearRangoFacturacion: async (payload: {
-    document: string;
-    prefix: string;
-    current: number;
-    resolution_number?: string;
-    start_date?: string;
-    end_date?: string;
+    document_code: string;
+    factus_id?: number | null;
+    factus_range_id?: number | null;
+    prefijo: string;
+    desde: number;
+    hasta: number;
+    consecutivo_actual: number;
+    resolucion?: string;
+    fecha_autorizacion?: string | null;
+    fecha_expiracion?: string | null;
     technical_key?: string;
-    from_number: number;
-    to_number: number;
+    is_active_remote?: boolean;
+    is_associated_to_software?: boolean;
+    is_selected_local?: boolean;
+    activo?: boolean;
+    activate_now?: boolean;
   }) => {
     const response = await apiClient.post('/facturacion/rangos/', payload);
+    return response.data;
+  },
+  actualizarRangoFacturacion: async (id: number, payload: Partial<FacturacionRango>) => {
+    const response = await apiClient.patch(`/facturacion/rangos/${id}/`, payload);
     return response.data;
   },
   actualizarConsecutivoRango: async (
@@ -267,6 +279,10 @@ export const configuracionAPI = {
       `/facturacion/rangos/${id}/seleccionar-activo/`,
       { document_code: documentCode }
     );
+    return response.data;
+  },
+  activarRangoFacturacion: async (id: number, activo: boolean) => {
+    const response = await apiClient.patch(`/facturacion/rangos/${id}/activar/`, { activo });
     return response.data;
   },
   obtenerNumeracionRemision: async () => {
