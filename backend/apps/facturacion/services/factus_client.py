@@ -13,6 +13,10 @@ from decouple import config
 from django.utils import timezone
 
 from apps.facturacion_electronica.models import FactusToken
+from apps.facturacion.services.factus_environment import (
+    resolve_factus_base_url,
+    resolve_factus_environment,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +56,8 @@ class FactusValidationError(Exception):
 
 class FactusClient:
     def __init__(self) -> None:
-        self.base_url = config('FACTUS_API_URL', default='https://api-sandbox.factus.com.co').rstrip('/')
+        self.base_url = self._resolve_factus_base_url()
+        self.environment = resolve_factus_environment()
         self.auth_path = config('FACTUS_AUTH_PATH', default='/oauth/token')
         self.refresh_path = config('FACTUS_REFRESH_PATH', default='/oauth/token')
         self.invoice_path = config('FACTUS_INVOICE_PATH', default='/v1/bills/validate')
@@ -106,6 +111,12 @@ class FactusClient:
         self.client_secret = config('FACTUS_CLIENT_SECRET', default='')
         self.username = config('FACTUS_USERNAME', default='')
         self.password = config('FACTUS_PASSWORD', default='')
+
+    def _resolve_factus_base_url(self) -> str:
+        return resolve_factus_base_url()
+
+    def get_effective_environment(self) -> str:
+        return self.environment
 
     def _auth_payload(self) -> dict[str, str]:
         return {
@@ -465,6 +476,51 @@ class FactusClient:
     def get_numbering_ranges(self) -> dict[str, Any]:
         """Consulta los rangos de numeración autorizados en Factus."""
         return self.request('GET', self.numbering_ranges_path)
+
+    def health_check(self) -> dict[str, Any]:
+        """Smoke test de credenciales/token/acceso a rangos."""
+        has_credentials = all(
+            [
+                bool(str(self.client_id).strip()),
+                bool(str(self.client_secret).strip()),
+                bool(str(self.username).strip()),
+                bool(str(self.password).strip()),
+            ]
+        )
+        result: dict[str, Any] = {
+            'environment': self.get_effective_environment(),
+            'base_url': self.base_url,
+            'numbering_ranges_path': self.numbering_ranges_path,
+            'has_credentials': has_credentials,
+            'token_ok': False,
+            'numbering_ranges_ok': False,
+            'ranges_count': 0,
+        }
+        if not has_credentials:
+            return result
+
+        token = self.get_valid_token()
+        result['token_ok'] = bool(token)
+
+        payload = self.get_numbering_ranges()
+        ranges_data: list[Any] = []
+        if isinstance(payload, list):
+            ranges_data = payload
+        elif isinstance(payload, dict):
+            data = payload.get('data', payload)
+            if isinstance(data, list):
+                ranges_data = data
+            elif isinstance(data, dict):
+                nested = data.get('data')
+                if isinstance(nested, list):
+                    ranges_data = nested
+                else:
+                    maybe_ranges = data.get('numbering_ranges', [])
+                    if isinstance(maybe_ranges, list):
+                        ranges_data = maybe_ranges
+        result['numbering_ranges_ok'] = True
+        result['ranges_count'] = len(ranges_data)
+        return result
 
     def get_invoice(self, number: str) -> dict[str, Any]:
         """Consulta una factura electrónica existente en Factus por número."""

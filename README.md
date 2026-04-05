@@ -100,6 +100,28 @@ DATABASE_HOST=localhost
 DATABASE_PORT=5432
 ```
 
+Para Factus puedes partir de uno de estos templates:
+
+- `backend/.env.sandbox.example`
+- `backend/.env.production.example`
+
+Variables mínimas de Factus:
+
+```env
+FACTUS_ENV=sandbox
+# FACTUS_API_URL=...   # opcional como override
+FACTUS_AUTH_PATH=/oauth/token
+FACTUS_NUMBERING_RANGES_PATH=/v1/numbering-ranges
+FACTUS_INVOICE_PATH=/v1/bills/validate
+FACTUS_CREDIT_NOTE_PATH=/v1/credit-notes/validate
+```
+
+Para pasar a producción normalmente basta con cambiar:
+
+```env
+FACTUS_ENV=production
+```
+
 ### 4) Crear la base de datos
 
 Asegúrate de tener PostgreSQL corriendo y crea la base de datos:

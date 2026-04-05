@@ -6,23 +6,48 @@ import logging
 from datetime import date
 from typing import Any
 
-from django.conf import settings
-
 from apps.facturacion.models import RangoNumeracionDIAN
 from apps.facturacion.services.factus_client import FactusClient
+from apps.facturacion.services.factus_environment import resolve_factus_environment
 
 logger = logging.getLogger(__name__)
 
 
 def _resolve_document_code(raw_range: dict[str, Any]) -> str:
-    raw = str(
+    raw_value = str(
         raw_range.get('document')
         or raw_range.get('document_code')
         or raw_range.get('voucher_type')
         or ''
-    ).strip().upper()
-    if raw in {'NOTA_CREDITO', 'CREDIT_NOTE', 'NC'}:
+    ).strip()
+    raw = raw_value.upper()
+    compact = (
+        raw.replace('Á', 'A')
+        .replace('É', 'E')
+        .replace('Í', 'I')
+        .replace('Ó', 'O')
+        .replace('Ú', 'U')
+        .replace(' ', '_')
+        .replace('-', '_')
+    )
+    if raw in {'NOTA_CREDITO', 'CREDIT_NOTE', 'NC'} or compact in {'NOTA_CREDITO', 'CREDIT_NOTE', 'NC'}:
         return 'NOTA_CREDITO'
+    if raw in {'DOCUMENTO_SOPORTE', 'SUPPORT_DOCUMENT', 'DS'} or compact in {
+        'DOCUMENTO_SOPORTE',
+        'SUPPORT_DOCUMENT',
+        'DS',
+    }:
+        return 'DOCUMENTO_SOPORTE'
+    if raw in {'NOTA_AJUSTE_DOCUMENTO_SOPORTE', 'SUPPORT_DOCUMENT_ADJUSTMENT_NOTE', 'NDA', 'NADS'} or compact in {
+        'NOTA_DE_AJUSTE_DOCUMENTO_SOPORTE',
+        'NOTA_AJUSTE_DOCUMENTO_SOPORTE',
+        'SUPPORT_DOCUMENT_ADJUSTMENT_NOTE',
+        'NDA',
+        'NADS',
+    }:
+        return 'NOTA_AJUSTE_DOCUMENTO_SOPORTE'
+    if raw in {'NOTA_DEBITO', 'DEBIT_NOTE'} or compact in {'NOTA_DEBITO', 'DEBIT_NOTE'}:
+        return 'NOTA_DEBITO'
     return 'FACTURA_VENTA'
 
 
@@ -37,11 +62,7 @@ def _as_date(value: Any) -> date | None:
 
 def sync_numbering_ranges() -> list[RangoNumeracionDIAN]:
     """Sincroniza rangos de numeración desde Factus y retorna los rangos procesados."""
-    environment = (
-        'PRODUCTION'
-        if str(getattr(settings, 'FACTUS_ENV', 'sandbox')).strip().lower() in {'prod', 'production'}
-        else 'SANDBOX'
-    )
+    environment = resolve_factus_environment()
     payload = FactusClient().get_numbering_ranges()
     ranges: list[dict[str, Any]] = []
     if isinstance(payload, list):
@@ -89,8 +110,10 @@ def sync_numbering_ranges() -> list[RangoNumeracionDIAN]:
                 'fecha_autorizacion': _as_date(raw_range.get('valid_from', raw_range.get('fecha_autorizacion'))),
                 'fecha_expiracion': _as_date(raw_range.get('valid_to', raw_range.get('fecha_expiracion'))),
                 'prefijo': prefijo,
-                'activo': bool(raw_range.get('is_active', raw_range.get('activo', True))),
-                'is_active_remote': bool(raw_range.get('is_active', raw_range.get('activo', True))),
+                'activo': bool(raw_range.get('is_active', raw_range.get('activo', True)))
+                and not bool(raw_range.get('is_expired', False)),
+                'is_active_remote': bool(raw_range.get('is_active', raw_range.get('activo', True)))
+                and not bool(raw_range.get('is_expired', False)),
             },
         )
         synced.append(rango)

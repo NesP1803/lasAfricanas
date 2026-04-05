@@ -4,16 +4,21 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from django.conf import settings
 from django.db import transaction
 
 from apps.facturacion.models import RangoNumeracionDIAN
+from apps.facturacion.services.factus_environment import resolve_factus_environment
 from apps.facturacion.services.factus_client import FactusValidationError
 
 
-def _current_environment() -> str:
-    raw = str(getattr(settings, 'FACTUS_ENV', 'sandbox')).strip().lower()
-    return 'PRODUCTION' if raw in {'prod', 'production'} else 'SANDBOX'
+DOCUMENT_LABELS = {
+    'FACTURA_VENTA': 'factura de venta',
+    'NOTA_CREDITO': 'nota crédito',
+    'DOCUMENTO_SOPORTE': 'documento soporte',
+    'NOTA_AJUSTE_DOCUMENTO_SOPORTE': 'nota de ajuste de documento soporte',
+    'NOTA_DEBITO': 'nota débito',
+    'REMISION': 'remisión',
+}
 
 
 @dataclass
@@ -23,8 +28,8 @@ class InvoiceSequence:
 
 
 def resolve_numbering_range(document_code: str = 'FACTURA_VENTA') -> RangoNumeracionDIAN:
-    document_label = 'factura' if document_code == 'FACTURA_VENTA' else 'nota crédito'
-    environment = _current_environment()
+    document_label = DOCUMENT_LABELS.get(document_code, document_code)
+    environment = resolve_factus_environment()
     base_queryset = RangoNumeracionDIAN.objects.filter(
         environment=environment,
         document_code=document_code,
@@ -63,10 +68,10 @@ def resolve_numbering_range(document_code: str = 'FACTURA_VENTA') -> RangoNumera
     )
 
 
-def get_next_invoice_sequence() -> InvoiceSequence:
-    """Obtiene e incrementa el siguiente consecutivo del rango resuelto para factura de venta."""
+def get_next_document_sequence(document_code: str) -> InvoiceSequence:
+    """Obtiene e incrementa el siguiente consecutivo del rango resuelto por documento."""
     with transaction.atomic():
-        range_base = resolve_numbering_range(document_code='FACTURA_VENTA')
+        range_base = resolve_numbering_range(document_code=document_code)
         rango = RangoNumeracionDIAN.objects.select_for_update().get(pk=range_base.pk)
 
         siguiente = rango.consecutivo_actual
@@ -82,6 +87,22 @@ def get_next_invoice_sequence() -> InvoiceSequence:
         number=f'{rango.prefijo}{siguiente:06d}',
         numbering_range_id=int(rango.factus_range_id or 0),
     )
+
+
+def get_next_invoice_sequence() -> InvoiceSequence:
+    return get_next_document_sequence('FACTURA_VENTA')
+
+
+def get_next_credit_note_sequence() -> InvoiceSequence:
+    return get_next_document_sequence('NOTA_CREDITO')
+
+
+def get_next_support_document_sequence() -> InvoiceSequence:
+    return get_next_document_sequence('DOCUMENTO_SOPORTE')
+
+
+def get_next_support_adjustment_sequence() -> InvoiceSequence:
+    return get_next_document_sequence('NOTA_AJUSTE_DOCUMENTO_SOPORTE')
 
 
 def get_next_invoice_number() -> str:

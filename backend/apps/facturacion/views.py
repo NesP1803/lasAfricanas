@@ -65,10 +65,19 @@ from apps.facturacion.services import (
     delete_invoice_in_factus,
 )
 from apps.facturacion.services.factus_client import FactusClient
+from apps.facturacion.services.factus_environment import resolve_factus_environment
 from apps.facturacion.services.electronic_state_machine import resolve_actions
 from apps.facturacion.services.public_invoice_url import has_documental_inconsistency
 
 logger = logging.getLogger(__name__)
+
+DOCUMENT_CODE_LABELS = {
+    'FACTURA_VENTA': 'Factura de venta',
+    'NOTA_CREDITO': 'Nota crédito',
+    'DOCUMENTO_SOPORTE': 'Documento soporte',
+    'NOTA_AJUSTE_DOCUMENTO_SOPORTE': 'Nota de ajuste documento soporte',
+    'NOTA_DEBITO': 'Nota débito',
+}
 
 
 def _is_admin(user) -> bool:
@@ -656,14 +665,14 @@ class ConfiguracionDIANViewSet(viewsets.GenericViewSet):
 
     @action(detail=False, methods=['get'], url_path='rangos')
     def rangos(self, request):
-        environment = (
-            'PRODUCTION'
-            if str(getattr(settings, 'FACTUS_ENV', 'sandbox')).strip().lower() in {'prod', 'production'}
-            else 'SANDBOX'
-        )
+        environment = resolve_factus_environment()
+        document_code = str(request.query_params.get('document_code', 'FACTURA_VENTA')).strip().upper() or 'FACTURA_VENTA'
+        valid_codes = {choice[0] for choice in RangoNumeracionDIAN.DOCUMENT_CODE_CHOICES}
+        if document_code not in valid_codes:
+            return Response({'detail': 'document_code no soportado.'}, status=status.HTTP_400_BAD_REQUEST)
         rangos = RangoNumeracionDIAN.objects.filter(
             environment=environment,
-            document_code='FACTURA_VENTA',
+            document_code=document_code,
         ).order_by('prefijo', 'factus_range_id')
         data = [
             {
@@ -671,7 +680,7 @@ class ConfiguracionDIANViewSet(viewsets.GenericViewSet):
                 'factus_range_id': rango.factus_range_id,
                 'environment': rango.environment,
                 'document_code': rango.document_code,
-                'document_name': 'Factura de venta',
+                'document_name': DOCUMENT_CODE_LABELS.get(rango.document_code, rango.document_code),
                 'prefix': rango.prefijo,
                 'from_number': rango.desde,
                 'to_number': rango.hasta,
@@ -686,7 +695,7 @@ class ConfiguracionDIANViewSet(viewsets.GenericViewSet):
         return Response(
             {
                 'environment': environment,
-                'document_code': 'FACTURA_VENTA',
+                'document_code': document_code,
                 'selected_range_id': next((r['id'] for r in data if r['is_selected_local']), None),
                 'ranges': data,
             }
@@ -705,27 +714,58 @@ class ConfiguracionDIANViewSet(viewsets.GenericViewSet):
             return Response({'detail': 'No autorizado.'}, status=status.HTTP_403_FORBIDDEN)
 
         rango_id = request.data.get('range_id')
+        document_code = str(request.data.get('document_code', 'FACTURA_VENTA')).strip().upper() or 'FACTURA_VENTA'
         if not rango_id:
             return Response({'detail': 'Debe enviar range_id.'}, status=status.HTTP_400_BAD_REQUEST)
-        environment = (
-            'PRODUCTION'
-            if str(getattr(settings, 'FACTUS_ENV', 'sandbox')).strip().lower() in {'prod', 'production'}
-            else 'SANDBOX'
-        )
+        valid_codes = {choice[0] for choice in RangoNumeracionDIAN.DOCUMENT_CODE_CHOICES}
+        if document_code not in valid_codes:
+            return Response({'detail': 'document_code no soportado.'}, status=status.HTTP_400_BAD_REQUEST)
+        environment = resolve_factus_environment()
         rango = RangoNumeracionDIAN.objects.filter(
             id=rango_id,
             environment=environment,
-            document_code='FACTURA_VENTA',
+            document_code=document_code,
         ).first()
         if rango is None:
             return Response({'detail': 'El rango no existe para el entorno actual.'}, status=status.HTTP_404_NOT_FOUND)
 
-        RangoNumeracionDIAN.objects.filter(environment=environment, document_code='FACTURA_VENTA').update(
+        RangoNumeracionDIAN.objects.filter(environment=environment, document_code=document_code).update(
             is_selected_local=False
         )
         rango.is_selected_local = True
         rango.save(update_fields=['is_selected_local'])
-        return Response({'message': 'Rango activo actualizado correctamente.', 'range_id': rango.id})
+        return Response(
+            {
+                'message': 'Rango activo actualizado correctamente.',
+                'range_id': rango.id,
+                'document_code': document_code,
+                'environment': environment,
+            }
+        )
+
+    @action(detail=False, methods=['get'], url_path='health')
+    def factus_health(self, request):
+        if not _is_admin(request.user):
+            return Response({'detail': 'No autorizado.'}, status=status.HTTP_403_FORBIDDEN)
+        client = FactusClient()
+        try:
+            result = client.health_check()
+        except (FactusAPIError, FactusAuthError) as exc:
+            return Response(
+                {
+                    'environment': client.get_effective_environment(),
+                    'base_url': client.base_url,
+                    'detail': str(exc),
+                    'healthy': False,
+                },
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        return Response(
+            {
+                **result,
+                'healthy': bool(result.get('has_credentials') and result.get('token_ok') and result.get('numbering_ranges_ok')),
+            }
+        )
 
     def create(self, request):
         if not _is_admin(request.user):
@@ -736,11 +776,7 @@ class ConfiguracionDIANViewSet(viewsets.GenericViewSet):
             serializer.is_valid(raise_exception=True)
             serializer.save()
             rango_id = serializer.validated_data.get('rango_facturacion').id
-            environment = (
-                'PRODUCTION'
-                if str(getattr(settings, 'FACTUS_ENV', 'sandbox')).strip().lower() in {'prod', 'production'}
-                else 'SANDBOX'
-            )
+            environment = resolve_factus_environment()
             RangoNumeracionDIAN.objects.filter(environment=environment, document_code='FACTURA_VENTA').update(
                 is_selected_local=False
             )
@@ -751,11 +787,7 @@ class ConfiguracionDIANViewSet(viewsets.GenericViewSet):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         rango_id = serializer.validated_data.get('rango_facturacion').id
-        environment = (
-            'PRODUCTION'
-            if str(getattr(settings, 'FACTUS_ENV', 'sandbox')).strip().lower() in {'prod', 'production'}
-            else 'SANDBOX'
-        )
+        environment = resolve_factus_environment()
         RangoNumeracionDIAN.objects.filter(environment=environment, document_code='FACTURA_VENTA').update(
             is_selected_local=False
         )

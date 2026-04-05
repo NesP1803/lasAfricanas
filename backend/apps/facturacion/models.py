@@ -316,6 +316,10 @@ class RangoNumeracionDIAN(models.Model):
     DOCUMENT_CODE_CHOICES = [
         ('FACTURA_VENTA', 'Factura de venta'),
         ('NOTA_CREDITO', 'Nota crédito'),
+        ('DOCUMENTO_SOPORTE', 'Documento soporte'),
+        ('NOTA_AJUSTE_DOCUMENTO_SOPORTE', 'Nota de ajuste documento soporte'),
+        ('NOTA_DEBITO', 'Nota débito'),
+        ('REMISION', 'Remisión (consecutivo local)'),
     ]
 
     factus_range_id = models.PositiveIntegerField(
@@ -362,6 +366,13 @@ class RangoNumeracionDIAN(models.Model):
         indexes = [
             models.Index(fields=['environment', 'document_code', 'is_active_remote']),
             models.Index(fields=['environment', 'document_code', 'is_selected_local']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['environment', 'document_code'],
+                condition=models.Q(is_selected_local=True),
+                name='uq_rango_selected_env_doc',
+            ),
         ]
 
     def __str__(self) -> str:
