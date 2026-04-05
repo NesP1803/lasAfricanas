@@ -1022,6 +1022,8 @@ def _validate_payload_tax_consistency(payload: dict[str, Any], venta: Venta) -> 
             continue
         is_excluded = _to_bool(item.get('is_excluded'))
         tax_rate = _to_decimal_or_none(item.get('tax_rate')) or Decimal('0.00')
+        taxable_amount = _to_decimal_or_none(item.get('taxable_amount')) or Decimal('0.00')
+        tax_amount = _to_decimal_or_none(item.get('tax_amount')) or Decimal('0.00')
         tribute_id = item.get('tribute_id')
         if is_excluded and tax_rate > Decimal('0.00'):
             raise FactusValidationError(
@@ -1034,6 +1036,10 @@ def _validate_payload_tax_consistency(payload: dict[str, Any], venta: Venta) -> 
         if not is_excluded and not tribute_id:
             raise FactusValidationError(
                 f'Ítem gravado inválido en línea {index}: tribute_id es obligatorio para evitar degradación en Factus.'
+            )
+        if not is_excluded and (taxable_amount <= Decimal('0.00') or tax_amount <= Decimal('0.00')):
+            raise FactusValidationError(
+                f'Ítem gravado inválido en línea {index}: taxable_amount y tax_amount deben ser mayores a 0.'
             )
         if is_excluded and int(tribute_id or 0) != excluded_tribute_id:
             raise FactusValidationError(

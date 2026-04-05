@@ -204,6 +204,15 @@ def build_factus_item(document_detail: dict[str, Any]) -> dict[str, Any]:
 
     effective_tax_rate = Decimal('0.00') if is_excluded else tax_rate
     price_for_factus = q_money(document_detail['unit_gross_price'])
+    totals = document_detail.get('totals', {}) if isinstance(document_detail.get('totals'), dict) else {}
+    taxable_amount = q_money(to_decimal(totals.get('base', Decimal('0.00'))))
+    tax_amount = q_money(to_decimal(totals.get('impuesto', Decimal('0.00'))))
+    line_total = q_money(to_decimal(totals.get('total', Decimal('0.00'))))
+    if is_excluded:
+        taxable_amount = Decimal('0.00')
+        tax_amount = Decimal('0.00')
+    elif taxable_amount <= Decimal('0.00') or tax_amount <= Decimal('0.00'):
+        raise FactusValidationError('Una línea gravada debe tener taxable_amount y tax_amount mayores a 0.')
 
     item_payload = {
         'code_reference': document_detail['code_reference'],
@@ -211,6 +220,9 @@ def build_factus_item(document_detail: dict[str, Any]) -> dict[str, Any]:
         'quantity': _to_float(document_detail['quantity']),
         'price': _to_float(price_for_factus),
         'tax_rate': _to_float(effective_tax_rate),
+        'taxable_amount': _to_float(taxable_amount),
+        'tax_amount': _to_float(tax_amount),
+        'total': _to_float(line_total),
         'discount_rate': _to_float(document_detail['discount_rate']),
         'is_excluded': int(1 if is_excluded else 0),
         'tribute_id': tribute_id,
