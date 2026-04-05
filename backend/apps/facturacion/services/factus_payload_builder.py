@@ -84,9 +84,8 @@ def _resolve_excluded_item_tribute_id() -> int:
 
 
 def _is_excluded_item(detalle) -> bool:
-    producto = detalle.producto
-    iva_porcentaje = to_decimal(detalle.iva_porcentaje)
-    return bool(getattr(producto, 'iva_exento', False) or iva_porcentaje <= Decimal('0'))
+    iva_porcentaje = q_money(to_decimal(detalle.iva_porcentaje))
+    return iva_porcentaje <= Decimal('0.00')
 
 
 def _resolve_item_unit_gross_price(detalle) -> Decimal:
@@ -143,8 +142,9 @@ def _normalize_document_detail(detalle) -> dict[str, Any]:
 
     unit_gross_price = _resolve_item_unit_gross_price(detalle)
     discount_rate = _resolve_item_discount_rate(detalle)
+    iva_porcentaje = q_money(to_decimal(detalle.iva_porcentaje))
     is_excluded = _is_excluded_item(detalle)
-    tax_rate = Decimal('0.00') if is_excluded else q_money(to_decimal(detalle.iva_porcentaje))
+    tax_rate = Decimal('0.00') if is_excluded else iva_porcentaje
     tribute_id = _resolve_excluded_item_tribute_id() if is_excluded else _resolve_item_tribute_id(tax_rate)
 
     totals = calculate_document_detail_totals(
@@ -153,7 +153,7 @@ def _normalize_document_detail(detalle) -> dict[str, Any]:
         discount_pct=discount_rate,
         tax_pct=tax_rate,
     )
-    return {
+    normalized_detail = {
         'code_reference': _to_clean_text(getattr(producto, 'codigo', ''), fallback=str(detalle.id)),
         'name': _to_clean_text(getattr(producto, 'nombre', ''), fallback=f'ITEM-{detalle.id}'),
         'quantity': quantity,
@@ -167,6 +167,15 @@ def _normalize_document_detail(detalle) -> dict[str, Any]:
         'withholding_taxes': [],
         'totals': totals,
     }
+    logger.info(
+        'factus_payload.item_normalized code_reference=%s iva_porcentaje_detalle=%s tax_rate=%s is_excluded=%s tribute_id=%s',
+        normalized_detail['code_reference'],
+        iva_porcentaje,
+        normalized_detail['tax_rate'],
+        normalized_detail['is_excluded'],
+        normalized_detail['tribute_id'],
+    )
+    return normalized_detail
 
 
 def build_factus_item(document_detail: dict[str, Any]) -> dict[str, Any]:
@@ -178,9 +187,22 @@ def build_factus_item(document_detail: dict[str, Any]) -> dict[str, Any]:
     - Para líneas gravadas, `tax_rate` > 0, `is_excluded`=False y `tribute_id` de IVA.
     """
     is_excluded = bool(document_detail['is_excluded'])
-    tax_rate = Decimal('0.00') if is_excluded else q_money(document_detail['tax_rate'])
+    tax_rate = q_money(to_decimal(document_detail.get('tax_rate')))
+    tribute_id = int(document_detail.get('tribute_id') or 0)
+    excluded_tribute_id = _resolve_excluded_item_tribute_id()
+
+    if is_excluded and tax_rate > Decimal('0.00'):
+        raise FactusValidationError('Una línea excluida debe enviarse con tax_rate igual a 0.')
     if not is_excluded and tax_rate <= Decimal('0.00'):
         raise FactusValidationError('Una línea gravada debe enviarse con tax_rate mayor a 0.')
+    if not is_excluded and tribute_id <= 0:
+        raise FactusValidationError('Una línea gravada debe enviarse con tribute_id válido.')
+    if is_excluded and tribute_id != excluded_tribute_id:
+        raise FactusValidationError(
+            f'Una línea excluida debe enviarse con tribute_id={excluded_tribute_id} (no causa/excluido).'
+        )
+
+    effective_tax_rate = Decimal('0.00') if is_excluded else tax_rate
     price_for_factus = q_money(document_detail['unit_gross_price'])
 
     item_payload = {
@@ -188,10 +210,10 @@ def build_factus_item(document_detail: dict[str, Any]) -> dict[str, Any]:
         'name': document_detail['name'],
         'quantity': _to_float(document_detail['quantity']),
         'price': _to_float(price_for_factus),
-        'tax_rate': _to_float(tax_rate),
+        'tax_rate': _to_float(effective_tax_rate),
         'discount_rate': _to_float(document_detail['discount_rate']),
         'is_excluded': int(1 if is_excluded else 0),
-        'tribute_id': int(document_detail['tribute_id']),
+        'tribute_id': tribute_id,
         'unit_measure_id': int(document_detail['unit_measure_id']),
         'standard_code_id': int(document_detail['standard_code_id']),
         'withholding_taxes': document_detail.get('withholding_taxes', []),

@@ -23,6 +23,7 @@ from apps.facturacion.services.download_invoice_files import download_pdf, downl
 from apps.facturacion.services.electronic_state_machine import extract_bill_errors as _extract_bill_errors
 from apps.facturacion.services.electronic_state_machine import map_factus_status
 from apps.facturacion.services.exceptions import DescargaFacturaError
+from apps.facturacion.services.factus_catalog_lookup import get_tribute_id
 from apps.facturacion.services.factus_client import (
     FactusAPIError,
     FactusAuthError,
@@ -1015,22 +1016,31 @@ def _validate_payload_tax_consistency(payload: dict[str, Any], venta: Venta) -> 
         raise FactusValidationError('Falta payment_form/payment_method_code en el payload Factus.')
 
     taxable_count = 0
+    excluded_tribute_id = int(get_tribute_id('NO_CAUSA', default=1))
     for index, item in enumerate(items, start=1):
         if not isinstance(item, dict):
             continue
         is_excluded = _to_bool(item.get('is_excluded'))
         tax_rate = _to_decimal_or_none(item.get('tax_rate')) or Decimal('0.00')
         tribute_id = item.get('tribute_id')
+        if is_excluded and tax_rate > Decimal('0.00'):
+            raise FactusValidationError(
+                f'Ítem excluido inválido en línea {index}: tax_rate debe ser 0 cuando is_excluded=1.'
+            )
+        if not is_excluded and tax_rate <= Decimal('0.00'):
+            raise FactusValidationError(
+                f'Ítem gravado inválido en línea {index}: tax_rate debe ser mayor a 0 cuando is_excluded=0.'
+            )
+        if not is_excluded and not tribute_id:
+            raise FactusValidationError(
+                f'Ítem gravado inválido en línea {index}: tribute_id es obligatorio para evitar degradación en Factus.'
+            )
+        if is_excluded and int(tribute_id or 0) != excluded_tribute_id:
+            raise FactusValidationError(
+                f'Ítem excluido inválido en línea {index}: tribute_id debe ser {excluded_tribute_id} (no causa/excluido).'
+            )
         if not is_excluded:
             taxable_count += 1
-            if tax_rate <= Decimal('0.00'):
-                raise FactusValidationError(
-                    f'Ítem gravado inválido en línea {index}: tax_rate debe ser mayor a 0 cuando is_excluded=0.'
-                )
-            if not tribute_id:
-                raise FactusValidationError(
-                    f'Ítem gravado inválido en línea {index}: tribute_id es obligatorio para evitar degradación en Factus.'
-                )
     logger.info(
         'facturar_venta.payload_consistencia venta_id=%s customer_tribute_id=%s taxable_items=%s total_items=%s',
         venta.id,
@@ -1221,6 +1231,17 @@ def facturar_venta(
 
     client = FactusClient()
     try:
+        for index, item in enumerate(payload.get('items', []), start=1):
+            if not isinstance(item, dict):
+                continue
+            logger.info(
+                'facturar_venta.payload_pre_post_item venta_id=%s line=%s tax_rate=%s is_excluded=%s tribute_id=%s',
+                venta.id,
+                index,
+                item.get('tax_rate'),
+                item.get('is_excluded'),
+                item.get('tribute_id'),
+            )
         logger.info(
             'facturar_venta.payload_pre_post venta_id=%s payload=%s items=%s customer=%s payment_form=%s '
             'payment_method=%s numbering_range_id=%s operation_type=%s',
@@ -1590,9 +1611,3 @@ def facturar_venta(
     send_invoice_email_via_factus(factura)
     logger.info('facturar_venta.fin_ok venta_id=%s factura=%s', venta.id, factura.number)
     return factura
-    def _nearest_expected(candidates: list[Any], expected_value: Decimal) -> Decimal | None:
-        normalized = [_to_decimal_or_none(value) for value in candidates]
-        valid = [value for value in normalized if value is not None]
-        if not valid:
-            return None
-        return min(valid, key=lambda current: abs(current - expected_value))
