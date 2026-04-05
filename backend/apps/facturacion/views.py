@@ -30,6 +30,7 @@ from apps.facturacion.models import (
 )
 from apps.facturacion.serializers import (
     CreateRangoFactusSerializer,
+    LocalRangoNumeracionSerializer,
     ConfiguracionDIANSerializer,
     DocumentoSoporteCreateSerializer,
     DocumentoSoporteListSerializer,
@@ -870,6 +871,8 @@ class ConfiguracionDIANViewSet(viewsets.GenericViewSet):
 class FacturacionRangosViewSet(viewsets.GenericViewSet):
     permission_classes = [IsAuthenticated]
 
+    MAIN_DOCUMENT_CODES = {'FACTURA_VENTA', 'NOTA_CREDITO', 'DOCUMENTO_SOPORTE'}
+
     def _base_queryset(self):
         environment = resolve_factus_environment()
         return RangoNumeracionDIAN.objects.filter(environment=environment).order_by('-created_at', '-id')
@@ -879,6 +882,17 @@ class FacturacionRangosViewSet(viewsets.GenericViewSet):
         document_code = str(request.query_params.get('document_code', '')).strip().upper()
         if document_code:
             queryset = queryset.filter(document_code=document_code)
+        else:
+            queryset = queryset.filter(document_code__in=self.MAIN_DOCUMENT_CODES)
+        estado = str(request.query_params.get('estado', '')).strip().lower()
+        if estado == 'activo':
+            queryset = queryset.filter(activo=True, is_expired_remote=False)
+        elif estado == 'inactivo':
+            queryset = queryset.filter(activo=False)
+        elif estado == 'vencido':
+            queryset = queryset.filter(is_expired_remote=True)
+        elif estado == 'seleccionado':
+            queryset = queryset.filter(is_selected_local=True)
         prefijo = str(request.query_params.get('prefijo', '')).strip()
         if prefijo:
             queryset = queryset.filter(prefijo__icontains=prefijo)
@@ -910,12 +924,31 @@ class FacturacionRangosViewSet(viewsets.GenericViewSet):
     def create(self, request):
         if not _is_admin(request.user):
             return Response({'detail': 'No autorizado.'}, status=status.HTTP_403_FORBIDDEN)
-        serializer = CreateRangoFactusSerializer(data=request.data)
+        payload = dict(request.data)
+        payload['environment'] = resolve_factus_environment()
+        activate_now = str(payload.get('activate_now', '')).strip().lower() in {'1', 'true', 'si', 'sí', 'yes'}
+        serializer = LocalRangoNumeracionSerializer(data=payload)
         serializer.is_valid(raise_exception=True)
-        payload = serializer.validated_data
-        created = create_range(payload)
-        sync_ranges_to_db()
-        return Response(created, status=status.HTTP_201_CREATED)
+        with transaction.atomic():
+            rango = serializer.save(
+                environment=resolve_factus_environment(),
+                document_name=DOCUMENT_CODE_LABELS.get(serializer.validated_data['document_code'], ''),
+                is_selected_local=activate_now,
+            )
+            if activate_now:
+                self._base_queryset().filter(document_code=rango.document_code).exclude(pk=rango.pk).update(is_selected_local=False)
+        return Response(RangoNumeracionDIANSerializer(rango).data, status=status.HTTP_201_CREATED)
+
+    def partial_update(self, request, pk=None):
+        if not _is_admin(request.user):
+            return Response({'detail': 'No autorizado.'}, status=status.HTTP_403_FORBIDDEN)
+        rango = self._base_queryset().filter(pk=pk).first()
+        if not rango:
+            return Response({'detail': 'Rango no encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+        serializer = LocalRangoNumeracionSerializer(instance=rango, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        rango = serializer.save()
+        return Response(RangoNumeracionDIANSerializer(rango).data)
 
     @action(detail=True, methods=['patch'], url_path='consecutivo')
     def consecutivo(self, request, pk=None):
@@ -942,14 +975,25 @@ class FacturacionRangosViewSet(viewsets.GenericViewSet):
         rango = self._base_queryset().filter(pk=pk).first()
         if not rango:
             return Response({'detail': 'Rango no encontrado.'}, status=status.HTTP_404_NOT_FOUND)
-        payload = delete_range(int(rango.factus_id or rango.factus_range_id))
+        payload = {}
+        if rango.factus_id or rango.factus_range_id:
+            try:
+                payload = delete_range(int(rango.factus_id or rango.factus_range_id))
+            except Exception:
+                payload = {}
         rango.delete()
-        return Response({'message': 'Rango eliminado en Factus y en local.', 'provider': payload})
+        return Response({'message': 'Rango eliminado.', 'provider': payload})
 
     @action(detail=False, methods=['get'], url_path='software')
     def software(self, request):
         software_status = get_software_ranges_resilient()
         software_ranges = software_status['ranges']
+        document = str(request.query_params.get('document', '')).strip()
+        allowed_documents = {'21', '22', '24'}
+        if document in allowed_documents:
+            software_ranges = [item for item in software_ranges if str(item.get('document')) == document]
+        else:
+            software_ranges = [item for item in software_ranges if str(item.get('document')) in allowed_documents]
         local_by_id = {int(item.factus_id or item.factus_range_id or 0): item for item in self._base_queryset()}
         comparisons = []
         for item in software_ranges:
@@ -986,6 +1030,22 @@ class FacturacionRangosViewSet(viewsets.GenericViewSet):
             rango.is_selected_local = True
             rango.save(update_fields=['is_selected_local'])
         return Response({'message': 'Rango seleccionado localmente.', 'range': RangoNumeracionDIANSerializer(rango).data})
+
+    @action(detail=True, methods=['patch'], url_path='activar')
+    def activar(self, request, pk=None):
+        if not _is_admin(request.user):
+            return Response({'detail': 'No autorizado.'}, status=status.HTTP_403_FORBIDDEN)
+        rango = self._base_queryset().filter(pk=pk).first()
+        if not rango:
+            return Response({'detail': 'Rango no encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+        enabled = bool(request.data.get('activo', True))
+        rango.activo = enabled
+        if not enabled and rango.is_selected_local:
+            rango.is_selected_local = False
+            rango.save(update_fields=['activo', 'is_selected_local'])
+        else:
+            rango.save(update_fields=['activo'])
+        return Response({'message': 'Estado actualizado.', 'range': RangoNumeracionDIANSerializer(rango).data})
 
 
 def _compare_software_vs_local(remote: dict, local: RangoNumeracionDIAN) -> list[str]:

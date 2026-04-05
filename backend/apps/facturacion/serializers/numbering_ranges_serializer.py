@@ -47,7 +47,7 @@ class RangoNumeracionDIANSerializer(serializers.ModelSerializer):
 
 
 class CreateRangoFactusSerializer(serializers.Serializer):
-    document = serializers.ChoiceField(choices=['21', '22', '23', '24', '25', '26', '27', '28', '30'])
+    document = serializers.ChoiceField(choices=['21', '22', '24'])
     prefix = serializers.CharField(max_length=20)
     current = serializers.IntegerField(min_value=1)
     resolution_number = serializers.CharField(max_length=100, required=False, allow_blank=True)
@@ -71,6 +71,71 @@ class CreateRangoFactusSerializer(serializers.Serializer):
         if current and from_number and to_number and not (from_number <= current <= to_number):
             raise serializers.ValidationError({'current': 'Debe estar dentro del rango.'})
 
+        return attrs
+
+
+class LocalRangoNumeracionSerializer(serializers.ModelSerializer):
+    activate_now = serializers.BooleanField(write_only=True, required=False, default=False)
+
+    class Meta:
+        model = RangoNumeracionDIAN
+        fields = [
+            'id',
+            'environment',
+            'document_code',
+            'document_name',
+            'factus_id',
+            'factus_range_id',
+            'prefijo',
+            'desde',
+            'hasta',
+            'consecutivo_actual',
+            'resolucion',
+            'fecha_autorizacion',
+            'fecha_expiracion',
+            'technical_key',
+            'is_active_remote',
+            'is_expired_remote',
+            'is_associated_to_software',
+            'is_selected_local',
+            'activo',
+            'metadata_json',
+            'activate_now',
+        ]
+        read_only_fields = ['id', 'environment', 'is_expired_remote', 'document_name']
+
+    def validate(self, attrs):
+        instance = self.instance
+        document_code = attrs.get('document_code', getattr(instance, 'document_code', 'FACTURA_VENTA'))
+        prefijo = (attrs.get('prefijo', getattr(instance, 'prefijo', '')) or '').strip()
+        desde = attrs.get('desde', getattr(instance, 'desde', 0))
+        hasta = attrs.get('hasta', getattr(instance, 'hasta', 0))
+        actual = attrs.get('consecutivo_actual', getattr(instance, 'consecutivo_actual', 0))
+        resolucion = (attrs.get('resolucion', getattr(instance, 'resolucion', '')) or '').strip()
+
+        if not prefijo:
+            raise serializers.ValidationError({'prefijo': 'El prefijo es obligatorio.'})
+        if desde > hasta:
+            raise serializers.ValidationError({'hasta': 'Debe ser mayor o igual que desde.'})
+        if not (desde <= actual <= hasta):
+            raise serializers.ValidationError({'consecutivo_actual': 'Debe estar dentro del rango configurado.'})
+        if document_code in {'FACTURA_VENTA', 'DOCUMENTO_SOPORTE'} and not resolucion:
+            raise serializers.ValidationError({'resolucion': 'Este campo es obligatorio para el documento seleccionado.'})
+
+        environment = attrs.get('environment', getattr(instance, 'environment', None))
+        queryset = RangoNumeracionDIAN.objects.filter(
+            environment=environment,
+            document_code=document_code,
+            prefijo__iexact=prefijo,
+            desde=desde,
+            hasta=hasta,
+        )
+        if instance:
+            queryset = queryset.exclude(pk=instance.pk)
+        if queryset.exists():
+            raise serializers.ValidationError(
+                {'prefijo': 'Ya existe un rango equivalente para este documento con el mismo prefijo y límites.'}
+            )
         return attrs
 
 
