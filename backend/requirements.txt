@@ -19,3 +19,6 @@ python-dateutil==2.9.0.post0
 python-dotenv==1.2.2
 six==1.17.0
 urllib3==2.6.3
+gunicorn==22.0.0
+whitenoise==6.8.2
+dj-database-url==2.2.0

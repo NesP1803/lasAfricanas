@@ -1,9 +1,17 @@
 import axios from 'axios';
 import type { AxiosRequestConfig, Method, ResponseType } from 'axios';
 
+const API_ORIGIN = import.meta.env.VITE_API_URL?.replace(/\/$/, '') || '';
+const API_BASE_URL = API_ORIGIN ? `${API_ORIGIN}/api` : '/api';
+
+const toApiUrl = (path: string) => {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${API_BASE_URL}${normalizedPath}`;
+};
+
 // Configuración base de Axios
 const apiClient = axios.create({
-  baseURL: '/api', // Vite proxy redirigirá a http://127.0.0.1:8000/api
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -72,7 +80,7 @@ apiClient.interceptors.response.use(
           throw new Error('No refresh token');
         }
 
-        const response = await axios.post('/api/auth/refresh/', {
+        const response = await axios.post(toApiUrl('/auth/refresh/'), {
           refresh: refreshToken,
         });
 
@@ -154,6 +162,8 @@ export const authFetch = async (input: string, options: AuthFetchOptions = {}) =
 };
 
 export {
+  API_BASE_URL,
+  toApiUrl,
   ACCESS_TOKEN_KEY,
   REFRESH_TOKEN_KEY,
   clearAuthStorage,

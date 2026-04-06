@@ -11,9 +11,11 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 """
 
 from pathlib import Path
+from datetime import timedelta
+
+import dj_database_url
 from decouple import Config, RepositoryEnv, config as decouple_config
 from dotenv import load_dotenv
-import os
 
 load_dotenv()
 
@@ -21,6 +23,11 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
 ENV_FILE = BASE_DIR / '.env'
 config = Config(RepositoryEnv(ENV_FILE)) if ENV_FILE.exists() else decouple_config
+
+
+def get_list_env(key: str, default: str = '') -> list[str]:
+    raw_value = config(key, default=default)
+    return [value.strip() for value in raw_value.split(',') if value.strip()]
 
 
 # Quick-start development settings - unsuitable for production
@@ -32,7 +39,8 @@ SECRET_KEY = config('SECRET_KEY', default='django-insecure-default-key')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=True, cast=bool)
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = get_list_env('ALLOWED_HOSTS', default='127.0.0.1,localhost')
+CSRF_TRUSTED_ORIGINS = get_list_env('CSRF_TRUSTED_ORIGINS', default='')
 
 
 # Application definition
@@ -44,13 +52,13 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    
+
     # Third party
     'rest_framework',
     'corsheaders',
     'django_extensions',
     'django_filters',
-    
+
     # Local apps
     'apps.core',
     'apps.usuarios',
@@ -64,6 +72,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -108,6 +117,10 @@ DATABASES = {
     }
 }
 
+DATABASE_URL = config('DATABASE_URL', default='')
+if DATABASE_URL:
+    DATABASES['default'] = dj_database_url.parse(DATABASE_URL, conn_max_age=600, ssl_require=not DEBUG)
+
 
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
@@ -144,8 +157,17 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.0/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 MEDIA_URL = '/media/'
+# Nota: en Render el filesystem es efímero. Conviene migrar media/XML/PDF a storage persistente.
 MEDIA_ROOT = BASE_DIR / 'media'
+
+# Security for reverse proxies / HTTPS on Render
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+SECURE_SSL_REDIRECT = not DEBUG
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
@@ -153,7 +175,8 @@ MEDIA_ROOT = BASE_DIR / 'media'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # CORS Settings
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOWED_ORIGINS = get_list_env('CORS_ALLOWED_ORIGINS', default='http://127.0.0.1:5173,http://localhost:5173')
+CORS_ALLOW_ALL_ORIGINS = config('CORS_ALLOW_ALL_ORIGINS', default=DEBUG, cast=bool)
 
 # Django REST Framework
 REST_FRAMEWORK = {
@@ -182,8 +205,6 @@ AUDITORIA_RETENTION_DAYS = 365  # Días que se mantienen en la tabla principal
 AUDITORIA_ARCHIVE_RETENTION_DAYS = 3650  # Días a conservar en el archivo histórico
 
 # JWT Settings
-from datetime import timedelta
-
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(hours=8),  # Token dura 8 horas
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),   # Refresh dura 7 días
