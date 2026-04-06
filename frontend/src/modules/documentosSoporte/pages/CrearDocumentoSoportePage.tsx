@@ -1,14 +1,27 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useNotification } from '../../../contexts/NotificationContext';
 import DocumentoSoporteForm from '../components/DocumentoSoporteForm';
 import { documentosSoporteApi, type CrearDocumentoSoportePayload } from '../services/documentosSoporteApi';
+import { configuracionAPI, type FacturacionRango } from '../../../api/configuracion';
 
 export default function CrearDocumentoSoportePage() {
   const [loading, setLoading] = useState(false);
+  const [rangoDocumentoSoporteActivo, setRangoDocumentoSoporteActivo] = useState<FacturacionRango | null>(null);
   const navigate = useNavigate();
   const { showNotification } = useNotification();
+
+  useEffect(() => {
+    configuracionAPI
+      .listarRangosFacturacion({ document_code: 'DOCUMENTO_SOPORTE' })
+      .then((rangos) => {
+        const seleccionado = rangos.find((rango) => rango.is_selected_local);
+        const asociado = rangos.find((rango) => rango.is_associated_to_software);
+        setRangoDocumentoSoporteActivo(seleccionado ?? asociado ?? rangos[0] ?? null);
+      })
+      .catch(() => setRangoDocumentoSoporteActivo(null));
+  }, []);
 
   const handleSubmit = async (payload: CrearDocumentoSoportePayload) => {
     setLoading(true);
@@ -57,6 +70,17 @@ export default function CrearDocumentoSoportePage() {
           <Link to="/listados/documentos-soporte" className="text-sm font-semibold text-blue-600 hover:text-blue-700">
             Volver al listado
           </Link>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            Generar documento soporte
+          </p>
+          <p className="text-sm font-medium text-slate-800">
+            {rangoDocumentoSoporteActivo
+              ? `${rangoDocumentoSoporteActivo.prefijo}-${rangoDocumentoSoporteActivo.consecutivo_actual}`
+              : 'Sin rango seleccionado'}
+          </p>
         </div>
       </div>
 

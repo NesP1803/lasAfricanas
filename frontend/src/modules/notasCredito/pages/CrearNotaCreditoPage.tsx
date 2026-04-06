@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useNotification } from '../../../contexts/NotificationContext';
 import { notasCreditoApi, type CrearNotaCreditoPayload, type NotaCredito } from '../services/notasCreditoApi';
 import EstadoNotaCreditoBadge from '../components/EstadoNotaCreditoBadge';
+import { configuracionAPI, type FacturacionRango } from '../../../api/configuracion';
 
 interface FacturaOption {
   id: number;
@@ -113,6 +114,7 @@ export default function CrearNotaCreditoPage() {
   const [motivoTipo, setMotivoTipo] = useState(motivosCredito[1].code);
   const [motivo, setMotivo] = useState('');
   const [observaciones, setObservaciones] = useState('');
+  const [rangoNotaCreditoActivo, setRangoNotaCreditoActivo] = useState<FacturacionRango | null>(null);
 
   useEffect(() => {
     const loadInitialData = async () => {
@@ -144,6 +146,17 @@ export default function CrearNotaCreditoPage() {
 
     loadInitialData();
   }, [showNotification]);
+
+  useEffect(() => {
+    configuracionAPI
+      .listarRangosFacturacion({ document_code: 'NOTA_CREDITO' })
+      .then((rangos) => {
+        const seleccionado = rangos.find((rango) => rango.is_selected_local);
+        const asociado = rangos.find((rango) => rango.is_associated_to_software);
+        setRangoNotaCreditoActivo(seleccionado ?? asociado ?? rangos[0] ?? null);
+      })
+      .catch(() => setRangoNotaCreditoActivo(null));
+  }, []);
 
   const facturasFiltradas = useMemo(() => {
     const q = busquedaFactura.trim().toLowerCase();
@@ -410,6 +423,17 @@ export default function CrearNotaCreditoPage() {
           >
             Volver al listado
           </Link>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            Generar nota crédito
+          </p>
+          <p className="text-sm font-medium text-slate-800">
+            {rangoNotaCreditoActivo
+              ? `${rangoNotaCreditoActivo.prefijo}-${rangoNotaCreditoActivo.consecutivo_actual}`
+              : 'Sin rango seleccionado'}
+          </p>
         </div>
 
         <ol className="mt-4 grid gap-2 text-xs sm:grid-cols-4">

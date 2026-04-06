@@ -34,6 +34,7 @@ import { printComprobante } from '../utils/printComprobante';
 import { descuentosApi, type SolicitudDescuento } from '../api/descuentos';
 import type { ConfiguracionEmpresa } from '../types';
 import type { ConfiguracionFacturacion } from '../types';
+import type { FacturacionRango } from '../api/configuracion';
 import {
   formatCurrencyCOP,
   formatMoneyCOP,
@@ -286,6 +287,11 @@ export default function Ventas() {
   const location = useLocation();
   const navigate = useNavigate();
   const [configuracion, setConfiguracion] = useState<ConfiguracionFacturacion | null>(null);
+  const [rangoFacturaActivo, setRangoFacturaActivo] = useState<FacturacionRango | null>(null);
+  const [numeracionRemision, setNumeracionRemision] = useState<{
+    prefix?: string;
+    current?: number;
+  } | null>(null);
   const [empresa, setEmpresa] = useState<ConfiguracionEmpresa | null>(null);
   const [clienteDocumento, setClienteDocumento] = useState('');
   const [clienteNombre, setClienteNombre] = useState('Cliente general');
@@ -347,6 +353,22 @@ export default function Ventas() {
       .obtenerEmpresa()
       .then(setEmpresa)
       .catch(() => setEmpresa(null));
+
+    configuracionAPI
+      .listarRangosFacturacion({ document_code: 'FACTURA_VENTA' })
+      .then((rangosFactura) => {
+        const rangoSeleccionado = rangosFactura.find((rango) => rango.is_selected_local);
+        const rangoAsociado = rangosFactura.find((rango) => rango.is_associated_to_software);
+        setRangoFacturaActivo(rangoSeleccionado ?? rangoAsociado ?? rangosFactura[0] ?? null);
+      })
+      .catch(() => setRangoFacturaActivo(null));
+
+    configuracionAPI
+      .obtenerNumeracionRemision()
+      .then((respuesta) => {
+        setNumeracionRemision(respuesta || null);
+      })
+      .catch(() => setNumeracionRemision(null));
   }, []);
 
   useEffect(() => {
@@ -1327,7 +1349,9 @@ export default function Ventas() {
             </label>
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700">
               {configuracion
-                ? `${configuracion.prefijo_factura}-${configuracion.numero_factura}`
+                ? rangoFacturaActivo
+                  ? `${rangoFacturaActivo.prefijo}-${rangoFacturaActivo.consecutivo_actual}`
+                  : `${configuracion.prefijo_factura}-${configuracion.numero_factura}`
                 : 'FAC-000000'}
             </div>
           </div>
@@ -1338,7 +1362,9 @@ export default function Ventas() {
             </label>
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700">
               {configuracion
-                ? `${configuracion.prefijo_remision}-${configuracion.numero_remision}`
+                ? numeracionRemision?.prefix && numeracionRemision.current
+                  ? `${numeracionRemision.prefix}-${numeracionRemision.current}`
+                  : `${configuracion.prefijo_remision}-${configuracion.numero_remision}`
                 : 'REM-000000'}
             </div>
           </div>
