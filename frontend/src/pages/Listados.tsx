@@ -703,7 +703,7 @@ export default function Listados() {
               No hay registros para mostrar.
             </div>
           ) : (
-            <table className="w-full text-sm">
+            <table className="min-w-[900px] w-full text-sm">
               <thead className="bg-slate-100 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                 {renderTableHeader(activeTab)}
               </thead>

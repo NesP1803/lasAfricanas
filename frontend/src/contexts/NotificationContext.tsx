@@ -8,7 +8,7 @@ import {
   useState,
 } from 'react';
 
-type NotificationType = 'success' | 'error' | 'info';
+type NotificationType = 'success' | 'error' | 'info' | 'warning';
 
 interface NotificationPayload {
   message: string;
@@ -30,6 +30,7 @@ const typeStyles: Record<NotificationType, string> = {
   success: 'border-emerald-200 bg-emerald-50 text-emerald-800',
   error: 'border-red-200 bg-red-50 text-red-700',
   info: 'border-blue-200 bg-blue-50 text-blue-700',
+  warning: 'border-amber-200 bg-amber-50 text-amber-800',
 };
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
