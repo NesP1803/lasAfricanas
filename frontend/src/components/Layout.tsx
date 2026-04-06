@@ -769,7 +769,7 @@ export default function Layout() {
                   )}
                 </button>
                 {isBellOpen && (
-                  <div className="absolute right-0 mt-2 w-80 overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-700 shadow-xl">
+                  <div className="absolute right-0 mt-2 w-[min(20rem,calc(100vw-1rem))] overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-700 shadow-xl">
                     <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
                       <p className="text-sm font-semibold">Notificaciones</p>
                       <button
@@ -912,7 +912,7 @@ export default function Layout() {
         )}
       </header>
 
-      <main className="flex-1 overflow-auto">
+      <main className="min-w-0 flex-1 overflow-auto">
         <div className="p-4 sm:p-6 lg:p-8">
           <Outlet />
         </div>

@@ -805,13 +805,13 @@ export default function Taller() {
                     {motosPorMecanico.length}
                   </span>
                 </div>
-                <div className="max-h-[360px] overflow-y-auto">
+                <div className="max-h-[360px] overflow-x-auto overflow-y-auto">
                   {motosPorMecanico.length === 0 ? (
                     <div className="p-3 text-center text-xs text-slate-500">
                       No hay motos asignadas.
                     </div>
                   ) : (
-                    <table className="w-full text-xs">
+                    <table className="min-w-[560px] w-full text-xs">
                       <thead className="bg-slate-100 text-left text-[11px] font-semibold uppercase text-slate-500">
                         <tr>
                           <th className="px-3 py-2">Placa</th>
@@ -962,8 +962,8 @@ export default function Taller() {
                             Aún no hay repuestos agregados.
                           </div>
                         ) : (
-                          <div className="max-h-[260px] overflow-y-auto border border-slate-200">
-                            <table className="w-full text-xs">
+                          <div className="max-h-[260px] overflow-x-auto overflow-y-auto border border-slate-200">
+                            <table className="min-w-[640px] w-full text-xs">
                               <thead className="bg-slate-100 text-left text-[11px] font-semibold uppercase text-slate-500">
                                 <tr>
                                   <th className="px-3 py-2">Artículo</th>
@@ -1023,7 +1023,7 @@ export default function Taller() {
             </div>
           </div>
         ) : (
-          <div className="space-y-4 px-6 py-6">
+          <div className="space-y-4 px-3 py-4 sm:px-6 sm:py-6">
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
@@ -1081,7 +1081,7 @@ export default function Taller() {
               ) : motosListado.length === 0 ? (
                 <div className="p-8 text-center text-sm text-slate-500">No hay motos registradas.</div>
               ) : (
-                <table className="w-full text-sm">
+                <table className="min-w-[900px] w-full text-sm">
                   <thead className="bg-slate-100 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                     <tr>
                       <th className="px-4 py-3">Placa</th>
@@ -1451,13 +1451,13 @@ export default function Taller() {
                   Buscar
                 </button>
               </div>
-              <div className="max-h-[360px] overflow-y-auto rounded-xl border border-slate-200">
+              <div className="max-h-[360px] overflow-x-auto overflow-y-auto rounded-xl border border-slate-200">
                 {repuestos.length === 0 ? (
                   <div className="p-6 text-center text-sm text-slate-500">
                     {searchRepuesto ? 'No hay resultados.' : 'Empieza a buscar repuestos.'}
                   </div>
                 ) : (
-                  <table className="w-full text-sm">
+                  <table className="min-w-[720px] w-full text-sm">
                     <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
                       <tr>
                         <th className="px-3 py-2">Código</th>
