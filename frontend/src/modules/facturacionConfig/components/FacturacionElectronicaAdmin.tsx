@@ -107,7 +107,7 @@ export default function FacturacionElectronicaAdmin({
   const [actionMessage, setActionMessage] = useState('');
 
   const [docFilter, setDocFilter] = useState<string>('');
-  const [stateFilter, setStateFilter] = useState<string>('todos');
+  const [stateFilter, setStateFilter] = useState<string>('activo');
 
   const [showModal, setShowModal] = useState(false);
   const [createTab, setCreateTab] = useState<CreateTab>('autorizado');
