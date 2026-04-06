@@ -287,7 +287,7 @@ export default function Dashboard() {
             ))}
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 gap-6">
             <div className="bg-white rounded-lg shadow-md p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-semibold text-gray-900">
@@ -323,30 +323,6 @@ export default function Dashboard() {
                   </div>
                   <ShoppingCart className="w-5 h-5 text-green-600" />
                 </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold text-gray-900">
-                  Atajos rápidos
-                </h2>
-                <BarChart3 className="w-6 h-6 text-blue-600" />
-              </div>
-              <div className="grid grid-cols-1 gap-3">
-                {[
-                  'Registrar producto',
-                  'Crear venta',
-                  'Consultar stock',
-                  'Buscar cliente',
-                ].map((shortcut) => (
-                  <button
-                    key={shortcut}
-                    className="w-full text-left px-4 py-3 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 transition-colors"
-                  >
-                    {shortcut}
-                  </button>
-                ))}
               </div>
             </div>
           </div>
