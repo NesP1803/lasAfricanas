@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { toApiUrl } from '../api/client';
 
 export default function Login() {
   const [username, setUsername] = useState('');
@@ -21,7 +22,7 @@ export default function Login() {
 
     const cargarLogo = async () => {
       try {
-        const response = await fetch('/api/configuracion-empresa/');
+        const response = await fetch(toApiUrl('/configuracion-empresa/'));
         if (!response.ok) {
           return;
         }
