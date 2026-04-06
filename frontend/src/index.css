@@ -15,6 +15,21 @@ body {
   color: #333;
 }
 
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100%;
+}
+
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+  height: auto;
+}
+
 /* Estilos para inputs estilo SIDEFA */
 input[type="text"],
 input[type="number"],
