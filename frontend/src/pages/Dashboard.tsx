@@ -3,7 +3,6 @@ import {
   AlertCircle,
   BarChart3,
   Boxes,
-  ClipboardList,
   DollarSign,
   Package,
   ShoppingCart,
@@ -287,45 +286,6 @@ export default function Dashboard() {
             ))}
           </div>
 
-          <div className="grid grid-cols-1 gap-6">
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold text-gray-900">
-                  Prioridades operativas
-                </h2>
-                <ClipboardList className="w-6 h-6 text-blue-600" />
-              </div>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between rounded-lg border border-gray-100 p-4">
-                  <div>
-                    <p className="text-sm text-gray-600">Reposiciones urgentes</p>
-                    <p className="text-xl font-semibold text-gray-900 mt-1">
-                      {loading ? '...' : inventarioStats?.stock_bajo ?? 0}
-                    </p>
-                  </div>
-                  <TriangleAlert className="w-5 h-5 text-orange-500" />
-                </div>
-                <div className="flex items-center justify-between rounded-lg border border-gray-100 p-4">
-                  <div>
-                    <p className="text-sm text-gray-600">Productos agotados</p>
-                    <p className="text-xl font-semibold text-gray-900 mt-1">
-                      {loading ? '...' : inventarioStats?.agotados ?? 0}
-                    </p>
-                  </div>
-                  <AlertCircle className="w-5 h-5 text-red-500" />
-                </div>
-                <div className="flex items-center justify-between rounded-lg border border-gray-100 p-4">
-                  <div>
-                    <p className="text-sm text-gray-600">Comprobantes del día</p>
-                    <p className="text-xl font-semibold text-gray-900 mt-1">
-                      {loading ? '...' : ventasStats?.total_ventas ?? 0}
-                    </p>
-                  </div>
-                  <ShoppingCart className="w-5 h-5 text-green-600" />
-                </div>
-              </div>
-            </div>
-          </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="bg-white rounded-lg shadow-md p-6">
