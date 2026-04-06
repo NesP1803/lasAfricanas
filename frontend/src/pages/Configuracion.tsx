@@ -937,8 +937,8 @@ export default function Configuracion() {
           )}
 
           {/* Tabla de impuestos */}
-          <div className="mt-6 overflow-hidden rounded-lg border border-slate-200">
-            <table className="w-full">
+          <div className="mt-6 overflow-x-auto rounded-lg border border-slate-200">
+            <table className="min-w-full">
               <thead className="bg-slate-50">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
@@ -1353,7 +1353,7 @@ export default function Configuracion() {
             </div>
           </div>
 
-          <div className="mt-6 overflow-hidden rounded-xl border border-slate-200">
+          <div className="mt-6 overflow-x-auto rounded-xl border border-slate-200">
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
                 <tr>
@@ -1436,7 +1436,7 @@ export default function Configuracion() {
               {mensajeUsuario}
             </div>
           )}
-          <div className="mt-6 overflow-hidden rounded-xl border border-slate-200">
+          <div className="mt-6 overflow-x-auto rounded-xl border border-slate-200">
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
                 <tr>
