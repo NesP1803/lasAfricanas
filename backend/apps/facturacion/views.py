@@ -904,6 +904,21 @@ class FacturacionRangosViewSet(viewsets.GenericViewSet):
             return False, 'Para FACTURA_VENTA el rango debe existir en los rangos autorizados del software en Factus.'
         return True, ''
 
+    def _validate_factura_venta_payload(self, payload: dict) -> tuple[bool, str]:
+        remote_id = int(payload.get('factus_range_id') or payload.get('factus_id') or 0)
+        if remote_id <= 0:
+            return (
+                False,
+                'Para FACTURA_VENTA debe registrar un rango autorizado real de Factus con factus_range_id válido.',
+            )
+        remote_ids = get_authorized_software_range_ids(document_code='FACTURA_VENTA')
+        if remote_id not in remote_ids:
+            return (
+                False,
+                'Para FACTURA_VENTA el rango no está autorizado/relacionado al software en Factus. Use "Buscar" y seleccione un rango válido.',
+            )
+        return True, ''
+
     def list(self, request):
         queryset = self._base_queryset()
         document_code = str(request.query_params.get('document_code', '')).strip().upper()
@@ -1015,6 +1030,13 @@ class FacturacionRangosViewSet(viewsets.GenericViewSet):
             payload['is_associated_to_software'] = False
             payload['is_active_remote'] = False
             payload['is_expired_remote'] = False
+        document_code = str(payload.get('document_code') or '').strip().upper()
+        if document_code == 'FACTURA_VENTA':
+            is_valid_factura, detail = self._validate_factura_venta_payload(payload)
+            if not is_valid_factura:
+                return Response({'detail': detail}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+            payload['is_associated_to_software'] = True
+            payload['is_active_remote'] = bool(payload.get('is_active_remote', True))
         serializer = LocalRangoNumeracionSerializer(data=payload)
         serializer.is_valid(raise_exception=True)
         with transaction.atomic():
@@ -1023,6 +1045,11 @@ class FacturacionRangosViewSet(viewsets.GenericViewSet):
                 document_name=DOCUMENT_CODE_LABELS.get(serializer.validated_data['document_code'], ''),
                 is_selected_local=activate_now,
             )
+            if rango.document_code == 'FACTURA_VENTA' and activate_now:
+                is_valid_selected, detail = self._validate_factura_venta_selection(rango)
+                if not is_valid_selected:
+                    transaction.set_rollback(True)
+                    return Response({'detail': detail}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
             if activate_now:
                 self._base_queryset().filter(document_code=rango.document_code).exclude(pk=rango.pk).update(is_selected_local=False)
         return Response(RangoNumeracionDIANSerializer(rango).data, status=status.HTTP_201_CREATED)

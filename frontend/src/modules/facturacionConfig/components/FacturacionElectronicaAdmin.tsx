@@ -202,6 +202,18 @@ export default function FacturacionElectronicaAdmin({
 
   const handleCreate = async () => {
     setActionMessage('');
+    if (createTab === 'manual' && form.document_code === 'FACTURA_VENTA') {
+      setActionMessage(
+        'Factura de Venta solo permite rangos autorizados asociados al software en Factus. Use la pestaña "Rango autorizado".',
+      );
+      return;
+    }
+    if (createTab === 'autorizado' && form.document_code === 'FACTURA_VENTA' && !form.factus_range_id) {
+      setActionMessage(
+        'Debe seleccionar un rango autorizado real desde "Buscar" antes de registrar Factura de Venta.',
+      );
+      return;
+    }
     try {
       await configuracionAPI.crearRangoFacturacion({
         ...form,
@@ -550,7 +562,15 @@ export default function FacturacionElectronicaAdmin({
                 className={`rounded px-3 py-2 text-lg font-semibold text-white ${
                   createTab === 'manual' ? 'bg-blue-700' : 'bg-blue-400'
                 }`}
-                onClick={() => setCreateTab('manual')}
+                onClick={() => {
+                  if (form.document_code === 'FACTURA_VENTA') {
+                    setActionMessage(
+                      'Factura de Venta no admite rango manual. Seleccione un rango autorizado desde Factus.',
+                    );
+                    return;
+                  }
+                  setCreateTab('manual');
+                }}
               >
                 Rango manual
               </button>
@@ -632,7 +652,7 @@ export default function FacturacionElectronicaAdmin({
                   <div className="max-h-44 overflow-auto rounded border p-2">
                     {availableRanges.map((item) => (
                       <button
-                        key={String(item.remote_id)}
+                        key={String(item.factus_range_id)}
                         className="block w-full rounded px-2 py-1 text-left text-lg font-semibold text-slate-700 hover:bg-blue-50"
                         onClick={() => applyRemoteRange(item)}
                       >

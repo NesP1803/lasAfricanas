@@ -3597,6 +3597,44 @@ class FacturacionRangosRoutingAndDegradedTests(TestCase):
         self.assertIsInstance(response.data['items'], list)
         self.assertIn('No hay rangos autorizados', response.data['detail'])
 
+    @patch('apps.facturacion.views.get_authorized_software_range_ids', return_value={99})
+    def test_create_factura_venta_rechaza_rango_no_autorizado(self, _mocked_ids):
+        payload = {
+            'document_code': 'FACTURA_VENTA',
+            'prefijo': 'MAN',
+            'desde': 1,
+            'hasta': 100,
+            'consecutivo_actual': 1,
+            'resolucion': 'RES-MAN',
+            'factus_range_id': 88,
+            'factus_id': 88,
+            'activate_now': True,
+        }
+        response = self.client.post('/api/facturacion/rangos/', payload, format='json')
+        self.assertEqual(response.status_code, 422)
+        self.assertIn('no está autorizado', response.data['detail'])
+
+    @patch('apps.facturacion.views.get_authorized_software_range_ids', return_value={88})
+    def test_create_factura_venta_valido_desde_rango_autorizado(self, _mocked_ids):
+        payload = {
+            'document_code': 'FACTURA_VENTA',
+            'prefijo': 'SETP',
+            'desde': 1,
+            'hasta': 100,
+            'consecutivo_actual': 1,
+            'resolucion': 'RES-OK',
+            'factus_range_id': 88,
+            'factus_id': 88,
+            'is_active_remote': True,
+            'is_associated_to_software': True,
+            'activate_now': True,
+        }
+        response = self.client.post('/api/facturacion/rangos/', payload, format='json')
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data['document_code'], 'FACTURA_VENTA')
+        self.assertEqual(response.data['factus_range_id'], 88)
+        self.assertTrue(response.data['is_selected_local'])
+
 
 class FactusNumberingSoftwareEndpointTests(TestCase):
     def test_default_endpoint_usa_dian(self):
