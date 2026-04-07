@@ -135,6 +135,7 @@ from .nota_credito_serializer import (
     NotaCreditoPreviewSerializer,
 )
 from .numbering_ranges_serializer import (
+    AuthorizedAvailableRangeSerializer,
     CreateRangoFactusSerializer,
     LocalRangoNumeracionSerializer,
     RangoNumeracionDIANSerializer,
@@ -155,6 +156,7 @@ __all__ = [
     'DocumentoSoporteCreateSerializer',
     'DocumentoSoporteListSerializer',
     'RangoNumeracionDIANSerializer',
+    'AuthorizedAvailableRangeSerializer',
     'CreateRangoFactusSerializer',
     'LocalRangoNumeracionSerializer',
     'UpdateConsecutivoSerializer',

@@ -164,6 +164,23 @@ class SelectActiveRangeSerializer(serializers.Serializer):
         return value
 
 
+class AuthorizedAvailableRangeSerializer(serializers.Serializer):
+    remote_id = serializers.IntegerField()
+    factus_range_id = serializers.IntegerField()
+    document = serializers.CharField()
+    document_code = serializers.CharField()
+    prefix = serializers.CharField()
+    from_number = serializers.IntegerField(source='from')
+    to_number = serializers.IntegerField(source='to')
+    current = serializers.IntegerField()
+    resolution_number = serializers.CharField(allow_blank=True)
+    start_date = serializers.DateField(allow_null=True)
+    end_date = serializers.DateField(allow_null=True)
+    technical_key = serializers.CharField(allow_blank=True)
+    is_active = serializers.BooleanField()
+    is_associated_to_software = serializers.BooleanField()
+
+
 class RemisionNumeracionSerializer(serializers.ModelSerializer):
     class Meta:
         model = RemisionNumeracion

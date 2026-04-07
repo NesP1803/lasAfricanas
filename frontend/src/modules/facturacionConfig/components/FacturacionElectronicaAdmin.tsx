@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Eye, Pencil, Plus, Save, Trash2 } from 'lucide-react';
 import {
   configuracionAPI,
+  type AuthorizedAvailableRange,
   type FacturacionRango,
 } from '../../../api/configuracion';
 import type { ConfiguracionFacturacion } from '../../../types';
@@ -113,8 +114,8 @@ export default function FacturacionElectronicaAdmin({
   const [createTab, setCreateTab] = useState<CreateTab>('autorizado');
   const [form, setForm] = useState<RangoForm>(emptyForm);
   const [activateNow, setActivateNow] = useState(true);
-  const [availableRanges, setAvailableRanges] = useState<Record<string, unknown>[]>([]);
-  const [detalleRango, setDetalleRango] = useState<FacturacionRango | null>(null);
+  const [availableRanges, setAvailableRanges] = useState<AuthorizedAvailableRange[]>([]);
+  const [detalleRango, setDetalleRango] = useState<Record<string, unknown> | null>(null);
   const [remision, setRemision] = useState<RemisionNumeracionPayload>({});
 
   const loadData = async () => {
@@ -155,7 +156,7 @@ export default function FacturacionElectronicaAdmin({
 
   const paged = useMemo(() => filteredRangos.slice(0, 50), [filteredRangos]);
 
-  const applyRemoteRange = (remote: Record<string, unknown>) => {
+  const applyRemoteRange = (remote: AuthorizedAvailableRange) => {
     const startDate = String(remote.start_date || '').split('T')[0];
     const endDate = String(remote.end_date || '').split('T')[0];
     setForm((prev) => ({
@@ -168,22 +169,17 @@ export default function FacturacionElectronicaAdmin({
       fecha_autorizacion: startDate,
       fecha_expiracion: endDate,
       technical_key: String(remote.technical_key || ''),
-      factus_id: Number(remote.id || remote.numbering_range_id || 0) || null,
-      factus_range_id: Number(remote.id || remote.numbering_range_id || 0) || null,
+      factus_id: Number(remote.remote_id || 0) || null,
+      factus_range_id: Number(remote.factus_range_id || 0) || null,
     }));
     setAvailableRanges([]);
   };
 
   const handleBuscarRangosAutorizados = async () => {
     try {
-      const selected = DOC_OPTIONS.find((d) => d.value === form.document_code);
-      if (!selected || !('factusDocument' in selected)) return;
-      const software = await configuracionAPI.obtenerRangosSoftware();
-      const remoteItems = software.items
-        .map((row) => row.remote)
-        .filter((item) => String(item.document || '') === selected.factusDocument);
-      setAvailableRanges(remoteItems);
-      if (!remoteItems.length) {
+      const response = await configuracionAPI.obtenerRangosAutorizadosDisponibles(form.document_code);
+      setAvailableRanges(response.items || []);
+      if (!response.items?.length) {
         setActionMessage('No hay rangos asociados al software para este documento.');
       }
     } catch (e: unknown) {
@@ -192,18 +188,10 @@ export default function FacturacionElectronicaAdmin({
   };
 
   const loadResolutionsByDocument = async (documentCode: string) => {
-    const selected = DOC_OPTIONS.find((d) => d.value === documentCode);
-    if (!selected || !('factusDocument' in selected)) {
-      setAvailableRanges([]);
-      return;
-    }
     try {
-      const software = await configuracionAPI.obtenerRangosSoftware();
-      const remoteItems = software.items
-        .map((row) => row.remote)
-        .filter((item) => String(item.document || '') === selected.factusDocument);
-      setAvailableRanges(remoteItems);
-      if (!remoteItems.length) {
+      const response = await configuracionAPI.obtenerRangosAutorizadosDisponibles(documentCode);
+      setAvailableRanges(response.items || []);
+      if (!response.items?.length) {
         setActionMessage('No hay resoluciones vinculadas en Factus para este documento.');
       }
     } catch (e: unknown) {
@@ -233,9 +221,19 @@ export default function FacturacionElectronicaAdmin({
   };
 
   useEffect(() => {
-    if (!showModal) return;
+    if (!showModal || createTab !== 'autorizado') return;
     loadResolutionsByDocument(form.document_code);
   }, [form.document_code, showModal, createTab]);
+
+  useEffect(() => {
+    if (createTab !== 'manual') return;
+    setAvailableRanges([]);
+    setForm((prev) => ({
+      ...prev,
+      factus_id: null,
+      factus_range_id: null,
+    }));
+  }, [createTab]);
 
   const toggleActivo = async (rango: FacturacionRango) => {
     try {
@@ -375,9 +373,7 @@ export default function FacturacionElectronicaAdmin({
                 <th className="px-4 py-3">Desde</th>
                 <th className="px-4 py-3">Hasta</th>
                 <th className="px-4 py-3">Actual</th>
-                <th className="px-4 py-3">Activo local</th>
-                <th className="px-4 py-3">Activo remoto</th>
-                <th className="px-4 py-3">Seleccionado local</th>
+                <th className="px-4 py-3">Estado</th>
                 <th className="px-4 py-3">Vence en</th>
                 <th className="px-4 py-3">Acciones</th>
               </tr>
@@ -385,13 +381,13 @@ export default function FacturacionElectronicaAdmin({
             <tbody>
               {loading ? (
                 <tr>
-                  <td className="px-4 py-6 text-slate-500" colSpan={10}>
+                  <td className="px-4 py-6 text-slate-500" colSpan={8}>
                     Cargando rangos...
                   </td>
                 </tr>
               ) : paged.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-6 text-slate-500" colSpan={10}>
+                  <td className="px-4 py-6 text-slate-500" colSpan={8}>
                     No hay rangos disponibles para el filtro seleccionado.
                   </td>
                 </tr>
@@ -401,31 +397,33 @@ export default function FacturacionElectronicaAdmin({
                   return (
                     <tr key={rango.id} className={`border-t border-slate-100 ${marked ? 'bg-red-200/70' : 'hover:bg-slate-50'}`}>
                       <td className="px-4 py-3 text-slate-700">{rango.document_code_label || documentLabel(rango.document_code)}</td>
-                      <td className="px-4 py-3 text-slate-700">{rango.prefijo || 'N/A'}</td>
+                      <td className="px-4 py-3 text-slate-700">
+                        <div className="flex items-center gap-2">
+                          <span>{rango.prefijo || 'N/A'}</span>
+                          {rango.is_selected_local ? (
+                            <span className="rounded-full bg-indigo-100 px-2 py-1 text-xs font-semibold text-indigo-700">Seleccionado</span>
+                          ) : null}
+                        </div>
+                      </td>
                       <td className="px-4 py-3 text-slate-700">{rango.desde || 'N/A'}</td>
                       <td className="px-4 py-3 text-slate-700">{rango.hasta || 'N/A'}</td>
                       <td className="px-4 py-3 text-slate-700">{rango.consecutivo_actual || 'N/A'}</td>
                       <td className="px-4 py-3">
-                        <button
-                          type="button"
-                          onClick={() => toggleActivo(rango)}
-                          disabled={!isAdmin}
-                          className={`min-w-14 rounded-full px-3 py-1 text-xs font-semibold text-white ${
-                            rango.activo ? 'bg-blue-600' : 'bg-slate-400'
-                          } disabled:cursor-not-allowed disabled:opacity-60`}
-                        >
-                          {rango.activo ? 'ON' : 'OFF'}
-                        </button>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`rounded-full px-2 py-1 text-xs font-semibold ${rango.is_active_remote ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
-                          {rango.is_active_remote ? 'Activo' : 'Inactivo'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`rounded-full px-2 py-1 text-xs font-semibold ${rango.is_selected_local ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-600'}`}>
-                          {rango.is_selected_local ? 'Sí' : 'No'}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => toggleActivo(rango)}
+                            disabled={!isAdmin}
+                            className={`min-w-14 rounded-full px-3 py-1 text-xs font-semibold text-white ${
+                              rango.activo ? 'bg-blue-600' : 'bg-slate-400'
+                            } disabled:cursor-not-allowed disabled:opacity-60`}
+                          >
+                            {rango.activo ? 'ON' : 'OFF'}
+                          </button>
+                          <span className={`rounded-full px-2 py-1 text-xs font-semibold ${rango.activo ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
+                            {rango.activo ? 'Activo' : 'Inactivo'}
+                          </span>
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-slate-700">{rango.fecha_expiracion || 'N/A'}</td>
                       <td className="px-4 py-3">
@@ -453,7 +451,7 @@ export default function FacturacionElectronicaAdmin({
                             title="Ver detalle"
                             onClick={async () => {
                               const detalle = await configuracionAPI.obtenerDetalleRangoFacturacion(rango.id);
-                              setDetalleRango(detalle as FacturacionRango);
+                              setDetalleRango(detalle);
                             }}
                           >
                             <Eye size={16} />
@@ -611,31 +609,33 @@ export default function FacturacionElectronicaAdmin({
               </div>
             </div>
 
-            <div className="mt-3 rounded-lg border bg-white p-4">
-              <p className="mb-2 text-base font-semibold text-slate-700">
-                Resoluciones vinculadas en Factus
-              </p>
-              <p className="mb-2 text-sm font-medium text-slate-600">
-                Selecciona una resolución para autocompletar el rango.
-              </p>
-              {availableRanges.length > 0 ? (
-                <div className="max-h-44 overflow-auto rounded border p-2">
-                  {availableRanges.map((item) => (
-                    <button
-                      key={String(item.id || item.numbering_range_id)}
-                      className="block w-full rounded px-2 py-1 text-left text-lg font-semibold text-slate-700 hover:bg-blue-50"
-                      onClick={() => applyRemoteRange(item)}
-                    >
-                      {String(item.prefix || '')} ({String(item.from || '')} - {String(item.to || '')})
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <p className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500">
-                  No hay resoluciones vinculadas para el documento seleccionado.
+            {createTab === 'autorizado' ? (
+              <div className="mt-3 rounded-lg border bg-white p-4">
+                <p className="mb-2 text-base font-semibold text-slate-700">
+                  Resoluciones vinculadas en Factus
                 </p>
-              )}
-            </div>
+                <p className="mb-2 text-sm font-medium text-slate-600">
+                  Selecciona una resolución para autocompletar el rango.
+                </p>
+                {availableRanges.length > 0 ? (
+                  <div className="max-h-44 overflow-auto rounded border p-2">
+                    {availableRanges.map((item) => (
+                      <button
+                        key={String(item.remote_id)}
+                        className="block w-full rounded px-2 py-1 text-left text-lg font-semibold text-slate-700 hover:bg-blue-50"
+                        onClick={() => applyRemoteRange(item)}
+                      >
+                        {String(item.prefix || '')} ({String(item.from || '')} - {String(item.to || '')})
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500">
+                    No hay resoluciones vinculadas para el documento seleccionado.
+                  </p>
+                )}
+              </div>
+            ) : null}
 
             <div className="mt-4 flex justify-end gap-2">
               <button className="rounded border px-3 py-2 text-sm" onClick={() => setShowModal(false)}>

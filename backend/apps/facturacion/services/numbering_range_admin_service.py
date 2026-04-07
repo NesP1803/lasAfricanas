@@ -80,6 +80,30 @@ def _normalize_payload(raw: dict[str, Any], *, software_ids: set[int] | None = N
     }
 
 
+def normalize_software_range(raw: dict[str, Any]) -> dict[str, Any]:
+    """Normaliza un rango remoto asociado al software para consumo de UI."""
+    factus_id = int(raw.get('id') or raw.get('numbering_range_id') or 0)
+    doc_code = str(raw.get('document') or raw.get('document_code') or '').strip()
+    is_expired = bool(raw.get('is_expired', False))
+    is_active = bool(raw.get('is_active', True)) and not is_expired
+    return {
+        'remote_id': factus_id,
+        'factus_range_id': factus_id,
+        'document': doc_code,
+        'document_code': DOCUMENT_CODE_MAP.get(doc_code, 'FACTURA_VENTA'),
+        'prefix': str(raw.get('prefix') or '').strip(),
+        'from': int(raw.get('from') or 1),
+        'to': int(raw.get('to') or 1),
+        'current': int(raw.get('current') or raw.get('from') or 1),
+        'resolution_number': str(raw.get('resolution_number') or '').strip(),
+        'start_date': _as_date(raw.get('start_date') or raw.get('valid_from')),
+        'end_date': _as_date(raw.get('end_date') or raw.get('valid_to')),
+        'technical_key': str(raw.get('technical_key') or '').strip(),
+        'is_active': is_active,
+        'is_associated_to_software': True,
+    }
+
+
 def list_ranges() -> list[dict[str, Any]]:
     payload = FactusClient().get_numbering_ranges()
     if isinstance(payload, list):
@@ -133,6 +157,22 @@ def get_software_ranges() -> list[dict[str, Any]]:
         if isinstance(nested, list):
             return nested
     return []
+
+
+def list_available_authorized_ranges(document_code: str) -> list[dict[str, Any]]:
+    """Lista rangos remotos asociados al software normalizados para UI."""
+    target_documents = {
+        code
+        for code, local_code in DOCUMENT_CODE_MAP.items()
+        if local_code == document_code
+    }
+    if not target_documents:
+        return []
+    return [
+        normalize_software_range(item)
+        for item in get_software_ranges()
+        if str(item.get('document') or item.get('document_code') or '').strip() in target_documents
+    ]
 
 
 
