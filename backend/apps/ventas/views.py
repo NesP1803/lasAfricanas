@@ -109,6 +109,11 @@ def _factus_http_status_and_code(exc: Exception) -> tuple[int, str]:
         return status.HTTP_409_CONFLICT, 'MISMATCH_DOCUMENTAL'
     if isinstance(exc, FactusValidationError):
         return status.HTTP_422_UNPROCESSABLE_ENTITY, 'ERROR_VALIDACION_LOCAL'
+    if isinstance(exc, FactusAPIError) and int(getattr(exc, 'status_code', 0) or 0) == 422:
+        provider_payload = getattr(exc, 'provider_payload', {}) or {}
+        provider_errors = (((provider_payload.get('data') or {}).get('errors') or {}) if isinstance(provider_payload, dict) else {})
+        if 'numbering_range_id' in provider_errors:
+            return status.HTTP_422_UNPROCESSABLE_ENTITY, 'ERROR_RANGO_INVALIDO'
     if isinstance(exc, FactusAuthError):
         return status.HTTP_502_BAD_GATEWAY, 'FACTUS_AUTH_ERROR'
     return status.HTTP_502_BAD_GATEWAY, 'FACTUS_API_ERROR'

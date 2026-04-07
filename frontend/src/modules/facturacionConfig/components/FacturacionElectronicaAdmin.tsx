@@ -394,6 +394,17 @@ export default function FacturacionElectronicaAdmin({
               ) : (
                 paged.map((rango) => {
                   const marked = rango.is_expired_remote || !rango.activo;
+                  const expiryDate = rango.fecha_expiracion ? new Date(`${rango.fecha_expiracion}T00:00:00`) : null;
+                  const isExpiredByDate = expiryDate ? expiryDate.getTime() < Date.now() : false;
+                  const canSelectFacturaVenta =
+                    rango.document_code !== 'FACTURA_VENTA'
+                    || Boolean(
+                      rango.factus_range_id
+                      && rango.is_associated_to_software
+                      && rango.is_active_remote
+                      && !rango.is_expired_remote
+                      && !isExpiredByDate,
+                    );
                   return (
                     <tr key={rango.id} className={`border-t border-slate-100 ${marked ? 'bg-red-200/70' : 'hover:bg-slate-50'}`}>
                       <td className="px-4 py-3 text-slate-700">{rango.document_code_label || documentLabel(rango.document_code)}</td>
@@ -433,7 +444,7 @@ export default function FacturacionElectronicaAdmin({
                             className="rounded-md border border-indigo-200 px-2 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-60"
                             title="Seleccionar para emisión"
                             onClick={() => seleccionarRango(rango)}
-                            disabled={!isAdmin || !rango.activo || rango.is_expired_remote}
+                            disabled={!isAdmin || !rango.activo || rango.is_expired_remote || isExpiredByDate || !canSelectFacturaVenta}
                           >
                             Seleccionar
                           </button>

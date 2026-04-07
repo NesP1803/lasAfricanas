@@ -9,9 +9,29 @@ from apps.inventario.models import Categoria, Producto, Proveedor, MovimientoInv
 from apps.usuarios.models import Usuario
 from apps.facturacion.models import FacturaElectronica
 from apps.ventas.models import Cliente, Venta, DetalleVenta
-from apps.ventas.views import _registrar_salida_inventario
+from apps.ventas.views import _factus_http_status_and_code, _registrar_salida_inventario
 from apps.ventas.services.cerrar_venta import build_pos_ticket_payload, cerrar_venta_local
 from apps.ventas.services.enviar_venta_a_caja import enviar_venta_a_caja
+
+
+class FactusErrorMappingTests(TestCase):
+    def test_numbering_range_id_invalido_retorna_422_local(self):
+        from apps.facturacion.services import FactusAPIError
+
+        exc = FactusAPIError(
+            'Factus rechazó la factura',
+            status_code=422,
+            provider_payload={
+                'data': {
+                    'errors': {
+                        'numbering_range_id': ['El campo id rango de numeración es inválido.'],
+                    }
+                }
+            },
+        )
+        http_status, error_code = _factus_http_status_and_code(exc)
+        self.assertEqual(http_status, 422)
+        self.assertEqual(error_code, 'ERROR_RANGO_INVALIDO')
 
 
 class CajaVentaFlowTests(TestCase):
