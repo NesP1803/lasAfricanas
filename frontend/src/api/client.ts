@@ -29,6 +29,7 @@ const clearAuthStorage = () => {
 
 const getAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY);
 const getRefreshToken = () => localStorage.getItem(REFRESH_TOKEN_KEY);
+let refreshPromise: Promise<string> | null = null;
 
 const setAccessToken = (accessToken: string) => {
   localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
@@ -46,10 +47,71 @@ const setAuthTokens = ({ accessToken, refreshToken }: { accessToken: string; ref
   }
 };
 
+const decodeJwtExp = (token: string): number | null => {
+  try {
+    const payloadBase64 = token.split('.')[1];
+    if (!payloadBase64) {
+      return null;
+    }
+    const base64 = payloadBase64.replace(/-/g, '+').replace(/_/g, '/');
+    const json = JSON.parse(window.atob(base64)) as { exp?: number };
+    return typeof json.exp === 'number' ? json.exp : null;
+  } catch {
+    return null;
+  }
+};
+
+const isTokenExpired = (token: string, skewSeconds = 15): boolean => {
+  const exp = decodeJwtExp(token);
+  if (!exp) {
+    return false;
+  }
+  const now = Math.floor(Date.now() / 1000);
+  return exp <= now + skewSeconds;
+};
+
+const refreshAccessToken = async (): Promise<string> => {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) {
+    throw new Error('No refresh token');
+  }
+  const response = await axios.post(toApiUrl('/auth/refresh/'), {
+    refresh: refreshToken,
+  });
+  const { access } = response.data as { access: string };
+  if (!access) {
+    throw new Error('Refresh inválido: sin access token');
+  }
+  setAuthTokens({ accessToken: access });
+  return access;
+};
+
+const ensureValidAccessToken = async (): Promise<string | null> => {
+  const currentToken = getAccessToken();
+  if (!currentToken) {
+    return null;
+  }
+  if (!isTokenExpired(currentToken)) {
+    return currentToken;
+  }
+
+  if (!refreshPromise) {
+    refreshPromise = refreshAccessToken().finally(() => {
+      refreshPromise = null;
+    });
+  }
+
+  return refreshPromise;
+};
+
 // Interceptor para agregar token JWT en cada request
 apiClient.interceptors.request.use(
-  (config) => {
-    const token = getAccessToken();
+  async (config) => {
+    const url = String(config.url || '');
+    if (url.includes('/auth/login/') || url.includes('/auth/refresh/')) {
+      return config;
+    }
+    const token = await ensureValidAccessToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -75,17 +137,12 @@ apiClient.interceptors.response.use(
       originalRequest._retry = true;
 
       try {
-        const refreshToken = getRefreshToken();
-        if (!refreshToken) {
-          throw new Error('No refresh token');
+        if (!refreshPromise) {
+          refreshPromise = refreshAccessToken().finally(() => {
+            refreshPromise = null;
+          });
         }
-
-        const response = await axios.post(toApiUrl('/auth/refresh/'), {
-          refresh: refreshToken,
-        });
-
-        const { access } = response.data;
-        setAuthTokens({ accessToken: access });
+        const access = await refreshPromise;
 
         originalRequest.headers.Authorization = `Bearer ${access}`;
         return apiClient(originalRequest);

@@ -1419,6 +1419,8 @@ class NumberingRangeResolutionTests(TestCase):
         )
         resolved = resolve_numbering_range(document_code='FACTURA_VENTA')
         self.assertEqual(resolved.id, rango.id)
+        rango.refresh_from_db()
+        self.assertTrue(rango.is_selected_local)
 
     def test_error_cuando_hay_varios_activos_sin_seleccion(self):
         for idx in [8, 9]:
@@ -1556,6 +1558,56 @@ class ConfiguracionDianRangosEndpointsTests(TestCase):
         self.assertEqual(select_response.status_code, 200)
         rango_nc.refresh_from_db()
         self.assertTrue(rango_nc.is_selected_local)
+
+    def test_patch_activar_no_selecciona_por_defecto(self):
+        client = APIClient()
+        client.force_authenticate(self.admin)
+        response = client.patch(f'/api/facturacion/rangos/{self.rango.id}/activar/', {'activo': True}, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.rango.refresh_from_db()
+        self.assertFalse(self.rango.is_selected_local)
+        self.assertIn('Activar no implica seleccionar', response.data['message'])
+
+    def test_patch_activar_con_seleccionar_true_selecciona_rango(self):
+        other = RangoNumeracionDIAN.objects.create(
+            factus_range_id=10,
+            environment='SANDBOX',
+            document_code='FACTURA_VENTA',
+            is_active_remote=True,
+            is_selected_local=True,
+            prefijo='SETP2',
+            desde=1,
+            hasta=999999,
+            resolucion='18760000002',
+            consecutivo_actual=1,
+            activo=True,
+        )
+        client = APIClient()
+        client.force_authenticate(self.admin)
+        response = client.patch(
+            f'/api/facturacion/rangos/{self.rango.id}/activar/',
+            {'activo': True, 'seleccionar': True},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.rango.refresh_from_db()
+        other.refresh_from_db()
+        self.assertTrue(self.rango.is_selected_local)
+        self.assertFalse(other.is_selected_local)
+
+    @patch('apps.facturacion.views.get_range_resilient')
+    def test_retrieve_rango_no_falla_cuando_detalle_remoto_no_disponible(self, mocked_get_range):
+        mocked_get_range.return_value = {
+            'payload': None,
+            'unavailable': True,
+            'error': '403 Forbidden',
+        }
+        client = APIClient()
+        client.force_authenticate(self.admin)
+        response = client.get(f'/api/facturacion/rangos/{self.rango.id}/')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data['remote_detail_unavailable'])
+        self.assertEqual(response.data['remote'], None)
 
 
 class FactusEnvironmentResolutionTests(TestCase):

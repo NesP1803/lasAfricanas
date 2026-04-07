@@ -51,13 +51,17 @@ def resolve_numbering_range(document_code: str = 'FACTURA_VENTA') -> RangoNumera
             f'No hay rangos sincronizados para {document_label} en {env_label}. Debe sincronizar/configurar el rango antes de emitir.'
         )
 
-    selected = base_queryset.filter(is_selected_local=True, activo=True)
+    selected = base_queryset.filter(is_selected_local=True)
     if selected.count() > 1:
         raise FactusValidationError(
-            f'Hay múltiples rangos seleccionados localmente para {document_label}. Debe dejar solo uno activo.'
+            f'Hay múltiples rangos seleccionados localmente para {document_label}. Debe dejar solo uno seleccionado.'
         )
     if selected.count() == 1:
         selected_range = selected.first()
+        if not selected_range.activo:
+            raise FactusValidationError(
+                f'El rango seleccionado para {document_label} está inactivo localmente. Active o seleccione otro rango.'
+            )
         if not (selected_range.factus_id or selected_range.factus_range_id):
             raise FactusValidationError(
                 f'El rango local seleccionado para {document_label} no tiene ID de Factus (numbering_range_id). '
@@ -76,15 +80,21 @@ def resolve_numbering_range(document_code: str = 'FACTURA_VENTA') -> RangoNumera
             f'No hay rangos sincronizados para {document_label} en {env_label}. Debe sincronizar/configurar el rango antes de emitir.'
         )
     if len(active_ranges) == 1:
-        if not (active_ranges[0].factus_id or active_ranges[0].factus_range_id):
+        unique_active = active_ranges[0]
+        if not (unique_active.factus_id or unique_active.factus_range_id):
             raise FactusValidationError(
                 f'El único rango activo para {document_label} no tiene ID de Factus (numbering_range_id). '
                 'Debe sincronizar/importar un rango autorizado antes de emitir.'
             )
-        return active_ranges[0]
+        if not unique_active.is_selected_local:
+            base_queryset.filter(is_selected_local=True).update(is_selected_local=False)
+            unique_active.is_selected_local = True
+            unique_active.save(update_fields=['is_selected_local'])
+        return unique_active
 
     raise FactusValidationError(
-        f'Hay múltiples rangos activos para {document_label}, pero ninguno está seleccionado localmente.'
+        f'Hay múltiples rangos activos para {document_label} y ninguno está seleccionado. '
+        'Seleccione explícitamente un rango antes de emitir.'
     )
 
 

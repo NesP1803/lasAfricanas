@@ -75,6 +75,7 @@ from apps.facturacion.services import (
     create_range,
     delete_range,
     get_range,
+    get_range_resilient,
     get_software_ranges_resilient,
     sync_ranges_to_db,
     update_range_current,
@@ -924,11 +925,21 @@ class FacturacionRangosViewSet(viewsets.GenericViewSet):
         rango = self._base_queryset().filter(pk=pk).first()
         if not rango:
             return Response({'detail': 'Rango no encontrado.'}, status=status.HTTP_404_NOT_FOUND)
-        payload = get_range(int(rango.factus_id or rango.factus_range_id or 0))
+        payload = None
+        remote_detail_unavailable = False
+        remote_error = ''
+        factus_id = int(rango.factus_id or rango.factus_range_id or 0)
+        if factus_id > 0:
+            remote_result = get_range_resilient(factus_id)
+            payload = remote_result['payload']
+            remote_detail_unavailable = bool(remote_result['unavailable'])
+            remote_error = str(remote_result['error'] or '')
         return Response(
             {
                 'local': RangoNumeracionDIANSerializer(rango).data,
                 'remote': payload,
+                'remote_detail_unavailable': remote_detail_unavailable,
+                'remote_error': remote_error,
             }
         )
 
@@ -1042,6 +1053,24 @@ class FacturacionRangosViewSet(viewsets.GenericViewSet):
             rango.save(update_fields=['is_selected_local'])
         return Response({'message': 'Rango seleccionado localmente.', 'range': RangoNumeracionDIANSerializer(rango).data})
 
+    @action(detail=True, methods=['patch'], url_path='seleccionar')
+    def seleccionar(self, request, pk=None):
+        if not _is_admin(request.user):
+            return Response({'detail': 'No autorizado.'}, status=status.HTTP_403_FORBIDDEN)
+        rango = self._base_queryset().filter(pk=pk).first()
+        if not rango:
+            return Response({'detail': 'Rango no encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+        if not rango.activo or rango.is_expired_remote:
+            return Response(
+                {'detail': 'Solo se puede seleccionar un rango local activo y vigente.'},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+        with transaction.atomic():
+            self._base_queryset().filter(document_code=rango.document_code).update(is_selected_local=False)
+            rango.is_selected_local = True
+            rango.save(update_fields=['is_selected_local'])
+        return Response({'message': 'Rango seleccionado localmente.', 'range': RangoNumeracionDIANSerializer(rango).data})
+
     @action(detail=True, methods=['patch'], url_path='activar')
     def activar(self, request, pk=None):
         if not _is_admin(request.user):
@@ -1050,13 +1079,29 @@ class FacturacionRangosViewSet(viewsets.GenericViewSet):
         if not rango:
             return Response({'detail': 'Rango no encontrado.'}, status=status.HTTP_404_NOT_FOUND)
         enabled = bool(request.data.get('activo', True))
+        select_now = bool(request.data.get('seleccionar', False))
+        if select_now and not enabled:
+            return Response(
+                {'detail': 'No se puede seleccionar un rango mientras se desactiva.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         rango.activo = enabled
-        if not enabled and rango.is_selected_local:
-            rango.is_selected_local = False
-            rango.save(update_fields=['activo', 'is_selected_local'])
-        else:
-            rango.save(update_fields=['activo'])
-        return Response({'message': 'Estado actualizado.', 'range': RangoNumeracionDIANSerializer(rango).data})
+        with transaction.atomic():
+            if not enabled and rango.is_selected_local:
+                rango.is_selected_local = False
+                rango.save(update_fields=['activo', 'is_selected_local'])
+            else:
+                rango.save(update_fields=['activo'])
+                if select_now:
+                    self._base_queryset().filter(document_code=rango.document_code).exclude(pk=rango.pk).update(is_selected_local=False)
+                    rango.is_selected_local = True
+                    rango.save(update_fields=['is_selected_local'])
+        message = (
+            'Estado actualizado y rango seleccionado.'
+            if select_now and enabled
+            else 'Estado actualizado. Activar no implica seleccionar.'
+        )
+        return Response({'message': message, 'range': RangoNumeracionDIANSerializer(rango).data})
 
 
 def _compare_software_vs_local(remote: dict, local: RangoNumeracionDIAN) -> list[str]:

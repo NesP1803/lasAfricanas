@@ -27,6 +27,7 @@ type PaginatedResponse<T> = {
 };
 
 export const descuentosApi = {
+  _listarInFlight: null as Promise<SolicitudDescuento[]> | null,
   crearSolicitud: async (payload: {
     aprobador: number;
     descuento_solicitado: number;
@@ -42,13 +43,21 @@ export const descuentosApi = {
     return response.data;
   },
   listarSolicitudes: async () => {
-    const response = await apiClient.get<
-      SolicitudDescuento[] | PaginatedResponse<SolicitudDescuento>
-    >('/solicitudes-descuento/');
-    if (Array.isArray(response.data)) {
-      return response.data;
+    if (descuentosApi._listarInFlight) {
+      return descuentosApi._listarInFlight;
     }
-    return response.data.results ?? [];
+    descuentosApi._listarInFlight = apiClient
+      .get<SolicitudDescuento[] | PaginatedResponse<SolicitudDescuento>>('/solicitudes-descuento/')
+      .then((response) => {
+        if (Array.isArray(response.data)) {
+          return response.data;
+        }
+        return response.data.results ?? [];
+      })
+      .finally(() => {
+        descuentosApi._listarInFlight = null;
+      });
+    return descuentosApi._listarInFlight;
   },
   obtenerSolicitud: async (id: number) => {
     const response = await apiClient.get<SolicitudDescuento>(`/solicitudes-descuento/${id}/`);
