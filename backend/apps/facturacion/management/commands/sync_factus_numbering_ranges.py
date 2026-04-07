@@ -4,7 +4,7 @@ from apps.facturacion.services.sync_numbering_ranges import sync_numbering_range
 
 
 class Command(BaseCommand):
-    help = 'Sincroniza rangos de numeración de Factus al almacenamiento local.'
+    help = 'Sincroniza rangos oficiales DIAN desde Factus.'
 
     def handle(self, *args, **options):
         try:
@@ -15,6 +15,6 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f'Rangos sincronizados: {len(synced)}'))
         for rango in synced:
             self.stdout.write(
-                f'- env={rango.environment} doc={rango.document_code} factus_id={rango.factus_range_id} '
-                f'prefijo={rango.prefijo} activo_remoto={rango.is_active_remote} seleccionado_local={rango.is_selected_local}'
+                f'- doc={rango.document} prefix={rango.prefix} '
+                f'resolution={rango.resolution_number} active={rango.is_active}'
             )

@@ -644,23 +644,11 @@ def facturar_venta(
         numero = str(venta.numero_comprobante or '').strip()
         if not numero:
             sequence = get_next_invoice_sequence()
-            if not sequence.numbering_range_id:
-                raise FactusValidationError(
-                    'Debe sincronizar/configurar el rango antes de facturar. Falta factus_range_id del rango seleccionado.'
-                )
             numero = sequence.number
-            payload['numbering_range_id'] = sequence.numbering_range_id
             venta.numero_comprobante = numero
             venta.save(update_fields=['numero_comprobante', 'updated_at'])
-        elif not payload.get('numbering_range_id'):
-            rango = resolve_numbering_range(document_code='FACTURA_VENTA')
-            if not rango.factus_range_id:
-                raise FactusValidationError(
-                    'Debe sincronizar/configurar el rango antes de facturar. Falta factus_range_id del rango seleccionado.'
-                )
-            payload['numbering_range_id'] = int(rango.factus_range_id)
 
-        should_lock_expected_number = number_matches_active_range(numero, rango_activo.prefijo)
+        should_lock_expected_number = number_matches_active_range(numero, rango_activo.prefix)
         if should_lock_expected_number:
             payload['number'] = numero
         else:

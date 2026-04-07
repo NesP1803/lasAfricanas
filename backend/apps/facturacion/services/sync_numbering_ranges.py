@@ -1,140 +1,62 @@
-"""Sincronización de rangos de numeración DIAN desde Factus."""
+"""Sincronización oficial de rangos DIAN asociados al software en Factus."""
 
 from __future__ import annotations
 
-import logging
 from datetime import date
-from typing import Any
 
-from apps.facturacion.models import RangoNumeracionDIAN
+from django.utils import timezone
+
+from apps.facturacion.models import FactusNumberingRange
 from apps.facturacion.services.factus_client import FactusClient
-from apps.facturacion.services.factus_environment import resolve_factus_environment
-from apps.facturacion.services.numbering_range_admin_service import sync_ranges_to_db
-
-logger = logging.getLogger(__name__)
 
 
-def _resolve_document_code(raw_range: dict[str, Any]) -> str:
-    raw_value = str(
-        raw_range.get('document')
-        or raw_range.get('document_code')
-        or raw_range.get('voucher_type')
-        or ''
-    ).strip()
-    raw = raw_value.upper()
-    compact = (
-        raw.replace('Á', 'A')
-        .replace('É', 'E')
-        .replace('Í', 'I')
-        .replace('Ó', 'O')
-        .replace('Ú', 'U')
-        .replace(' ', '_')
-        .replace('-', '_')
-    )
-    if raw in {'NOTA_CREDITO', 'CREDIT_NOTE', 'NC'} or compact in {'NOTA_CREDITO', 'CREDIT_NOTE', 'NC'}:
-        return 'NOTA_CREDITO'
-    if raw in {'DOCUMENTO_SOPORTE', 'SUPPORT_DOCUMENT', 'DS'} or compact in {
-        'DOCUMENTO_SOPORTE',
-        'SUPPORT_DOCUMENT',
-        'DS',
-    }:
-        return 'DOCUMENTO_SOPORTE'
-    if raw in {'NOTA_AJUSTE_DOCUMENTO_SOPORTE', 'SUPPORT_DOCUMENT_ADJUSTMENT_NOTE', 'NDA', 'NADS'} or compact in {
-        'NOTA_DE_AJUSTE_DOCUMENTO_SOPORTE',
-        'NOTA_AJUSTE_DOCUMENTO_SOPORTE',
-        'SUPPORT_DOCUMENT_ADJUSTMENT_NOTE',
-        'NDA',
-        'NADS',
-    }:
-        return 'NOTA_AJUSTE_DOCUMENTO_SOPORTE'
-    if raw in {'NOTA_DEBITO', 'DEBIT_NOTE'} or compact in {'NOTA_DEBITO', 'DEBIT_NOTE'}:
-        return 'NOTA_DEBITO'
-    return 'FACTURA_VENTA'
+FACTURA_VENTA = 'FACTURA_VENTA'
 
 
-def _as_date(value: Any) -> date | None:
-    if not value:
-        return None
-    parsed = str(value).split('T')[0].strip()
+def _resolve_document_code(raw_range: dict[str, object]) -> str:
+    """Compatibilidad legacy: endpoint /dian aplica a factura de venta."""
+    return FACTURA_VENTA
+
+
+def _as_date(value: str | None) -> date:
+    parsed = str(value or '').split('T')[0].strip()
     if not parsed:
-        return None
+        raise ValueError('Factus devolvió una fecha vacía en numbering-ranges/dian.')
     return date.fromisoformat(parsed)
 
 
-def sync_numbering_ranges() -> list[RangoNumeracionDIAN]:
-    """Sincroniza rangos de numeración desde Factus y retorna los rangos procesados."""
-    return sync_ranges_to_db()
+def sync_factus_dian_ranges() -> list[FactusNumberingRange]:
+    """Sincroniza rangos desde GET /v1/numbering-ranges/dian y reemplaza snapshot local."""
+    payload = FactusClient().get_software_numbering_ranges()
 
+    data = payload.get('data', payload) if isinstance(payload, dict) else payload
+    if isinstance(data, dict):
+        data = data.get('data', data.get('numbering_ranges', []))
+    ranges = data if isinstance(data, list) else []
 
-def _sync_numbering_ranges_legacy() -> list[RangoNumeracionDIAN]:
-    """Implementación legacy (mantenida temporalmente por compatibilidad)."""
-    environment = resolve_factus_environment()
-    payload = FactusClient().get_numbering_ranges()
-    ranges: list[dict[str, Any]] = []
-    if isinstance(payload, list):
-        ranges = payload
-    elif isinstance(payload, dict):
-        data = payload.get('data', payload)
-        if isinstance(data, list):
-            ranges = data
-        elif isinstance(data, dict):
-            nested = data.get('data')
-            if isinstance(nested, list):
-                ranges = nested
-            elif isinstance(nested, dict):
-                ranges = nested.get('numbering_ranges', [])
-            else:
-                ranges = data.get('numbering_ranges', [])
-        else:
-            ranges = []
+    today = timezone.now().date()
+    FactusNumberingRange.objects.all().delete()
 
-    synced: list[RangoNumeracionDIAN] = []
-    synced_ids: list[int] = []
-    for raw_range in ranges:
-        factus_range_id = raw_range.get('id') or raw_range.get('numbering_range_id')
-        if factus_range_id is None:
-            continue
-        prefijo = str(raw_range.get('prefix', raw_range.get('prefijo', ''))).strip()
-        if not prefijo:
-            continue
-
-        desde = int(raw_range.get('from', raw_range.get('desde', 1)) or 1)
-        hasta = int(raw_range.get('to', raw_range.get('hasta', desde)) or desde)
-        resolucion = str(raw_range.get('resolution_number', raw_range.get('resolution', raw_range.get('resolucion', '')))).strip()
-        consecutivo_actual = int(raw_range.get('current', raw_range.get('consecutivo_actual', desde)) or desde)
-
-        document_code = _resolve_document_code(raw_range)
-        rango, _ = RangoNumeracionDIAN.objects.update_or_create(
-            factus_range_id=factus_range_id,
-            environment=environment,
-            document_code=document_code,
-            defaults={
-                'desde': desde,
-                'hasta': hasta,
-                'resolucion': resolucion,
-                'consecutivo_actual': consecutivo_actual,
-                'fecha_autorizacion': _as_date(raw_range.get('valid_from', raw_range.get('fecha_autorizacion'))),
-                'fecha_expiracion': _as_date(raw_range.get('valid_to', raw_range.get('fecha_expiracion'))),
-                'prefijo': prefijo,
-                'activo': bool(raw_range.get('is_active', raw_range.get('activo', True)))
-                and not bool(raw_range.get('is_expired', False)),
-                'is_active_remote': bool(raw_range.get('is_active', raw_range.get('activo', True)))
-                and not bool(raw_range.get('is_expired', False)),
-            },
+    created: list[FactusNumberingRange] = []
+    for raw in ranges:
+        end_date = _as_date(raw.get('end_date'))
+        created.append(
+            FactusNumberingRange.objects.create(
+                document=FACTURA_VENTA,
+                prefix=str(raw.get('prefix') or '').strip(),
+                resolution_number=str(raw.get('resolution_number') or '').strip(),
+                from_number=int(raw.get('from') or 0),
+                to_number=int(raw.get('to') or 0),
+                start_date=_as_date(raw.get('start_date')),
+                end_date=end_date,
+                technical_key=str(raw.get('technical_key') or '').strip() or None,
+                is_active=end_date >= today,
+            )
         )
-        synced.append(rango)
-        if rango.factus_range_id is not None:
-            synced_ids.append(int(rango.factus_range_id))
 
-    RangoNumeracionDIAN.objects.filter(
-        environment=environment,
-    ).exclude(factus_range_id__in=synced_ids).update(is_active_remote=False)
+    return created
 
-    logger.info(
-        'Sincronización Factus rangos: recibidos=%s persistidos=%s entorno=%s',
-        len(ranges),
-        len(synced),
-        environment,
-    )
 
-    return synced
+def sync_numbering_ranges() -> list[FactusNumberingRange]:
+    """Compat wrapper para llamadas legadas."""
+    return sync_factus_dian_ranges()
