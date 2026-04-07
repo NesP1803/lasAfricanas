@@ -12,6 +12,7 @@ from django.conf import settings
 from apps.core.models import Impuesto
 from apps.facturacion.services.consecutivo_service import resolve_numbering_range
 from apps.facturacion.services.factus_catalog_lookup import (
+    get_first_active_tribute_id,
     get_document_type_id,
     get_municipality_id,
     get_payment_method_code,
@@ -25,7 +26,6 @@ from apps.facturacion.services.document_totals import (
     q_money,
     to_decimal,
 )
-from apps.facturacion_electronica.catalogos.models import TributoFactus
 from apps.ventas.models import Venta
 
 logger = logging.getLogger(__name__)
@@ -55,13 +55,7 @@ def _resolve_customer_tribute_id(tipo_documento: str) -> int:
         if tribute_id:
             return int(tribute_id)
 
-    fallback = (
-        TributoFactus.objects.filter(is_active=True)
-        .order_by('factus_id')
-        .values_list('factus_id', flat=True)
-        .first()
-    )
-    return int(fallback or 1)
+    return get_first_active_tribute_id(default=1)
 
 
 def _resolve_item_tribute_id(iva_porcentaje: Decimal) -> int:

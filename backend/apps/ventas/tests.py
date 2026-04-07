@@ -1767,3 +1767,135 @@ class PosTicketDiscriminacionIvaTests(TestCase):
         self.assertEqual(payload['discriminacion_iva'][0]['base_imp'], 5042.02)
         self.assertEqual(payload['discriminacion_iva'][0]['valor_iva'], 957.98)
         self.assertEqual(payload['discriminacion_iva'][0]['valor_compra'], 6000.0)
+
+
+class EmisionFacturaUseCaseAndViewDelegationTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.vendedor = Usuario.objects.create_user(username='uc-vendedor', password='pass1234', tipo_usuario='VENDEDOR')
+        self.cajero = Usuario.objects.create_user(username='uc-cajero', password='pass1234', tipo_usuario='VENDEDOR')
+        self.cajero.es_cajero = True
+        self.cajero.save(update_fields=['es_cajero'])
+        categoria = Categoria.objects.create(nombre='UC Cat')
+        proveedor = Proveedor.objects.create(nombre='UC Prov')
+        self.producto = Producto.objects.create(
+            codigo='UC-1',
+            nombre='Producto UC',
+            categoria=categoria,
+            proveedor=proveedor,
+            precio_costo=Decimal('100'),
+            precio_venta=Decimal('200'),
+            precio_venta_minimo=Decimal('150'),
+            stock=10,
+            stock_minimo=1,
+            iva_porcentaje=Decimal('19'),
+        )
+        self.cliente = Cliente.objects.create(tipo_documento='CC', numero_documento='987654', nombre='Cliente UC')
+
+    def _crear_venta(self, estado='BORRADOR'):
+        venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            cliente=self.cliente,
+            vendedor=self.vendedor,
+            subtotal=Decimal('200'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('38'),
+            total=Decimal('238'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('238'),
+            cambio=Decimal('0'),
+            estado=estado,
+            enviada_a_caja_por=self.vendedor if estado == 'ENVIADA_A_CAJA' else None,
+            enviada_a_caja_at=timezone.now() if estado == 'ENVIADA_A_CAJA' else None,
+        )
+        DetalleVenta.objects.create(
+            venta=venta,
+            producto=self.producto,
+            cantidad=1,
+            precio_unitario=Decimal('200'),
+            descuento_unitario=Decimal('0'),
+            iva_porcentaje=Decimal('19'),
+            subtotal=Decimal('200'),
+            total=Decimal('238'),
+        )
+        return venta
+
+    @patch('apps.facturacion.use_cases.emit_invoice_use_case.emitir_factura_completa')
+    def test_use_case_venta_cobrada_factura_aceptada(self, mocked_emitir):
+        from apps.facturacion.use_cases import emit_invoice_use_case
+
+        venta = self._crear_venta()
+        factura = FacturaElectronica.objects.create(venta=venta, number='FAC-OK-1', reference_code='REF-OK-1', estado_electronico='ACEPTADA', response_json={})
+        mocked_emitir.return_value = {'factura': factura, 'warnings': []}
+
+        result = emit_invoice_use_case(venta_id=venta.id, triggered_by=self.vendedor)
+        venta.refresh_from_db()
+        self.assertEqual(venta.estado, 'COBRADA')
+        self.assertEqual(result.factura.estado_electronico, 'ACEPTADA')
+
+    @patch('apps.facturacion.use_cases.emit_invoice_use_case.emitir_factura_completa')
+    def test_use_case_venta_cobrada_factura_pendiente(self, mocked_emitir):
+        from apps.facturacion.use_cases import emit_invoice_use_case
+
+        venta = self._crear_venta()
+        factura = FacturaElectronica.objects.create(venta=venta, number='FAC-PEN-1', reference_code='REF-PEN-1', estado_electronico='PENDIENTE_REINTENTO', response_json={})
+        mocked_emitir.return_value = {'factura': factura, 'warnings': []}
+
+        result = emit_invoice_use_case(venta_id=venta.id, triggered_by=self.vendedor)
+        venta.refresh_from_db()
+        self.assertEqual(venta.estado, 'COBRADA')
+        self.assertEqual(result.factura.estado_electronico, 'PENDIENTE_REINTENTO')
+
+    @patch('apps.facturacion.use_cases.emit_invoice_use_case.emitir_factura_completa')
+    def test_use_case_venta_cobrada_factura_rechazada(self, mocked_emitir):
+        from apps.facturacion.use_cases import emit_invoice_use_case
+
+        venta = self._crear_venta()
+        factura = FacturaElectronica.objects.create(venta=venta, number='FAC-REJ-1', reference_code='REF-REJ-1', estado_electronico='RECHAZADA', response_json={})
+        mocked_emitir.return_value = {'factura': factura, 'warnings': []}
+
+        result = emit_invoice_use_case(venta_id=venta.id, triggered_by=self.vendedor)
+        venta.refresh_from_db()
+        self.assertEqual(venta.estado, 'COBRADA')
+        self.assertEqual(result.factura.estado_electronico, 'RECHAZADA')
+
+    @patch('apps.facturacion.use_cases.emit_invoice_use_case.emitir_factura_completa')
+    def test_use_case_reintento_no_duplica_reference_code(self, mocked_emitir):
+        from apps.facturacion.use_cases import emit_invoice_use_case
+
+        venta = self._crear_venta(estado='COBRADA')
+        factura = FacturaElectronica.objects.create(venta=venta, number='FAC-RET-1', reference_code='REF-RET-1', estado_electronico='PENDIENTE_REINTENTO', response_json={})
+        mocked_emitir.return_value = {'factura': factura, 'warnings': []}
+
+        first = emit_invoice_use_case(venta_id=venta.id, triggered_by=self.vendedor)
+        second = emit_invoice_use_case(venta_id=venta.id, triggered_by=self.vendedor)
+
+        self.assertEqual(first.factura.reference_code, second.factura.reference_code)
+        self.assertEqual(FacturaElectronica.objects.filter(venta=venta).count(), 1)
+
+    @patch('apps.ventas.views.emit_invoice_use_case')
+    def test_view_ventas_facturar_delega_use_case(self, mocked_use_case):
+        from apps.facturacion.use_cases import EmitInvoiceResult
+
+        venta = self._crear_venta()
+        factura = FacturaElectronica.objects.create(venta=venta, number='FAC-VIEW-1', reference_code='REF-VIEW-1', estado_electronico='ACEPTADA', response_json={})
+        mocked_use_case.return_value = EmitInvoiceResult(venta=venta, factura=factura, warnings=[])
+
+        self.client.force_authenticate(user=self.vendedor)
+        response = self.client.post(f'/api/ventas/{venta.id}/facturar/')
+        self.assertIn(response.status_code, {200, 201})
+        mocked_use_case.assert_called()
+
+    @patch('apps.ventas.views.emit_invoice_use_case')
+    def test_view_caja_facturar_delega_use_case(self, mocked_use_case):
+        from apps.facturacion.use_cases import EmitInvoiceResult
+
+        venta = self._crear_venta(estado='ENVIADA_A_CAJA')
+        factura = FacturaElectronica.objects.create(venta=venta, number='FAC-CAJA-1', reference_code='REF-CAJA-1', estado_electronico='ACEPTADA', response_json={})
+        mocked_use_case.return_value = EmitInvoiceResult(venta=venta, factura=factura, warnings=[])
+
+        self.client.force_authenticate(user=self.cajero)
+        response = self.client.post(f'/api/caja/{venta.id}/facturar/')
+        self.assertEqual(response.status_code, 200)
+        mocked_use_case.assert_called()

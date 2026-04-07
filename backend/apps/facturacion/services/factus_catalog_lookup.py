@@ -126,6 +126,16 @@ def get_tribute_id(codigo: str, default: int = 1) -> int:
     return int(value or default)
 
 
+def get_first_active_tribute_id(default: int = 1) -> int:
+    value = (
+        TributoFactus.objects.filter(is_active=True)
+        .order_by('factus_id')
+        .values_list('factus_id', flat=True)
+        .first()
+    )
+    return int(value or default)
+
+
 def get_payment_method_code(codigo: str, default: str = '10') -> str:
     by_homologacion = _homologacion_lookup(HomologacionMedioPago, 'payment_method_code', codigo)
     if by_homologacion:
