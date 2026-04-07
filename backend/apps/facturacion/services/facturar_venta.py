@@ -2,12 +2,7 @@
 
 from __future__ import annotations
 
-import copy
-import hashlib
-import json
 import logging
-import uuid
-from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from django.db import DataError, transaction
@@ -16,15 +11,14 @@ from django.utils import timezone
 from apps.facturacion.exceptions import FacturaDuplicadaError, FacturaPersistenciaError
 from apps.facturacion.models import FacturaElectronica
 from apps.facturacion.services.consecutivo_service import get_next_invoice_sequence, resolve_numbering_range
-from apps.facturacion.services.document_totals import (
-    calculate_document_detail_totals,
-    q_money,
+from apps.facturacion.services.document_fetcher import sync_existing_pending_invoice
+from apps.facturacion.services.download_invoice_files import download_pdf, download_xml
+from apps.facturacion.services.electronic_state_machine import (
+    extract_bill_errors as _extract_bill_errors,
+    map_factus_status,
 )
-from apps.facturacion.services.electronic_state_machine import extract_bill_errors as _extract_bill_errors
-from apps.facturacion.services.electronic_state_machine import map_factus_status
 from apps.facturacion.services.exceptions import DescargaFacturaError
 from apps.facturacion.services.factura_assets_service import sync_invoice_assets
-from apps.facturacion.services.factus_catalog_lookup import get_tribute_id
 from apps.facturacion.services.factus_client import (
     FactusAPIError,
     FactusAuthError,
@@ -34,676 +28,71 @@ from apps.facturacion.services.factus_client import (
 )
 from apps.facturacion.services.factus_payload_builder import build_invoice_payload
 from apps.facturacion.services.generate_qr_dian import generate_qr_dian
+from apps.facturacion.services.persistence import (
+    assign_qr_image_fields,
+    build_attempt_trace,
+    persist_local_validation_error,
+    persist_pending_dian_conflict,
+    persist_remote_error,
+)
 from apps.facturacion.services.persistence_safety import (
     log_model_string_overflow_diagnostics,
-    normalize_qr_image_value,
     safe_assign_charfield,
     safe_assign_json,
 )
+from apps.facturacion.services.reconciliation import (
+    PERSISTABLE_FACTURA_FIELDS,
+    assert_emitted_document_matches_sale,
+    extract_factus_data,
+    merge_factus_fields,
+)
+from apps.facturacion.services.reference_code import resolve_reference_code, generate_unique_reference_code
+from apps.facturacion.services.totals import (
+    DOCUMENT_CONCILIATION_ERROR_CODE,
+    assert_document_conciliation,
+    sync_sale_totals_before_emit,
+)
+from apps.facturacion.services.result_types import FacturacionContext
 from apps.facturacion.services.upload_custom_pdf_to_factus import (
     send_invoice_email_via_factus,
     upload_custom_pdf_to_factus,
+)
+from apps.facturacion.services.validators import (
+    has_definitive_electronic_identifiers,
+    number_matches_active_range,
+    validate_customer_for_factus,
+    validate_payload_tax_consistency,
 )
 from apps.usuarios.models import Usuario
 from apps.ventas.models import Venta
 
 logger = logging.getLogger(__name__)
-MISMATCH_ERROR_CODE = 'MISMATCH_NUMERACION'
-LOCAL_VALIDATION_ERROR_CODE = 'ERROR_VALIDACION_LOCAL'
-DOCUMENT_CONCILIATION_ERROR_CODE = 'ERROR_CONCILIACION_DOCUMENTAL'
-MONEY_TOLERANCE = Decimal('0.05')
-MONEY_QUANT = Decimal('0.01')
 FINAL_ACCEPTED_STATUSES = {'ACEPTADA', 'ACEPTADA_CON_OBSERVACIONES'}
 
 
-class FacturaPersistenciaError(Exception):
-    """Error de persistencia controlado para no dejar estados ambiguos."""
-
-
-def _extract_factus_data(response_json: dict[str, Any]) -> dict[str, str]:
-    data = response_json.get('data', response_json)
-    bill = data.get('bill', data)
-    document = bill.get('document', {}) if isinstance(bill.get('document', {}), dict) else {}
-    file_data = bill.get('files', {}) if isinstance(bill.get('files', {}), dict) else {}
-    return {
-        'cufe': str(bill.get('cufe') or document.get('cufe') or data.get('cufe', '')).strip(),
-        'uuid': str(bill.get('uuid') or document.get('uuid') or data.get('uuid', '')).strip(),
-        'number': str(bill.get('number') or document.get('number') or data.get('number', '')).strip(),
-        'reference_code': str(
-            bill.get('reference_code') or document.get('reference_code') or data.get('reference_code', '')
-        ).strip(),
-        'xml_url': str(
-            bill.get('xml_url') or file_data.get('xml_url') or document.get('xml_url') or data.get('xml_url', '')
-        ).strip(),
-        'pdf_url': str(
-            bill.get('pdf_url') or file_data.get('pdf_url') or document.get('pdf_url') or data.get('pdf_url', '')
-        ).strip(),
-        'qr': str(bill.get('qr', data.get('qr', ''))).strip(),
-        'qr_image': str(bill.get('qr_image', data.get('qr_image', ''))).strip(),
-        'qr_url': str(bill.get('qr_url', data.get('qr_url', ''))).strip(),
-        'public_url': str(bill.get('public_url', data.get('public_url', ''))).strip(),
-        'zip_key': str(bill.get('zip_key', data.get('zip_key', ''))).strip(),
-        'status': map_factus_status(response_json)[0],
-        'estado_factus_raw': map_factus_status(response_json)[1],
-    }
-
-
-def _merge_factus_fields(base: dict[str, str], extra: dict[str, str]) -> dict[str, str]:
-    merged = dict(base)
-    for key, value in extra.items():
-        if value and not merged.get(key):
-            merged[key] = value
-    return merged
-
-
-def _assign_qr_image_fields(factura: FacturaElectronica, qr_image_value: str) -> None:
-    qr_image_url, qr_image_data = normalize_qr_image_value(qr_image_value)
-    safe_assign_charfield(factura, 'qr_image_url', qr_image_url)
-    factura.qr_image_data = qr_image_data
-
-
-PERSISTABLE_FACTURA_FIELDS = {
-    'cufe',
-    'uuid',
-    'number',
-    'reference_code',
-    'xml_url',
-    'pdf_url',
-    'public_url',
-    'qr',
-    'qr_image',
-    'status',
-    'estado_factus_raw',
-}
-
-
-def _apply_qr_image_fields(instance: FacturaElectronica, raw_value: str) -> None:
-    qr_image_url, qr_image_data = normalize_qr_image_value(raw_value)
-    safe_assign_charfield(instance, 'qr_image_url', qr_image_url)
-    instance.qr_image_data = qr_image_data
-
-
-def _build_attempt_trace(
-    *,
-    factura: FacturaElectronica | None,
-    payload: dict[str, Any],
-    numero: str,
-    reference_code: str,
-    triggered_by: Usuario | None,
-    status: str,
-    response: dict[str, Any] | None = None,
-    response_show: dict[str, Any] | None = None,
-    response_download: dict[str, Any] | None = None,
-    error: dict[str, Any] | None = None,
-    final_fields: dict[str, Any] | None = None,
-    bill_errors: list[str] | None = None,
-) -> dict[str, Any]:
-    payload_sent = copy.deepcopy(payload)
-    payload_hash = hashlib.sha256(
-        json.dumps(payload_sent, sort_keys=True, ensure_ascii=False, default=str).encode('utf-8')
-    ).hexdigest()
-    previous = factura.response_json if factura and isinstance(factura.response_json, dict) else {}
-    previous_attempts = previous.get('attempts', [])
-    attempts = previous_attempts if isinstance(previous_attempts, list) else []
-    attempts.append(
-        {
-            'status': status,
-            'numero': numero,
-            'reference_code': reference_code,
-            'triggered_by_user_id': triggered_by.id if triggered_by else None,
-            'error': error or {},
-        }
-    )
-    venta_snapshot = None
-    if factura and factura.venta_id:
-        venta_obj = Venta.objects.filter(pk=factura.venta_id).prefetch_related('detalles__producto').first()
-        if venta_obj is not None:
-            venta_snapshot = {
-                'id': venta_obj.id,
-                'numero_comprobante': venta_obj.numero_comprobante,
-                'subtotal': str(venta_obj.subtotal),
-                'iva': str(venta_obj.iva),
-                'descuento_valor': str(venta_obj.descuento_valor),
-                'total': str(venta_obj.total),
-                'detalles': [
-                    {
-                        'producto_id': d.producto_id,
-                        'codigo': getattr(d.producto, 'codigo', ''),
-                        'nombre': getattr(d.producto, 'nombre', ''),
-                        'cantidad': str(d.cantidad),
-                        'precio_unitario': str(d.precio_unitario),
-                        'descuento_unitario': str(d.descuento_unitario),
-                        'subtotal': str(d.subtotal),
-                        'iva_porcentaje': str(d.iva_porcentaje),
-                        'total': str(d.total),
-                    }
-                    for d in venta_obj.detalles.all()
-                ],
-            }
-    return {
-        'request': payload_sent,
-        'request_sha256': payload_hash,
-        'response': response,
-        'response_show': response_show,
-        'response_download': response_download,
-        'final_fields': final_fields or {},
-        'bill_errors': bill_errors or [],
-        'venta_id': factura.venta_id if factura else None,
-        'venta_snapshot': venta_snapshot,
-        'triggered_by_user_id': triggered_by.id if triggered_by else None,
-        'attempts': attempts,
-    }
-
-
-def _retry_metadata(factura: FacturaElectronica, *, pending: bool) -> dict[str, Any]:
-    retry_count = int((factura.retry_count or 0) + 1)
-    now = timezone.now()
-    return {
-        'retry_count': retry_count,
-        'last_retry_at': now,
-        'next_retry_at': now if pending else None,
-    }
-
-
-def _assert_emitted_document_matches_sale(
-    *,
-    venta: Venta,
-    fields: dict[str, str],
-    expected_number: str,
-    expected_reference_code: str,
-) -> None:
-    number = str(fields.get('number') or '').strip()
-    reference_code = str(fields.get('reference_code') or '').strip()
-    expected_number = str(expected_number or '').strip()
-    expected_reference_code = str(expected_reference_code or '').strip()
-
-    expected_prefix = ''.join(char for char in expected_number if char.isalpha())
-    expected_sequence = ''.join(char for char in expected_number if char.isdigit())
-    returned_prefix = ''.join(char for char in number if char.isalpha())
-    returned_sequence = ''.join(char for char in number if char.isdigit())
-    has_prefix_mismatch = bool(expected_prefix and returned_prefix and expected_prefix != returned_prefix)
-    has_sequence_mismatch = bool(expected_sequence and returned_sequence and expected_sequence != returned_sequence)
-
-    logger.info(
-        'facturar_venta.validacion_documental venta_id=%s expected_reference=%s expected_number=%s '
-        'returned_number=%s returned_reference_code=%s factus_status=%s',
-        venta.id,
-        expected_reference_code,
-        expected_number,
-        number,
-        reference_code,
-        fields.get('status', ''),
+def _assert_document_conciliation(*, venta: Venta, request_payload: dict[str, Any], response_payload: dict[str, Any], logger_context: dict[str, Any]) -> None:
+    return assert_document_conciliation(
+        venta=venta,
+        request_payload=request_payload,
+        response_payload=response_payload,
+        logger_context=logger_context,
     )
 
-    if number and expected_number and (number != expected_number or has_prefix_mismatch or has_sequence_mismatch):
-        raise FactusValidationError(
-            f'Factus devolvió number={number} pero la venta {venta.id} esperaba {expected_number}. '
-            'Se bloquea la asociación para evitar enlazar CUFE/QR de otro documento.'
-        )
 
-    if number and FacturaElectronica.objects.filter(number=number).exclude(venta=venta).exists():
-        raise FactusValidationError(
-            f'Factus devolvió number={number}, pero ya está asociado a otra venta. '
-            'Se bloquea la asociación para evitar enlazar CUFE/QR de otro documento.'
-        )
-
-    if reference_code and expected_reference_code and reference_code != expected_reference_code:
-        raise FactusValidationError(
-            f'Factus devolvió reference_code={reference_code} pero la venta {venta.id} esperaba '
-            f'{expected_reference_code}. Se bloquea la asociación para evitar cruces entre ventas.'
-        )
-
-    if reference_code and FacturaElectronica.objects.filter(reference_code=reference_code).exclude(venta=venta).exists():
-        raise FactusValidationError(
-            f'Factus devolvió reference_code={reference_code}, pero ya está asociado a otra venta. '
-            'Se bloquea la asociación para evitar cruces entre ventas.'
-        )
+def _generate_unique_reference_code(venta_id: int, numero: str | None = None) -> str:
+    return generate_unique_reference_code(venta_id, numero)
 
 
-def _to_decimal_or_none(value: Any) -> Decimal | None:
-    if value is None or value == '':
-        return None
-    try:
-        return Decimal(str(value).strip())
-    except (InvalidOperation, ValueError, TypeError):
-        return None
-
-
-def _normalize_identification(value: Any) -> str:
-    return ''.join(char for char in str(value or '').strip() if char.isalnum()).upper()
-
-
-def _quantize_money(value: Decimal | None) -> Decimal:
-    normalized = Decimal(str(value if value is not None else '0'))
-    return normalized.quantize(MONEY_QUANT)
-
-
-def _to_bool(value: Any) -> bool:
-    if isinstance(value, bool):
-        return value
-    return str(value or '').strip().lower() in {'1', 'true', 'si', 'sí', 'yes', 'y', 'on'}
-
-
-def _extract_request_document_snapshot(payload: dict[str, Any]) -> dict[str, Any]:
-    data = payload.get('data', payload) if isinstance(payload, dict) else {}
-    bill = data.get('bill', data) if isinstance(data, dict) else {}
-    customer = bill.get('customer', data.get('customer', {})) if isinstance(bill, dict) else {}
-    items = bill.get('items', data.get('items', [])) if isinstance(bill, dict) else []
-    if not isinstance(customer, dict):
-        customer = {}
-    if not isinstance(items, list):
-        items = []
-
-    total = Decimal('0.00')
-    tax_total = Decimal('0.00')
-    base_total = Decimal('0.00')
-
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        quantity = _to_decimal_or_none(item.get('quantity')) or Decimal('0')
-        unit_price = _to_decimal_or_none(item.get('price')) or Decimal('0')
-        discount_rate = _to_decimal_or_none(item.get('discount_rate')) or Decimal('0')
-        tax_rate = _to_decimal_or_none(item.get('tax_rate')) or Decimal('0')
-        is_excluded = _to_bool(item.get('is_excluded'))
-
-        line = calculate_document_detail_totals(
-            quantity=quantity,
-            unit_gross_price=unit_price,
-            discount_pct=discount_rate,
-            tax_pct=Decimal('0.00') if is_excluded else tax_rate,
-        )
-        total += line['total']
-        base_total += line['base']
-        tax_total += line['impuesto']
-
-    return {
-        'customer_identification': _normalize_identification(
-            customer.get('identification') or customer.get('identification_number') or customer.get('nit')
-        ),
-        'total': _quantize_money(total),
-        'tax_total': _quantize_money(tax_total),
-        'base_total': _quantize_money(base_total),
-        'items_count': len(items),
-    }
-
-
-def _calculate_sale_document_totals_from_details(venta: Venta) -> dict[str, Decimal]:
-    base_total = Decimal('0.00')
-    tax_total = Decimal('0.00')
-    total = Decimal('0.00')
-
-    for detalle in venta.detalles.all():
-        line_total_bruto = q_money(q_money(detalle.cantidad) * q_money(detalle.precio_unitario))
-        descuento_pct = Decimal('0.00')
-        if line_total_bruto > Decimal('0.00'):
-            descuento_linea = q_money(q_money(detalle.cantidad) * max(q_money(detalle.descuento_unitario), Decimal('0.00')))
-            descuento_pct = q_money((descuento_linea / line_total_bruto) * Decimal('100'))
-        tax_pct = q_money(detalle.iva_porcentaje) if q_money(detalle.iva_porcentaje) > Decimal('0.00') else Decimal('0.00')
-        line = calculate_document_detail_totals(
-            quantity=detalle.cantidad,
-            unit_gross_price=detalle.precio_unitario,
-            discount_pct=descuento_pct,
-            tax_pct=tax_pct,
-        )
-        if q_money(detalle.subtotal) != line['base'] or q_money(detalle.total) != line['total']:
-            detalle.subtotal = line['base']
-            detalle.total = line['total']
-            detalle.save(update_fields=['subtotal', 'total', 'updated_at'])
-        logger.info(
-            'facturar_venta.detalle_documental venta_id=%s detalle_id=%s cantidad=%s precio_bruto=%s descuento_pct=%s '
-            'base=%s impuesto=%s total=%s',
-            venta.id,
-            detalle.id,
-            detalle.cantidad,
-            detalle.precio_unitario,
-            descuento_pct,
-            line['base'],
-            line['impuesto'],
-            line['total'],
-        )
-        base_total += line['base']
-        tax_total += line['impuesto']
-        total += line['total']
-
-    return {
-        'base_total': q_money(base_total),
-        'tax_total': q_money(tax_total),
-        'total': q_money(total),
-    }
-
-
-def _sync_sale_totals_before_emit(venta: Venta) -> dict[str, Decimal]:
-    calculated = _calculate_sale_document_totals_from_details(venta)
-    current_base = q_money(venta.subtotal)
-    current_tax = q_money(venta.iva)
-    current_total = q_money(venta.total)
-    changed_fields: list[str] = []
-    if current_base != calculated['base_total']:
-        venta.subtotal = calculated['base_total']
-        changed_fields.append('subtotal')
-    if current_tax != calculated['tax_total']:
-        venta.iva = calculated['tax_total']
-        changed_fields.append('iva')
-    if current_total != calculated['total']:
-        venta.total = calculated['total']
-        changed_fields.append('total')
-    if changed_fields:
-        venta.save(update_fields=[*changed_fields, 'updated_at'])
-        logger.warning(
-            'facturar_venta.totales_recalculados venta_id=%s changed=%s before=(%s,%s,%s) after=(%s,%s,%s)',
-            venta.id,
-            changed_fields,
-            current_base,
-            current_tax,
-            current_total,
-            calculated['base_total'],
-            calculated['tax_total'],
-            calculated['total'],
-        )
-    return calculated
-
-
-def _extract_totals_from_items(items: list[Any]) -> dict[str, Decimal]:
-    total = Decimal('0.00')
-    tax_total = Decimal('0.00')
-    base_total = Decimal('0.00')
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        quantity = _to_decimal_or_none(item.get('quantity') or item.get('qty')) or Decimal('0')
-        unit_price = _to_decimal_or_none(
-            item.get('price') or item.get('unit_price') or item.get('price_amount')
-        ) or Decimal('0')
-        discount_rate = _to_decimal_or_none(
-            item.get('discount_rate') or item.get('discount_percentage')
-        ) or Decimal('0')
-        discount_amount_field = _to_decimal_or_none(
-            item.get('discount_amount') or item.get('discount')
-        ) or Decimal('0')
-        tax_rate = _to_decimal_or_none(item.get('tax_rate') or item.get('tax_percentage')) or Decimal('0')
-        is_excluded = _to_bool(item.get('is_excluded'))
-
-        if discount_amount_field > Decimal('0.00'):
-            gross_line = _quantize_money(quantity * unit_price)
-            discount_rate = _quantize_money((discount_amount_field / gross_line) * Decimal('100')) if gross_line > Decimal('0.00') else Decimal('0.00')
-        line = calculate_document_detail_totals(
-            quantity=quantity,
-            unit_gross_price=unit_price,
-            discount_pct=discount_rate,
-            tax_pct=Decimal('0.00') if is_excluded else tax_rate,
-        )
-        total += line['total']
-        base_total += line['base']
-        tax_total += line['impuesto']
-
-    return {
-        'total': _quantize_money(total),
-        'base_total': _quantize_money(base_total),
-        'tax_total': _quantize_money(tax_total),
-    }
-
-
-def _extract_remote_document_snapshot(payload: dict[str, Any]) -> dict[str, Any]:
-    data = payload.get('data', payload) if isinstance(payload, dict) else {}
-    bill = data.get('bill', data) if isinstance(data, dict) else {}
-    customer = bill.get('customer', data.get('customer', {})) if isinstance(bill, dict) else {}
-    totals = bill.get('totals', data.get('totals', {})) if isinstance(bill, dict) else {}
-    if not isinstance(customer, dict):
-        customer = {}
-    if not isinstance(totals, dict):
-        totals = {}
-    items = bill.get('items', data.get('items', [])) if isinstance(bill, dict) else []
-    taxes = bill.get('tax_totals', data.get('tax_totals', [])) if isinstance(bill, dict) else []
-    if not isinstance(items, list):
-        items = []
-    if not isinstance(taxes, list):
-        taxes = []
-    has_item_amounts = any(
-        isinstance(item, dict)
-        and any(
-            item.get(key) not in (None, '')
-            for key in (
-                'price',
-                'unit_price',
-                'price_amount',
-                'line_total',
-                'total',
-                'total_amount',
-                'tax_rate',
-                'tax_percentage',
-                'tax_amount',
-            )
-        )
-        for item in items
-    )
-
-    tax_total = _to_decimal_or_none(totals.get('tax_amount') or totals.get('tax') or totals.get('total_tax'))
-    if tax_total is None:
-        collected = [_to_decimal_or_none((t.get('tax_amount') if isinstance(t, dict) else None)) for t in taxes]
-        tax_total = sum((val for val in collected if val is not None), Decimal('0')) if collected else None
-    items_totals = _extract_totals_from_items(items)
-
-    total_candidates = [
-        _to_decimal_or_none(totals.get('payable_amount')),
-        _to_decimal_or_none(totals.get('total_payable')),
-        _to_decimal_or_none(totals.get('total')),
-        _to_decimal_or_none(bill.get('total')),
-        _to_decimal_or_none(data.get('total')),
-        items_totals['total'],
-    ]
-    base_candidates = [
-        _to_decimal_or_none(totals.get('taxable_amount')),
-        _to_decimal_or_none(totals.get('subtotal')),
-        _to_decimal_or_none(totals.get('line_extension_amount')),
-        _to_decimal_or_none(totals.get('gross_value')),
-        _to_decimal_or_none(bill.get('gross_value')),
-        _to_decimal_or_none(data.get('gross_value')),
-        items_totals['base_total'],
-    ]
-    tax_candidates = [
-        tax_total,
-        items_totals['tax_total'],
-    ]
-
-    return {
-        'customer_identification': _normalize_identification(
-            customer.get('identification') or customer.get('identification_number') or customer.get('nit')
-        ),
-        'total': next((v for v in total_candidates if v is not None), None),
-        'tax_total': next((v for v in tax_candidates if v is not None), None),
-        'base_total': next((v for v in base_candidates if v is not None), None),
-        'total_candidates': [v for v in total_candidates if v is not None],
-        'tax_total_candidates': [v for v in tax_candidates if v is not None],
-        'base_total_candidates': [v for v in base_candidates if v is not None],
-        'items_count': len(items),
-        'has_item_amounts': has_item_amounts,
-    }
-
-
-def _extract_items_from_payload(payload: dict[str, Any]) -> list[dict[str, Any]]:
-    data = payload.get('data', payload) if isinstance(payload, dict) else {}
-    bill = data.get('bill', data) if isinstance(data, dict) else {}
-    items = bill.get('items', data.get('items', [])) if isinstance(bill, dict) else []
-    if not isinstance(items, list):
-        return []
-    return [item for item in items if isinstance(item, dict)]
-
-
-def _is_remote_snapshot_inconclusive(*, remote: dict[str, Any], expected_tax: Decimal) -> bool:
-    remote_tax = _to_decimal_or_none(remote.get('tax_total'))
-    remote_base = _to_decimal_or_none(remote.get('base_total'))
-    remote_total = _to_decimal_or_none(remote.get('total'))
-    items_count = int(remote.get('items_count') or 0)
-    has_item_amounts = bool(remote.get('has_item_amounts'))
-    tax_candidates = [v for v in (remote.get('tax_total_candidates') or []) if _to_decimal_or_none(v) is not None]
-
-    if expected_tax <= Decimal('0.00'):
-        return False
-    if remote_tax is None or remote_total is None or remote_base is None:
-        return False
-    if remote_tax != Decimal('0.00'):
-        return False
-    if remote_total != remote_base:
-        return False
-    if has_item_amounts:
-        return False
-    if items_count > 0 and tax_candidates:
-        return False
-    return True
-
-
-def _nearest_expected(candidates: list[Any], expected_value: Decimal) -> Decimal | None:
-    normalized = [_to_decimal_or_none(value) for value in candidates]
-    valid = [value for value in normalized if value is not None]
-    if not valid:
-        return None
-    return min(valid, key=lambda current: abs(current - expected_value))
-
-
-def _assert_document_conciliation(
-    *,
-    venta: Venta,
-    request_payload: dict[str, Any],
-    response_payload: dict[str, Any],
-    logger_context: dict[str, Any],
-) -> None:
-    expected_snapshot = _extract_request_document_snapshot(request_payload)
-    expected = _calculate_sale_document_totals_from_details(venta)
-    remote = _extract_remote_document_snapshot(response_payload)
-
-    raw_local_total = _to_decimal_or_none(venta.total) or Decimal('0')
-    raw_local_tax = _to_decimal_or_none(venta.iva) or Decimal('0')
-    raw_local_base = _to_decimal_or_none(venta.subtotal) or Decimal('0')
-
-    expected_total = expected.get('total') or Decimal('0')
-    expected_tax = expected.get('tax_total') or Decimal('0')
-    expected_base = expected.get('base_total') or Decimal('0')
-    expected_customer = _normalize_identification(expected_snapshot.get('customer_identification') or '')
-    expected_items_count = int(expected_snapshot.get('items_count') or 0)
-    remote_is_inconclusive = _is_remote_snapshot_inconclusive(remote=remote, expected_tax=expected_tax)
-
-    mismatches: list[str] = []
-    remote_total = _nearest_expected(remote.get('total_candidates', []), expected_total) or remote.get('total')
-    if (
-        not remote_is_inconclusive
-        and remote_total is not None
-        and abs(remote_total - expected_total) > MONEY_TOLERANCE
-    ):
-        mismatches.append(f'total_remoto={remote_total} total_esperado={expected_total}')
-
-    remote_tax = _nearest_expected(remote.get('tax_total_candidates', []), expected_tax) or remote.get('tax_total')
-    if (
-        not remote_is_inconclusive
-        and remote_tax is not None
-        and abs(remote_tax - expected_tax) > MONEY_TOLERANCE
-    ):
-        mismatches.append(f'impuesto_remoto={remote_tax} impuesto_esperado={expected_tax}')
-
-    remote_base = _nearest_expected(remote.get('base_total_candidates', []), expected_base) or remote.get('base_total')
-    if (
-        not remote_is_inconclusive
-        and remote_base is not None
-        and abs(remote_base - expected_base) > MONEY_TOLERANCE
-    ):
-        mismatches.append(f'base_remota={remote_base} base_esperada={expected_base}')
-
-    remote_customer = str(remote.get('customer_identification') or '').strip()
-    if remote_customer and expected_customer and remote_customer != expected_customer:
-        mismatches.append(f'cliente_remoto={remote_customer} cliente_esperado={expected_customer}')
-
-    remote_items_count = int(remote.get('items_count') or 0)
-    if remote_items_count and expected_items_count and remote_items_count != expected_items_count:
-        mismatches.append(f'items_remotos={remote_items_count} items_esperados={expected_items_count}')
-
-    logger.info(
-        'facturar_venta.conciliacion venta_id=%s factura_number=%s reference_code=%s '
-        'total_local=%s total_esperado=%s total_remoto=%s '
-        'base_local=%s base_esperada=%s base_remota=%s '
-        'impuesto_local=%s impuesto_esperado=%s impuesto_remoto=%s '
-        'cliente_remoto=%s cliente_esperado=%s resultado=%s',
-        venta.id,
-        logger_context.get('number', ''),
-        logger_context.get('reference_code', ''),
-        raw_local_total,
-        expected_total,
-        remote_total,
-        raw_local_base,
-        expected_base,
-        remote_base,
-        raw_local_tax,
-        expected_tax,
-        remote_tax,
-        remote_customer,
-        expected_customer,
-        'OK' if not mismatches else 'MISMATCH',
-    )
-    if mismatches:
-        request_items = _extract_items_from_payload(request_payload)
-        response_items = _extract_items_from_payload(response_payload)
-        logger.error(
-            'facturar_venta.conciliacion_error venta_id=%s payload_enviado=%s item_original=%s item_factus=%s '
-            'totales_locales=%s totales_factus=%s response_json=%s',
-            venta.id,
-            request_payload,
-            request_items[0] if request_items else {},
-            response_items[0] if response_items else {},
-            {
-                'base': str(expected_base),
-                'impuesto': str(expected_tax),
-                'total': str(expected_total),
-            },
-            {
-                'base': str(remote_base),
-                'impuesto': str(remote_tax),
-                'total': str(remote_total),
-            },
-            response_payload,
-        )
-    if remote_is_inconclusive:
-        logger.warning(
-            'facturar_venta.conciliacion_inconclusa venta_id=%s factura_number=%s reference_code=%s '
-            'total_esperado=%s impuesto_esperado=%s base_esperada=%s '
-            'total_remoto=%s impuesto_remoto=%s base_remota=%s',
-            venta.id,
-            logger_context.get('number', ''),
-            logger_context.get('reference_code', ''),
-            expected_total,
-            expected_tax,
-            expected_base,
-            remote_total,
-            remote_tax,
-            remote_base,
-        )
-    if mismatches:
-        request_reference_code = str(request_payload.get('reference_code') or '').strip()
-        returned_reference_code = str(logger_context.get('reference_code') or '').strip()
-        collision_hint = ''
-        if request_reference_code and returned_reference_code and request_reference_code == returned_reference_code:
-            collision_hint = (
-                ' Posible colisión por reuse de reference_code: Factus respondió un documento previo '
-                'con el mismo reference_code técnico pero con totales/ítems distintos.'
-            )
-        raise FactusValidationError(
-            f'{DOCUMENT_CONCILIATION_ERROR_CODE}: Conciliación documental fallida ({", ".join(mismatches)}).'
-            f'{collision_hint}'
-        )
+def _resolve_reference_code(*, venta: Venta, factura_existente: FacturaElectronica | None, numero: str) -> str:
+    return resolve_reference_code(venta=venta, factura_existente=factura_existente, numero=numero)
 
 
 def _build_and_log_factus_payload(venta: Venta) -> dict[str, Any]:
-    """
-    Separa explícitamente la traducción al formato Factus del resto del flujo.
-    La capa documental local se normaliza antes con _sync_sale_totals_before_emit.
-    """
     payload = build_invoice_payload(venta)
     customer = payload.get('customer', {}) if isinstance(payload.get('customer'), dict) else {}
     items = payload.get('items', []) if isinstance(payload.get('items'), list) else []
     first_item = items[0] if items and isinstance(items[0], dict) else {}
-    logger.info(
-        'facturar_venta.payload_normalizado venta_id=%s payload=%s',
-        venta.id,
-        payload,
-    )
+    logger.info('facturar_venta.payload_normalizado venta_id=%s payload=%s', venta.id, payload)
     logger.info(
         'facturar_venta.payload_componentes venta_id=%s customer=%s payment_form=%s payment_method=%s '
         'numbering_range_id=%s operation_type=%s first_item=%s items_count=%s',
@@ -1163,7 +552,7 @@ def facturar_venta(
         if (
             factura_existente
             and factura_existente.estado_electronico in FINAL_ACCEPTED_STATUSES
-            and _has_definitive_electronic_identifiers(factura_existente)
+            and has_definitive_electronic_identifiers(factura_existente)
         ):
             if venta.factura_electronica_uuid and venta.factura_electronica_uuid != factura_existente.uuid:
                 logger.warning(
@@ -1184,12 +573,7 @@ def facturar_venta(
                 venta.factura_electronica_cufe = venta.factura_electronica_cufe or (factura_existente.cufe or '')
                 venta.fecha_envio_dian = venta.fecha_envio_dian or factura_existente.updated_at
                 venta.save(
-                    update_fields=[
-                        'factura_electronica_uuid',
-                        'factura_electronica_cufe',
-                        'fecha_envio_dian',
-                        'updated_at',
-                    ]
+                    update_fields=['factura_electronica_uuid', 'factura_electronica_cufe', 'fecha_envio_dian', 'updated_at']
                 )
             logger.info(
                 'facturar_venta.reutiliza_aceptada_historial_preservado venta_id=%s factura=%s '
@@ -1240,24 +624,16 @@ def facturar_venta(
                 'No se permite una nueva asociación automática.'
             )
         if factura_existente and factura_existente.estado_electronico == 'PENDIENTE_REINTENTO' and not force_resend_pending:
-            logger.info(
-                'facturar_venta.reutiliza_en_proceso venta_id=%s numero=%s',
-                venta.id,
-                factura_existente.number,
-            )
-            return _sync_existing_pending_invoice(factura=factura_existente, venta=venta, triggered_by=triggered_by)
+            logger.info('facturar_venta.reutiliza_en_proceso venta_id=%s numero=%s', venta.id, factura_existente.number)
+            return sync_existing_pending_invoice(factura=factura_existente, venta=venta, triggered_by=triggered_by)
         if factura_existente and factura_existente.estado_electronico == 'PENDIENTE_REINTENTO' and force_resend_pending:
-            logger.warning(
-                'facturar_venta.reenvio_forzado_en_proceso venta_id=%s numero=%s',
-                venta.id,
-                factura_existente.number,
-            )
+            logger.warning('facturar_venta.reenvio_forzado_en_proceso venta_id=%s numero=%s', venta.id, factura_existente.number)
 
-        local_totals = _sync_sale_totals_before_emit(venta)
+        local_totals = sync_sale_totals_before_emit(venta)
         payload = _build_and_log_factus_payload(venta)
         rango_activo = resolve_numbering_range(document_code='FACTURA_VENTA')
-        _validate_customer_for_factus(payload.get('customer', {}), venta)
-        _validate_payload_tax_consistency(payload, venta)
+        validate_customer_for_factus(payload.get('customer', {}), venta)
+        validate_payload_tax_consistency(payload, venta)
         logger.info(
             'facturar_venta.documento_local_normalizado venta_id=%s base=%s impuesto=%s total=%s',
             venta.id,
@@ -1277,7 +653,6 @@ def facturar_venta(
             venta.numero_comprobante = numero
             venta.save(update_fields=['numero_comprobante', 'updated_at'])
         elif not payload.get('numbering_range_id'):
-            # Reintentos con número ya asignado: resolver rango sin incrementar consecutivo.
             rango = resolve_numbering_range(document_code='FACTURA_VENTA')
             if not rango.factus_range_id:
                 raise FactusValidationError(
@@ -1285,16 +660,12 @@ def facturar_venta(
                 )
             payload['numbering_range_id'] = int(rango.factus_range_id)
 
-        should_lock_expected_number = _number_matches_active_range(numero, rango_activo.prefijo)
+        should_lock_expected_number = number_matches_active_range(numero, rango_activo.prefijo)
         if should_lock_expected_number:
             payload['number'] = numero
         else:
             payload.pop('number', None)
-        reference_code = _resolve_reference_code(
-            venta=venta,
-            factura_existente=factura_existente,
-            numero=numero,
-        )
+        reference_code = resolve_reference_code(venta=venta, factura_existente=factura_existente, numero=numero)
         payload['reference_code'] = reference_code
         if FacturaElectronica.objects.filter(reference_code=reference_code).exclude(venta=venta).exists():
             raise FacturaDuplicadaError(f'Ya existe una factura electrónica con reference_code={reference_code}.')
@@ -1307,7 +678,7 @@ def facturar_venta(
                 'estado_electronico': 'PENDIENTE_REINTENTO',
                 'number': numero,
                 'reference_code': reference_code,
-                'response_json': _build_attempt_trace(
+                'response_json': build_attempt_trace(
                     factura=factura_existente,
                     payload=payload,
                     numero=numero,
@@ -1320,14 +691,25 @@ def facturar_venta(
             },
         )
 
+    ctx = FacturacionContext(
+        venta=venta,
+        factura_existente=factura_existente,
+        factura=factura,
+        triggered_by=triggered_by,
+        payload=payload,
+        numero=numero,
+        reference_code=reference_code,
+        should_lock_expected_number=should_lock_expected_number,
+    )
+
     client = FactusClient()
     try:
-        for index, item in enumerate(payload.get('items', []), start=1):
+        for index, item in enumerate(ctx.payload.get('items', []), start=1):
             if not isinstance(item, dict):
                 continue
             logger.info(
                 'facturar_venta.payload_pre_post_item venta_id=%s line=%s tax_rate=%s is_excluded=%s tribute_id=%s',
-                venta.id,
+                ctx.venta.id,
                 index,
                 item.get('tax_rate'),
                 item.get('is_excluded'),
@@ -1336,39 +718,39 @@ def facturar_venta(
         logger.info(
             'facturar_venta.payload_pre_post venta_id=%s payload=%s items=%s customer=%s payment_form=%s '
             'payment_method=%s numbering_range_id=%s operation_type=%s',
-            venta.id,
-            payload,
-            payload.get('items', []),
-            payload.get('customer', {}),
-            payload.get('payment_form'),
-            payload.get('payment_method_code'),
-            payload.get('numbering_range_id'),
-            payload.get('operation_type'),
+            ctx.venta.id,
+            ctx.payload,
+            ctx.payload.get('items', []),
+            ctx.payload.get('customer', {}),
+            ctx.payload.get('payment_form'),
+            ctx.payload.get('payment_method_code'),
+            ctx.payload.get('numbering_range_id'),
+            ctx.payload.get('operation_type'),
         )
-        response_json = client.create_and_validate_invoice(payload)
+        response_json = client.create_and_validate_invoice(ctx.payload)
     except FactusPendingDianError as exc:
         logger.warning(
             'facturar_venta.factus_409_pendiente_dian venta_id=%s numero=%s reference_code=%s',
-            venta.id,
-            numero,
-            reference_code,
+            ctx.venta.id,
+            ctx.numero,
+            ctx.reference_code,
         )
-        _persist_pending_dian_conflict(
-            factura=factura,
-            payload=payload,
-            numero=numero,
-            reference_code=reference_code,
-            triggered_by=triggered_by,
+        persist_pending_dian_conflict(
+            factura=ctx.factura,
+            payload=ctx.payload,
+            numero=ctx.numero,
+            reference_code=ctx.reference_code,
+            triggered_by=ctx.triggered_by,
             error=exc,
         )
-        return factura
+        return ctx.factura
     except (FactusAPIError, FactusAuthError) as exc:
-        _persist_remote_error(
-            factura=factura,
-            payload=payload,
-            numero=numero,
-            reference_code=reference_code,
-            triggered_by=triggered_by,
+        persist_remote_error(
+            factura=ctx.factura,
+            payload=ctx.payload,
+            numero=ctx.numero,
+            reference_code=ctx.reference_code,
+            triggered_by=ctx.triggered_by,
             stage='send_invoice',
             error=exc,
         )
@@ -1377,40 +759,40 @@ def facturar_venta(
             if 'FAK21' in rejection:
                 logger.warning(
                     'facturar_venta.rechazo_cliente_sin_id venta_id=%s cliente_id=%s numero=%s resumen=FAK21',
-                    venta.id,
-                    venta.cliente_id,
-                    numero,
+                    ctx.venta.id,
+                    ctx.venta.cliente_id,
+                    ctx.numero,
                 )
-        logger.warning('facturar_venta.factus_rechazo venta_id=%s numero=%s', venta.id, numero)
+        logger.warning('facturar_venta.factus_rechazo venta_id=%s numero=%s', ctx.venta.id, ctx.numero)
         raise
-    logger.info('facturar_venta.factus_response venta_id=%s keys=%s', venta.id, sorted(response_json.keys()))
+    logger.info('facturar_venta.factus_response venta_id=%s keys=%s', ctx.venta.id, sorted(response_json.keys()))
 
-    fields = _extract_factus_data(response_json)
-    fields['number'] = fields.get('number') or numero
-    fields['reference_code'] = fields.get('reference_code') or reference_code
+    fields = extract_factus_data(response_json)
+    fields['number'] = fields.get('number') or ctx.numero
+    fields['reference_code'] = fields.get('reference_code') or ctx.reference_code
     pending_conciliation_error: FactusValidationError | None = None
     try:
-        _assert_emitted_document_matches_sale(
-            venta=venta,
+        assert_emitted_document_matches_sale(
+            venta=ctx.venta,
             fields=fields,
-            expected_number=numero if should_lock_expected_number else '',
-            expected_reference_code=reference_code,
+            expected_number=ctx.numero if ctx.should_lock_expected_number else '',
+            expected_reference_code=ctx.reference_code,
         )
     except FactusValidationError as exc:
-        _persist_local_validation_error(
-            factura=factura,
-            payload=payload,
-            numero=numero,
-            reference_code=reference_code,
-            triggered_by=triggered_by,
+        persist_local_validation_error(
+            factura=ctx.factura,
+            payload=ctx.payload,
+            numero=ctx.numero,
+            reference_code=ctx.reference_code,
+            triggered_by=ctx.triggered_by,
             error=exc,
             response=response_json,
         )
         raise
     try:
-        _assert_document_conciliation(
-            venta=venta,
-            request_payload=payload,
+        assert_document_conciliation(
+            venta=ctx.venta,
+            request_payload=ctx.payload,
             response_payload=response_json,
             logger_context=fields,
         )
@@ -1418,60 +800,56 @@ def facturar_venta(
         pending_conciliation_error = exc
     bill_errors = _extract_bill_errors(response_json)
 
-    remote_snapshot_before = _extract_remote_document_snapshot(response_json)
-    needs_conciliation_enrichment = not (
-        remote_snapshot_before.get('total') is not None and remote_snapshot_before.get('customer_identification')
-    )
-    missing_before = [field for field in ['uuid', 'xml_url', 'pdf_url'] if not fields.get(field)]
     response_show_json: dict[str, Any] | None = None
     response_download_json: dict[str, Any] | None = None
-    if missing_before or needs_conciliation_enrichment or pending_conciliation_error is not None:
+    missing_before = [field for field in ['uuid', 'xml_url', 'pdf_url'] if not fields.get(field)]
+    if missing_before or pending_conciliation_error is not None:
         logger.info(
             'facturar_venta.factus_complemento_inicio venta_id=%s numero=%s faltantes=%s',
-            venta.id,
+            ctx.venta.id,
             fields['number'],
             missing_before,
         )
         try:
             response_show_json = client.get_invoice(fields['number'])
         except (FactusAPIError, FactusAuthError) as exc:
-            _persist_remote_error(
-                factura=factura,
-                payload=payload,
-                numero=numero,
-                reference_code=reference_code,
-                triggered_by=triggered_by,
+            persist_remote_error(
+                factura=ctx.factura,
+                payload=ctx.payload,
+                numero=ctx.numero,
+                reference_code=ctx.reference_code,
+                triggered_by=ctx.triggered_by,
                 stage='get_invoice',
                 error=exc,
             )
             raise
         logger.info(
             'facturar_venta.factus_show_response venta_id=%s numero=%s keys=%s',
-            venta.id,
+            ctx.venta.id,
             fields['number'],
             sorted(response_show_json.keys()),
         )
-        fields = _merge_factus_fields(fields, _extract_factus_data(response_show_json))
+        fields = merge_factus_fields(fields, extract_factus_data(response_show_json))
         try:
-            _assert_emitted_document_matches_sale(
-                venta=venta,
+            assert_emitted_document_matches_sale(
+                venta=ctx.venta,
                 fields=fields,
-                expected_number=numero if should_lock_expected_number else '',
-                expected_reference_code=reference_code,
+                expected_number=ctx.numero if ctx.should_lock_expected_number else '',
+                expected_reference_code=ctx.reference_code,
             )
-            _assert_document_conciliation(
-                venta=venta,
-                request_payload=payload,
+            assert_document_conciliation(
+                venta=ctx.venta,
+                request_payload=ctx.payload,
                 response_payload=response_show_json,
                 logger_context=fields,
             )
         except FactusValidationError as exc:
-            _persist_local_validation_error(
-                factura=factura,
-                payload=payload,
-                numero=numero,
-                reference_code=reference_code,
-                triggered_by=triggered_by,
+            persist_local_validation_error(
+                factura=ctx.factura,
+                payload=ctx.payload,
+                numero=ctx.numero,
+                reference_code=ctx.reference_code,
+                triggered_by=ctx.triggered_by,
                 error=exc,
                 response=response_json,
                 response_show=response_show_json,
@@ -1485,31 +863,31 @@ def facturar_venta(
                 response_download_json = client.get_invoice_downloads(fields['number'])
                 logger.info(
                     'facturar_venta.factus_download_response venta_id=%s numero=%s keys=%s',
-                    venta.id,
+                    ctx.venta.id,
                     fields['number'],
                     sorted(response_download_json.keys()),
                 )
-                fields = _merge_factus_fields(fields, _extract_factus_data(response_download_json))
+                fields = merge_factus_fields(fields, extract_factus_data(response_download_json))
                 try:
-                    _assert_emitted_document_matches_sale(
-                        venta=venta,
+                    assert_emitted_document_matches_sale(
+                        venta=ctx.venta,
                         fields=fields,
-                        expected_number=numero if should_lock_expected_number else '',
-                        expected_reference_code=reference_code,
+                        expected_number=ctx.numero if ctx.should_lock_expected_number else '',
+                        expected_reference_code=ctx.reference_code,
                     )
-                    _assert_document_conciliation(
-                        venta=venta,
-                        request_payload=payload,
+                    assert_document_conciliation(
+                        venta=ctx.venta,
+                        request_payload=ctx.payload,
                         response_payload=response_download_json,
                         logger_context=fields,
                     )
                 except FactusValidationError as exc:
-                    _persist_local_validation_error(
-                        factura=factura,
-                        payload=payload,
-                        numero=numero,
-                        reference_code=reference_code,
-                        triggered_by=triggered_by,
+                    persist_local_validation_error(
+                        factura=ctx.factura,
+                        payload=ctx.payload,
+                        numero=ctx.numero,
+                        reference_code=ctx.reference_code,
+                        triggered_by=ctx.triggered_by,
                         error=exc,
                         response=response_json,
                         response_show=response_show_json,
@@ -1519,30 +897,28 @@ def facturar_venta(
                 if not bill_errors:
                     bill_errors = _extract_bill_errors(response_download_json)
             except (FactusAPIError, FactusAuthError) as exc:
-                _persist_remote_error(
-                    factura=factura,
-                    payload=payload,
-                    numero=numero,
-                    reference_code=reference_code,
-                    triggered_by=triggered_by,
+                persist_remote_error(
+                    factura=ctx.factura,
+                    payload=ctx.payload,
+                    numero=ctx.numero,
+                    reference_code=ctx.reference_code,
+                    triggered_by=ctx.triggered_by,
                     stage='get_invoice_downloads',
                     error=exc,
                 )
                 raise
     elif pending_conciliation_error is not None:
-        _persist_local_validation_error(
-            factura=factura,
-            payload=payload,
-            numero=numero,
-            reference_code=reference_code,
-            triggered_by=triggered_by,
+        persist_local_validation_error(
+            factura=ctx.factura,
+            payload=ctx.payload,
+            numero=ctx.numero,
+            reference_code=ctx.reference_code,
+            triggered_by=ctx.triggered_by,
             error=pending_conciliation_error,
             response=response_json,
         )
         raise pending_conciliation_error
 
-    # Factus puede no devolver uuid/xml/pdf en validate; se completa con show/download
-    # y, como último recurso, se genera URL directa de descarga para no abortar el flujo.
     if not fields.get('uuid'):
         fields['uuid'] = fields.get('cufe') or fields.get('reference_code') or fields['number']
     if not fields.get('xml_url'):
@@ -1557,24 +933,21 @@ def facturar_venta(
         safe_assign_charfield(factura, 'codigo_error', 'RESPUESTA_INCOMPLETA')
         factura.mensaje_error = f'Factus no devolvió campos requeridos: {", ".join(missing_fields)}.'
         safe_assign_json(
-            factura,
+            ctx.factura,
             'response_json',
-            _build_attempt_trace(
-            factura=factura,
-            payload=payload,
-            numero=numero,
-            reference_code=reference_code,
-            triggered_by=triggered_by,
-            status='ERROR_PERSISTENCIA',
-            response=response_json,
-            response_show=response_show_json,
-            response_download=response_download_json,
-            final_fields=fields,
-            bill_errors=bill_errors,
-            error={
-                'message': 'Respuesta incompleta de Factus',
-                'missing_fields': missing_fields,
-            },
+            build_attempt_trace(
+                factura=ctx.factura,
+                payload=ctx.payload,
+                numero=ctx.numero,
+                reference_code=ctx.reference_code,
+                triggered_by=ctx.triggered_by,
+                status='ERROR_PERSISTENCIA',
+                response=response_json,
+                response_show=response_show_json,
+                response_download=response_download_json,
+                final_fields=fields,
+                bill_errors=bill_errors,
+                error={'message': 'Respuesta incompleta de Factus', 'missing_fields': missing_fields},
             ),
         )
         log_model_string_overflow_diagnostics(
@@ -1587,21 +960,23 @@ def facturar_venta(
             fields.get('number') or numero,
             missing_fields,
         )
+        ctx.factura.save(update_fields=['status', 'estado_electronico', 'codigo_error', 'mensaje_error', 'response_json', 'retry_count', 'last_retry_at', 'next_retry_at', 'updated_at'])
+        logger.error('facturar_venta.respuesta_incompleta venta_id=%s numero=%s faltantes=%s', ctx.venta.id, fields.get('number') or ctx.numero, missing_fields)
         raise FactusAPIError('La respuesta de Factus no contiene todos los datos requeridos.')
 
     persistable_fields = {k: v for k, v in fields.items() if k in PERSISTABLE_FACTURA_FIELDS}
 
     try:
         with transaction.atomic():
-            factura = FacturaElectronica.objects.select_for_update().get(pk=factura.pk)
+            ctx.factura = FacturaElectronica.objects.select_for_update().get(pk=ctx.factura.pk)
             for key, value in persistable_fields.items():
                 if key == 'qr':
-                    factura.qr_data = value
+                    ctx.factura.qr_data = value
                 elif key == 'qr_image':
-                    _assign_qr_image_fields(factura, value)
+                    assign_qr_image_fields(ctx.factura, value)
                 else:
                     if key in {'xml_url', 'pdf_url', 'public_url'}:
-                        safe_assign_charfield(factura, key, value)
+                        safe_assign_charfield(ctx.factura, key, value)
                     else:
                         setattr(factura, key, value)
             factura.reference_code = persistable_fields.get('reference_code') or reference_code
@@ -1620,56 +995,56 @@ def facturar_venta(
                 else response_json.get('error_message')
             )
             safe_assign_json(
-                factura,
+                ctx.factura,
                 'response_json',
-                _build_attempt_trace(
-                factura=factura,
-                payload=payload,
-                numero=numero,
-                reference_code=reference_code,
-                triggered_by=triggered_by,
-                status=persistable_fields.get('status', 'ERROR_INTEGRACION'),
-                response=response_json,
-                response_show=response_show_json,
-                response_download=response_download_json,
-                final_fields={**fields, 'persisted_fields': persistable_fields},
-                bill_errors=bill_errors,
+                build_attempt_trace(
+                    factura=ctx.factura,
+                    payload=ctx.payload,
+                    numero=ctx.numero,
+                    reference_code=ctx.reference_code,
+                    triggered_by=ctx.triggered_by,
+                    status=persistable_fields.get('status', 'ERROR_INTEGRACION'),
+                    response=response_json,
+                    response_show=response_show_json,
+                    response_download=response_download_json,
+                    final_fields={**fields, 'persisted_fields': persistable_fields},
+                    bill_errors=bill_errors,
                 ),
             )
-            factura.observaciones_json = bill_errors
-            factura.retry_count = int(factura.retry_count or 0) + 1
-            factura.last_retry_at = timezone.now()
-            factura.next_retry_at = None
-            factura.ultima_sincronizacion_at = timezone.now()
+            ctx.factura.observaciones_json = bill_errors
+            ctx.factura.retry_count = int(ctx.factura.retry_count or 0) + 1
+            ctx.factura.last_retry_at = timezone.now()
+            ctx.factura.next_retry_at = None
+            ctx.factura.ultima_sincronizacion_at = timezone.now()
             overflows = log_model_string_overflow_diagnostics(
-                instance=factura, venta_id=venta.id, factura_id=factura.pk, stage='before_factura_save'
+                instance=ctx.factura, venta_id=ctx.venta.id, factura_id=ctx.factura.pk, stage='before_factura_save'
             )
             if overflows:
                 raise FacturaPersistenciaError('Se detectaron campos con overflow antes de guardar la factura.')
-            factura.save()
+            ctx.factura.save()
 
             incoming_uuid = fields.get('uuid') or ''
             incoming_cufe = fields.get('cufe') or ''
-            if not venta.factura_electronica_uuid:
-                venta.factura_electronica_uuid = incoming_uuid
-            elif incoming_uuid and venta.factura_electronica_uuid != incoming_uuid:
+            if not ctx.venta.factura_electronica_uuid:
+                ctx.venta.factura_electronica_uuid = incoming_uuid
+            elif incoming_uuid and ctx.venta.factura_electronica_uuid != incoming_uuid:
                 logger.warning(
                     'facturar_venta.no_sobrescribe_venta_uuid_historico venta_id=%s actual=%s incoming=%s',
-                    venta.id,
-                    venta.factura_electronica_uuid,
+                    ctx.venta.id,
+                    ctx.venta.factura_electronica_uuid,
                     incoming_uuid,
                 )
-            if not venta.factura_electronica_cufe:
-                venta.factura_electronica_cufe = incoming_cufe
-            elif incoming_cufe and venta.factura_electronica_cufe != incoming_cufe:
+            if not ctx.venta.factura_electronica_cufe:
+                ctx.venta.factura_electronica_cufe = incoming_cufe
+            elif incoming_cufe and ctx.venta.factura_electronica_cufe != incoming_cufe:
                 logger.warning(
                     'facturar_venta.no_sobrescribe_venta_cufe_historico venta_id=%s actual=%s incoming=%s',
-                    venta.id,
-                    venta.factura_electronica_cufe,
+                    ctx.venta.id,
+                    ctx.venta.factura_electronica_cufe,
                     incoming_cufe,
                 )
-            venta.fecha_envio_dian = venta.fecha_envio_dian or factura.updated_at
-            venta.save(update_fields=['factura_electronica_uuid', 'factura_electronica_cufe', 'fecha_envio_dian', 'updated_at'])
+            ctx.venta.fecha_envio_dian = ctx.venta.fecha_envio_dian or ctx.factura.updated_at
+            ctx.venta.save(update_fields=['factura_electronica_uuid', 'factura_electronica_cufe', 'fecha_envio_dian', 'updated_at'])
             logger.info(
                 'facturar_venta.persistida venta_id=%s factura=%s status=%s reference_code=%s',
                 venta.id,
@@ -1677,10 +1052,10 @@ def facturar_venta(
                 factura.estado_electronico,
                 factura.reference_code,
             )
-            if factura.cufe and factura.number:
-                qr_file = generate_qr_dian(factura.number, factura.cufe)
-                factura.qr.save(qr_file.name, qr_file, save=False)
-                factura.save(update_fields=['qr', 'updated_at'])
+            if ctx.factura.cufe and ctx.factura.number:
+                qr_file = generate_qr_dian(ctx.factura.number, ctx.factura.cufe)
+                ctx.factura.qr.save(qr_file.name, qr_file, save=False)
+                ctx.factura.save(update_fields=['qr', 'updated_at'])
     except (DataError, FacturaPersistenciaError) as exc:
         with transaction.atomic():
             factura = FacturaElectronica.objects.select_for_update().get(pk=factura.pk)
@@ -1691,20 +1066,17 @@ def facturar_venta(
                 'Revise logs técnicos para detalle de campos.'
             )
             log_model_string_overflow_diagnostics(
-                instance=factura, venta_id=venta.id, factura_id=factura.pk, stage='dataerror_factura_save'
+                instance=ctx.factura, venta_id=ctx.venta.id, factura_id=ctx.factura.pk, stage='dataerror_factura_save'
             )
             factura.save(update_fields=['estado_electronico', 'codigo_error', 'mensaje_error', 'updated_at'])
         raise DataError(str(exc))
 
-    factura.send_email_enabled = bool(payload.get('send_email', True))
-    factura.save(update_fields=['send_email_enabled', 'updated_at'])
+    ctx.factura.send_email_enabled = bool(ctx.payload.get('send_email', True))
+    ctx.factura.save(update_fields=['send_email_enabled', 'updated_at'])
     try:
-        sync_invoice_assets(
-            factura,
-            include_email_content=not factura.send_email_enabled,
-        )
+        sync_invoice_assets(ctx.factura, include_email_content=not ctx.factura.send_email_enabled)
     except DescargaFacturaError:
-        logger.warning('facturar_venta.assets_sync_error venta_id=%s factura=%s', venta.id, factura.number, exc_info=True)
+        logger.warning('facturar_venta.assets_sync_error venta_id=%s factura=%s', ctx.venta.id, ctx.factura.number, exc_info=True)
     logger.info(
         'facturar_venta.emitida_ok venta_id=%s factura_id=%s numero=%s estado=%s',
         venta.id,
@@ -1712,7 +1084,7 @@ def facturar_venta(
         factura.number,
         factura.estado_electronico,
     )
-    upload_custom_pdf_to_factus(factura)
-    send_invoice_email_via_factus(factura)
-    logger.info('facturar_venta.fin_ok venta_id=%s factura=%s', venta.id, factura.number)
-    return factura
+    upload_custom_pdf_to_factus(ctx.factura)
+    send_invoice_email_via_factus(ctx.factura)
+    logger.info('facturar_venta.fin_ok venta_id=%s factura=%s', ctx.venta.id, ctx.factura.number)
+    return ctx.factura
