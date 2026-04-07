@@ -98,6 +98,7 @@ def normalize_software_range(raw: dict[str, Any]) -> dict[str, Any]:
     mapped_document_code = map_remote_document_to_local(doc_code)
     is_expired = bool(raw.get('is_expired', False))
     is_active_remote = bool(raw.get('is_active', True)) and not is_expired
+    is_associated = bool(raw.get('is_associated_to_software', True))
     normalized = {
         'factus_range_id': factus_id,
         'document_code': mapped_document_code,
@@ -111,7 +112,7 @@ def normalize_software_range(raw: dict[str, Any]) -> dict[str, Any]:
         'end_date': _as_date(raw.get('end_date') or raw.get('valid_to')),
         'technical_key': str(raw.get('technical_key') or '').strip(),
         'is_active_remote': is_active_remote,
-        'is_associated_to_software': True,
+        'is_associated_to_software': is_associated,
     }
     # Compatibilidad con payloads frontend existentes.
     normalized['remote_id'] = factus_id
@@ -252,5 +253,20 @@ def sync_ranges_to_db() -> list[RangoNumeracionDIAN]:
             RangoNumeracionDIAN.objects.filter(environment=environment).exclude(
                 factus_id__in=synced_ids
             ).update(is_active_remote=False)
+        authorized_factura_ids = get_authorized_software_range_ids(document_code='FACTURA_VENTA')
+        if authorized_factura_ids:
+            RangoNumeracionDIAN.objects.filter(
+                environment=environment,
+                document_code='FACTURA_VENTA',
+                is_selected_local=True,
+            ).exclude(
+                factus_id__in=authorized_factura_ids,
+            ).update(is_selected_local=False)
+        else:
+            RangoNumeracionDIAN.objects.filter(
+                environment=environment,
+                document_code='FACTURA_VENTA',
+                is_selected_local=True,
+            ).update(is_selected_local=False)
 
     return synced

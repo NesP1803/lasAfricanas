@@ -646,7 +646,7 @@ export default function FacturacionElectronicaAdmin({
                   <div className="max-h-44 overflow-auto rounded border p-2">
                     {availableRanges.map((item) => (
                       <button
-                        key={String(item.remote_id)}
+                        key={String(item.factus_range_id)}
                         className="block w-full rounded px-2 py-1 text-left text-lg font-semibold text-slate-700 hover:bg-blue-50"
                         onClick={() => applyRemoteRange(item)}
                       >
