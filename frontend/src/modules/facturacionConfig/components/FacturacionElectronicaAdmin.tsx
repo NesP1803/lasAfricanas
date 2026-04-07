@@ -169,8 +169,8 @@ export default function FacturacionElectronicaAdmin({
       fecha_autorizacion: startDate,
       fecha_expiracion: endDate,
       technical_key: String(remote.technical_key || ''),
-      factus_id: Number(remote.remote_id || 0) || null,
-      factus_range_id: Number(remote.factus_range_id || 0) || null,
+      factus_id: Number(remote.factus_range_id || remote.remote_id || 0) || null,
+      factus_range_id: Number(remote.factus_range_id || remote.remote_id || 0) || null,
     }));
     setAvailableRanges([]);
   };
@@ -180,7 +180,7 @@ export default function FacturacionElectronicaAdmin({
       const response = await configuracionAPI.obtenerRangosAutorizadosDisponibles(form.document_code);
       setAvailableRanges(response.items || []);
       if (!response.items?.length) {
-        setActionMessage('No hay rangos asociados al software para este documento.');
+        setActionMessage(response.detail || 'No hay rangos asociados al software para este documento.');
       }
     } catch (e: unknown) {
       setActionMessage(getApiErrorMessage(e) || 'No fue posible consultar rangos asociados.');
@@ -192,7 +192,7 @@ export default function FacturacionElectronicaAdmin({
       const response = await configuracionAPI.obtenerRangosAutorizadosDisponibles(documentCode);
       setAvailableRanges(response.items || []);
       if (!response.items?.length) {
-        setActionMessage('No hay resoluciones vinculadas en Factus para este documento.');
+        setActionMessage(response.detail || 'No hay resoluciones vinculadas en Factus para este documento.');
       }
     } catch (e: unknown) {
       setActionMessage(getApiErrorMessage(e) || 'No fue posible consultar resoluciones de Factus.');

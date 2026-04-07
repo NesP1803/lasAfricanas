@@ -60,10 +60,9 @@ export type SoftwareRangesResponse = {
 };
 
 export type AuthorizedAvailableRange = {
-  remote_id: number;
   factus_range_id: number;
-  document: string;
   document_code: string;
+  document_name: string;
   prefix: string;
   from: number;
   to: number;
@@ -72,8 +71,12 @@ export type AuthorizedAvailableRange = {
   start_date: string | null;
   end_date: string | null;
   technical_key: string;
-  is_active: boolean;
+  is_active_remote: boolean;
   is_associated_to_software: boolean;
+  // Compatibilidad retroactiva.
+  remote_id?: number;
+  document?: string;
+  is_active?: boolean;
 };
 
 export type AuthorizedAvailableRangesResponse = {
@@ -257,11 +260,29 @@ export const configuracionAPI = {
     return response.data;
   },
   obtenerRangosAutorizadosDisponibles: async (documentCode: string) => {
-    const response = await apiClient.get<AuthorizedAvailableRangesResponse>(
-      '/facturacion/rangos/autorizados-disponibles/',
-      { params: { document_code: documentCode } }
-    );
-    return response.data;
+    try {
+      const response = await apiClient.get<AuthorizedAvailableRangesResponse>(
+        '/facturacion/rangos/autorizados-disponibles/',
+        { params: { document_code: documentCode } }
+      );
+      return response.data;
+    } catch (error: unknown) {
+      const statusCode =
+        typeof error === 'object' &&
+        error !== null &&
+        'response' in error &&
+        (error as { response?: { status?: number } }).response?.status
+          ? Number((error as { response?: { status?: number } }).response?.status)
+          : 0;
+      if (statusCode === 404) {
+        return {
+          status: 'degraded',
+          detail: 'El endpoint de rangos autorizados no está disponible en el backend.',
+          items: [],
+        } as AuthorizedAvailableRangesResponse;
+      }
+      throw error;
+    }
   },
   crearRangoFacturacion: async (payload: {
     document_code: string;
