@@ -37,6 +37,7 @@ export type FacturacionRango = {
   fecha_autorizacion: string | null;
   fecha_expiracion: string | null;
   technical_key: string;
+  activo: boolean;
   is_active_remote: boolean;
   is_expired_remote: boolean;
   is_associated_to_software: boolean;
@@ -283,6 +284,14 @@ export const configuracionAPI = {
   },
   activarRangoFacturacion: async (id: number, activo: boolean) => {
     const response = await apiClient.patch(`/facturacion/rangos/${id}/activar/`, { activo });
+    return response.data;
+  },
+  activarYSeleccionarRangoFacturacion: async (id: number, payload: { activo: boolean; seleccionar?: boolean }) => {
+    const response = await apiClient.patch(`/facturacion/rangos/${id}/activar/`, payload);
+    return response.data;
+  },
+  seleccionarRangoFacturacion: async (id: number) => {
+    const response = await apiClient.patch(`/facturacion/rangos/${id}/seleccionar/`);
     return response.data;
   },
   obtenerNumeracionRemision: async () => {

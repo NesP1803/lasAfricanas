@@ -1595,6 +1595,29 @@ class ConfiguracionDianRangosEndpointsTests(TestCase):
         self.assertTrue(self.rango.is_selected_local)
         self.assertFalse(other.is_selected_local)
 
+    def test_patch_seleccionar_endpoint_separa_activar_y_seleccionar(self):
+        self.rango.activo = False
+        self.rango.save(update_fields=['activo'])
+        client = APIClient()
+        client.force_authenticate(self.admin)
+
+        response_inactive = client.patch(f'/api/facturacion/rangos/{self.rango.id}/seleccionar/', {}, format='json')
+        self.assertEqual(response_inactive.status_code, 422)
+
+        self.rango.activo = True
+        self.rango.save(update_fields=['activo'])
+        response = client.patch(f'/api/facturacion/rangos/{self.rango.id}/seleccionar/', {}, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.rango.refresh_from_db()
+        self.assertTrue(self.rango.is_selected_local)
+
+    def test_list_rangos_expone_activo_local(self):
+        client = APIClient()
+        client.force_authenticate(self.admin)
+        response = client.get('/api/facturacion/rangos/?document_code=FACTURA_VENTA')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('activo', response.data[0])
+
     @patch('apps.facturacion.views.get_range_resilient')
     def test_retrieve_rango_no_falla_cuando_detalle_remoto_no_disponible(self, mocked_get_range):
         mocked_get_range.return_value = {

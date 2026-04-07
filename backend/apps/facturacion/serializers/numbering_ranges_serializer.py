@@ -26,6 +26,7 @@ class RangoNumeracionDIANSerializer(serializers.ModelSerializer):
             'fecha_autorizacion',
             'fecha_expiracion',
             'technical_key',
+            'activo',
             'is_active_remote',
             'is_expired_remote',
             'is_associated_to_software',
