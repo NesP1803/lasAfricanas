@@ -31,9 +31,9 @@ def _build_factura_electronica_data(venta):
         'reference_code': factura.reference_code,
         'cufe': factura.cufe,
         'uuid': factura.uuid,
-        'status': factura.estado_electronico or factura.status,
-        'estado_dian': factura.estado_electronico or factura.status,
-        'estado': factura.estado_electronico or factura.status,
+        'status': factura.estado_electronico,
+        'estado_dian': factura.estado_electronico,
+        'estado': factura.estado_electronico,
         'codigo_error': factura.codigo_error,
         'observaciones': factura.mensaje_error or '',
         'bill_errors': bill_errors if isinstance(bill_errors, list) else [],
@@ -178,7 +178,7 @@ class VentaListSerializer(serializers.ModelSerializer):
         factura = getattr(obj, 'factura_electronica_factus', None)
         if not factura:
             return None
-        return factura.estado_electronico or factura.status
+        return factura.estado_electronico
 
     def get_factura_electronica(self, obj):
         return _build_factura_electronica_data(obj)
@@ -244,7 +244,7 @@ class VentaDetailSerializer(serializers.ModelSerializer):
         factura = getattr(obj, 'factura_electronica_factus', None)
         if not factura:
             return None
-        return factura.estado_electronico or factura.status
+        return factura.estado_electronico
 
     def get_factura_electronica(self, obj):
         return _build_factura_electronica_data(obj)

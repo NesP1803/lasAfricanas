@@ -122,7 +122,7 @@ class FacturaEstadoSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_acciones_sugeridas(self, obj: FacturaElectronica):
-        return resolve_actions(obj.estado_electronico or obj.status)
+        return resolve_actions(obj.estado_electronico)
 
 
 from .configuracion_dian_serializer import ConfiguracionDIANSerializer

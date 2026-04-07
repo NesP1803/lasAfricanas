@@ -64,5 +64,5 @@ def has_documental_inconsistency(factura: FacturaElectronica) -> bool:
 
 
 def can_expose_public_invoice_url(factura: FacturaElectronica) -> bool:
-    status = str(factura.estado_electronico or factura.status or '').strip()
+    status = str(factura.estado_electronico or '').strip()
     return status in {'ACEPTADA', 'ACEPTADA_CON_OBSERVACIONES'} and not has_documental_inconsistency(factura)

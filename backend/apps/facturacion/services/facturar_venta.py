@@ -768,7 +768,7 @@ def _persist_local_validation_error(
     response_show: dict[str, Any] | None = None,
     response_download: dict[str, Any] | None = None,
 ) -> None:
-    if factura.status == 'ACEPTADA' and factura.cufe:
+    if factura.estado_electronico == 'ACEPTADA' and factura.cufe:
         logger.error(
             'facturar_venta.local_validation_conflict_ignored venta_id=%s factura_id=%s numero=%s',
             factura.venta_id,
@@ -777,7 +777,6 @@ def _persist_local_validation_error(
         )
         return
 
-    factura.status = 'RECHAZADA'
     factura.estado_electronico = 'RECHAZADA'
     error_text = str(error)
     if DOCUMENT_CONCILIATION_ERROR_CODE in error_text:
@@ -808,7 +807,7 @@ def _persist_local_validation_error(
     factura.retry_count = metadata['retry_count']
     factura.last_retry_at = metadata['last_retry_at']
     factura.next_retry_at = metadata['next_retry_at']
-    factura.save(update_fields=['status', 'estado_electronico', 'codigo_error', 'mensaje_error', 'response_json', 'retry_count', 'last_retry_at', 'next_retry_at', 'updated_at'])
+    factura.save(update_fields=['estado_electronico', 'codigo_error', 'mensaje_error', 'response_json', 'retry_count', 'last_retry_at', 'next_retry_at', 'updated_at'])
 
 
 def _persist_remote_error(
@@ -824,8 +823,7 @@ def _persist_remote_error(
     status_code = getattr(error, 'status_code', None)
     provider_detail = getattr(error, 'provider_detail', '')
     is_validation_error = isinstance(error, FactusAPIError) and getattr(error, 'status_code', 0) in {400, 401, 403, 404, 409, 422}
-    factura.status = 'RECHAZADA' if is_validation_error else 'ERROR_INTEGRACION'
-    factura.estado_electronico = factura.status
+    factura.estado_electronico = 'RECHAZADA' if is_validation_error else 'ERROR_INTEGRACION'
     safe_assign_charfield(factura, 'codigo_error', str(status_code or error.__class__.__name__))
     factura.mensaje_error = provider_detail or str(error)
     safe_assign_json(
@@ -837,7 +835,7 @@ def _persist_remote_error(
         numero=numero,
         reference_code=reference_code,
         triggered_by=triggered_by,
-        status=factura.status,
+        status=factura.estado_electronico,
         error={
             'stage': stage,
             'error_type': error.__class__.__name__,
@@ -854,7 +852,7 @@ def _persist_remote_error(
     log_model_string_overflow_diagnostics(
         instance=factura, venta_id=factura.venta_id, factura_id=factura.pk, stage='persist_remote_error'
     )
-    factura.save(update_fields=['status', 'estado_electronico', 'codigo_error', 'mensaje_error', 'response_json', 'retry_count', 'last_retry_at', 'next_retry_at', 'updated_at'])
+    factura.save(update_fields=['estado_electronico', 'codigo_error', 'mensaje_error', 'response_json', 'retry_count', 'last_retry_at', 'next_retry_at', 'updated_at'])
 
 
 def _persist_pending_dian_conflict(
@@ -868,7 +866,6 @@ def _persist_pending_dian_conflict(
 ) -> None:
     provider_payload = error.provider_payload if isinstance(error.provider_payload, dict) else {}
     message = str(provider_payload.get('message') or error.provider_detail or str(error))
-    factura.status = 'PENDIENTE_REINTENTO'
     factura.estado_electronico = 'PENDIENTE_REINTENTO'
     safe_assign_charfield(factura, 'codigo_error', 'FACTUS_PENDING_DIAN_409')
     factura.mensaje_error = message
@@ -900,7 +897,7 @@ def _persist_pending_dian_conflict(
     log_model_string_overflow_diagnostics(
         instance=factura, venta_id=factura.venta_id, factura_id=factura.pk, stage='persist_pending_dian_conflict'
     )
-    factura.save(update_fields=['status', 'estado_electronico', 'codigo_error', 'mensaje_error', 'response_json', 'retry_count', 'last_retry_at', 'next_retry_at', 'updated_at'])
+    factura.save(update_fields=['estado_electronico', 'codigo_error', 'mensaje_error', 'response_json', 'retry_count', 'last_retry_at', 'next_retry_at', 'updated_at'])
 
 
 def _sync_existing_pending_invoice(
@@ -961,7 +958,7 @@ def _sync_existing_pending_invoice(
                     _assign_qr_image_fields(locked, value)
                 else:
                     setattr(locked, key, value)
-        locked.estado_electronico = locked.status
+        locked.estado_electronico = locked.estado_electronico or 'PENDIENTE_REINTENTO'
         locked.emitida_en_factus = bool(locked.number and locked.cufe)
         locked.codigo_error = response.get('error_code') or locked.codigo_error
         locked.mensaje_error = '; '.join(bill_errors) if bill_errors else (response.get('error_message') or locked.mensaje_error)
@@ -971,7 +968,7 @@ def _sync_existing_pending_invoice(
             numero=locked.number or factura.number,
             reference_code=locked.reference_code or factura.reference_code or '',
             triggered_by=triggered_by,
-            status=locked.status,
+            status=locked.estado_electronico,
             response=response,
             final_fields={**fields, 'persisted_fields': persistable_fields, 'source': 'get_invoice_on_pending'},
             bill_errors=bill_errors,
@@ -979,14 +976,14 @@ def _sync_existing_pending_invoice(
         log_model_string_overflow_diagnostics(
             instance=locked, venta_id=venta.id, factura_id=locked.pk, stage='sync_existing_pending_invoice'
         )
-        locked.save(update_fields=['status', 'estado_electronico', 'cufe', 'uuid', 'number', 'reference_code', 'xml_url', 'pdf_url', 'public_url', 'qr_data', 'qr_image_url', 'qr_image_data', 'codigo_error', 'mensaje_error', 'response_json', 'updated_at'])
+        locked.save(update_fields=['estado_electronico', 'cufe', 'uuid', 'number', 'reference_code', 'xml_url', 'pdf_url', 'public_url', 'qr_data', 'qr_image_url', 'qr_image_data', 'codigo_error', 'mensaje_error', 'response_json', 'updated_at'])
         logger.info(
             'facturar_venta.pending_sync_result venta_id=%s numero=%s status=%s',
             venta.id,
             locked.number,
-            locked.status,
+            locked.estado_electronico,
         )
-        if locked.status == 'ACEPTADA' and locked.cufe and locked.number and not locked.qr:
+        if locked.estado_electronico == 'ACEPTADA' and locked.cufe and locked.number and not locked.qr:
             qr_file = generate_qr_dian(locked.number, locked.cufe)
             locked.qr.save(qr_file.name, qr_file, save=False)
             locked.save(update_fields=['qr', 'updated_at'])
@@ -1113,7 +1110,6 @@ def _mark_factura_persistence_error(
 ) -> FacturaElectronica:
     with transaction.atomic():
         factura = FacturaElectronica.objects.select_for_update().get(pk=factura_id)
-        factura.status = 'ERROR_PERSISTENCIA'
         factura.estado_electronico = 'ERROR_PERSISTENCIA'
         safe_assign_charfield(factura, 'codigo_error', 'ERROR_PERSISTENCIA_SAVE')
         factura.mensaje_error = error_message
@@ -1138,7 +1134,7 @@ def _mark_factura_persistence_error(
         log_model_string_overflow_diagnostics(
             instance=factura, venta_id=venta_id, factura_id=factura.pk, stage='mark_persistence_error'
         )
-        factura.save(update_fields=['status', 'estado_electronico', 'codigo_error', 'mensaje_error', 'response_json', 'updated_at'])
+        factura.save(update_fields=['estado_electronico', 'codigo_error', 'mensaje_error', 'response_json', 'updated_at'])
         return factura
 
 
@@ -1240,7 +1236,7 @@ def facturar_venta(
             return factura_existente
         if factura_existente and factura_existente.cufe and factura_existente.estado_electronico not in FINAL_ACCEPTED_STATUSES:
             raise FactusValidationError(
-                f'La venta {venta.id} ya tiene CUFE persistido ({factura_existente.cufe}) en estado {factura_existente.status}. '
+                f'La venta {venta.id} ya tiene CUFE persistido ({factura_existente.cufe}) en estado {factura_existente.estado_electronico}. '
                 'No se permite una nueva asociación automática.'
             )
         if factura_existente and factura_existente.estado_electronico == 'PENDIENTE_REINTENTO' and not force_resend_pending:
@@ -1306,7 +1302,6 @@ def facturar_venta(
         factura, _ = FacturaElectronica.objects.update_or_create(
             venta=venta,
             defaults={
-                'status': 'PENDIENTE_REINTENTO',
                 'estado_electronico': 'PENDIENTE_REINTENTO',
                 'number': numero,
                 'reference_code': reference_code,
@@ -1556,7 +1551,6 @@ def facturar_venta(
     required_fields = ['cufe', 'number', 'uuid', 'xml_url', 'pdf_url']
     missing_fields = [field for field in required_fields if not fields[field]]
     if missing_fields:
-        factura.status = 'ERROR_PERSISTENCIA'
         factura.estado_electronico = 'ERROR_PERSISTENCIA'
         safe_assign_charfield(factura, 'codigo_error', 'RESPUESTA_INCOMPLETA')
         factura.mensaje_error = f'Factus no devolvió campos requeridos: {", ".join(missing_fields)}.'
@@ -1584,7 +1578,7 @@ def facturar_venta(
         log_model_string_overflow_diagnostics(
             instance=factura, venta_id=venta.id, factura_id=factura.pk, stage='missing_required_fields'
         )
-        factura.save(update_fields=['status', 'estado_electronico', 'codigo_error', 'mensaje_error', 'response_json', 'retry_count', 'last_retry_at', 'next_retry_at', 'updated_at'])
+        factura.save(update_fields=['estado_electronico', 'codigo_error', 'mensaje_error', 'response_json', 'retry_count', 'last_retry_at', 'next_retry_at', 'updated_at'])
         logger.error(
             'facturar_venta.respuesta_incompleta venta_id=%s numero=%s faltantes=%s',
             venta.id,
@@ -1610,7 +1604,6 @@ def facturar_venta(
                         setattr(factura, key, value)
             factura.reference_code = persistable_fields.get('reference_code') or reference_code
             factura.estado_electronico = persistable_fields.get('status', 'ERROR_INTEGRACION')
-            factura.status = factura.estado_electronico
             factura.estado_factus_raw = persistable_fields.get('estado_factus_raw', factura.estado_factus_raw)
             factura.emitida_en_factus = bool(factura.number and factura.cufe)
             codigo_error = (
@@ -1679,7 +1672,7 @@ def facturar_venta(
                 'facturar_venta.persistida venta_id=%s factura=%s status=%s reference_code=%s',
                 venta.id,
                 factura.number,
-                factura.status,
+                factura.estado_electronico,
                 factura.reference_code,
             )
             if factura.cufe and factura.number:
@@ -1689,7 +1682,6 @@ def facturar_venta(
     except (DataError, FacturaPersistenciaError) as exc:
         with transaction.atomic():
             factura = FacturaElectronica.objects.select_for_update().get(pk=factura.pk)
-            factura.status = 'ERROR_PERSISTENCIA'
             factura.estado_electronico = 'ERROR_PERSISTENCIA'
             safe_assign_charfield(factura, 'codigo_error', 'ERROR_PERSISTENCIA_SAVE')
             factura.mensaje_error = (
@@ -1699,7 +1691,7 @@ def facturar_venta(
             log_model_string_overflow_diagnostics(
                 instance=factura, venta_id=venta.id, factura_id=factura.pk, stage='dataerror_factura_save'
             )
-            factura.save(update_fields=['status', 'estado_electronico', 'codigo_error', 'mensaje_error', 'updated_at'])
+            factura.save(update_fields=['estado_electronico', 'codigo_error', 'mensaje_error', 'updated_at'])
         raise DataError(str(exc))
 
     factura.send_email_enabled = bool(payload.get('send_email', True))
@@ -1716,7 +1708,7 @@ def facturar_venta(
         venta.id,
         factura.pk,
         factura.number,
-        factura.estado_electronico or factura.status,
+        factura.estado_electronico,
     )
     upload_custom_pdf_to_factus(factura)
     send_invoice_email_via_factus(factura)

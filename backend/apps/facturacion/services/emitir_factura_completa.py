@@ -31,7 +31,7 @@ def emitir_factura_completa(venta_id: int, triggered_by: Usuario | None = None) 
     client = FactusClient()
     warnings: list[dict[str, str]] = []
 
-    estado_electronico = factura.estado_electronico or factura.status
+    estado_electronico = factura.estado_electronico
     if estado_electronico not in {'ACEPTADA', 'ACEPTADA_CON_OBSERVACIONES', 'PENDIENTE_REINTENTO'}:
         return {'factura': factura, 'warnings': warnings}
 
