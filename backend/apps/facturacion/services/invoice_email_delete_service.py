@@ -96,13 +96,12 @@ def delete_invoice_in_factus(*, factura: FacturaElectronica) -> dict[str, Any]:
         raise FactusValidationError('Factura sin número electrónico aún.')
     if not factura.reference_code:
         raise FactusValidationError('Factura sin reference_code; no se puede eliminar en Factus.')
-    if (factura.estado_electronico or factura.status) in {'ACEPTADA', 'ACEPTADA_CON_OBSERVACIONES'}:
+    if factura.estado_electronico in {'ACEPTADA', 'ACEPTADA_CON_OBSERVACIONES'}:
         raise FactusValidationError('No se puede eliminar una factura ya validada/aceptada por DIAN.')
 
     payload = FactusClient().delete_invoice(factura.reference_code)
-    factura.status = 'RECHAZADA'
     factura.estado_electronico = 'RECHAZADA'
     factura.mensaje_error = 'Documento eliminado/cancelado en Factus por acción administrativa.'
-    factura.save(update_fields=['status', 'estado_electronico', 'mensaje_error', 'updated_at'])
+    factura.save(update_fields=['estado_electronico', 'mensaje_error', 'updated_at'])
     logger.info('factura_delete.ok factura_id=%s number=%s reference_code=%s', factura.id, factura.number, factura.reference_code)
     return payload

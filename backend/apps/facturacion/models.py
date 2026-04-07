@@ -106,6 +106,29 @@ class FacturaElectronica(models.Model):
     def __str__(self) -> str:
         return f'{self.number} - {self.cufe}'
 
+    @property
+    def electronic_status(self) -> str:
+        """
+        Estado electrónico canónico de la factura.
+
+        `estado_electronico` es la única fuente de verdad de negocio.
+        `status` se mantiene únicamente por compatibilidad de contrato legado.
+        """
+        return self.estado_electronico
+
+    def save(self, *args, **kwargs):
+        # Compatibilidad transitoria:
+        # - si solo llega `status` (legacy), se migra a `estado_electronico`.
+        # - al persistir, `status` siempre queda derivado de `estado_electronico`.
+        if self.estado_electronico:
+            self.status = self.estado_electronico
+        elif self.status:
+            self.estado_electronico = self.status
+        else:
+            self.estado_electronico = 'PENDIENTE_REINTENTO'
+            self.status = self.estado_electronico
+        super().save(*args, **kwargs)
+
 
 class NotaCreditoElectronica(models.Model):
     """Representa una nota crédito electrónica emitida en Factus para una factura existente."""

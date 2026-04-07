@@ -791,6 +791,79 @@ class VentaServicesTests(TestCase):
         self.assertIn('warnings', response.data)
 
     @patch('apps.ventas.views.emitir_factura_completa')
+    def test_facturar_venta_retorna_resultado_electronico_pendiente_con_venta_local_cobrada(self, mocked_emitir_factura_completa):
+        venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            cliente=self.cliente,
+            vendedor=self.vendedor,
+            subtotal=Decimal('200'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('38'),
+            total=Decimal('238'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('238'),
+            cambio=Decimal('0'),
+            estado='BORRADOR',
+        )
+        DetalleVenta.objects.create(
+            venta=venta,
+            producto=self.producto,
+            cantidad=1,
+            precio_unitario=Decimal('200'),
+            descuento_unitario=Decimal('0'),
+            iva_porcentaje=Decimal('19'),
+            subtotal=Decimal('200'),
+            total=Decimal('238'),
+        )
+        factura = FacturaElectronica.objects.create(
+            venta=venta,
+            number='SETP-PT-1',
+            reference_code='SETP-PT-1',
+            estado_electronico='PENDIENTE_REINTENTO',
+            cufe='',
+            uuid='',
+            response_json={},
+        )
+        mocked_emitir_factura_completa.return_value = {'factura': factura, 'warnings': []}
+        self.client.force_authenticate(user=self.vendedor)
+
+        response = self.client.post(f'/api/ventas/{venta.id}/facturar/')
+
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response.data['estado_local'], 'COBRADA')
+        self.assertEqual(response.data['estado_electronico'], 'PENDIENTE_REINTENTO')
+        self.assertEqual(response.data['resultado_electronico'], 'PENDIENTE')
+        self.assertEqual(response.data['status'], 'PENDIENTE_REINTENTO')
+
+    def test_facturaelectronica_save_status_legacy_se_deriva_desde_estado_electronico(self):
+        venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            cliente=self.cliente,
+            vendedor=self.vendedor,
+            subtotal=Decimal('200'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('38'),
+            total=Decimal('238'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('238'),
+            cambio=Decimal('0'),
+            estado='COBRADA',
+        )
+        factura = FacturaElectronica.objects.create(
+            venta=venta,
+            number='SETP-LEG-1',
+            reference_code='SETP-LEG-1',
+            estado_electronico='RECHAZADA',
+            status='ACEPTADA',
+            response_json={},
+        )
+        factura.refresh_from_db()
+        self.assertEqual(factura.estado_electronico, 'RECHAZADA')
+        self.assertEqual(factura.status, 'RECHAZADA')
+
+    @patch('apps.ventas.views.emitir_factura_completa')
     def test_convertir_remision_dataerror_retorna_error_persistencia_controlado(self, mocked_emitir_factura_completa):
         mocked_emitir_factura_completa.side_effect = DataError('value too long for type character varying(2048)')
         remision = Venta.objects.create(

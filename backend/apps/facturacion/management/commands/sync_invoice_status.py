@@ -23,7 +23,7 @@ class Command(BaseCommand):
             try:
                 factura = sync_invoice_status(number)
                 ok += 1
-                self.stdout.write(self.style.SUCCESS(f'{number}: {factura.status}'))
+                self.stdout.write(self.style.SUCCESS(f'{number}: {factura.estado_electronico}'))
             except (FacturaNoEncontrada, FactusConsultaError) as exc:
                 failed += 1
                 self.stderr.write(self.style.WARNING(f'{number}: {exc}'))

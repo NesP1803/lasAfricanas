@@ -50,7 +50,6 @@ def sync_invoice_status(numero_factura: str) -> FacturaElectronica:
             )
             with transaction.atomic():
                 factura.estado_electronico = factura.estado_electronico or 'PENDIENTE_REINTENTO'
-                factura.status = factura.estado_electronico
                 factura.codigo_error = 'FACTUS_DOCUMENTO_NO_ENCONTRADO'
                 factura.mensaje_error = (
                     'Factus aún no reporta el documento para este número; intente sincronizar nuevamente en unos minutos.'
@@ -64,7 +63,6 @@ def sync_invoice_status(numero_factura: str) -> FacturaElectronica:
                 }
                 factura.save(
                     update_fields=[
-                        'status',
                         'estado_electronico',
                         'codigo_error',
                         'mensaje_error',
@@ -84,7 +82,6 @@ def sync_invoice_status(numero_factura: str) -> FacturaElectronica:
     with transaction.atomic():
         factura.cufe = payload['cufe'] or factura.cufe
         factura.uuid = payload['uuid'] or factura.uuid
-        factura.status = payload['status']
         factura.estado_electronico = payload['status']
         factura.estado_factus_raw = payload['estado_factus_raw']
         factura.xml_url = payload['xml_url'] or factura.xml_url
@@ -97,7 +94,6 @@ def sync_invoice_status(numero_factura: str) -> FacturaElectronica:
             update_fields=[
                 'cufe',
                 'uuid',
-                'status',
                 'estado_electronico',
                 'estado_factus_raw',
                 'xml_url',
@@ -110,5 +106,5 @@ def sync_invoice_status(numero_factura: str) -> FacturaElectronica:
             ]
         )
 
-    logger.info('sincronizacion_estado numero=%s estado=%s', factura.number, factura.status)
+    logger.info('sincronizacion_estado numero=%s estado=%s', factura.number, factura.estado_electronico)
     return factura

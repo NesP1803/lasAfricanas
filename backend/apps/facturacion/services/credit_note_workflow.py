@@ -804,7 +804,7 @@ def _build_result_meta(nota: NotaCreditoElectronica, *, business_effects_applied
 def create_credit_note(*, factura: FacturaElectronica, motivo: str, lines: list[dict[str, Any]], is_total: bool, user) -> tuple[NotaCreditoElectronica, dict[str, Any]]:
     if not factura.emitida_en_factus:
         raise CreditNoteStateError('La factura no está emitida electrónicamente; use anulación local.')
-    estado_factura = factura.estado_electronico or factura.status
+    estado_factura = factura.estado_electronico
     if estado_factura not in ALLOWED_INVOICE_STATES:
         raise CreditNoteStateError(f'La factura está en estado {estado_factura} y no admite nota crédito electrónica.')
 

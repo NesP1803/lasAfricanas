@@ -150,12 +150,12 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
                 'cliente': factura.venta.cliente.nombre,
                 'fecha': factura.venta.fecha,
                 'total': factura.venta.total,
-                'estado': factura.estado_electronico or factura.status,
-                'estado_dian': factura.estado_electronico or factura.status,
-                'status': factura.estado_electronico or factura.status,
+                'estado': factura.estado_electronico,
+                'estado_dian': factura.estado_electronico,
+                'status': factura.estado_electronico,
                 'estado_local': factura.venta.estado,
-                'estado_electronico': factura.estado_electronico or factura.status,
-                'acciones_sugeridas': resolve_actions(factura.estado_electronico or factura.status),
+                'estado_electronico': factura.estado_electronico,
+                'acciones_sugeridas': resolve_actions(factura.estado_electronico),
                 'codigo_error': factura.codigo_error,
                 'observaciones': factura.mensaje_error,
                 'observaciones_json': factura.observaciones_json,
@@ -239,10 +239,10 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
             {
                 'detail': (
                     'Factura sincronizada y aceptada por DIAN.'
-                    if (sincronizada.estado_electronico or sincronizada.status) in {'ACEPTADA', 'ACEPTADA_CON_OBSERVACIONES'}
+                    if sincronizada.estado_electronico in {'ACEPTADA', 'ACEPTADA_CON_OBSERVACIONES'}
                     else 'Factura reintentada/sincronizada, pero sigue en proceso en Factus/DIAN.'
                 ),
-                'result': 'SYNCED' if (sincronizada.estado_electronico or sincronizada.status) in {'ACEPTADA', 'ACEPTADA_CON_OBSERVACIONES'} else 'PENDING',
+                'result': 'SYNCED' if sincronizada.estado_electronico in {'ACEPTADA', 'ACEPTADA_CON_OBSERVACIONES'} else 'PENDING',
                 'factura': serializer.data,
                 'warnings': result.get('warnings', []),
             }
@@ -427,7 +427,7 @@ class FacturaElectronicaViewSet(viewsets.GenericViewSet):
         message = (
             f'Hola {factura.venta.cliente.nombre},\n\n'
             f'Compartimos la información de tu factura electrónica {factura.number}.\n'
-            f'Estado DIAN: {factura.status}\n'
+            f'Estado DIAN: {factura.estado_electronico}\n'
             f'CUFE: {factura.cufe}\n\n'
             f'PDF: {factura.pdf_url}\n'
             f'XML: {factura.xml_url}\n\n'

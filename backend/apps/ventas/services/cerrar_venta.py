@@ -156,7 +156,7 @@ def build_pos_ticket_payload(venta, factura):
         },
         'vendedor_caja': request_user_label(venta.facturada_por),
         'medio_pago': venta.get_medio_pago_display(),
-        'estado_documento': factura.status,
+        'estado_documento': factura.estado_electronico,
         'reference_code': factura.reference_code,
         'subtotal': float(venta.subtotal),
         'impuestos': float(venta.iva),
@@ -191,8 +191,8 @@ def build_factura_ready_payload(venta, factura):
         'number': factura.number,
         'numero_visible': factura.number,
         'prefix': ''.join(filter(str.isalpha, factura.number or '')),
-        'status': factura.status,
-        'estado': factura.status,
+        'status': factura.estado_electronico,
+        'estado': factura.estado_electronico,
         'cufe': factura.cufe,
         'uuid': factura.uuid,
         'qr_url': factura.qr.url if factura.qr else '',
@@ -230,4 +230,4 @@ def build_factura_ready_payload(venta, factura):
 
 
 def estado_electronico_ui(factura):
-    return factura.estado_electronico or factura.status
+    return factura.estado_electronico

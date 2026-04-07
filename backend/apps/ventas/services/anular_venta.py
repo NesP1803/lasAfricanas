@@ -78,7 +78,7 @@ def anular_venta(venta, user, *, motivo, descripcion='', devuelve_inventario=Tru
         if factura_generada:
             return anular_venta(factura_generada, user, motivo=motivo, descripcion=descripcion, devuelve_inventario=devuelve_inventario)
 
-    if factura_emitida and factura_emitida.emitida_en_factus and (factura_emitida.estado_electronico or factura_emitida.status) in {'ACEPTADA', 'ACEPTADA_CON_OBSERVACIONES'}:
+    if factura_emitida and factura_emitida.emitida_en_factus and factura_emitida.estado_electronico in {'ACEPTADA', 'ACEPTADA_CON_OBSERVACIONES'}:
         lines = [
             {
                 'detalle_venta_original_id': detalle.id,
