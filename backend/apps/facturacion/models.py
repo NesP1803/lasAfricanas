@@ -425,6 +425,33 @@ class RangoNumeracionDIAN(models.Model):
         return f'{self.prefijo}: {self.desde}-{self.hasta}'
 
 
+class FactusNumberingRange(models.Model):
+    """Rangos oficiales DIAN asociados al software habilitado en Factus."""
+
+    document = models.CharField(max_length=50)
+    prefix = models.CharField(max_length=20)
+    resolution_number = models.CharField(max_length=50)
+    from_number = models.BigIntegerField()
+    to_number = models.BigIntegerField()
+    start_date = models.DateField()
+    end_date = models.DateField()
+    technical_key = models.CharField(max_length=255, blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'facturacion_factus_numbering_ranges'
+        verbose_name = 'Factus Numbering Range'
+        verbose_name_plural = 'Factus Numbering Ranges'
+        unique_together = ('prefix', 'resolution_number')
+        indexes = [
+            models.Index(fields=['document', 'is_active', 'end_date']),
+        ]
+
+    def __str__(self) -> str:
+        return f'{self.document} {self.prefix} ({self.resolution_number})'
+
+
 class RemisionNumeracion(models.Model):
     """Configuración local de numeración para remisiones (no depende de Factus)."""
 

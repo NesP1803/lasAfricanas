@@ -1,160 +1,52 @@
-"""Servicios para control de consecutivos internos DIAN.
-
-Importante de dominio:
-- Este módulo gestiona exclusivamente la numeración electrónica (Factus/DIAN).
-- NO debe usarse para recalcular/modificar números históricos de documentos ya emitidos.
-- Los consecutivos visibles locales (p. ej. FAC-1 / REM-1 en configuración POS) pertenecen
-  a configuración local y están desacoplados del ``number`` electrónico de Factus.
-"""
+"""Resolución de rangos DIAN oficiales sincronizados desde Factus."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-import logging
 
 from django.db import transaction
+from django.utils import timezone
 
-from apps.facturacion.models import RangoNumeracionDIAN
-from apps.facturacion.services.factus_environment import resolve_factus_environment
+from apps.facturacion.models import FactusNumberingRange
 from apps.facturacion.services.factus_client import FactusValidationError
-from apps.facturacion.services.numbering_range_admin_service import list_available_authorized_ranges
-
-
-DOCUMENT_LABELS = {
-    'FACTURA_VENTA': 'factura de venta',
-    'NOTA_CREDITO': 'nota crédito',
-    'DOCUMENTO_SOPORTE': 'documento soporte',
-    'NOTA_AJUSTE_DOCUMENTO_SOPORTE': 'nota de ajuste de documento soporte',
-    'NOTA_DEBITO': 'nota débito',
-    'REMISION': 'remisión',
-}
-
-logger = logging.getLogger(__name__)
-
-
-def _authorized_remote_ids(document_code: str) -> set[int]:
-    return {
-        int(item.get('factus_range_id') or 0)
-        for item in list_available_authorized_ranges(document_code=document_code)
-        if int(item.get('factus_range_id') or 0) > 0
-    }
 
 
 @dataclass
 class InvoiceSequence:
     number: str
-    numbering_range_id: int
+    numbering_range_id: int | None
 
 
-def resolve_numbering_range(document_code: str = 'FACTURA_VENTA') -> RangoNumeracionDIAN:
-    """Resuelve el rango DIAN activo para una NUEVA emisión electrónica.
+def resolve_numbering_range(document_code: str = 'FACTURA_VENTA') -> FactusNumberingRange:
+    today = timezone.now().date()
 
-    No debe invocarse para relinkear facturas históricas ya emitidas.
-    """
-    document_label = DOCUMENT_LABELS.get(document_code, document_code)
-    environment = resolve_factus_environment()
-    base_queryset = RangoNumeracionDIAN.objects.filter(
-        environment=environment,
-        document_code=document_code,
+    if not FactusNumberingRange.objects.exists():
+        raise FactusValidationError('No hay rangos sincronizados con Factus')
+
+    rango = (
+        FactusNumberingRange.objects.filter(
+            document=document_code,
+            is_active=True,
+            end_date__gte=today,
+        )
+        .order_by('start_date')
+        .first()
     )
-    if not base_queryset.exists():
-        env_label = 'sandbox' if environment == 'SANDBOX' else 'producción'
+    if not rango:
         raise FactusValidationError(
-            f'No hay rangos sincronizados para {document_label} en {env_label}. Debe sincronizar/configurar el rango antes de emitir.'
+            'No hay rangos DIAN asociados al software en Factus. Debe sincronizar.'
         )
 
-    selected = base_queryset.filter(is_selected_local=True)
-    if selected.count() > 1:
-        raise FactusValidationError(
-            f'Hay múltiples rangos seleccionados localmente para {document_label}. Debe dejar solo uno seleccionado.'
-        )
-    if selected.count() == 1:
-        selected_range = selected.first()
-        if not selected_range.activo:
-            raise FactusValidationError(
-                f'El rango seleccionado para {document_label} está inactivo localmente. Active o seleccione otro rango.'
-            )
-        if document_code == 'FACTURA_VENTA' and not (selected_range.factus_id or selected_range.factus_range_id):
-            raise FactusValidationError(
-                f'El rango local seleccionado para {document_label} no tiene ID de Factus (numbering_range_id). '
-                'Debe seleccionar/importar un rango autorizado asociado al software antes de emitir.'
-            )
-        if document_code == 'FACTURA_VENTA':
-            if not selected_range.is_active_remote:
-                raise FactusValidationError(
-                    f'El rango seleccionado para {document_label} no está activo en Factus. Seleccione un rango autorizado vigente.'
-                )
-            remote_ids = _authorized_remote_ids(document_code='FACTURA_VENTA')
-            remote_id = int(selected_range.factus_range_id or selected_range.factus_id or 0)
-            logger.info(
-                'facturacion.range.resolve.factura_venta_validation local_range_id=%s local_factus_range_id=%s remote_valid_ids=%s',
-                selected_range.pk,
-                remote_id,
-                sorted(remote_ids),
-            )
-            if remote_id <= 0 or remote_id not in remote_ids:
-                RangoNumeracionDIAN.objects.filter(pk=selected_range.pk, is_selected_local=True).update(is_selected_local=False)
-                raise FactusValidationError(
-                    'El rango seleccionado localmente no es válido en Factus para factura de venta. '
-                    'Debe resincronizar y seleccionar un rango autorizado asociado al software.'
-                )
-        if selected_range.is_expired_remote:
-            raise FactusValidationError(
-                f'El rango local seleccionado para {document_label} está vencido. Seleccione otro rango vigente.'
-            )
-        return selected_range
-
-    active_ranges = list(base_queryset.filter(activo=True, is_expired_remote=False).order_by('id'))
-    if document_code == 'FACTURA_VENTA':
-        remote_ids = _authorized_remote_ids(document_code='FACTURA_VENTA')
-        active_ranges = [
-            item
-            for item in active_ranges
-            if (item.factus_id or item.factus_range_id)
-            and item.is_active_remote
-            and int(item.factus_range_id or item.factus_id or 0) in remote_ids
-        ]
-    if not active_ranges:
-        env_label = 'sandbox' if environment == 'SANDBOX' else 'producción'
-        raise FactusValidationError(
-            f'No hay rangos sincronizados para {document_label} en {env_label}. Debe sincronizar/configurar el rango antes de emitir.'
-        )
-    if len(active_ranges) == 1:
-        unique_active = active_ranges[0]
-        if not unique_active.is_selected_local:
-            base_queryset.filter(is_selected_local=True).update(is_selected_local=False)
-            unique_active.is_selected_local = True
-            unique_active.save(update_fields=['is_selected_local'])
-        return unique_active
-
-    raise FactusValidationError(
-        f'Hay múltiples rangos activos para {document_label} y ninguno está seleccionado. '
-        'Seleccione explícitamente un rango antes de emitir.'
-    )
+    return rango
 
 
 def get_next_document_sequence(document_code: str) -> InvoiceSequence:
-    """Obtiene e incrementa consecutivo DIAN solo para documentos NUEVOS.
-
-    Este método nunca debe aplicarse a facturas históricas ya emitidas.
-    """
     with transaction.atomic():
-        range_base = resolve_numbering_range(document_code=document_code)
-        rango = RangoNumeracionDIAN.objects.select_for_update().get(pk=range_base.pk)
-
-        siguiente = rango.consecutivo_actual
-        if siguiente > rango.hasta:
-            raise FactusValidationError(
-                f'El rango DIAN activo {rango.prefijo} llegó a su límite ({rango.hasta}).'
-            )
-
-        rango.consecutivo_actual = siguiente + 1
-        rango.save(update_fields=['consecutivo_actual'])
-
-    return InvoiceSequence(
-        number=f'{rango.prefijo}{siguiente:06d}',
-        numbering_range_id=int(rango.factus_range_id or rango.factus_id or 0),
-    )
+        rango = FactusNumberingRange.objects.select_for_update().get(pk=resolve_numbering_range(document_code).pk)
+        siguiente = int(rango.from_number)
+        rango.from_number = siguiente + 1
+        rango.save(update_fields=['from_number'])
+    return InvoiceSequence(number=f'{rango.prefix}{siguiente:06d}', numbering_range_id=None)
 
 
 def get_next_invoice_sequence() -> InvoiceSequence:

@@ -344,7 +344,8 @@ def build_invoice_payload(venta: Venta) -> dict:
 
     payload = {
         'document': '01',
-        'numbering_range_id': int(rango.factus_range_id or settings.FACTUS_NUMBERING_RANGE_FACTURA),
+        'prefix': rango.prefix,
+        'resolution_number': rango.resolution_number,
         'observation': venta.observaciones or '',
         'payment_form': '1',
         'payment_method_code': get_payment_method_code(venta.medio_pago),
