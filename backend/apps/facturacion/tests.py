@@ -36,6 +36,9 @@ from apps.facturacion.services.factus_catalog_lookup import (
     get_unit_measure_id,
 )
 from apps.facturacion.services.factus_payload_builder import build_invoice_payload
+from apps.facturacion.services.reference_code import resolve_reference_code
+from apps.facturacion.services.reconciliation import merge_factus_fields
+from apps.facturacion.services.validators import to_bool
 from apps.facturacion.services.support_document_payload_builder import build_support_document_payload
 from apps.facturacion.services.exceptions import DescargaFacturaError
 from apps.facturacion.services.factus_client import (
@@ -3470,3 +3473,20 @@ class FactusNumberingSoftwareEndpointTests(TestCase):
     def test_default_endpoint_usa_dian(self):
         client = FactusClient()
         self.assertEqual(client.numbering_ranges_dian_path, '/v1/numbering-ranges/dian')
+
+class FacturacionRefactorHelpersTests(TestCase):
+    def test_reference_code_reutiliza_existente(self):
+        venta = MagicMock(id=44)
+        factura = MagicMock(reference_code='RC-EXISTE')
+        rc = resolve_reference_code(venta=venta, factura_existente=factura, numero='FV44')
+        self.assertEqual(rc, 'RC-EXISTE')
+
+    def test_merge_factus_fields_preserva_existentes(self):
+        merged = merge_factus_fields({'number': 'FV1', 'cufe': 'CUFE-1'}, {'number': 'FV2', 'uuid': 'UUID-2'})
+        self.assertEqual(merged['number'], 'FV1')
+        self.assertEqual(merged['uuid'], 'UUID-2')
+
+    def test_to_bool_valores_compatibles(self):
+        self.assertTrue(to_bool('sí'))
+        self.assertTrue(to_bool('TRUE'))
+        self.assertFalse(to_bool('0'))
