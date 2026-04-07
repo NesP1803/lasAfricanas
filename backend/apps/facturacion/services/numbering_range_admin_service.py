@@ -100,6 +100,17 @@ def get_range(factus_id: int) -> dict[str, Any]:
     return FactusClient().get_numbering_range(factus_id)
 
 
+def get_range_resilient(factus_id: int) -> dict[str, Any]:
+    try:
+        payload = get_range(factus_id)
+        return {'payload': payload, 'unavailable': False, 'error': ''}
+    except (FactusAPIError, FactusAuthError, FactusValidationError) as exc:
+        status_code = int(getattr(exc, 'status_code', 0) or 0)
+        if status_code in {403, 404}:
+            return {'payload': None, 'unavailable': True, 'error': str(exc)}
+        raise
+
+
 def create_range(payload: dict[str, Any]) -> dict[str, Any]:
     return FactusClient().create_numbering_range(payload)
 

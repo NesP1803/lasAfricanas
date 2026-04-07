@@ -322,6 +322,8 @@ export interface EstadisticasVentas {
 }
 
 export const ventasApi = {
+  _estadisticasHoyInFlight: null as Promise<EstadisticasVentas> | null,
+  _estadisticasInFlight: new Map<string, Promise<EstadisticasVentas>>(),
   // Clientes
   async buscarCliente(documento: string): Promise<Cliente> {
     try {
@@ -716,12 +718,18 @@ export const ventasApi = {
       fecha_inicio: hoy,
       fecha_fin: hoy,
     });
+    if (this._estadisticasHoyInFlight) {
+      return this._estadisticasHoyInFlight;
+    }
     try {
-      return await apiRequest<EstadisticasVentas>({
+      this._estadisticasHoyInFlight = apiRequest<EstadisticasVentas>({
         url: `${API_URL}/ventas/estadisticas/?${queryParams.toString()}`,
       });
+      return await this._estadisticasHoyInFlight;
     } catch {
       throw new Error('Error al obtener estadísticas');
+    } finally {
+      this._estadisticasHoyInFlight = null;
     }
   },
 
@@ -733,12 +741,19 @@ export const ventasApi = {
     if (params?.fechaInicio) queryParams.append('fecha_inicio', params.fechaInicio);
     if (params?.fechaFin) queryParams.append('fecha_fin', params.fechaFin);
     const query = queryParams.toString();
+    if (this._estadisticasInFlight.has(query)) {
+      return this._estadisticasInFlight.get(query)!;
+    }
     try {
-      return await apiRequest<EstadisticasVentas>({
+      const request = apiRequest<EstadisticasVentas>({
         url: `${API_URL}/ventas/estadisticas/${query ? `?${query}` : ''}`,
       });
+      this._estadisticasInFlight.set(query, request);
+      return await request;
     } catch {
       throw new Error('Error al obtener estadísticas');
+    } finally {
+      this._estadisticasInFlight.delete(query);
     }
   },
 };

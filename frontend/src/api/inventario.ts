@@ -109,6 +109,7 @@ type BuscarPorCodigoNoEncontrado = {
 
 // Funciones API
 export const inventarioApi = {
+  _estadisticasInFlight: null as Promise<InventarioEstadisticas> | null,
   // Productos
   async getProductos(params?: {
     page?: number;
@@ -284,14 +285,22 @@ export const inventarioApi = {
   },
 
   async getEstadisticas(): Promise<InventarioEstadisticas> {
-    const response = await authFetch(`${API_URL}/productos/estadisticas/`, {
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
+    if (this._estadisticasInFlight) {
+      return this._estadisticasInFlight;
+    }
+    this._estadisticasInFlight = (async () => {
+      const response = await authFetch(`${API_URL}/productos/estadisticas/`, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
 
-    if (!response.ok) throw new Error('Error al obtener estadísticas del inventario');
-    return response.json();
+      if (!response.ok) throw new Error('Error al obtener estadísticas del inventario');
+      return response.json();
+    })().finally(() => {
+      this._estadisticasInFlight = null;
+    });
+    return this._estadisticasInFlight;
   },
 
   async ajustarStock(id: number, payload: AjusteStockPayload): Promise<Producto> {
