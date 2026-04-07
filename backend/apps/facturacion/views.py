@@ -84,6 +84,7 @@ from apps.facturacion.services import (
 from apps.facturacion.services.factura_assets_service import sync_invoice_assets
 from apps.facturacion.services.factus_client import FactusClient
 from apps.facturacion.services.factus_environment import resolve_factus_environment
+from apps.facturacion.services.numbering_range_admin_service import get_authorized_software_range_ids
 from apps.facturacion.services.electronic_state_machine import map_factus_status, resolve_actions
 from apps.facturacion.services.public_invoice_url import has_documental_inconsistency
 
@@ -890,6 +891,19 @@ class FacturacionRangosViewSet(viewsets.GenericViewSet):
         environment = resolve_factus_environment()
         return RangoNumeracionDIAN.objects.filter(environment=environment).order_by('-created_at', '-id')
 
+    def _validate_factura_venta_selection(self, rango: RangoNumeracionDIAN) -> tuple[bool, str]:
+        remote_id = int(rango.factus_range_id or rango.factus_id or 0)
+        if remote_id <= 0:
+            return False, 'Para FACTURA_VENTA solo se puede seleccionar un rango con factus_range_id válido.'
+        if not rango.is_associated_to_software:
+            return False, 'Para FACTURA_VENTA solo se puede seleccionar un rango asociado al software en Factus.'
+        if not rango.is_active_remote:
+            return False, 'Para FACTURA_VENTA solo se puede seleccionar un rango autorizado activo en Factus.'
+        remote_ids = get_authorized_software_range_ids(document_code='FACTURA_VENTA')
+        if remote_id not in remote_ids:
+            return False, 'Para FACTURA_VENTA el rango debe existir en los rangos autorizados del software en Factus.'
+        return True, ''
+
     def list(self, request):
         queryset = self._base_queryset()
         document_code = str(request.query_params.get('document_code', '')).strip().upper()
@@ -1064,8 +1078,22 @@ class FacturacionRangosViewSet(viewsets.GenericViewSet):
         if rango.factus_id or rango.factus_range_id:
             try:
                 payload = delete_range(int(rango.factus_id or rango.factus_range_id))
-            except Exception:
-                payload = {}
+            except (FactusAPIError, FactusAuthError, FactusValidationError) as exc:
+                status_code = int(getattr(exc, 'status_code', 0) or 0)
+                if status_code == 403:
+                    return Response(
+                        {
+                            'detail': 'Factus rechazó eliminar el rango remoto (403). '
+                            'No se eliminó el registro local para evitar divergencia.',
+                            'provider_error': str(exc),
+                            'range': RangoNumeracionDIANSerializer(rango).data,
+                        },
+                        status=status.HTTP_409_CONFLICT,
+                    )
+                return Response(
+                    {'detail': str(exc), 'provider_error': True, 'range': RangoNumeracionDIANSerializer(rango).data},
+                    status=status.HTTP_502_BAD_GATEWAY,
+                )
         rango.delete()
         return Response({'message': 'Rango eliminado.', 'provider': payload})
 
@@ -1129,10 +1157,10 @@ class FacturacionRangosViewSet(viewsets.GenericViewSet):
                 status=status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
         if rango.document_code == 'FACTURA_VENTA':
-            remote_id = int(rango.factus_range_id or rango.factus_id or 0)
-            if remote_id <= 0 or not rango.is_active_remote:
+            is_valid, detail = self._validate_factura_venta_selection(rango)
+            if not is_valid:
                 return Response(
-                    {'detail': 'Para FACTURA_VENTA solo se puede seleccionar un rango autorizado activo en Factus.'},
+                    {'detail': detail},
                     status=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 )
         with transaction.atomic():

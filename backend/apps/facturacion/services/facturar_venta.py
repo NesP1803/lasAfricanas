@@ -756,6 +756,13 @@ def facturar_venta(
         )
         if isinstance(exc, FactusAPIError):
             rejection = str(getattr(exc, 'provider_detail', '') or '')
+            provider_payload = getattr(exc, 'provider_payload', {}) or {}
+            provider_errors = (((provider_payload.get('data') or {}).get('errors') or {}) if isinstance(provider_payload, dict) else {})
+            if int(getattr(exc, 'status_code', 0) or 0) == 422 and 'numbering_range_id' in provider_errors:
+                raise FactusValidationError(
+                    'El rango seleccionado localmente no es válido en Factus. '
+                    'Resincronice los rangos autorizados y seleccione uno vigente.'
+                ) from exc
             if 'FAK21' in rejection:
                 logger.warning(
                     'facturar_venta.rechazo_cliente_sin_id venta_id=%s cliente_id=%s numero=%s resumen=FAK21',

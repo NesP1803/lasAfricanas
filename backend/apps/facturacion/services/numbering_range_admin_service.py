@@ -42,6 +42,52 @@ DOCUMENT_NAME_MAP: dict[str, str] = {
 }
 
 
+def _remote_document_value(raw: dict[str, Any]) -> str:
+    return str(raw.get('document') or raw.get('document_code') or '').strip()
+
+
+def map_remote_document_to_local(raw_document: str) -> str:
+    compact = (
+        str(raw_document or '')
+        .strip()
+        .upper()
+        .replace('Á', 'A')
+        .replace('É', 'E')
+        .replace('Í', 'I')
+        .replace('Ó', 'O')
+        .replace('Ú', 'U')
+        .replace('-', '_')
+        .replace(' ', '_')
+    )
+    if compact in {'21', 'FACTURA', 'FACTURA_VENTA', 'INVOICE', 'BILL'}:
+        return 'FACTURA_VENTA'
+    if compact in {'22', 'NOTA_CREDITO', 'NOTA_CREDITO', 'CREDIT_NOTE', 'NC'}:
+        return 'NOTA_CREDITO'
+    if compact in {'23', 'NOTA_DEBITO', 'DEBIT_NOTE'}:
+        return 'NOTA_DEBITO'
+    if compact in {'24', 'DOCUMENTO_SOPORTE', 'SUPPORT_DOCUMENT', 'DS'}:
+        return 'DOCUMENTO_SOPORTE'
+    if compact in {'25', 'NOTA_AJUSTE_DOCUMENTO_SOPORTE', 'SUPPORT_DOCUMENT_ADJUSTMENT_NOTE', 'NDA', 'NADS'}:
+        return 'NOTA_AJUSTE_DOCUMENTO_SOPORTE'
+    return DOCUMENT_CODE_MAP.get(str(raw_document).strip(), 'FACTURA_VENTA')
+
+
+def get_authorized_software_ranges(document_code: str) -> list[dict[str, Any]]:
+    return [
+        item
+        for item in get_software_ranges()
+        if map_remote_document_to_local(_remote_document_value(item)) == document_code
+    ]
+
+
+def get_authorized_software_range_ids(document_code: str) -> set[int]:
+    return {
+        int(item.get('id') or item.get('numbering_range_id') or 0)
+        for item in get_authorized_software_ranges(document_code=document_code)
+        if int(item.get('id') or item.get('numbering_range_id') or 0) > 0
+    }
+
+
 def _as_date(value: Any) -> date | None:
     if not value:
         return None
@@ -52,8 +98,8 @@ def _as_date(value: Any) -> date | None:
 
 
 def _normalize_payload(raw: dict[str, Any], *, software_ids: set[int] | None = None) -> dict[str, Any]:
-    doc_code = str(raw.get('document') or raw.get('document_code') or '').strip()
-    mapped_doc_code = DOCUMENT_CODE_MAP.get(doc_code, 'FACTURA_VENTA')
+    doc_code = _remote_document_value(raw)
+    mapped_doc_code = map_remote_document_to_local(doc_code)
     factus_id = int(raw.get('id') or raw.get('numbering_range_id') or 0)
     is_expired = bool(raw.get('is_expired', False))
     is_active = bool(raw.get('is_active', True)) and not is_expired
@@ -62,7 +108,7 @@ def _normalize_payload(raw: dict[str, Any], *, software_ids: set[int] | None = N
         'factus_id': factus_id,
         'factus_range_id': factus_id,
         'document_code': mapped_doc_code,
-        'document_name': DOCUMENT_NAME_MAP.get(doc_code, mapped_doc_code),
+        'document_name': DOCUMENT_NAME_MAP.get(doc_code, doc_code or mapped_doc_code),
         'prefijo': str(raw.get('prefix') or '').strip(),
         'desde': int(raw.get('from') or 1),
         'hasta': int(raw.get('to') or 1),
@@ -83,14 +129,14 @@ def _normalize_payload(raw: dict[str, Any], *, software_ids: set[int] | None = N
 def normalize_software_range(raw: dict[str, Any]) -> dict[str, Any]:
     """Normaliza un rango remoto asociado al software para consumo de UI."""
     factus_id = int(raw.get('id') or raw.get('numbering_range_id') or 0)
-    doc_code = str(raw.get('document') or raw.get('document_code') or '').strip()
+    doc_code = _remote_document_value(raw)
     is_expired = bool(raw.get('is_expired', False))
     is_active = bool(raw.get('is_active', True)) and not is_expired
     return {
         'remote_id': factus_id,
         'factus_range_id': factus_id,
         'document': doc_code,
-        'document_code': DOCUMENT_CODE_MAP.get(doc_code, 'FACTURA_VENTA'),
+        'document_code': map_remote_document_to_local(doc_code),
         'prefix': str(raw.get('prefix') or '').strip(),
         'from': int(raw.get('from') or 1),
         'to': int(raw.get('to') or 1),
@@ -193,8 +239,11 @@ def sync_ranges_to_db() -> list[RangoNumeracionDIAN]:
     ranges = list_ranges()
     software_status = get_software_ranges_resilient()
     software_ranges = software_status['ranges']
-    software_ids = {
-        int(item.get('id') or item.get('numbering_range_id') or 0)
+    software_keys = {
+        (
+            int(item.get('id') or item.get('numbering_range_id') or 0),
+            map_remote_document_to_local(_remote_document_value(item)),
+        )
         for item in software_ranges
         if item.get('id') or item.get('numbering_range_id')
     }
@@ -203,9 +252,13 @@ def sync_ranges_to_db() -> list[RangoNumeracionDIAN]:
     synced_ids: list[int] = []
     with transaction.atomic():
         for raw in ranges:
-            normalized = _normalize_payload(raw, software_ids=software_ids)
+            normalized = _normalize_payload(raw, software_ids=None)
             if not normalized['factus_id'] or not normalized['prefijo']:
                 continue
+            normalized['is_associated_to_software'] = (
+                normalized['factus_id'],
+                normalized['document_code'],
+            ) in software_keys
             synced_ids.append(normalized['factus_id'])
             rango, _ = RangoNumeracionDIAN.objects.update_or_create(
                 factus_id=normalized['factus_id'],

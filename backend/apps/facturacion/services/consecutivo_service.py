@@ -16,6 +16,7 @@ from django.db import transaction
 from apps.facturacion.models import RangoNumeracionDIAN
 from apps.facturacion.services.factus_environment import resolve_factus_environment
 from apps.facturacion.services.factus_client import FactusValidationError
+from apps.facturacion.services.numbering_range_admin_service import get_authorized_software_range_ids
 
 
 DOCUMENT_LABELS = {
@@ -67,10 +68,19 @@ def resolve_numbering_range(document_code: str = 'FACTURA_VENTA') -> RangoNumera
                 f'El rango local seleccionado para {document_label} no tiene ID de Factus (numbering_range_id). '
                 'Debe seleccionar/importar un rango autorizado asociado al software antes de emitir.'
             )
-        if document_code == 'FACTURA_VENTA' and not selected_range.is_active_remote:
-            raise FactusValidationError(
-                f'El rango seleccionado para {document_label} no está activo en Factus. Seleccione un rango autorizado vigente.'
-            )
+        if document_code == 'FACTURA_VENTA':
+            if not selected_range.is_active_remote:
+                raise FactusValidationError(
+                    f'El rango seleccionado para {document_label} no está activo en Factus. Seleccione un rango autorizado vigente.'
+                )
+            remote_ids = get_authorized_software_range_ids(document_code='FACTURA_VENTA')
+            remote_id = int(selected_range.factus_range_id or selected_range.factus_id or 0)
+            if remote_id <= 0 or remote_id not in remote_ids:
+                RangoNumeracionDIAN.objects.filter(pk=selected_range.pk, is_selected_local=True).update(is_selected_local=False)
+                raise FactusValidationError(
+                    'El rango seleccionado localmente no es válido en Factus para factura de venta. '
+                    'Debe resincronizar y seleccionar un rango autorizado asociado al software.'
+                )
         if selected_range.is_expired_remote:
             raise FactusValidationError(
                 f'El rango local seleccionado para {document_label} está vencido. Seleccione otro rango vigente.'
@@ -79,7 +89,14 @@ def resolve_numbering_range(document_code: str = 'FACTURA_VENTA') -> RangoNumera
 
     active_ranges = list(base_queryset.filter(activo=True, is_expired_remote=False).order_by('id'))
     if document_code == 'FACTURA_VENTA':
-        active_ranges = [item for item in active_ranges if (item.factus_id or item.factus_range_id) and item.is_active_remote]
+        remote_ids = get_authorized_software_range_ids(document_code='FACTURA_VENTA')
+        active_ranges = [
+            item
+            for item in active_ranges
+            if (item.factus_id or item.factus_range_id)
+            and item.is_active_remote
+            and int(item.factus_range_id or item.factus_id or 0) in remote_ids
+        ]
     if not active_ranges:
         env_label = 'sandbox' if environment == 'SANDBOX' else 'producción'
         raise FactusValidationError(

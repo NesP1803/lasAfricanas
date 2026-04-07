@@ -1403,7 +1403,8 @@ class NumberingRangeResolutionTests(TestCase):
     def setUp(self):
         os.environ['FACTUS_ENV'] = 'sandbox'
 
-    def test_fallback_cuando_hay_un_solo_rango_activo(self):
+    @patch('apps.facturacion.services.consecutivo_service.get_authorized_software_range_ids', return_value={8})
+    def test_fallback_cuando_hay_un_solo_rango_activo(self, _mocked_ids):
         rango = RangoNumeracionDIAN.objects.create(
             factus_range_id=8,
             environment='SANDBOX',
@@ -1422,7 +1423,8 @@ class NumberingRangeResolutionTests(TestCase):
         rango.refresh_from_db()
         self.assertTrue(rango.is_selected_local)
 
-    def test_error_cuando_hay_varios_activos_sin_seleccion(self):
+    @patch('apps.facturacion.services.consecutivo_service.get_authorized_software_range_ids', return_value={8, 9})
+    def test_error_cuando_hay_varios_activos_sin_seleccion(self, _mocked_ids):
         for idx in [8, 9]:
             RangoNumeracionDIAN.objects.create(
                 factus_range_id=idx,
@@ -1463,6 +1465,28 @@ class NumberingRangeResolutionTests(TestCase):
         resolved = resolve_numbering_range(document_code='NOTA_CREDITO')
         self.assertEqual(resolved.id, rango.id)
 
+    @patch('apps.facturacion.services.consecutivo_service.get_authorized_software_range_ids', return_value={999})
+    def test_error_cuando_rango_seleccionado_no_existe_en_autorizados_software(self, _mocked_ids):
+        rango = RangoNumeracionDIAN.objects.create(
+            factus_range_id=8,
+            environment='SANDBOX',
+            document_code='FACTURA_VENTA',
+            is_active_remote=True,
+            is_associated_to_software=True,
+            is_selected_local=True,
+            prefijo='SETP',
+            desde=1,
+            hasta=999999,
+            resolucion='18760000001',
+            consecutivo_actual=1,
+            activo=True,
+        )
+        with self.assertRaises(FactusValidationError) as exc:
+            resolve_numbering_range(document_code='FACTURA_VENTA')
+        self.assertIn('no es válido en Factus para factura de venta', str(exc.exception))
+        rango.refresh_from_db()
+        self.assertFalse(rango.is_selected_local)
+
 
 class ConfiguracionDianRangosEndpointsTests(TestCase):
     def setUp(self):
@@ -1483,6 +1507,7 @@ class ConfiguracionDianRangosEndpointsTests(TestCase):
             environment='SANDBOX',
             document_code='FACTURA_VENTA',
             is_active_remote=True,
+            is_associated_to_software=True,
             is_selected_local=False,
             prefijo='SETP',
             desde=1,
@@ -1595,7 +1620,8 @@ class ConfiguracionDianRangosEndpointsTests(TestCase):
         self.assertTrue(self.rango.is_selected_local)
         self.assertFalse(other.is_selected_local)
 
-    def test_patch_seleccionar_endpoint_separa_activar_y_seleccionar(self):
+    @patch('apps.facturacion.views.get_authorized_software_range_ids', return_value={8})
+    def test_patch_seleccionar_endpoint_separa_activar_y_seleccionar(self, _mocked_ids):
         self.rango.activo = False
         self.rango.save(update_fields=['activo'])
         client = APIClient()
@@ -1610,6 +1636,24 @@ class ConfiguracionDianRangosEndpointsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.rango.refresh_from_db()
         self.assertTrue(self.rango.is_selected_local)
+
+    @patch('apps.facturacion.views.get_authorized_software_range_ids', return_value={77})
+    def test_patch_seleccionar_rechaza_rango_no_autorizado_remotamente(self, _mocked_ids):
+        client = APIClient()
+        client.force_authenticate(self.admin)
+        response = client.patch(f'/api/facturacion/rangos/{self.rango.id}/seleccionar/', {}, format='json')
+        self.assertEqual(response.status_code, 422)
+        self.rango.refresh_from_db()
+        self.assertFalse(self.rango.is_selected_local)
+
+    @patch('apps.facturacion.views.delete_range')
+    def test_destroy_no_elimina_local_si_delete_remoto_retorna_403(self, mocked_delete):
+        mocked_delete.side_effect = FactusAPIError('forbidden', status_code=403)
+        client = APIClient()
+        client.force_authenticate(self.admin)
+        response = client.delete(f'/api/facturacion/rangos/{self.rango.id}/')
+        self.assertEqual(response.status_code, 409)
+        self.assertTrue(RangoNumeracionDIAN.objects.filter(pk=self.rango.id).exists())
 
     def test_list_rangos_expone_activo_local(self):
         client = APIClient()
