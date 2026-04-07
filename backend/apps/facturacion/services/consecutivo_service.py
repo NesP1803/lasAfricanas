@@ -16,7 +16,7 @@ from django.db import transaction
 from apps.facturacion.models import RangoNumeracionDIAN
 from apps.facturacion.services.factus_environment import resolve_factus_environment
 from apps.facturacion.services.factus_client import FactusValidationError
-from apps.facturacion.services.numbering_range_admin_service import get_authorized_software_range_ids
+from apps.facturacion.services.numbering_range_admin_service import list_available_authorized_ranges
 
 
 DOCUMENT_LABELS = {
@@ -27,6 +27,14 @@ DOCUMENT_LABELS = {
     'NOTA_DEBITO': 'nota débito',
     'REMISION': 'remisión',
 }
+
+
+def _authorized_remote_ids(document_code: str) -> set[int]:
+    return {
+        int(item.get('factus_range_id') or 0)
+        for item in list_available_authorized_ranges(document_code=document_code)
+        if int(item.get('factus_range_id') or 0) > 0
+    }
 
 
 @dataclass
@@ -73,7 +81,7 @@ def resolve_numbering_range(document_code: str = 'FACTURA_VENTA') -> RangoNumera
                 raise FactusValidationError(
                     f'El rango seleccionado para {document_label} no está activo en Factus. Seleccione un rango autorizado vigente.'
                 )
-            remote_ids = get_authorized_software_range_ids(document_code='FACTURA_VENTA')
+            remote_ids = _authorized_remote_ids(document_code='FACTURA_VENTA')
             remote_id = int(selected_range.factus_range_id or selected_range.factus_id or 0)
             if remote_id <= 0 or remote_id not in remote_ids:
                 RangoNumeracionDIAN.objects.filter(pk=selected_range.pk, is_selected_local=True).update(is_selected_local=False)
@@ -89,7 +97,7 @@ def resolve_numbering_range(document_code: str = 'FACTURA_VENTA') -> RangoNumera
 
     active_ranges = list(base_queryset.filter(activo=True, is_expired_remote=False).order_by('id'))
     if document_code == 'FACTURA_VENTA':
-        remote_ids = get_authorized_software_range_ids(document_code='FACTURA_VENTA')
+        remote_ids = _authorized_remote_ids(document_code='FACTURA_VENTA')
         active_ranges = [
             item
             for item in active_ranges

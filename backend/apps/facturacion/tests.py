@@ -1403,7 +1403,7 @@ class NumberingRangeResolutionTests(TestCase):
     def setUp(self):
         os.environ['FACTUS_ENV'] = 'sandbox'
 
-    @patch('apps.facturacion.services.consecutivo_service.get_authorized_software_range_ids', return_value={8})
+    @patch('apps.facturacion.services.consecutivo_service.list_available_authorized_ranges', return_value=[{'factus_range_id': 8}])
     def test_fallback_cuando_hay_un_solo_rango_activo(self, _mocked_ids):
         rango = RangoNumeracionDIAN.objects.create(
             factus_range_id=8,
@@ -1423,7 +1423,7 @@ class NumberingRangeResolutionTests(TestCase):
         rango.refresh_from_db()
         self.assertTrue(rango.is_selected_local)
 
-    @patch('apps.facturacion.services.consecutivo_service.get_authorized_software_range_ids', return_value={8, 9})
+    @patch('apps.facturacion.services.consecutivo_service.list_available_authorized_ranges', return_value=[{'factus_range_id': 8}, {'factus_range_id': 9}])
     def test_error_cuando_hay_varios_activos_sin_seleccion(self, _mocked_ids):
         for idx in [8, 9]:
             RangoNumeracionDIAN.objects.create(
@@ -1465,7 +1465,7 @@ class NumberingRangeResolutionTests(TestCase):
         resolved = resolve_numbering_range(document_code='NOTA_CREDITO')
         self.assertEqual(resolved.id, rango.id)
 
-    @patch('apps.facturacion.services.consecutivo_service.get_authorized_software_range_ids', return_value={999})
+    @patch('apps.facturacion.services.consecutivo_service.list_available_authorized_ranges', return_value=[{'factus_range_id': 999}])
     def test_error_cuando_rango_seleccionado_no_existe_en_autorizados_software(self, _mocked_ids):
         rango = RangoNumeracionDIAN.objects.create(
             factus_range_id=8,
@@ -3574,6 +3574,7 @@ class FacturacionRangosRoutingAndDegradedTests(TestCase):
         self.assertIsInstance(response.data, list)
         self.assertGreaterEqual(len(response.data), 1)
 
+
     @patch('apps.facturacion.views.get_software_ranges_resilient')
     def test_endpoint_software_responde_modo_degradado(self, mocked_software):
         mocked_software.return_value = {
@@ -3586,6 +3587,15 @@ class FacturacionRangosRoutingAndDegradedTests(TestCase):
         self.assertEqual(response.data['status'], 'degraded')
         self.assertIn('Factus temporalmente no disponible', response.data['detail'])
         self.assertEqual(response.data['items'], [])
+
+    @patch('apps.facturacion.views.list_available_authorized_ranges')
+    def test_endpoint_autorizados_disponibles_responde_200(self, mocked_available):
+        mocked_available.return_value = []
+        response = self.client.get('/api/facturacion/rangos/autorizados-disponibles/?document_code=FACTURA_VENTA')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['status'], 'ok')
+        self.assertIsInstance(response.data['items'], list)
+        self.assertIn('No hay rangos autorizados', response.data['detail'])
 
 
 class FactusNumberingSoftwareEndpointTests(TestCase):

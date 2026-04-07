@@ -949,7 +949,8 @@ class FacturacionRangosViewSet(viewsets.GenericViewSet):
                 {'detail': str(exc), 'status': 'degraded', 'items': []},
                 status=status.HTTP_200_OK,
             )
-        return Response({'status': 'ok', 'items': items})
+        detail = '' if items else 'No hay rangos autorizados asociados al software para este documento.'
+        return Response({'status': 'ok', 'detail': detail, 'items': items})
 
     def retrieve(self, request, pk=None):
         rango = self._base_queryset().filter(pk=pk).first()
