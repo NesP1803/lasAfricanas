@@ -8,6 +8,7 @@ from apps.facturacion.services.electronic_state_machine import resolve_actions
 
 class FacturaElectronicaSerializer(serializers.ModelSerializer):
     """Serializer de lectura para trazabilidad completa del documento electrónico."""
+    status = serializers.CharField(source='estado_electronico', read_only=True)
 
     class Meta:
         model = FacturaElectronica
@@ -69,6 +70,7 @@ class FacturarVentaResponseSerializer(serializers.Serializer):
 class FacturaEstadoSerializer(serializers.ModelSerializer):
     """Serializer de respuesta para consulta de estado DIAN sincronizado."""
 
+    status = serializers.CharField(source='estado_electronico', read_only=True)
     estado = serializers.CharField(source='estado_electronico', read_only=True)
     estado_dian = serializers.CharField(source='estado_electronico', read_only=True)
     acciones_sugeridas = serializers.SerializerMethodField()

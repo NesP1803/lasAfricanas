@@ -97,6 +97,7 @@ class FacturaElectronica(models.Model):
         verbose_name_plural = 'Facturas Electrónicas'
         ordering = ['-created_at']
         indexes = [
+            # Legacy index, candidate to remove in fase 2 cuando se elimine `status`.
             models.Index(fields=['status', '-created_at']),
             models.Index(fields=['estado_electronico', '-created_at']),
             models.Index(fields=['number', '-created_at']),

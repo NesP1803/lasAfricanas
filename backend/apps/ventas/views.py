@@ -13,11 +13,11 @@ import logging
 from apps.facturacion.exceptions import FacturaDuplicadaError, FacturaPersistenciaError
 from apps.facturacion.models import FacturaElectronica
 from apps.facturacion.serializers import FacturaElectronicaSerializer
+from apps.facturacion.use_cases import emit_invoice_use_case
 from apps.facturacion.services import (
     FactusAPIError,
     FactusAuthError,
     FactusValidationError,
-    emitir_factura_completa,
 )
 from apps.ventas.services import (
     anular_venta,
@@ -27,7 +27,6 @@ from apps.ventas.services import (
     enviar_venta_a_caja,
     estado_electronico_ui,
     registrar_salida_inventario,
-    validar_para_facturar_en_caja,
 )
 from apps.ventas.permissions import has_caja_access, is_admin_user
 
@@ -222,22 +221,26 @@ class VentaViewSet(viewsets.ModelViewSet):
             return VentaCreateSerializer
         return VentaDetailSerializer
 
-    def _emitir_factura_electronica(self, venta, user):
+    def _emitir_factura_electronica(self, venta_id, user):
         try:
-            logger.info('ventas.facturar.enviando_factus venta_id=%s', venta.id)
-            flow_result = emitir_factura_completa(venta.id, triggered_by=user)
-            factura = flow_result['factura']
-            warnings = flow_result.get('warnings', [])
+            logger.info('ventas.facturar.enviando_factus venta_id=%s', venta_id)
+            use_case_result = emit_invoice_use_case(
+                venta_id=venta_id,
+                triggered_by=user,
+                enforce_caja_rules=False,
+            )
+            venta = use_case_result.venta
+            factura = use_case_result.factura
+            warnings = use_case_result.warnings
             logger.info(
                 'ventas.facturar.factus_ok venta_id=%s factura_number=%s estado_electronico=%s',
                 venta.id,
                 factura.number,
                 factura.estado_electronico,
             )
-            venta.refresh_from_db()
         except (FactusValidationError, FactusAuthError, FactusAPIError, FacturaDuplicadaError, DataError, FacturaPersistenciaError) as exc:
-            logger.exception('ventas.facturar.factus_error venta_id=%s', venta.id)
-            venta.refresh_from_db()
+            logger.exception('ventas.facturar.factus_error venta_id=%s', venta_id)
+            venta = Venta.objects.get(pk=venta_id)
             factura_error = FacturaElectronica.objects.filter(venta=venta).first()
             warning_code, warning_detail = _factus_error_category(exc)
             http_status, codigo_error = _factus_http_status_and_code(exc)
@@ -281,9 +284,11 @@ class VentaViewSet(viewsets.ModelViewSet):
                 },
                 status=http_status,
             )
+        except ValidationError:
+            raise
         except Exception as exc:
-            logger.exception('ventas.facturar.error_no_controlado venta_id=%s', venta.id)
-            venta.refresh_from_db()
+            logger.exception('ventas.facturar.error_no_controlado venta_id=%s', venta_id)
+            venta = Venta.objects.get(pk=venta_id)
             factura_error = FacturaElectronica.objects.filter(venta=venta).first()
             return Response(
                 {
@@ -476,7 +481,7 @@ class VentaViewSet(viewsets.ModelViewSet):
                 if factura.estado not in {'COBRADA', 'FACTURADA'}:
                     cerrar_venta_local(factura, request.user)
 
-            return self._emitir_factura_electronica(factura, request.user)
+            return self._emitir_factura_electronica(factura.id, request.user)
         except ValidationError as exc:
             return Response({'error': exc.detail}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as exc:
@@ -581,26 +586,16 @@ class VentaViewSet(viewsets.ModelViewSet):
             getattr(request.user, 'id', None),
             pk,
         )
-        venta = self.get_object()
-
         try:
-            with transaction.atomic():
-                venta = (
-                    Venta.objects.select_for_update()
-                    .select_related('cliente', 'vendedor')
-                    .prefetch_related('detalles', 'detalles__producto')
-                    .get(pk=pk)
-                )
-                if venta.tipo_comprobante != 'FACTURA':
-                    raise ValidationError('Solo se puede facturar electrónicamente comprobantes de tipo FACTURA.')
-                if venta.estado == 'ANULADA':
-                    raise ValidationError('No se puede facturar una venta anulada.')
-                if venta.estado not in {'COBRADA', 'FACTURADA'}:
-                    cerrar_venta_local(venta, request.user)
+            venta_id = int(pk)
+        except (TypeError, ValueError):
+            logger.warning('ventas.facturar.validation_error venta_id=%s error=id_invalido', pk)
+            return Response({'error': 'Identificador de venta inválido.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            return self._emitir_factura_electronica(venta_id, request.user)
         except ValidationError as exc:
             logger.warning('ventas.facturar.validation_error venta_id=%s error=%s', pk, exc.detail)
             return Response({'error': exc.detail}, status=status.HTTP_400_BAD_REQUEST)
-        return self._emitir_factura_electronica(venta, request.user)
     
     @action(detail=False, methods=['get'])
     def estadisticas(self, request):
@@ -692,9 +687,6 @@ class CajaViewSet(viewsets.GenericViewSet):
             return Response({'detail': 'No autorizado.'}, status=status.HTTP_403_FORBIDDEN)
         return None
 
-    def _validar_para_facturar(self, venta):
-        validar_para_facturar_en_caja(venta)
-
     @action(detail=False, methods=['get'], url_path='pendientes')
     def pendientes(self, request):
         permission_response = self._require_caja(request)
@@ -778,24 +770,14 @@ class CajaViewSet(viewsets.GenericViewSet):
             return permission_response
 
         try:
-            with transaction.atomic():
-                venta = (
-                    Venta.objects.select_for_update()
-                    .select_related('cliente', 'vendedor')
-                    .prefetch_related('detalles', 'detalles__producto')
-                    .get(pk=venta_id)
-                )
-                logger.info('caja.facturar.validando venta_id=%s estado=%s tipo=%s', venta.id, venta.estado, venta.tipo_comprobante)
-                self._validar_para_facturar(venta)
-                logger.info('caja.facturar.validacion_ok venta_id=%s', venta.id)
-                cerrar_venta_local(venta, request.user)
-                logger.info('caja.facturar.estado_local_ok venta_id=%s estado=%s', venta.id, venta.estado)
-
-            logger.info('caja.facturar.enviando_factus venta_id=%s', venta.id)
-            flow_result = emitir_factura_completa(venta.id, triggered_by=request.user)
-            factura = flow_result['factura']
-            warnings = flow_result.get('warnings', [])
-            venta.refresh_from_db()
+            use_case_result = emit_invoice_use_case(
+                venta_id=venta_id,
+                triggered_by=request.user,
+                enforce_caja_rules=True,
+            )
+            venta = use_case_result.venta
+            factura = use_case_result.factura
+            warnings = use_case_result.warnings
             logger.info(
                 'caja.facturar.factus_ok venta_id=%s numero=%s estado_electronico=%s cufe=%s',
                 venta.id,
