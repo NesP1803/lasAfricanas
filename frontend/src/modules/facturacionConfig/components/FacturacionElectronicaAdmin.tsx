@@ -146,7 +146,7 @@ export default function FacturacionElectronicaAdmin({
   const filteredRangos = useMemo(() => {
     return rangos.filter((rango) => {
       const matchDocumento = !docFilter || rango.document_code === docFilter;
-      const isActivo = Boolean(rango.is_active_remote);
+      const isActivo = Boolean(rango.activo);
       const matchEstado =
         stateFilter === 'todos' ? true : stateFilter === 'activo' ? isActivo : !isActivo;
       return matchDocumento && matchEstado;
@@ -239,16 +239,50 @@ export default function FacturacionElectronicaAdmin({
 
   const toggleActivo = async (rango: FacturacionRango) => {
     try {
-      const nextState = !rango.is_active_remote;
-      if (!nextState && !window.confirm('¿Quieres desactivar este rango de numeración?')) {
+      const nextState = !rango.activo;
+      if (!nextState && !window.confirm('¿Quieres desactivar este rango de numeración? Si estaba seleccionado, perderá la selección local.')) {
         return;
       }
-      await configuracionAPI.activarRangoFacturacion(rango.id, nextState);
+      const selectNow = nextState && !rango.is_selected_local
+        ? window.confirm('¿Deseas activar y seleccionar este rango para emisión?')
+        : false;
+      await configuracionAPI.activarYSeleccionarRangoFacturacion(rango.id, {
+        activo: nextState,
+        seleccionar: selectNow,
+      });
       await loadData();
     } catch (e: unknown) {
       setActionMessage(getApiErrorMessage(e) || 'No fue posible actualizar el estado del rango.');
     }
   };
+
+  const seleccionarRango = async (rango: FacturacionRango) => {
+    try {
+      await configuracionAPI.seleccionarRangoFacturacion(rango.id);
+      setActionMessage(`Rango ${rango.prefijo} seleccionado localmente.`);
+      await loadData();
+    } catch (e: unknown) {
+      setActionMessage(getApiErrorMessage(e) || 'No fue posible seleccionar el rango.');
+    }
+  };
+
+  const seleccionInconsistente = useMemo(() => {
+    const grouped = new Map<string, FacturacionRango[]>();
+    rangos.forEach((rango) => {
+      const list = grouped.get(rango.document_code) || [];
+      list.push(rango);
+      grouped.set(rango.document_code, list);
+    });
+    const warnings: string[] = [];
+    grouped.forEach((items, documentCode) => {
+      const activos = items.filter((item) => item.activo && !item.is_expired_remote);
+      const seleccionados = items.filter((item) => item.is_selected_local);
+      if (activos.length > 1 && seleccionados.length === 0) {
+        warnings.push(`${documentLabel(documentCode)}: hay ${activos.length} rangos activos sin selección local.`);
+      }
+    });
+    return warnings;
+  }, [rangos]);
 
   const saveRemision = async () => {
     setSavingRemision(true);
@@ -321,6 +355,16 @@ export default function FacturacionElectronicaAdmin({
         {actionMessage ? (
           <p className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700">{actionMessage}</p>
         ) : null}
+        {seleccionInconsistente.length ? (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            <p className="font-semibold">Atención: hay rangos activos sin selección local.</p>
+            <ul className="list-disc pl-5">
+              {seleccionInconsistente.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
 
         <div className="overflow-x-auto rounded-xl border border-slate-200">
           <table className="min-w-full text-sm">
@@ -331,7 +375,9 @@ export default function FacturacionElectronicaAdmin({
                 <th className="px-4 py-3">Desde</th>
                 <th className="px-4 py-3">Hasta</th>
                 <th className="px-4 py-3">Actual</th>
-                <th className="px-4 py-3">Estado</th>
+                <th className="px-4 py-3">Activo local</th>
+                <th className="px-4 py-3">Activo remoto</th>
+                <th className="px-4 py-3">Seleccionado local</th>
                 <th className="px-4 py-3">Vence en</th>
                 <th className="px-4 py-3">Acciones</th>
               </tr>
@@ -339,19 +385,19 @@ export default function FacturacionElectronicaAdmin({
             <tbody>
               {loading ? (
                 <tr>
-                  <td className="px-4 py-6 text-slate-500" colSpan={8}>
+                  <td className="px-4 py-6 text-slate-500" colSpan={10}>
                     Cargando rangos...
                   </td>
                 </tr>
               ) : paged.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-6 text-slate-500" colSpan={8}>
+                  <td className="px-4 py-6 text-slate-500" colSpan={10}>
                     No hay rangos disponibles para el filtro seleccionado.
                   </td>
                 </tr>
               ) : (
                 paged.map((rango) => {
-                  const marked = rango.is_expired_remote || !rango.is_active_remote;
+                  const marked = rango.is_expired_remote || !rango.activo;
                   return (
                     <tr key={rango.id} className={`border-t border-slate-100 ${marked ? 'bg-red-200/70' : 'hover:bg-slate-50'}`}>
                       <td className="px-4 py-3 text-slate-700">{rango.document_code_label || documentLabel(rango.document_code)}</td>
@@ -365,15 +411,34 @@ export default function FacturacionElectronicaAdmin({
                           onClick={() => toggleActivo(rango)}
                           disabled={!isAdmin}
                           className={`min-w-14 rounded-full px-3 py-1 text-xs font-semibold text-white ${
-                            rango.is_active_remote ? 'bg-blue-600' : 'bg-slate-400'
+                            rango.activo ? 'bg-blue-600' : 'bg-slate-400'
                           } disabled:cursor-not-allowed disabled:opacity-60`}
                         >
-                          {rango.is_active_remote ? 'ON' : 'OFF'}
+                          {rango.activo ? 'ON' : 'OFF'}
                         </button>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`rounded-full px-2 py-1 text-xs font-semibold ${rango.is_active_remote ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
+                          {rango.is_active_remote ? 'Activo' : 'Inactivo'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`rounded-full px-2 py-1 text-xs font-semibold ${rango.is_selected_local ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-600'}`}>
+                          {rango.is_selected_local ? 'Sí' : 'No'}
+                        </span>
                       </td>
                       <td className="px-4 py-3 text-slate-700">{rango.fecha_expiracion || 'N/A'}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            className="rounded-md border border-indigo-200 px-2 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            title="Seleccionar para emisión"
+                            onClick={() => seleccionarRango(rango)}
+                            disabled={!isAdmin || !rango.activo || rango.is_expired_remote}
+                          >
+                            Seleccionar
+                          </button>
                           <button
                             type="button"
                             className="rounded-md p-1 text-blue-600 hover:bg-blue-50"
