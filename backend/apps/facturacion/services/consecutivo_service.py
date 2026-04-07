@@ -10,6 +10,7 @@ Importante de dominio:
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 
 from django.db import transaction
 
@@ -27,6 +28,8 @@ DOCUMENT_LABELS = {
     'NOTA_DEBITO': 'nota débito',
     'REMISION': 'remisión',
 }
+
+logger = logging.getLogger(__name__)
 
 
 def _authorized_remote_ids(document_code: str) -> set[int]:
@@ -83,6 +86,12 @@ def resolve_numbering_range(document_code: str = 'FACTURA_VENTA') -> RangoNumera
                 )
             remote_ids = _authorized_remote_ids(document_code='FACTURA_VENTA')
             remote_id = int(selected_range.factus_range_id or selected_range.factus_id or 0)
+            logger.info(
+                'facturacion.range.resolve.factura_venta_validation local_range_id=%s local_factus_range_id=%s remote_valid_ids=%s',
+                selected_range.pk,
+                remote_id,
+                sorted(remote_ids),
+            )
             if remote_id <= 0 or remote_id not in remote_ids:
                 RangoNumeracionDIAN.objects.filter(pk=selected_range.pk, is_selected_local=True).update(is_selected_local=False)
                 raise FactusValidationError(
