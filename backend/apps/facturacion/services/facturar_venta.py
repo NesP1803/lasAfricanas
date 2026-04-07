@@ -1302,6 +1302,8 @@ def facturar_venta(
         factura, _ = FacturaElectronica.objects.update_or_create(
             venta=venta,
             defaults={
+                # Fuente canónica: solo estado_electronico.
+                # `status` legado se sincroniza automáticamente en FacturaElectronica.save().
                 'estado_electronico': 'PENDIENTE_REINTENTO',
                 'number': numero,
                 'reference_code': reference_code,

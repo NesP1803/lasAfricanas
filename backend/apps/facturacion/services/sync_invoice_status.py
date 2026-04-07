@@ -63,7 +63,6 @@ def sync_invoice_status(numero_factura: str) -> FacturaElectronica:
                 }
                 factura.save(
                     update_fields=[
-                        'status',
                         'estado_electronico',
                         'codigo_error',
                         'mensaje_error',
@@ -95,7 +94,6 @@ def sync_invoice_status(numero_factura: str) -> FacturaElectronica:
             update_fields=[
                 'cufe',
                 'uuid',
-                'status',
                 'estado_electronico',
                 'estado_factus_raw',
                 'xml_url',
