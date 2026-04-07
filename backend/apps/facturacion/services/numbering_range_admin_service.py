@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from datetime import date
+import logging
 from typing import Any
 
 from django.db import transaction
 from django.utils import timezone
 
+from apps.facturacion.constants import FACTUS_CODE_TO_LOCAL, LOCAL_LABELS, normalize_local_document_code
 from apps.facturacion.models import RangoNumeracionDIAN
 from apps.facturacion.services.factus_client import (
     FactusAPIError,
@@ -17,28 +19,13 @@ from apps.facturacion.services.factus_client import (
 )
 from apps.facturacion.services.factus_environment import resolve_factus_environment
 
-DOCUMENT_CODE_MAP: dict[str, str] = {
-    '21': 'FACTURA_VENTA',
-    '22': 'NOTA_CREDITO',
-    '23': 'NOTA_DEBITO',
-    '24': 'DOCUMENTO_SOPORTE',
-    '25': 'NOTA_AJUSTE_DOCUMENTO_SOPORTE',
-    '26': 'NOMINA',
-    '27': 'NOTA_AJUSTE_NOMINA',
-    '28': 'NOTA_ELIMINACION_NOMINA',
-    '30': 'FACTURA_TALONARIO_PAPEL',
-}
+logger = logging.getLogger(__name__)
+
+DOCUMENT_CODE_MAP: dict[str, str] = dict(FACTUS_CODE_TO_LOCAL)
 
 DOCUMENT_NAME_MAP: dict[str, str] = {
-    '21': 'Factura de Venta',
-    '22': 'Nota Crédito',
-    '23': 'Nota Débito',
-    '24': 'Documento Soporte',
-    '25': 'Nota de Ajuste Documento Soporte',
-    '26': 'Nómina',
-    '27': 'Nota de Ajuste Nómina',
-    '28': 'Nota de eliminación de nómina',
-    '30': 'Factura de talonario y de papel',
+    code: LOCAL_LABELS.get(local_code, local_code)
+    for code, local_code in DOCUMENT_CODE_MAP.items()
 }
 
 
@@ -47,29 +34,7 @@ def _remote_document_value(raw: dict[str, Any]) -> str:
 
 
 def map_remote_document_to_local(raw_document: str) -> str:
-    compact = (
-        str(raw_document or '')
-        .strip()
-        .upper()
-        .replace('Á', 'A')
-        .replace('É', 'E')
-        .replace('Í', 'I')
-        .replace('Ó', 'O')
-        .replace('Ú', 'U')
-        .replace('-', '_')
-        .replace(' ', '_')
-    )
-    if compact in {'21', 'FACTURA', 'FACTURA_VENTA', 'INVOICE', 'BILL'}:
-        return 'FACTURA_VENTA'
-    if compact in {'22', 'NOTA_CREDITO', 'NOTA_CREDITO', 'CREDIT_NOTE', 'NC'}:
-        return 'NOTA_CREDITO'
-    if compact in {'23', 'NOTA_DEBITO', 'DEBIT_NOTE'}:
-        return 'NOTA_DEBITO'
-    if compact in {'24', 'DOCUMENTO_SOPORTE', 'SUPPORT_DOCUMENT', 'DS'}:
-        return 'DOCUMENTO_SOPORTE'
-    if compact in {'25', 'NOTA_AJUSTE_DOCUMENTO_SOPORTE', 'SUPPORT_DOCUMENT_ADJUSTMENT_NOTE', 'NDA', 'NADS'}:
-        return 'NOTA_AJUSTE_DOCUMENTO_SOPORTE'
-    return DOCUMENT_CODE_MAP.get(str(raw_document).strip(), 'FACTURA_VENTA')
+    return normalize_local_document_code(raw_document)
 
 
 def get_authorized_software_ranges(document_code: str) -> list[dict[str, Any]]:
@@ -158,14 +123,19 @@ def normalize_software_range(raw: dict[str, Any]) -> dict[str, Any]:
 
 def list_available_authorized_ranges(document_code: str) -> list[dict[str, Any]]:
     """Lista rangos autorizados asociados al software con un payload normalizado estable."""
-    return [
+    software_ranges = get_software_ranges()
+    normalized = [
         normalize_software_range(item)
-        for item in get_software_ranges()
-        if (
-            map_remote_document_to_local(_remote_document_value(item)) == document_code
-            and bool(item.get('is_associated_to_software', True))
-        )
+        for item in software_ranges
+        if map_remote_document_to_local(_remote_document_value(item)) == document_code
     ]
+    logger.info(
+        'facturacion.rangos.autorizados document_code=%s software_ranges=%s matched=%s',
+        document_code,
+        len(software_ranges),
+        len(normalized),
+    )
+    return normalized
 
 
 
@@ -175,6 +145,7 @@ def list_ranges() -> list[dict[str, Any]]:
         return payload
     data = payload.get('data', payload) if isinstance(payload, dict) else []
     if isinstance(data, list):
+        logger.info('facturacion.rangos.factus.response parsed=list count=%s', len(data))
         return data
     if isinstance(data, dict):
         nested = data.get('data', data.get('numbering_ranges', []))
@@ -213,14 +184,22 @@ def update_range_current(factus_id: int, current: int) -> dict[str, Any]:
 
 
 def get_software_ranges() -> list[dict[str, Any]]:
-    payload = FactusClient().get_software_numbering_ranges()
+    client = FactusClient()
+    logger.info(
+        'facturacion.rangos.factus.request endpoint=%s',
+        client.numbering_ranges_dian_path,
+    )
+    payload = client.get_software_numbering_ranges()
     data = payload.get('data', payload) if isinstance(payload, dict) else payload
     if isinstance(data, list):
+        logger.info('facturacion.rangos.factus.response parsed=list count=%s', len(data))
         return data
     if isinstance(data, dict):
         nested = data.get('data', data.get('numbering_ranges', []))
         if isinstance(nested, list):
+            logger.info('facturacion.rangos.factus.response parsed=nested_list count=%s', len(nested))
             return nested
+    logger.warning('facturacion.rangos.factus.response parsed=empty payload_type=%s', type(payload).__name__)
     return []
 
 

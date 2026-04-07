@@ -1,3 +1,5 @@
+import re
+
 from rest_framework import serializers
 
 from apps.facturacion.models import RemisionNumeracion, RemisionNumeracionHistorial, RangoNumeracionDIAN
@@ -76,7 +78,11 @@ class CreateRangoFactusSerializer(serializers.Serializer):
 
 
 class LocalRangoNumeracionSerializer(serializers.ModelSerializer):
+    MODE_AUTHORIZED = 'autorizado'
+    MODE_MANUAL = 'manual'
+
     activate_now = serializers.BooleanField(write_only=True, required=False, default=False)
+    create_mode = serializers.ChoiceField(choices=[MODE_AUTHORIZED, MODE_MANUAL], required=False, default=MODE_MANUAL, write_only=True)
 
     class Meta:
         model = RangoNumeracionDIAN
@@ -102,26 +108,39 @@ class LocalRangoNumeracionSerializer(serializers.ModelSerializer):
             'activo',
             'metadata_json',
             'activate_now',
+            'create_mode',
         ]
         read_only_fields = ['id', 'environment', 'is_expired_remote', 'document_name']
 
     def validate(self, attrs):
         instance = self.instance
         document_code = attrs.get('document_code', getattr(instance, 'document_code', 'FACTURA_VENTA'))
+        mode = attrs.get('create_mode', self.MODE_MANUAL)
         prefijo = (attrs.get('prefijo', getattr(instance, 'prefijo', '')) or '').strip()
         desde = attrs.get('desde', getattr(instance, 'desde', 0))
         hasta = attrs.get('hasta', getattr(instance, 'hasta', 0))
         actual = attrs.get('consecutivo_actual', getattr(instance, 'consecutivo_actual', 0))
         resolucion = (attrs.get('resolucion', getattr(instance, 'resolucion', '')) or '').strip()
+        fecha_autorizacion = attrs.get('fecha_autorizacion', getattr(instance, 'fecha_autorizacion', None))
+        fecha_expiracion = attrs.get('fecha_expiracion', getattr(instance, 'fecha_expiracion', None))
+        factus_range_id = int(attrs.get('factus_range_id', getattr(instance, 'factus_range_id', 0)) or 0)
 
+        if not document_code:
+            raise serializers.ValidationError({'document_code': 'El tipo de documento es obligatorio.'})
         if not prefijo:
             raise serializers.ValidationError({'prefijo': 'El prefijo es obligatorio.'})
         if desde > hasta:
             raise serializers.ValidationError({'hasta': 'Debe ser mayor o igual que desde.'})
         if not (desde <= actual <= hasta):
             raise serializers.ValidationError({'consecutivo_actual': 'Debe estar dentro del rango configurado.'})
+        if not re.fullmatch(r'[A-Za-z0-9-]{1,20}', prefijo):
+            raise serializers.ValidationError({'prefijo': 'Solo se permiten letras, números y guion (máximo 20 caracteres).'})
+        if fecha_autorizacion and fecha_expiracion and fecha_expiracion < fecha_autorizacion:
+            raise serializers.ValidationError({'fecha_expiracion': 'Debe ser mayor o igual a la fecha de expedición.'})
         if document_code in {'FACTURA_VENTA', 'DOCUMENTO_SOPORTE'} and not resolucion:
             raise serializers.ValidationError({'resolucion': 'Este campo es obligatorio para el documento seleccionado.'})
+        if mode == self.MODE_AUTHORIZED and factus_range_id <= 0:
+            raise serializers.ValidationError({'factus_range_id': 'En modo autorizado debe seleccionar una resolución de Factus.'})
 
         environment = attrs.get('environment', getattr(instance, 'environment', None))
         queryset = RangoNumeracionDIAN.objects.filter(

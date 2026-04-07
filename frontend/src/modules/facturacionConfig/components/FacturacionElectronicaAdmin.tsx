@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { type FormEvent, useEffect, useMemo, useState } from 'react';
 import { Eye, Pencil, Plus, Save, Trash2 } from 'lucide-react';
 import {
   configuracionAPI,
@@ -6,6 +6,9 @@ import {
   type FacturacionRango,
 } from '../../../api/configuracion';
 import type { ConfiguracionFacturacion } from '../../../types';
+import {
+  ADMIN_RANGE_DOCUMENT_TYPES,
+} from '../constants/documentTypes';
 
 type CreateTab = 'autorizado' | 'manual';
 
@@ -32,30 +35,7 @@ type RangoForm = {
   factus_range_id?: number | null;
 };
 
-const DOC_OPTIONS = [
-  { value: '', label: 'Todos' },
-  { value: 'FACTURA_VENTA', label: 'Factura de Venta', factusDocument: '21' },
-  { value: 'NOTA_CREDITO', label: 'Nota Crédito', factusDocument: '22' },
-  { value: 'NOTA_DEBITO', label: 'Nota Débito', factusDocument: '23' },
-  { value: 'DOCUMENTO_SOPORTE', label: 'Documento Soporte', factusDocument: '24' },
-  {
-    value: 'NOTA_AJUSTE_DOCUMENTO_SOPORTE',
-    label: 'Nota de Ajuste Documento Soporte',
-    factusDocument: '95',
-  },
-  { value: 'NOMINA', label: 'Nómina', factusDocument: '9' },
-  { value: 'NOTA_AJUSTE_NOMINA', label: 'Nota de Ajuste Nómina', factusDocument: '10' },
-  {
-    value: 'NOTA_ELIMINACION_NOMINA',
-    label: 'Nota de eliminación de nómina',
-    factusDocument: '11',
-  },
-  {
-    value: 'FACTURA_TALONARIO',
-    label: 'Factura de talonario o de papel',
-    factusDocument: '27',
-  },
-] as const;
+const DOC_OPTIONS = [{ value: '', label: 'Todos' }, ...ADMIN_RANGE_DOCUMENT_TYPES.map((item) => ({ value: item.key, label: item.label }))] as const;
 
 const STATUS_OPTIONS = [
   { value: 'todos', label: 'Todos' },
@@ -79,8 +59,19 @@ const emptyForm: RangoForm = {
 
 const getApiErrorMessage = (error: unknown): string | undefined => {
   if (!error || typeof error !== 'object' || !('response' in error)) return undefined;
-  const response = (error as { response?: { data?: { detail?: string } } }).response;
-  return response?.data?.detail;
+  const response = (error as { response?: { status?: number; data?: unknown } }).response;
+  const data = response?.data;
+  if (typeof data === 'string') return data;
+  if (data && typeof data === 'object') {
+    const details = (data as Record<string, unknown>).detail;
+    if (typeof details === 'string' && details.trim()) return details;
+    const fieldEntries = Object.entries(data as Record<string, unknown>)
+      .filter(([key]) => key !== 'detail')
+      .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(', ') : String(value)}`);
+    if (fieldEntries.length) return fieldEntries.join(' | ');
+  }
+  if (response?.status) return `Error HTTP ${response.status}.`;
+  return undefined;
 };
 
 const documentLabel = (documentCode: string) => {
@@ -115,6 +106,9 @@ export default function FacturacionElectronicaAdmin({
   const [form, setForm] = useState<RangoForm>(emptyForm);
   const [activateNow, setActivateNow] = useState(true);
   const [availableRanges, setAvailableRanges] = useState<AuthorizedAvailableRange[]>([]);
+  const [loadingRanges, setLoadingRanges] = useState(false);
+  const [submittingRange, setSubmittingRange] = useState(false);
+  const [modalError, setModalError] = useState('');
   const [detalleRango, setDetalleRango] = useState<Record<string, unknown> | null>(null);
   const [remision, setRemision] = useState<RemisionNumeracionPayload>({});
 
@@ -176,66 +170,58 @@ export default function FacturacionElectronicaAdmin({
   };
 
   const handleBuscarRangosAutorizados = async () => {
+    setModalError('');
+    setLoadingRanges(true);
     try {
+      // eslint-disable-next-line no-console
+      console.info('Busqueda rangos Factus payload', { document_code: form.document_code });
       const response = await configuracionAPI.obtenerRangosAutorizadosDisponibles(form.document_code);
       setAvailableRanges(response.items || []);
       if (!response.items?.length) {
-        setActionMessage(response.detail || 'No hay rangos asociados al software para este documento.');
+        setModalError(response.detail || 'Factus no retornó rangos asociados para este documento.');
       }
     } catch (e: unknown) {
-      setActionMessage(getApiErrorMessage(e) || 'No fue posible consultar rangos asociados.');
-    }
-  };
-
-  const loadResolutionsByDocument = async (documentCode: string) => {
-    try {
-      const response = await configuracionAPI.obtenerRangosAutorizadosDisponibles(documentCode);
-      setAvailableRanges(response.items || []);
-      if (!response.items?.length) {
-        setActionMessage(response.detail || 'No hay resoluciones vinculadas en Factus para este documento.');
-      }
-    } catch (e: unknown) {
-      setActionMessage(getApiErrorMessage(e) || 'No fue posible consultar resoluciones de Factus.');
+      // eslint-disable-next-line no-console
+      console.error('Busqueda rangos Factus error', e);
+      setModalError(getApiErrorMessage(e) || 'No fue posible consultar resoluciones de Factus.');
       setAvailableRanges([]);
+    } finally {
+      setLoadingRanges(false);
     }
   };
 
-  const handleCreate = async () => {
+  const handleCreate = async (event?: FormEvent) => {
+    event?.preventDefault();
     setActionMessage('');
-    if (createTab === 'manual' && form.document_code === 'FACTURA_VENTA') {
-      setActionMessage(
-        'Factura de Venta solo permite rangos autorizados asociados al software en Factus. Use la pestaña "Rango autorizado".',
-      );
-      return;
-    }
-    if (createTab === 'autorizado' && form.document_code === 'FACTURA_VENTA' && !form.factus_range_id) {
-      setActionMessage(
-        'Debe seleccionar un rango autorizado real desde "Buscar" antes de registrar Factura de Venta.',
-      );
-      return;
-    }
+    setModalError('');
+    setSubmittingRange(true);
     try {
-      await configuracionAPI.crearRangoFacturacion({
+      const payload = {
         ...form,
-        is_active_remote: true,
+        create_mode: createTab,
+        is_active_remote: createTab === 'autorizado',
         is_associated_to_software: createTab === 'autorizado',
         is_selected_local: activateNow,
         activo: true,
         activate_now: activateNow,
+      };
+      // eslint-disable-next-line no-console
+      console.info('Registrar rango payload', payload);
+      await configuracionAPI.crearRangoFacturacion({
+        ...payload,
       });
       setActionMessage('Rango registrado correctamente.');
       setShowModal(false);
       setForm(emptyForm);
       await loadData();
     } catch (e: unknown) {
-      setActionMessage(getApiErrorMessage(e) || 'No fue posible registrar el rango.');
+      // eslint-disable-next-line no-console
+      console.error('Registrar rango error', e);
+      setModalError(getApiErrorMessage(e) || 'No fue posible registrar el rango.');
+    } finally {
+      setSubmittingRange(false);
     }
   };
-
-  useEffect(() => {
-    if (!showModal || createTab !== 'autorizado') return;
-    loadResolutionsByDocument(form.document_code);
-  }, [form.document_code, showModal, createTab]);
 
   useEffect(() => {
     if (createTab !== 'manual') return;
@@ -554,7 +540,10 @@ export default function FacturacionElectronicaAdmin({
                 className={`rounded px-3 py-2 text-lg font-semibold text-white ${
                   createTab === 'autorizado' ? 'bg-blue-700' : 'bg-blue-400'
                 }`}
-                onClick={() => setCreateTab('autorizado')}
+                onClick={() => {
+                  setCreateTab('autorizado');
+                  setModalError('');
+                }}
               >
                 Rango autorizado
               </button>
@@ -563,30 +552,29 @@ export default function FacturacionElectronicaAdmin({
                   createTab === 'manual' ? 'bg-blue-700' : 'bg-blue-400'
                 }`}
                 onClick={() => {
-                  if (form.document_code === 'FACTURA_VENTA') {
-                    setActionMessage(
-                      'Factura de Venta no admite rango manual. Seleccione un rango autorizado desde Factus.',
-                    );
-                    return;
-                  }
                   setCreateTab('manual');
+                  setModalError('');
                 }}
               >
                 Rango manual
               </button>
             </div>
 
-            <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
+            <form id="create-range-form" className="mt-4 rounded-xl border border-slate-200 bg-white p-4" onSubmit={handleCreate}>
               <div className="grid gap-3 md:grid-cols-2">
                 <label className="text-sm font-semibold text-slate-700">
                   Documento
                   <select
                     className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-blue-600 focus:outline-none"
                     value={form.document_code}
-                    onChange={(e) => setForm((prev) => ({ ...prev, document_code: e.target.value }))}
+                    onChange={(e) => {
+                      setForm((prev) => ({ ...prev, document_code: e.target.value }));
+                      setAvailableRanges([]);
+                      setModalError('');
+                    }}
                   >
-                    {DOC_OPTIONS.filter((item) => item.value).map((d) => (
-                      <option key={d.value} value={d.value}>
+                    {ADMIN_RANGE_DOCUMENT_TYPES.map((d) => (
+                      <option key={d.key} value={d.key}>
                         {d.label}
                       </option>
                     ))}
@@ -597,9 +585,11 @@ export default function FacturacionElectronicaAdmin({
                   <div className="flex items-end">
                     <button
                       className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                      type="button"
                       onClick={handleBuscarRangosAutorizados}
+                      disabled={loadingRanges}
                     >
-                      Buscar
+                      {loadingRanges ? 'Buscando...' : 'Buscar'}
                     </button>
                   </div>
                 ) : null}
@@ -638,7 +628,11 @@ export default function FacturacionElectronicaAdmin({
                   Seleccionar como rango local activo al registrar
                 </label>
               </div>
-            </div>
+            </form>
+
+            {modalError ? (
+              <p className="mt-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{modalError}</p>
+            ) : null}
 
             {createTab === 'autorizado' ? (
               <div className="mt-3 rounded-lg border bg-white p-4">
@@ -662,7 +656,7 @@ export default function FacturacionElectronicaAdmin({
                   </div>
                 ) : (
                   <p className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500">
-                    No hay resoluciones vinculadas para el documento seleccionado.
+                    Factus no retornó rangos asociados para este documento.
                   </p>
                 )}
               </div>
@@ -672,11 +666,8 @@ export default function FacturacionElectronicaAdmin({
               <button className="rounded border px-3 py-2 text-sm" onClick={() => setShowModal(false)}>
                 Cerrar
               </button>
-              <button
-                className="rounded bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-                onClick={handleCreate}
-              >
-                Registrar
+              <button className="rounded bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60" type="submit" form="create-range-form" disabled={submittingRange}>
+                {submittingRange ? 'Registrando...' : 'Registrar'}
               </button>
             </div>
           </div>

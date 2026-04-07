@@ -286,6 +286,7 @@ export const configuracionAPI = {
   },
   crearRangoFacturacion: async (payload: {
     document_code: string;
+    create_mode?: 'autorizado' | 'manual';
     factus_id?: number | null;
     factus_range_id?: number | null;
     prefijo: string;

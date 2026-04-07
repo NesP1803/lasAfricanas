@@ -957,14 +957,25 @@ class FacturacionRangosViewSet(viewsets.GenericViewSet):
         valid_codes = {choice[0] for choice in RangoNumeracionDIAN.DOCUMENT_CODE_CHOICES}
         if document_code not in valid_codes:
             return Response({'detail': 'document_code inválido.'}, status=status.HTTP_400_BAD_REQUEST)
+        logger.info('facturacion.rangos.autorizados.request document_code=%s', document_code)
         try:
             items = list_available_authorized_ranges(document_code=document_code)
         except (FactusAPIError, FactusAuthError, FactusValidationError) as exc:
+            logger.warning(
+                'facturacion.rangos.autorizados.error document_code=%s detail=%s',
+                document_code,
+                str(exc),
+            )
             return Response(
                 {'detail': str(exc), 'status': 'degraded', 'items': []},
                 status=status.HTTP_200_OK,
             )
-        detail = '' if items else 'No hay rangos autorizados asociados al software para este documento.'
+        detail = '' if items else 'Factus no retornó rangos asociados para este documento.'
+        logger.info(
+            'facturacion.rangos.autorizados.response document_code=%s items=%s',
+            document_code,
+            len(items),
+        )
         return Response({'status': 'ok', 'detail': detail, 'items': items})
 
     def retrieve(self, request, pk=None):
@@ -993,11 +1004,14 @@ class FacturacionRangosViewSet(viewsets.GenericViewSet):
         if not _is_admin(request.user):
             return Response({'detail': 'No autorizado.'}, status=status.HTTP_403_FORBIDDEN)
         payload = dict(request.data)
+        logger.info('facturacion.rangos.create.request payload=%s', payload)
         payload['environment'] = resolve_factus_environment()
         activate_now = str(payload.get('activate_now', '')).strip().lower() in {'1', 'true', 'si', 'sí', 'yes'}
         create_remote_now = str(payload.get('create_remote', '')).strip().lower() in {'1', 'true', 'si', 'sí', 'yes'}
+        create_mode = str(payload.get('create_mode', 'manual')).strip().lower() or 'manual'
+        payload['create_mode'] = create_mode
         remote_id = int(payload.get('factus_range_id') or payload.get('factus_id') or 0)
-        is_authorized_import = remote_id > 0
+        is_authorized_import = create_mode == 'autorizado' and remote_id > 0
         remote_create_payload = None
         if create_remote_now and not is_authorized_import:
             remote_create_payload = {
@@ -1024,19 +1038,21 @@ class FacturacionRangosViewSet(viewsets.GenericViewSet):
             payload['factus_id'] = remote_id
             payload['factus_range_id'] = remote_id
             payload['is_associated_to_software'] = True
+            payload['is_active_remote'] = bool(payload.get('is_active_remote', True))
+            payload['is_expired_remote'] = bool(payload.get('is_expired_remote', False))
         else:
             payload['factus_id'] = None
             payload['factus_range_id'] = None
             payload['is_associated_to_software'] = False
             payload['is_active_remote'] = False
             payload['is_expired_remote'] = False
-        document_code = str(payload.get('document_code') or '').strip().upper()
-        if document_code == 'FACTURA_VENTA':
-            is_valid_factura, detail = self._validate_factura_venta_payload(payload)
-            if not is_valid_factura:
-                return Response({'detail': detail}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
-            payload['is_associated_to_software'] = True
-            payload['is_active_remote'] = bool(payload.get('is_active_remote', True))
+        logger.info(
+            'facturacion.rangos.create.normalized mode=%s activate_now=%s factus_range_id=%s document_code=%s',
+            create_mode,
+            activate_now,
+            payload.get('factus_range_id'),
+            payload.get('document_code'),
+        )
         serializer = LocalRangoNumeracionSerializer(data=payload)
         serializer.is_valid(raise_exception=True)
         with transaction.atomic():
@@ -1052,6 +1068,7 @@ class FacturacionRangosViewSet(viewsets.GenericViewSet):
                     return Response({'detail': detail}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
             if activate_now:
                 self._base_queryset().filter(document_code=rango.document_code).exclude(pk=rango.pk).update(is_selected_local=False)
+        logger.info('facturacion.rangos.create.success rango_id=%s document_code=%s', rango.id, rango.document_code)
         return Response(RangoNumeracionDIANSerializer(rango).data, status=status.HTTP_201_CREATED)
 
     def partial_update(self, request, pk=None):
