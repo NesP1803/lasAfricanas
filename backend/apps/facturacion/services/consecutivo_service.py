@@ -62,10 +62,14 @@ def resolve_numbering_range(document_code: str = 'FACTURA_VENTA') -> RangoNumera
             raise FactusValidationError(
                 f'El rango seleccionado para {document_label} está inactivo localmente. Active o seleccione otro rango.'
             )
-        if not (selected_range.factus_id or selected_range.factus_range_id):
+        if document_code == 'FACTURA_VENTA' and not (selected_range.factus_id or selected_range.factus_range_id):
             raise FactusValidationError(
                 f'El rango local seleccionado para {document_label} no tiene ID de Factus (numbering_range_id). '
                 'Debe seleccionar/importar un rango autorizado asociado al software antes de emitir.'
+            )
+        if document_code == 'FACTURA_VENTA' and not selected_range.is_active_remote:
+            raise FactusValidationError(
+                f'El rango seleccionado para {document_label} no está activo en Factus. Seleccione un rango autorizado vigente.'
             )
         if selected_range.is_expired_remote:
             raise FactusValidationError(
@@ -74,6 +78,8 @@ def resolve_numbering_range(document_code: str = 'FACTURA_VENTA') -> RangoNumera
         return selected_range
 
     active_ranges = list(base_queryset.filter(activo=True, is_expired_remote=False).order_by('id'))
+    if document_code == 'FACTURA_VENTA':
+        active_ranges = [item for item in active_ranges if (item.factus_id or item.factus_range_id) and item.is_active_remote]
     if not active_ranges:
         env_label = 'sandbox' if environment == 'SANDBOX' else 'producción'
         raise FactusValidationError(
@@ -81,11 +87,6 @@ def resolve_numbering_range(document_code: str = 'FACTURA_VENTA') -> RangoNumera
         )
     if len(active_ranges) == 1:
         unique_active = active_ranges[0]
-        if not (unique_active.factus_id or unique_active.factus_range_id):
-            raise FactusValidationError(
-                f'El único rango activo para {document_label} no tiene ID de Factus (numbering_range_id). '
-                'Debe sincronizar/importar un rango autorizado antes de emitir.'
-            )
         if not unique_active.is_selected_local:
             base_queryset.filter(is_selected_local=True).update(is_selected_local=False)
             unique_active.is_selected_local = True

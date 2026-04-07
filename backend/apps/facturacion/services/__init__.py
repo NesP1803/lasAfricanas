@@ -49,6 +49,7 @@ from .numbering_range_admin_service import (
     get_range_resilient,
     get_software_ranges,
     get_software_ranges_resilient,
+    list_available_authorized_ranges,
     list_ranges,
     sync_ranges_to_db,
     update_range_current,
@@ -108,5 +109,6 @@ __all__ = [
     'update_range_current',
     'get_software_ranges',
     'get_software_ranges_resilient',
+    'list_available_authorized_ranges',
     'sync_ranges_to_db',
 ]

@@ -77,6 +77,7 @@ from apps.facturacion.services import (
     get_range,
     get_range_resilient,
     get_software_ranges_resilient,
+    list_available_authorized_ranges,
     sync_ranges_to_db,
     update_range_current,
 )
@@ -921,6 +922,21 @@ class FacturacionRangosViewSet(viewsets.GenericViewSet):
         synced = sync_ranges_to_db()
         return Response({'message': 'Rangos sincronizados correctamente.', 'count': len(synced)})
 
+    @action(detail=False, methods=['get'], url_path='autorizados-disponibles')
+    def autorizados_disponibles(self, request):
+        document_code = str(request.query_params.get('document_code', 'FACTURA_VENTA')).strip().upper()
+        valid_codes = {choice[0] for choice in RangoNumeracionDIAN.DOCUMENT_CODE_CHOICES}
+        if document_code not in valid_codes:
+            return Response({'detail': 'document_code inválido.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            items = list_available_authorized_ranges(document_code=document_code)
+        except (FactusAPIError, FactusAuthError, FactusValidationError) as exc:
+            return Response(
+                {'detail': str(exc), 'status': 'degraded', 'items': []},
+                status=status.HTTP_200_OK,
+            )
+        return Response({'status': 'ok', 'items': items})
+
     def retrieve(self, request, pk=None):
         rango = self._base_queryset().filter(pk=pk).first()
         if not rango:
@@ -949,6 +965,41 @@ class FacturacionRangosViewSet(viewsets.GenericViewSet):
         payload = dict(request.data)
         payload['environment'] = resolve_factus_environment()
         activate_now = str(payload.get('activate_now', '')).strip().lower() in {'1', 'true', 'si', 'sí', 'yes'}
+        create_remote_now = str(payload.get('create_remote', '')).strip().lower() in {'1', 'true', 'si', 'sí', 'yes'}
+        remote_id = int(payload.get('factus_range_id') or payload.get('factus_id') or 0)
+        is_authorized_import = remote_id > 0
+        remote_create_payload = None
+        if create_remote_now and not is_authorized_import:
+            remote_create_payload = {
+                'document': str(payload.get('document') or '').strip(),
+                'prefix': str(payload.get('prefijo') or '').strip(),
+                'from': int(payload.get('desde') or 1),
+                'to': int(payload.get('hasta') or 1),
+                'current': int(payload.get('consecutivo_actual') or payload.get('desde') or 1),
+                'resolution_number': str(payload.get('resolucion') or '').strip(),
+                'start_date': payload.get('fecha_autorizacion'),
+                'end_date': payload.get('fecha_expiracion'),
+                'technical_key': str(payload.get('technical_key') or '').strip(),
+            }
+            try:
+                remote_created = create_range(remote_create_payload)
+                remote_id = int(remote_created.get('id') or remote_created.get('numbering_range_id') or 0)
+                is_authorized_import = remote_id > 0
+            except (FactusAPIError, FactusAuthError, FactusValidationError) as exc:
+                return Response(
+                    {'detail': str(exc), 'remote_error': True, 'remote_payload': remote_create_payload},
+                    status=status.HTTP_502_BAD_GATEWAY,
+                )
+        if is_authorized_import:
+            payload['factus_id'] = remote_id
+            payload['factus_range_id'] = remote_id
+            payload['is_associated_to_software'] = True
+        else:
+            payload['factus_id'] = None
+            payload['factus_range_id'] = None
+            payload['is_associated_to_software'] = False
+            payload['is_active_remote'] = False
+            payload['is_expired_remote'] = False
         serializer = LocalRangoNumeracionSerializer(data=payload)
         serializer.is_valid(raise_exception=True)
         with transaction.atomic():
@@ -984,7 +1035,19 @@ class FacturacionRangosViewSet(viewsets.GenericViewSet):
         new_current = serializer.validated_data['current']
         if new_current < rango.desde or new_current > rango.hasta:
             return Response({'detail': 'El consecutivo está fuera del rango permitido.'}, status=status.HTTP_400_BAD_REQUEST)
-        payload = update_range_current(int(rango.factus_id or rango.factus_range_id), new_current)
+        factus_id = int(rango.factus_id or rango.factus_range_id or 0)
+        if factus_id <= 0:
+            return Response(
+                {'detail': 'El rango local no tiene ID remoto en Factus para actualizar consecutivo.'},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+        try:
+            payload = update_range_current(factus_id, new_current)
+        except (FactusAPIError, FactusAuthError, FactusValidationError) as exc:
+            return Response(
+                {'detail': str(exc), 'remote_error': True, 'range': RangoNumeracionDIANSerializer(rango).data},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
         if serializer.validated_data.get('sync_local', True):
             rango.consecutivo_actual = new_current
             rango.last_synced_at = timezone.now()
@@ -1065,6 +1128,13 @@ class FacturacionRangosViewSet(viewsets.GenericViewSet):
                 {'detail': 'Solo se puede seleccionar un rango local activo y vigente.'},
                 status=status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
+        if rango.document_code == 'FACTURA_VENTA':
+            remote_id = int(rango.factus_range_id or rango.factus_id or 0)
+            if remote_id <= 0 or not rango.is_active_remote:
+                return Response(
+                    {'detail': 'Para FACTURA_VENTA solo se puede seleccionar un rango autorizado activo en Factus.'},
+                    status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                )
         with transaction.atomic():
             self._base_queryset().filter(document_code=rango.document_code).update(is_selected_local=False)
             rango.is_selected_local = True

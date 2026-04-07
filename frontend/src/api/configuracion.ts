@@ -59,6 +59,29 @@ export type SoftwareRangesResponse = {
   items: SoftwareRangeComparison[];
 };
 
+export type AuthorizedAvailableRange = {
+  remote_id: number;
+  factus_range_id: number;
+  document: string;
+  document_code: string;
+  prefix: string;
+  from: number;
+  to: number;
+  current: number;
+  resolution_number: string;
+  start_date: string | null;
+  end_date: string | null;
+  technical_key: string;
+  is_active: boolean;
+  is_associated_to_software: boolean;
+};
+
+export type AuthorizedAvailableRangesResponse = {
+  status: 'ok' | 'degraded';
+  detail?: string;
+  items: AuthorizedAvailableRange[];
+};
+
 export type FactusHealthResponse = {
   environment: 'SANDBOX' | 'PRODUCTION';
   token_ok: boolean;
@@ -225,7 +248,19 @@ export const configuracionAPI = {
     return response.data;
   },
   obtenerDetalleRangoFacturacion: async (id: number) => {
-    const response = await apiClient.get(`/facturacion/rangos/${id}/`);
+    const response = await apiClient.get<{
+      local: FacturacionRango;
+      remote: Record<string, unknown> | null;
+      remote_detail_unavailable: boolean;
+      remote_error: string;
+    }>(`/facturacion/rangos/${id}/`);
+    return response.data;
+  },
+  obtenerRangosAutorizadosDisponibles: async (documentCode: string) => {
+    const response = await apiClient.get<AuthorizedAvailableRangesResponse>(
+      '/facturacion/rangos/autorizados-disponibles/',
+      { params: { document_code: documentCode } }
+    );
     return response.data;
   },
   crearRangoFacturacion: async (payload: {
