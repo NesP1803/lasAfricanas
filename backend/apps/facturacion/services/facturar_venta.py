@@ -70,6 +70,24 @@ logger = logging.getLogger(__name__)
 FINAL_ACCEPTED_STATUSES = {'ACEPTADA', 'ACEPTADA_CON_OBSERVACIONES'}
 
 
+def _hydrate_factura_number_from_payload(factura: FacturaElectronica, response_payload: dict[str, Any] | None) -> str:
+    """Intenta completar el number oficial desde payload Factus y lo persiste en la factura."""
+    if factura.number:
+        return str(factura.number).strip()
+    if not isinstance(response_payload, dict):
+        return ''
+    extracted = extract_factus_data(response_payload)
+    number = str(extracted.get('number') or '').strip()
+    if not number:
+        return ''
+    factura.number = number
+    if not factura.reference_code and extracted.get('reference_code'):
+        factura.reference_code = str(extracted.get('reference_code') or '').strip()
+    factura.emitida_en_factus = bool(factura.cufe or extracted.get('cufe'))
+    factura.save(update_fields=['number', 'reference_code', 'emitida_en_factus', 'updated_at'])
+    return number
+
+
 def _assert_document_conciliation(*, venta: Venta, request_payload: dict[str, Any], response_payload: dict[str, Any], logger_context: dict[str, Any]) -> None:
     return assert_document_conciliation(
         venta=venta,
@@ -1007,18 +1025,18 @@ def facturar_venta(
                     if key in {'xml_url', 'pdf_url', 'public_url'}:
                         safe_assign_charfield(ctx.factura, key, value)
                     else:
-                        setattr(factura, key, value)
-            factura.reference_code = persistable_fields.get('reference_code') or reference_code
-            factura.estado_electronico = persistable_fields.get('status', 'ERROR_INTEGRACION')
-            factura.estado_factus_raw = persistable_fields.get('estado_factus_raw', factura.estado_factus_raw)
-            factura.emitida_en_factus = bool(factura.number and factura.cufe)
+                        setattr(ctx.factura, key, value)
+            ctx.factura.reference_code = persistable_fields.get('reference_code') or reference_code
+            ctx.factura.estado_electronico = persistable_fields.get('status', 'ERROR_INTEGRACION')
+            ctx.factura.estado_factus_raw = persistable_fields.get('estado_factus_raw', ctx.factura.estado_factus_raw)
+            ctx.factura.emitida_en_factus = bool(ctx.factura.number and ctx.factura.cufe)
             codigo_error = (
                 'OBSERVACIONES_FACTUS'
                 if bill_errors and persistable_fields.get('status') == 'ACEPTADA'
                 else response_json.get('error_code')
             )
-            safe_assign_charfield(factura, 'codigo_error', codigo_error)
-            factura.mensaje_error = (
+            safe_assign_charfield(ctx.factura, 'codigo_error', codigo_error)
+            ctx.factura.mensaje_error = (
                 '; '.join(bill_errors)
                 if bill_errors
                 else response_json.get('error_message')
@@ -1076,10 +1094,10 @@ def facturar_venta(
             ctx.venta.save(update_fields=['factura_electronica_uuid', 'factura_electronica_cufe', 'fecha_envio_dian', 'updated_at'])
             logger.info(
                 'facturar_venta.persistida venta_id=%s factura=%s status=%s reference_code=%s',
-                venta.id,
-                factura.number,
-                factura.estado_electronico,
-                factura.reference_code,
+                ctx.venta.id,
+                ctx.factura.number,
+                ctx.factura.estado_electronico,
+                ctx.factura.reference_code,
             )
             if ctx.factura.cufe and ctx.factura.number:
                 qr_file = generate_qr_dian(ctx.factura.number, ctx.factura.cufe)
@@ -1100,20 +1118,33 @@ def facturar_venta(
             factura.save(update_fields=['estado_electronico', 'codigo_error', 'mensaje_error', 'updated_at'])
         raise DataError(str(exc))
 
+    ctx.factura.refresh_from_db()
     ctx.factura.send_email_enabled = bool(ctx.payload.get('send_email', True))
     ctx.factura.save(update_fields=['send_email_enabled', 'updated_at'])
+    number_persisted = _hydrate_factura_number_from_payload(ctx.factura, response_json)
+    if not number_persisted:
+        logger.warning(
+            'facturar_venta.assets_sync_skip_missing_number venta_id=%s factura_id=%s',
+            ctx.venta.id,
+            ctx.factura.pk,
+        )
+        return ctx.factura
     try:
-        sync_invoice_assets(ctx.factura, include_email_content=not ctx.factura.send_email_enabled)
+        sync_invoice_assets(
+            ctx.factura,
+            include_email_content=not ctx.factura.send_email_enabled,
+            fallback_response_payload=response_json,
+        )
     except DescargaFacturaError:
         logger.warning('facturar_venta.assets_sync_error venta_id=%s factura=%s', ctx.venta.id, ctx.factura.number, exc_info=True)
     logger.info(
         'facturar_venta.emitida_ok venta_id=%s factura_id=%s numero=%s estado=%s',
-        venta.id,
-        factura.pk,
-        factura.number,
-        factura.estado_electronico,
+        ctx.venta.id,
+        ctx.factura.pk,
+        ctx.factura.number,
+        ctx.factura.estado_electronico,
     )
-    upload_custom_pdf_to_factus(ctx.factura)
+    upload_custom_pdf_to_factus(ctx.factura, fallback_response_payload=response_json)
     send_invoice_email_via_factus(ctx.factura)
     logger.info('facturar_venta.fin_ok venta_id=%s factura=%s', ctx.venta.id, ctx.factura.number)
     return ctx.factura

@@ -130,6 +130,31 @@ const estadoElectronicoMensaje = (estado?: string, fallback?: string): string =>
   }
 };
 
+const resolveOfficialFacturaNumber = (
+  venta?: Venta | null,
+  emision?: Partial<FacturarCajaResponse> | null
+): string => {
+  const number =
+    emision?.number ||
+    emision?.numero_factura ||
+    emision?.factura_electronica?.number ||
+    venta?.factura_electronica?.numero ||
+    venta?.numero_comprobante ||
+    '';
+  return String(number || '').trim();
+};
+
+const buildFacturaStatusText = (venta: Venta | null, isSubmitting: boolean): string => {
+  if (isSubmitting) return 'Emitiendo en Factus...';
+  const number = resolveOfficialFacturaNumber(venta, null);
+  if (number && !number.startsWith('FAC-')) return number;
+  const estado = String(venta?.factura_electronica?.estado || venta?.estado || '').toUpperCase();
+  if (estado === 'PENDIENTE_REINTENTO') return 'Pendiente de reintento';
+  if (estado === 'ERROR_INTEGRACION' || estado === 'ERROR_PERSISTENCIA') return 'Error técnico de emisión';
+  if (estado === 'RECHAZADA') return 'Rechazada';
+  return 'Pendiente de emisión';
+};
+
 const buildDocumentoPreviewFromVenta = (
   venta: Venta,
   emision?: Partial<FacturarCajaResponse>
@@ -158,7 +183,7 @@ const buildDocumentoPreviewFromVenta = (
 
   return {
     tipo: venta.tipo_comprobante as DocumentoPreview['tipo'],
-    numero: venta.numero_comprobante || `#${venta.id}`,
+    numero: resolveOfficialFacturaNumber(venta, emision) || `#${venta.id}`,
     fecha: venta.facturada_at || venta.fecha,
     clienteNombre: venta.cliente_info?.nombre ?? 'Cliente general',
     clienteDocumento: venta.cliente_info?.numero_documento ?? '',
@@ -202,6 +227,7 @@ const buildDocumentoPreviewFromVenta = (
       'Representación gráfica de factura electrónica de venta. Valide en DIAN con CUFE.',
     resolucion:
       facturaVenta?.resolucion_numeracion ||
+      (facturaVenta?.numbering_resolution_info?.resolucion as string | undefined) ||
       (typeof finalFields.factus_resolution_number === 'string' ? finalFields.factus_resolution_number : undefined),
   };
 };
@@ -1092,9 +1118,10 @@ export default function Ventas() {
         const emision = await ventasApi.facturarEnCaja(ventaIdFacturar);
         const ventaFacturada = await ventasApi.getVenta(ventaIdFacturar);
         setVentaBorrador(ventaFacturada);
+        const numeroOficial = resolveOfficialFacturaNumber(ventaFacturada, emision);
         setDocumentoGenerado({
           tipo: 'FACTURA',
-          numero: emision.numero_factura || ventaFacturada.numero_comprobante || `FAC-${ventaFacturada.id}`,
+          numero: numeroOficial || `FAC-${ventaFacturada.id}`,
           cliente: ventaFacturada.cliente_info?.nombre ?? clienteNombre,
           total: formatCurrencyCOP(ventaFacturada.total),
         });
@@ -1102,7 +1129,7 @@ export default function Ventas() {
         setDocumentoPreview(buildDocumentoPreviewFromVenta(ventaFacturada, emision));
         setMensaje(
           emision.factus_sent
-            ? `Factura electrónica emitida: ${emision.numero_factura} (${emision.estado_electronico || emision.status})`
+            ? `Factura electrónica emitida: ${numeroOficial || 'N/D'} (${emision.estado_electronico || emision.status})`
             : emision.message || 'Factura local confirmada sin envío electrónico.'
         );
         showNotification({
@@ -1120,9 +1147,10 @@ export default function Ventas() {
       const emision = await ventasApi.facturarVentaElectronica(venta.id);
       const ventaEmitida = await ventasApi.getVenta(venta.id);
       resetVentaState();
+      const numeroOficial = resolveOfficialFacturaNumber(ventaEmitida, emision);
       setDocumentoGenerado({
         tipo: 'FACTURA',
-        numero: emision.numero_factura || ventaEmitida.numero_comprobante || `FAC-${ventaEmitida.id}`,
+        numero: numeroOficial || `FAC-${ventaEmitida.id}`,
         cliente: clienteNombre,
         total: formatCurrencyCOP(totals.totalCobro),
       });
@@ -1130,7 +1158,7 @@ export default function Ventas() {
       setDocumentoPreview(buildDocumentoPreviewFromVenta(ventaEmitida, emision));
       setMensaje(
         emision.factus_sent
-          ? `Factura electrónica emitida: ${emision.numero_factura} (${emision.estado_electronico || emision.status})`
+          ? `Factura electrónica emitida: ${numeroOficial || 'N/D'} (${emision.estado_electronico || emision.status})`
           : estadoElectronicoMensaje(emision.estado_electronico, emision.status)
       );
       showNotification({
@@ -1332,7 +1360,7 @@ export default function Ventas() {
             </label>
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700">
               {configuracion
-                ? 'Número oficial asignado por Factus al facturar'
+                ? buildFacturaStatusText(ventaBorrador, guardandoBorrador)
                 : 'Pendiente de configuración técnica'}
             </div>
           </div>
@@ -1841,7 +1869,7 @@ export default function Ventas() {
                   efectivoRecibido={documentoPreview.efectivoRecibido}
                   cambio={documentoPreview.cambio}
                   notas={configuracion?.notas_factura}
-                  resolucion={documentoPreview.resolucion || 'Pendiente de consulta electrónica'}
+                  resolucion={documentoPreview.resolucion || 'Se asignará al facturar'}
                   empresa={empresa}
                   cufe={documentoPreview.cufe}
                   qrUrl={documentoPreview.qrUrl}
@@ -1875,7 +1903,7 @@ export default function Ventas() {
                       efectivoRecibido: documentoPreview.efectivoRecibido,
                       cambio: documentoPreview.cambio,
                       notas: configuracion?.notas_factura,
-                      resolucion: documentoPreview.resolucion || 'Pendiente de consulta electrónica',
+                      resolucion: documentoPreview.resolucion || 'Se asignará al facturar',
                       empresa,
                       cufe: documentoPreview.cufe,
                       qrUrl: documentoPreview.qrUrl,

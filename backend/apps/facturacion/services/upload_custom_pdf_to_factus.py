@@ -9,14 +9,32 @@ from django.utils import timezone
 from apps.facturacion.models import FacturaElectronica
 from apps.facturacion.services.factus_client import FactusAPIError, FactusAuthError, FactusClient
 from apps.facturacion.services.pdf_personalizado import build_pdf_personalizado_payload, generar_pdf_personalizado
+from apps.facturacion.services.reconciliation import extract_factus_data
 
 logger = logging.getLogger(__name__)
 
 
-def upload_custom_pdf_to_factus(factura: FacturaElectronica) -> bool:
+def upload_custom_pdf_to_factus(
+    factura: FacturaElectronica,
+    *,
+    fallback_response_payload: dict | None = None,
+) -> bool:
     """Sube el PDF Carta personalizado sin alterar estado electrónico de la factura."""
+    if not factura.number and factura.pk:
+        factura.refresh_from_db()
+    if not factura.number and isinstance(fallback_response_payload, dict):
+        extracted = extract_factus_data(fallback_response_payload)
+        number = str(extracted.get('number') or '').strip()
+        if number:
+            factura.number = number
+            if not factura.reference_code and extracted.get('reference_code'):
+                factura.reference_code = str(extracted.get('reference_code') or '').strip()
+            factura.save(update_fields=['number', 'reference_code', 'updated_at'])
     if not factura.number:
-        raise ValueError('La factura no tiene number confirmado para subir PDF personalizado.')
+        factura.ultimo_error_pdf = 'Se pospone carga PDF: falta número oficial Factus persistido.'
+        factura.save(update_fields=['ultimo_error_pdf', 'updated_at'])
+        logger.warning('facturar_venta.pdf_personalizado_skip_missing_number factura_id=%s', factura.pk)
+        return False
 
     try:
         generar_pdf_personalizado(factura)

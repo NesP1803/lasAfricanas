@@ -13,6 +13,7 @@ from django.utils import timezone
 from apps.facturacion.models import FacturaElectronica
 from apps.facturacion.services.exceptions import DescargaFacturaError
 from apps.facturacion.services.factus_client import FactusClient
+from apps.facturacion.services.reconciliation import extract_factus_data
 
 logger = logging.getLogger(__name__)
 
@@ -79,9 +80,38 @@ def sync_invoice_assets(
     *,
     include_email_content: bool = False,
     force: bool = False,
+    fallback_response_payload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    if not factura.number and factura.pk:
+        factura.refresh_from_db()
+
+    if not factura.number and isinstance(fallback_response_payload, dict):
+        extracted = extract_factus_data(fallback_response_payload)
+        number = str(extracted.get('number') or '').strip()
+        if number:
+            factura.number = number
+            if not factura.reference_code and extracted.get('reference_code'):
+                factura.reference_code = str(extracted.get('reference_code') or '').strip()
+            factura.save(update_fields=['number', 'reference_code', 'updated_at'])
+
     if not factura.number:
-        raise DescargaFacturaError('La factura no tiene número Factus para sincronizar activos.')
+        logger.warning(
+            'factura_assets.sync_skip_missing_number factura_id=%s include_email_content=%s force=%s',
+            factura.pk,
+            include_email_content,
+            force,
+        )
+        factura.last_assets_sync_at = timezone.now()
+        factura.save(update_fields=['last_assets_sync_at', 'updated_at'])
+        return {
+            'pdf_local_path': factura.pdf_local_path,
+            'xml_local_path': factura.xml_local_path,
+            'email_zip_local_path': factura.email_zip_local_path,
+            'email_subject': factura.email_subject,
+            'include_email_content': include_email_content,
+            'synced': {'pdf': False, 'xml': False, 'email_zip': False},
+            'skipped': 'missing_number',
+        }
 
     client = FactusClient()
     synced: dict[str, bool] = {'pdf': False, 'xml': False, 'email_zip': False}

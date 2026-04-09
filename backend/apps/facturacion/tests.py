@@ -7,7 +7,7 @@ from decimal import Decimal
 from pathlib import Path
 from io import StringIO
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 from apps.facturacion.exceptions import DocumentoSoporteInvalido
 
@@ -31,6 +31,7 @@ from apps.facturacion.services.facturar_venta import (
     facturar_venta,
 )
 from apps.facturacion.services.upload_custom_pdf_to_factus import upload_custom_pdf_to_factus
+from apps.facturacion.services.factura_assets_service import sync_invoice_assets
 from apps.facturacion.services.consecutivo_service import InvoiceSequence, resolve_numbering_range
 from apps.facturacion.services.factus_catalog_lookup import (
     get_municipality_id,
@@ -372,6 +373,30 @@ class FacturaHybridPdfFlowTests(TestCase):
         self.assertEqual(self.factura.estado_electronico, estado_original)
         self.assertIn('timeout upload', self.factura.ultimo_error_pdf)
 
+    @patch('apps.facturacion.services.upload_custom_pdf_to_factus.FactusClient.upload_custom_pdf')
+    def test_upload_custom_pdf_hidrata_number_desde_payload_fallback(self, mocked_upload):
+        self.factura.number = ''
+        self.factura.save(update_fields=['number', 'updated_at'])
+        mocked_upload.return_value = {'ok': True}
+
+        result = upload_custom_pdf_to_factus(
+            self.factura,
+            fallback_response_payload={
+                'data': {
+                    'bill': {
+                        'number': 'SETP-FALLBACK-10',
+                        'reference_code': 'REF-FALLBACK-10',
+                    }
+                }
+            },
+        )
+
+        self.assertTrue(result)
+        self.factura.refresh_from_db()
+        self.assertEqual(self.factura.number, 'SETP-FALLBACK-10')
+        self.assertEqual(self.factura.reference_code, 'REF-FALLBACK-10')
+        mocked_upload.assert_called_once_with('SETP-FALLBACK-10', ANY, filename=ANY)
+
     def test_serializer_venta_exhibe_public_url_estable(self):
         self.factura.public_url = ''
         self.factura.qr_data = 'Verifica aquí https://dian.example/consulta/FAC-HYB-1'
@@ -393,6 +418,68 @@ class FacturaHybridPdfFlowTests(TestCase):
         factura_data = payload['factura_electronica']
         self.assertEqual(factura_data['factus_public_url'], '')
         self.assertTrue(factura_data['documento_inconsistente'])
+
+
+class FacturaAssetsSyncGuardTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(username='assets-user', password='1234')
+        self.cliente = Cliente.objects.create(numero_documento='9003', nombre='Cliente Assets')
+        self.venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            cliente=self.cliente,
+            vendedor=self.user,
+            subtotal=Decimal('10'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('1.9'),
+            total=Decimal('11.9'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('12'),
+            cambio=Decimal('0.1'),
+            estado='FACTURADA',
+            numero_comprobante='FAC-ASSET-1',
+        )
+        self.factura = FacturaElectronica.objects.create(
+            venta=self.venta,
+            number='',
+            reference_code='REF-ASSET-1',
+            cufe='CUFE-ASSET-1',
+            uuid='UUID-ASSET-1',
+            status='ACEPTADA',
+            estado_electronico='ACEPTADA',
+            response_json={'ok': True},
+        )
+
+    @patch('apps.facturacion.services.factura_assets_service.FactusClient.get_bill_pdf')
+    def test_sync_assets_no_lanza_500_si_no_hay_number(self, mocked_pdf):
+        result = sync_invoice_assets(self.factura)
+        mocked_pdf.assert_not_called()
+        self.assertEqual(result.get('skipped'), 'missing_number')
+
+    @patch('apps.facturacion.services.factura_assets_service.store_factura_xml')
+    @patch('apps.facturacion.services.factura_assets_service.store_factura_pdf')
+    @patch('apps.facturacion.services.factura_assets_service.FactusClient.get_bill_xml')
+    @patch('apps.facturacion.services.factura_assets_service.FactusClient.get_bill_pdf')
+    def test_sync_assets_recupera_number_desde_payload(
+        self,
+        mocked_pdf,
+        mocked_xml,
+        mocked_store_pdf,
+        mocked_store_xml,
+    ):
+        mocked_pdf.return_value = {'data': {'pdf_base_64_encoded': 'UEZERg==', 'file_name': 'a.pdf'}}
+        mocked_xml.return_value = {'data': {'xml_base_64_encoded': 'UEZERg==', 'file_name': 'a.xml'}}
+        mocked_store_pdf.return_value = 'facturas/pdf/a.pdf'
+        mocked_store_xml.return_value = 'facturas/xml/a.xml'
+
+        sync_invoice_assets(
+            self.factura,
+            fallback_response_payload={'data': {'bill': {'number': 'SETP-ASSET-2'}}},
+        )
+
+        self.factura.refresh_from_db()
+        self.assertEqual(self.factura.number, 'SETP-ASSET-2')
 
 
 class FacturaFilesEndpointsTests(TestCase):
