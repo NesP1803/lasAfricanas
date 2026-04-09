@@ -12,7 +12,7 @@ from django.utils import timezone
 
 from apps.core.models import ConfiguracionFacturacion
 from apps.facturacion.constants import normalize_local_document_code
-from apps.facturacion.models import FactusNumberingRange
+from apps.facturacion.models import ConfiguracionDIAN, FactusNumberingRange
 from apps.facturacion.services.factus_client import FactusClient, FactusValidationError
 from apps.facturacion.services.factus_environment import resolve_factus_environment
 
@@ -40,6 +40,21 @@ class TechnicalRange:
     raw: dict[str, Any]
 
 
+LOCAL_TO_FACTUS_DOCUMENT_ALIASES: dict[str, set[str]] = {
+    'FACTURA_VENTA': {'21', 'FACTURA_VENTA', 'FACTURA DE VENTA', 'FACTURA', 'INVOICE', 'BILL'},
+    'NOTA_CREDITO': {'22', 'NOTA_CREDITO', 'NOTA CREDITO', 'CREDIT_NOTE', 'CREDIT NOTE', 'NC'},
+    'NOTA_DEBITO': {'23', 'NOTA_DEBITO', 'NOTA DEBITO', 'DEBIT_NOTE', 'DEBIT NOTE', 'ND'},
+    'DOCUMENTO_SOPORTE': {'24', 'DOCUMENTO_SOPORTE', 'DOCUMENTO SOPORTE', 'SUPPORT_DOCUMENT', 'SUPPORT DOCUMENT'},
+    'NOTA_AJUSTE_DOCUMENTO_SOPORTE': {
+        '25',
+        'NOTA_AJUSTE_DOCUMENTO_SOPORTE',
+        'NOTA DE AJUSTE DOCUMENTO SOPORTE',
+        'SUPPORT_DOCUMENT_ADJUSTMENT_NOTE',
+        'NADS',
+    },
+}
+
+
 def _extract_ranges_list(payload: Any) -> list[dict[str, Any]]:
     data = payload.get('data', payload) if isinstance(payload, dict) else payload
     if isinstance(data, list):
@@ -60,18 +75,72 @@ def _as_date(value: Any) -> date | None:
         return None
 
 
+def _as_bool(value: Any, *, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    normalized = str(value).strip().lower()
+    if normalized in {'1', 'true', 'yes', 'si', 'sí', 'on', 'active', 'activo'}:
+        return True
+    if normalized in {'0', 'false', 'no', 'off', 'inactive', 'inactivo'}:
+        return False
+    return default
+
+
+def _normalize_environment(value: Any, *, fallback: str) -> str:
+    normalized = str(value or '').strip().upper()
+    if not normalized:
+        return fallback
+    if normalized in {'PROD', 'PRODUCTION', '2'}:
+        return 'PRODUCTION'
+    if normalized in {'SANDBOX', 'HABILITACION', 'HABILITACIÓN', 'TEST', '1'}:
+        return 'SANDBOX'
+    return fallback
+
+
+def _extract_document_tokens(value: Any) -> set[str]:
+    raw = str(value or '').strip()
+    if not raw:
+        return set()
+    normalized = (
+        raw.upper()
+        .replace('-', '_')
+        .replace('Á', 'A')
+        .replace('É', 'E')
+        .replace('Í', 'I')
+        .replace('Ó', 'O')
+        .replace('Ú', 'U')
+    )
+    tokens = {normalized, normalized.replace('_', ' '), normalized.replace(' ', '_')}
+    mapped_local = normalize_local_document_code(raw)
+    if mapped_local:
+        tokens.add(mapped_local)
+    return {token.strip() for token in tokens if token.strip()}
+
+
+def _matches_local_document(local_document_code: str, remote_document_code: str) -> bool:
+    accepted = LOCAL_TO_FACTUS_DOCUMENT_ALIASES.get(local_document_code, {local_document_code})
+    remote_tokens = _extract_document_tokens(remote_document_code)
+    if not remote_tokens:
+        return local_document_code == 'FACTURA_VENTA'
+    return any(token in accepted for token in remote_tokens)
+
+
 def _normalize_technical_range(raw: dict[str, Any], *, environment: str) -> TechnicalRange:
-    factus_id = int(raw.get('id') or raw.get('numbering_range_id') or 0)
-    remote_doc = str(raw.get('document') or raw.get('document_code') or '').strip()
-    document_code = normalize_local_document_code(remote_doc)
+    factus_id = int(raw.get('id') or raw.get('numbering_range_id') or raw.get('range_id') or 0)
+    remote_doc = str(raw.get('document') or raw.get('document_code') or raw.get('document_type') or '').strip()
+    document_code = normalize_local_document_code(remote_doc) if remote_doc else 'FACTURA_VENTA'
     end_date = _as_date(raw.get('end_date') or raw.get('valid_to'))
     start_date = _as_date(raw.get('start_date') or raw.get('valid_from'))
-    is_expired = bool(raw.get('is_expired', False))
+    is_expired = _as_bool(raw.get('is_expired'), default=False)
     if end_date and end_date < timezone.now().date():
         is_expired = True
-    is_active = bool(raw.get('is_active', True)) and not is_expired
-    is_associated = bool(raw.get('is_associated_to_software', True))
-    range_env = str(raw.get('environment') or environment).strip().upper() or environment
+    is_active = _as_bool(raw.get('is_active'), default=True) and not is_expired
+    is_associated = _as_bool(raw.get('is_associated_to_software'), default=True)
+    range_env = _normalize_environment(raw.get('environment') or raw.get('ambiente'), fallback=environment)
 
     return TechnicalRange(
         factus_id=factus_id,
@@ -86,6 +155,51 @@ def _normalize_technical_range(raw: dict[str, Any], *, environment: str) -> Tech
         environment=range_env,
         raw=raw,
     )
+
+
+def _range_match_signature(item: TechnicalRange) -> tuple[str, str, str, str]:
+    return (
+        str(item.prefix or '').strip().upper(),
+        str(item.resolution_number or '').strip().upper(),
+        str(item.start_date or ''),
+        str(item.end_date or ''),
+    )
+
+
+def _merge_software_association(
+    base_ranges: list[TechnicalRange],
+    software_payload: dict[str, Any],
+    *,
+    environment: str,
+) -> list[TechnicalRange]:
+    software_ranges_raw = _extract_ranges_list(software_payload)
+    if not software_ranges_raw:
+        return base_ranges
+
+    software_ranges = [_normalize_technical_range(item, environment=environment) for item in software_ranges_raw]
+    by_signature = {_range_match_signature(item): item for item in software_ranges}
+    merged: list[TechnicalRange] = []
+    for item in base_ranges:
+        signature = _range_match_signature(item)
+        associated = item.is_associated_to_software
+        if signature in by_signature:
+            associated = True
+        merged.append(
+            TechnicalRange(
+                factus_id=item.factus_id,
+                document_code=item.document_code,
+                prefix=item.prefix,
+                is_active=item.is_active,
+                is_expired=item.is_expired,
+                is_associated_to_software=associated,
+                start_date=item.start_date,
+                end_date=item.end_date,
+                resolution_number=item.resolution_number,
+                environment=item.environment,
+                raw=item.raw,
+            )
+        )
+    return merged
 
 
 def _get_configured_range_id(configuracion: ConfiguracionFacturacion | None, field_name: str) -> int:
@@ -103,11 +217,15 @@ def _resolve_config_field(document_code: str) -> str:
 
 def _fetch_factus_technical_ranges() -> list[TechnicalRange]:
     environment = resolve_factus_environment()
-    payload = FactusClient().get_software_numbering_ranges()
+    client = FactusClient()
+    payload = client.get_numbering_ranges()
     ranges = [_normalize_technical_range(raw, environment=environment) for raw in _extract_ranges_list(payload)]
+    software_payload = client.get_software_numbering_ranges()
+    ranges = _merge_software_association(ranges, software_payload, environment=environment)
     logger.info(
-        'facturacion.numbering_ranges.fetch environment=%s total=%s sample_ids=%s',
+        'facturacion.numbering_ranges.fetch environment=%s endpoint=%s total=%s sample_ids=%s',
         environment,
+        client.numbering_ranges_path,
         len(ranges),
         [item.factus_id for item in ranges[:5]],
     )
@@ -122,17 +240,22 @@ def _pick_valid_range(
     environment: str,
 ) -> tuple[int, list[str]]:
     discard_reasons: list[str] = []
+    accepted_doc_aliases = sorted(LOCAL_TO_FACTUS_DOCUMENT_ALIASES.get(document_code, {document_code}))
 
     by_document = [
         item for item in ranges
-        if item.document_code == document_code and item.factus_id > 0 and item.environment == environment
+        if _matches_local_document(document_code, item.document_code) and item.factus_id > 0 and item.environment == environment
     ]
 
     for item in ranges:
-        if item.document_code != document_code:
-            discard_reasons.append(f'id={item.factus_id}:descartado_documento={item.document_code}')
+        if not _matches_local_document(document_code, item.document_code):
+            discard_reasons.append(
+                f'id={item.factus_id}:descartado_documento={item.document_code}:admitidos={accepted_doc_aliases}'
+            )
         elif item.environment != environment:
             discard_reasons.append(f'id={item.factus_id}:descartado_ambiente={item.environment}')
+        elif item.factus_id <= 0:
+            discard_reasons.append(f'id={item.factus_id}:descartado_id_invalido')
         elif not item.is_associated_to_software:
             discard_reasons.append(f'id={item.factus_id}:descartado_no_asociado_software')
         elif not item.is_active:
@@ -207,6 +330,18 @@ def resolve_electronic_numbering_range_id(document_code: str = 'FACTURA_VENTA') 
         )
 
     ranges = _fetch_factus_technical_ranges()
+    for item in ranges:
+        logger.info(
+            'facturacion.numbering_range.resolve.range_summary id=%s doc=%s prefix=%s environment=%s active=%s expired=%s valid_to=%s associated_to_software=%s',
+            item.factus_id,
+            item.document_code,
+            item.prefix,
+            item.environment,
+            item.is_active,
+            item.is_expired,
+            item.end_date,
+            item.is_associated_to_software,
+        )
     selected_id, discard_reasons = _pick_valid_range(
         ranges=ranges,
         document_code=document_code,
@@ -224,8 +359,37 @@ def resolve_electronic_numbering_range_id(document_code: str = 'FACTURA_VENTA') 
     )
 
     if selected_id <= 0:
+        dian_config = ConfiguracionDIAN.objects.order_by('-id').first()
+        logger.error(
+            'facturacion.numbering_range.resolve.diagnostic_not_found document_code=%s environment=%s configured_id=%s config_id=%s config_env=%s software_id=%s total_ranges=%s discard_reasons=%s',
+            document_code,
+            environment,
+            configured_id,
+            getattr(configuracion, 'id', None),
+            getattr(configuracion, 'ambiente_factus', None),
+            getattr(dian_config, 'software_id', None),
+            len(ranges),
+            discard_reasons,
+        )
+        logger.error(
+            'facturacion.numbering_range.resolve.raw_ranges_preview document_code=%s preview=%s',
+            document_code,
+            [item.raw for item in ranges[:10]],
+        )
         raise FactusValidationError(
             'No se encontró en Factus un rango autorizado y vigente para factura electrónica en el ambiente actual.'
+        )
+    selected_range = next((item for item in ranges if item.factus_id == selected_id), None)
+    if selected_range:
+        logger.info(
+            'facturacion.numbering_range.resolve.selected document_code=%s selected_id=%s prefix=%s valid_from=%s valid_to=%s environment=%s associated_to_software=%s',
+            document_code,
+            selected_range.factus_id,
+            selected_range.prefix,
+            selected_range.start_date,
+            selected_range.end_date,
+            selected_range.environment,
+            selected_range.is_associated_to_software,
         )
 
     if not configuracion:
