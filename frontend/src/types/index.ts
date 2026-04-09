@@ -160,6 +160,18 @@ export interface ConfiguracionFacturacion {
   factus_numbering_range_id_factura_venta?: number | null;
   factus_numbering_range_id_nota_credito?: number | null;
   prefijo_factura_electronica?: string;
+  factus_factura_venta_document_code?: string;
+  factus_factura_venta_range_name?: string;
+  factus_factura_venta_range_prefix?: string;
+  factus_factura_venta_resolution_number?: string;
+  factus_factura_venta_range_from?: number | null;
+  factus_factura_venta_range_to?: number | null;
+  factus_factura_venta_valid_from?: string | null;
+  factus_factura_venta_valid_to?: string | null;
+  factus_factura_venta_environment?: 'SANDBOX' | 'PRODUCTION' | string;
+  factus_factura_venta_current?: number | null;
+  factus_factura_venta_is_valid?: boolean;
+  factus_factura_venta_last_sync_at?: string | null;
   modo_operacion_electronica?: 'FACTUS_MANAGED';
   permitir_cache_metadatos_factus?: boolean;
   notas_factura: string;

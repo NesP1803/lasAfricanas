@@ -252,7 +252,7 @@ export default function Configuracion() {
       }
 
       try {
-        const data = await configuracionAPI.obtenerFacturacion();
+        const data = await configuracionAPI.obtenerFacturacion({ force: true });
         setFacturacion(data ?? null);
       } catch (error) {
         console.error("Error cargando configuración de facturación:", error);

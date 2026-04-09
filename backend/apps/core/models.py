@@ -105,6 +105,18 @@ class ConfiguracionFacturacion(models.Model):
     factus_numbering_range_id_factura_venta = models.PositiveIntegerField(null=True, blank=True)
     factus_numbering_range_id_nota_credito = models.PositiveIntegerField(null=True, blank=True)
     prefijo_factura_electronica = models.CharField(max_length=20, blank=True, default='')
+    factus_factura_venta_document_code = models.CharField(max_length=30, blank=True, default='')
+    factus_factura_venta_range_name = models.CharField(max_length=120, blank=True, default='')
+    factus_factura_venta_range_prefix = models.CharField(max_length=30, blank=True, default='')
+    factus_factura_venta_resolution_number = models.CharField(max_length=80, blank=True, default='')
+    factus_factura_venta_range_from = models.BigIntegerField(null=True, blank=True)
+    factus_factura_venta_range_to = models.BigIntegerField(null=True, blank=True)
+    factus_factura_venta_valid_from = models.DateField(null=True, blank=True)
+    factus_factura_venta_valid_to = models.DateField(null=True, blank=True)
+    factus_factura_venta_environment = models.CharField(max_length=20, blank=True, default='')
+    factus_factura_venta_current = models.BigIntegerField(null=True, blank=True)
+    factus_factura_venta_is_valid = models.BooleanField(default=False)
+    factus_factura_venta_last_sync_at = models.DateTimeField(null=True, blank=True)
     modo_operacion_electronica = models.CharField(
         max_length=30,
         choices=FACTUS_OPERATION_MODES,
