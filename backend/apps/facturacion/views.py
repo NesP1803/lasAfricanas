@@ -71,6 +71,7 @@ from apps.facturacion.services import (
     CreditNoteStateError,
     get_invoice_email_content,
     send_invoice_email,
+    ElectronicDocumentFileService,
     delete_invoice_in_factus,
     create_range,
     delete_range,
@@ -1369,19 +1370,15 @@ class NotasCreditoViewSet(viewsets.GenericViewSet):
                 {'detail': f'No existe nota crédito electrónica para número {number}.'},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        xml = str(nota.xml_url or '').strip()
-        if not xml:
-            return Response(
-                {'detail': f'La nota crédito {number} no tiene XML disponible.'},
-                status=status.HTTP_409_CONFLICT,
-            )
         if _is_legacy_download_response(request):
-            return Response({'numero': nota.number, 'xml': xml})
+            if nota.xml_local_path:
+                return Response({'numero': nota.number, 'xml': nota.xml_local_path})
+            return Response({'numero': nota.number, 'xml': nota.xml_url})
         try:
-            content = download_remote_file(xml)
-        except DownloadResourceError as exc:
+            document = ElectronicDocumentFileService().download_credit_note_xml(nota.number, note=nota)
+        except (FactusAPIError, FactusAuthError, DescargaFacturaError) as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
-        return _build_file_response(content, f'nota-credito-{nota.number}.xml', 'application/xml')
+        return _build_file_response(document.content, document.filename, 'application/xml')
 
     @action(detail=False, methods=['get'], url_path=r'(?P<number>[^/.]+)/pdf')
     def pdf(self, request, number=None):
@@ -1391,27 +1388,22 @@ class NotasCreditoViewSet(viewsets.GenericViewSet):
                 {'detail': f'No existe nota crédito electrónica para número {number}.'},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        pdf = str(nota.pdf_url or '').strip()
-        if not pdf:
-            return Response(
-                {'detail': f'La nota crédito {number} no tiene PDF disponible.'},
-                status=status.HTTP_409_CONFLICT,
-            )
         if _is_legacy_download_response(request):
-            return Response({'numero': nota.number, 'pdf': pdf})
+            if nota.pdf_local_path:
+                return Response({'numero': nota.number, 'pdf': nota.pdf_local_path})
+            return Response({'numero': nota.number, 'pdf': nota.pdf_url})
         try:
-            content = download_remote_file(pdf)
-        except DownloadResourceError as exc:
+            document = ElectronicDocumentFileService().download_credit_note_pdf(nota.number, note=nota)
+        except (FactusAPIError, FactusAuthError, DescargaFacturaError) as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
-        filename = f'nota-credito-{nota.number}.pdf'
         if str(request.query_params.get('base64', '')).strip().lower() in {'1', 'true', 'yes'}:
             return Response(
                 {
-                    'file_name': filename,
-                    'pdf_base_64_encoded': base64.b64encode(content).decode('ascii'),
+                    'file_name': document.filename,
+                    'pdf_base_64_encoded': base64.b64encode(document.content).decode('ascii'),
                 }
             )
-        return _build_file_response(content, filename, 'application/pdf')
+        return _build_file_response(document.content, document.filename, 'application/pdf')
 
     @action(detail=True, methods=['post'], url_path='sincronizar')
     def sincronizar(self, request, pk=None):
@@ -1505,23 +1497,17 @@ class NotasCreditoViewSet(viewsets.GenericViewSet):
         if not nota.number:
             return Response({'detail': 'La nota crédito aún no tiene número confirmado en Factus/DIAN.'}, status=status.HTTP_409_CONFLICT)
         try:
-            from apps.facturacion.services.factus_client import FactusClient
-
-            if nota.pdf_local_path:
-                content = read_local_media_file(nota.pdf_local_path)
-            else:
-                content = FactusClient().download_credit_note_pdf(nota.number)
-        except Exception as exc:
+            document = ElectronicDocumentFileService().download_credit_note_pdf(nota.number, note=nota)
+        except (FactusAPIError, FactusAuthError, DescargaFacturaError, DownloadResourceError) as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
-        filename = f'nota-credito-{nota.number}.pdf'
         if str(request.query_params.get('base64', '')).strip().lower() in {'1', 'true', 'yes'}:
             return Response(
                 {
-                    'file_name': filename,
-                    'pdf_base_64_encoded': base64.b64encode(content).decode('ascii'),
+                    'file_name': document.filename,
+                    'pdf_base_64_encoded': base64.b64encode(document.content).decode('ascii'),
                 }
             )
-        return _build_file_response(content, filename, 'application/pdf')
+        return _build_file_response(document.content, document.filename, 'application/pdf')
 
     @action(detail=True, methods=['get'], url_path='xml')
     def xml_by_id(self, request, pk=None):
@@ -1531,23 +1517,17 @@ class NotasCreditoViewSet(viewsets.GenericViewSet):
         if not nota.number:
             return Response({'detail': 'La nota crédito aún no tiene número confirmado en Factus/DIAN.'}, status=status.HTTP_409_CONFLICT)
         try:
-            from apps.facturacion.services.factus_client import FactusClient
-
-            if nota.xml_local_path:
-                content = read_local_media_file(nota.xml_local_path)
-            else:
-                content = FactusClient().download_credit_note_xml(nota.number)
-        except Exception as exc:
+            document = ElectronicDocumentFileService().download_credit_note_xml(nota.number, note=nota)
+        except (FactusAPIError, FactusAuthError, DescargaFacturaError, DownloadResourceError) as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
-        filename = f'nota-credito-{nota.number}.xml'
         if str(request.query_params.get('base64', '')).strip().lower() in {'1', 'true', 'yes'}:
             return Response(
                 {
-                    'file_name': filename,
-                    'xml_base_64_encoded': base64.b64encode(content).decode('ascii'),
+                    'file_name': document.filename,
+                    'xml_base_64_encoded': base64.b64encode(document.content).decode('ascii'),
                 }
             )
-        return _build_file_response(content, filename, 'application/xml')
+        return _build_file_response(document.content, document.filename, 'application/xml')
 
     @action(detail=True, methods=['get'], url_path='correo/contenido')
     def correo_contenido(self, request, pk=None):
@@ -1556,12 +1536,16 @@ class NotasCreditoViewSet(viewsets.GenericViewSet):
             return Response({'detail': 'Nota crédito no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
         if not nota.number:
             return Response({'detail': 'La nota crédito aún no tiene número confirmado para gestionar correo.'}, status=status.HTTP_409_CONFLICT)
-        from apps.facturacion.services.factus_client import FactusClient
-
-        payload = FactusClient().get_credit_note_email_content(nota.number)
-        nota.email_content_json = payload
-        nota.save(update_fields=['email_content_json', 'updated_at'])
-        return Response(payload)
+        return Response(
+            {
+                'detail': (
+                    'Factus solo expone email-content para facturas. '
+                    'Para notas crédito use el endpoint de enviar-correo.'
+                ),
+                'number': nota.number,
+                'email_content_json': nota.email_content_json or {},
+            }
+        )
 
     @action(detail=True, methods=['post'], url_path='enviar-correo')
     def enviar_correo(self, request, pk=None):
@@ -1570,14 +1554,26 @@ class NotasCreditoViewSet(viewsets.GenericViewSet):
             return Response({'detail': 'Nota crédito no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
         if not nota.number:
             return Response({'detail': 'La nota crédito aún no tiene número confirmado para envío de correo.'}, status=status.HTTP_409_CONFLICT)
-        from apps.facturacion.services.factus_client import FactusClient
 
         email = str(request.data.get('email') or nota.factura.venta.cliente.email or '').strip()
-        payload = {'email': email} if email else {}
-        result = FactusClient().send_credit_note_email(nota.number, payload=payload)
+        if not email:
+            return Response({'detail': 'No hay email de destino para enviar la nota crédito.'}, status=status.HTTP_400_BAD_REQUEST)
+        pdf_base_64_encoded = str(request.data.get('pdf_base_64_encoded') or '').strip() or None
+        try:
+            result = ElectronicDocumentFileService().send_credit_note_email(
+                nota.number,
+                email=email,
+                pdf_base64=pdf_base_64_encoded,
+            )
+        except (FactusAPIError, FactusAuthError, FactusValidationError) as exc:
+            nota.email_status = 'ERROR'
+            nota.mensaje_error = str(exc)
+            nota.save(update_fields=['email_status', 'mensaje_error', 'updated_at'])
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
         nota.correo_enviado = True
         nota.correo_enviado_at = timezone.now()
-        nota.save(update_fields=['correo_enviado', 'correo_enviado_at', 'updated_at'])
+        nota.email_status = 'ENVIADO'
+        nota.save(update_fields=['correo_enviado', 'correo_enviado_at', 'email_status', 'updated_at'])
         return Response(result)
 
     @action(detail=True, methods=['post'], url_path='eliminar')
@@ -1792,19 +1788,16 @@ class DocumentosSoporteViewSet(viewsets.GenericViewSet):
                 {'detail': f'No existe documento soporte electrónico para número {number}.'},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        xml = str(documento.xml_url or '').strip()
-        if not xml:
-            return Response(
-                {'detail': f'El documento soporte {number} no tiene XML disponible.'},
-                status=status.HTTP_409_CONFLICT,
-            )
         if _is_legacy_download_response(request):
-            return Response({'numero': documento.number, 'xml': xml})
+            return Response({'numero': documento.number, 'xml': documento.xml_url})
         try:
-            content = download_remote_file(xml)
-        except DownloadResourceError as exc:
+            downloaded = ElectronicDocumentFileService().download_support_document_xml(
+                documento.number,
+                support_document=documento,
+            )
+        except (FactusAPIError, FactusAuthError, DescargaFacturaError) as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
-        return _build_file_response(content, f'documento-soporte-{documento.number}.xml', 'application/xml')
+        return _build_file_response(downloaded.content, downloaded.filename, 'application/xml')
 
     @action(detail=False, methods=['get'], url_path=r'(?P<number>[^/.]+)/pdf')
     def pdf(self, request, number=None):
@@ -1814,19 +1807,16 @@ class DocumentosSoporteViewSet(viewsets.GenericViewSet):
                 {'detail': f'No existe documento soporte electrónico para número {number}.'},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        pdf = str(documento.pdf_url or '').strip()
-        if not pdf:
-            return Response(
-                {'detail': f'El documento soporte {number} no tiene PDF disponible.'},
-                status=status.HTTP_409_CONFLICT,
-            )
         if _is_legacy_download_response(request):
-            return Response({'numero': documento.number, 'pdf': pdf})
+            return Response({'numero': documento.number, 'pdf': documento.pdf_url})
         try:
-            content = download_remote_file(pdf)
-        except DownloadResourceError as exc:
+            downloaded = ElectronicDocumentFileService().download_support_document_pdf(
+                documento.number,
+                support_document=documento,
+            )
+        except (FactusAPIError, FactusAuthError, DescargaFacturaError) as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
-        return _build_file_response(content, f'documento-soporte-{documento.number}.pdf', 'application/pdf')
+        return _build_file_response(downloaded.content, downloaded.filename, 'application/pdf')
 
     @action(detail=True, methods=['get'], url_path='xml')
     def xml_by_id(self, request, pk=None):
@@ -1836,7 +1826,10 @@ class DocumentosSoporteViewSet(viewsets.GenericViewSet):
         if not documento.number:
             return Response({'detail': 'El documento soporte aún no tiene número confirmado.'}, status=status.HTTP_409_CONFLICT)
         try:
-            content = FactusClient().download_support_document_xml(documento.number)
+            downloaded = ElectronicDocumentFileService().download_support_document_xml(
+                documento.number,
+                support_document=documento,
+            )
         except FactusAPIError as exc:
             status_code = int(getattr(exc, 'status_code', 0) or 0)
             if status_code == 409:
@@ -1847,15 +1840,14 @@ class DocumentosSoporteViewSet(viewsets.GenericViewSet):
             return Response({'detail': 'No fue posible descargar el XML del documento soporte.'}, status=status.HTTP_502_BAD_GATEWAY)
         except Exception as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
-        filename = f'documento-soporte-{documento.number}.xml'
         if str(request.query_params.get('base64', '')).strip().lower() in {'1', 'true', 'yes'}:
             return Response(
                 {
-                    'file_name': filename,
-                    'xml_base_64_encoded': base64.b64encode(content).decode('ascii'),
+                    'file_name': downloaded.filename,
+                    'xml_base_64_encoded': base64.b64encode(downloaded.content).decode('ascii'),
                 }
             )
-        return _build_file_response(content, filename, 'application/xml')
+        return _build_file_response(downloaded.content, downloaded.filename, 'application/xml')
 
     @action(detail=True, methods=['get'], url_path='pdf')
     def pdf_by_id(self, request, pk=None):
@@ -1865,7 +1857,10 @@ class DocumentosSoporteViewSet(viewsets.GenericViewSet):
         if not documento.number:
             return Response({'detail': 'El documento soporte aún no tiene número confirmado.'}, status=status.HTTP_409_CONFLICT)
         try:
-            content = FactusClient().download_support_document_pdf(documento.number)
+            downloaded = ElectronicDocumentFileService().download_support_document_pdf(
+                documento.number,
+                support_document=documento,
+            )
         except FactusAPIError as exc:
             status_code = int(getattr(exc, 'status_code', 0) or 0)
             if status_code == 409:
@@ -1876,15 +1871,14 @@ class DocumentosSoporteViewSet(viewsets.GenericViewSet):
             return Response({'detail': 'No fue posible descargar el PDF del documento soporte.'}, status=status.HTTP_502_BAD_GATEWAY)
         except Exception as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
-        filename = f'documento-soporte-{documento.number}.pdf'
         if str(request.query_params.get('base64', '')).strip().lower() in {'1', 'true', 'yes'}:
             return Response(
                 {
-                    'file_name': filename,
-                    'pdf_base_64_encoded': base64.b64encode(content).decode('ascii'),
+                    'file_name': downloaded.filename,
+                    'pdf_base_64_encoded': base64.b64encode(downloaded.content).decode('ascii'),
                 }
             )
-        return _build_file_response(content, filename, 'application/pdf')
+        return _build_file_response(downloaded.content, downloaded.filename, 'application/pdf')
 
     @action(detail=True, methods=['post'], url_path='eliminar')
     def eliminar(self, request, pk=None):
