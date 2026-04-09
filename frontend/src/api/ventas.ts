@@ -125,6 +125,8 @@ export interface Venta {
     qr_image?: string;
     xml_url?: string;
     pdf_url?: string;
+    resolucion_numeracion?: string;
+    numbering_resolution_info?: Record<string, unknown>;
     response_json?: Record<string, unknown>;
   } | null;
   nota_credito_emitida?: {
@@ -294,6 +296,8 @@ export interface VentaListItem {
     qr_image?: string;
     xml_url?: string;
     pdf_url?: string;
+    resolucion_numeracion?: string;
+    numbering_resolution_info?: Record<string, unknown>;
   } | null;
 }
 

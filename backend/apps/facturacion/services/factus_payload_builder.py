@@ -9,8 +9,8 @@ from typing import Any
 
 from django.conf import settings
 
-from apps.core.models import Impuesto
-from apps.facturacion.services.consecutivo_service import resolve_numbering_range
+from apps.core.models import ConfiguracionFacturacion, Impuesto
+from apps.facturacion.services.consecutivo_service import resolve_electronic_numbering_range_id
 from apps.facturacion.services.factus_catalog_lookup import (
     get_first_active_tribute_id,
     get_document_type_id,
@@ -321,7 +321,8 @@ def _build_customer_payload(cliente) -> dict:
 
 def build_invoice_payload(venta: Venta) -> dict:
     cliente = venta.cliente
-    rango = resolve_numbering_range(document_code='FACTURA_VENTA')
+    numbering_range_id = resolve_electronic_numbering_range_id(document_code='FACTURA_VENTA')
+    configuracion = ConfiguracionFacturacion.objects.order_by('-id').first()
     detalles = list(venta.detalles.select_related('producto').all())
     items: list[dict[str, Any]] = []
     for detalle in detalles:
@@ -344,8 +345,7 @@ def build_invoice_payload(venta: Venta) -> dict:
 
     payload = {
         'document': '01',
-        'prefix': rango.prefix,
-        'resolution_number': rango.resolution_number,
+        'numbering_range_id': numbering_range_id,
         'observation': venta.observaciones or '',
         'payment_form': '1',
         'payment_method_code': get_payment_method_code(venta.medio_pago),
@@ -354,5 +354,7 @@ def build_invoice_payload(venta: Venta) -> dict:
         'customer': _build_customer_payload(cliente),
         'items': items,
     }
+    if configuracion and configuracion.prefijo_factura_electronica:
+        payload['prefix'] = str(configuracion.prefijo_factura_electronica).strip()
     logger.info('factus_payload.final payload=%s', payload)
     return payload

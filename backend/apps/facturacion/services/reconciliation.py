@@ -11,6 +11,58 @@ from apps.ventas.models import Venta
 logger = logging.getLogger(__name__)
 
 
+def _normalize_numbering_metadata(bill: dict[str, Any], data: dict[str, Any], document: dict[str, Any]) -> dict[str, str]:
+    numbering = bill.get('numbering_range', {}) if isinstance(bill.get('numbering_range', {}), dict) else {}
+    resolution = bill.get('resolution', {}) if isinstance(bill.get('resolution', {}), dict) else {}
+    return {
+        'factus_number_prefix': str(
+            bill.get('prefix')
+            or numbering.get('prefix')
+            or resolution.get('prefix')
+            or data.get('prefix')
+            or ''
+        ).strip(),
+        'factus_consecutive_number': str(
+            bill.get('consecutive')
+            or numbering.get('current')
+            or data.get('consecutive')
+            or ''
+        ).strip(),
+        'factus_numbering_range_id': str(
+            bill.get('numbering_range_id')
+            or numbering.get('id')
+            or data.get('numbering_range_id')
+            or ''
+        ).strip(),
+        'factus_numbering_range_name': str(numbering.get('name') or resolution.get('name') or '').strip(),
+        'factus_resolution_number': str(
+            bill.get('resolution_number')
+            or numbering.get('resolution_number')
+            or resolution.get('number')
+            or data.get('resolution_number')
+            or ''
+        ).strip(),
+        'factus_resolution_text': str(
+            bill.get('resolution_text')
+            or numbering.get('resolution')
+            or resolution.get('text')
+            or ''
+        ).strip(),
+        'factus_resolution_start_date': str(
+            numbering.get('start_date') or resolution.get('start_date') or data.get('resolution_start_date') or ''
+        ).strip(),
+        'factus_resolution_end_date': str(
+            numbering.get('end_date') or resolution.get('end_date') or data.get('resolution_end_date') or ''
+        ).strip(),
+        'factus_authorized_from': str(
+            numbering.get('from') or resolution.get('from') or data.get('authorized_from') or ''
+        ).strip(),
+        'factus_authorized_to': str(
+            numbering.get('to') or resolution.get('to') or data.get('authorized_to') or ''
+        ).strip(),
+    }
+
+
 def extract_factus_data(response_json: dict[str, Any]) -> dict[str, str]:
     data = response_json.get('data', response_json)
     bill = data.get('bill', data)
@@ -36,6 +88,7 @@ def extract_factus_data(response_json: dict[str, Any]) -> dict[str, str]:
         'zip_key': str(bill.get('zip_key', data.get('zip_key', ''))).strip(),
         'status': map_factus_status(response_json)[0],
         'estado_factus_raw': map_factus_status(response_json)[1],
+        **_normalize_numbering_metadata(bill, data, document),
     }
 
 
@@ -114,4 +167,14 @@ PERSISTABLE_FACTURA_FIELDS = {
     'qr_image',
     'status',
     'estado_factus_raw',
+    'factus_number_prefix',
+    'factus_consecutive_number',
+    'factus_numbering_range_id',
+    'factus_numbering_range_name',
+    'factus_resolution_number',
+    'factus_resolution_text',
+    'factus_resolution_start_date',
+    'factus_resolution_end_date',
+    'factus_authorized_from',
+    'factus_authorized_to',
 }

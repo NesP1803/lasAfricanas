@@ -82,6 +82,7 @@ type DocumentoPreview = {
   qrUrl?: string;
   qrImageUrl?: string;
   referenceCode?: string;
+  resolucion?: string;
   clienteDireccion?: string;
   clienteTelefono?: string;
   clienteEmail?: string;
@@ -200,6 +201,9 @@ const buildDocumentoPreviewFromVenta = (
       venta.cliente_info?.email || '',
     representacionGrafica:
       'Representación gráfica de factura electrónica de venta. Valide en DIAN con CUFE.',
+    resolucion:
+      facturaVenta?.resolucion_numeracion ||
+      (typeof finalFields.factus_resolution_number === 'string' ? finalFields.factus_resolution_number : undefined),
   };
 };
 const unidadPermiteDecimales = (unidadMedida?: string) =>
@@ -1862,7 +1866,7 @@ export default function Ventas() {
                   efectivoRecibido={documentoPreview.efectivoRecibido}
                   cambio={documentoPreview.cambio}
                   notas={configuracion?.notas_factura}
-                  resolucion={configuracion?.resolucion}
+                  resolucion={documentoPreview.resolucion || configuracion?.resolucion}
                   empresa={empresa}
                   cufe={documentoPreview.cufe}
                   qrUrl={documentoPreview.qrUrl}
@@ -1896,7 +1900,7 @@ export default function Ventas() {
                       efectivoRecibido: documentoPreview.efectivoRecibido,
                       cambio: documentoPreview.cambio,
                       notas: configuracion?.notas_factura,
-                      resolucion: configuracion?.resolucion,
+                      resolucion: documentoPreview.resolucion || configuracion?.resolucion,
                       empresa,
                       cufe: documentoPreview.cufe,
                       qrUrl: documentoPreview.qrUrl,

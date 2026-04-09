@@ -262,7 +262,7 @@ export const printComprobante = ({
               ${infoEmpresa.telefono ? `<div>Tel: ${infoEmpresa.telefono}</div>` : ''}
               <div class="resolution">
                 <div class="resolution-title">Resolución / Numeración</div>
-                <div class="muted break">${resolucion || 'No informada'}</div>
+                <div class="muted break">${resolucion || 'Pendiente de consulta electrónica'}</div>
               </div>
             </div>
             <div class="line"></div>

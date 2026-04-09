@@ -154,6 +154,12 @@ export interface ConfiguracionFacturacion {
   prefijo_remision: string;
   numero_remision: number;
   resolucion: string;
+  ambiente_factus?: 'SANDBOX' | 'PRODUCTION';
+  factus_numbering_range_id_factura_venta?: number | null;
+  factus_numbering_range_id_nota_credito?: number | null;
+  prefijo_factura_electronica?: string;
+  modo_operacion_electronica?: 'FACTUS_MANAGED';
+  permitir_cache_metadatos_factus?: boolean;
   notas_factura: string;
   plantilla_factura_carta: string;
   plantilla_factura_tirilla: string;

@@ -10,7 +10,6 @@ from django.utils import timezone
 
 from apps.facturacion.exceptions import FacturaDuplicadaError, FacturaPersistenciaError
 from apps.facturacion.models import FacturaElectronica
-from apps.facturacion.services.consecutivo_service import get_next_invoice_sequence, resolve_numbering_range
 from apps.facturacion.services.document_fetcher import sync_existing_pending_invoice
 from apps.facturacion.services.download_invoice_files import download_pdf, download_xml
 from apps.facturacion.services.electronic_state_machine import (
@@ -337,6 +336,12 @@ def _sync_existing_pending_invoice(
                 factura.number,
             )
     persistable_fields = {k: v for k, v in fields.items() if k in PERSISTABLE_FACTURA_FIELDS}
+    for numeric_key in ('factus_consecutive_number', 'factus_numbering_range_id', 'factus_authorized_from', 'factus_authorized_to'):
+        raw_value = str(persistable_fields.get(numeric_key) or '').strip()
+        persistable_fields[numeric_key] = int(raw_value) if raw_value.isdigit() else None
+    for date_key in ('factus_resolution_start_date', 'factus_resolution_end_date'):
+        raw_date = str(persistable_fields.get(date_key) or '').strip()
+        persistable_fields[date_key] = raw_date.split('T')[0] if raw_date else None
     with transaction.atomic():
         locked = FacturaElectronica.objects.select_for_update().get(pk=factura.pk)
         for key, value in persistable_fields.items():
@@ -631,7 +636,6 @@ def facturar_venta(
 
         local_totals = sync_sale_totals_before_emit(venta)
         payload = _build_and_log_factus_payload(venta)
-        rango_activo = resolve_numbering_range(document_code='FACTURA_VENTA')
         validate_customer_for_factus(payload.get('customer', {}), venta)
         validate_payload_tax_consistency(payload, venta)
         logger.info(
@@ -642,13 +646,7 @@ def facturar_venta(
             local_totals['total'],
         )
         numero = str(venta.numero_comprobante or '').strip()
-        if not numero:
-            sequence = get_next_invoice_sequence()
-            numero = sequence.number
-            venta.numero_comprobante = numero
-            venta.save(update_fields=['numero_comprobante', 'updated_at'])
-
-        should_lock_expected_number = number_matches_active_range(numero, rango_activo.prefix)
+        should_lock_expected_number = bool(numero)
         if should_lock_expected_number:
             payload['number'] = numero
         else:
@@ -960,6 +958,12 @@ def facturar_venta(
         raise FactusAPIError('La respuesta de Factus no contiene todos los datos requeridos.')
 
     persistable_fields = {k: v for k, v in fields.items() if k in PERSISTABLE_FACTURA_FIELDS}
+    for numeric_key in ('factus_consecutive_number', 'factus_numbering_range_id', 'factus_authorized_from', 'factus_authorized_to'):
+        raw_value = str(persistable_fields.get(numeric_key) or '').strip()
+        persistable_fields[numeric_key] = int(raw_value) if raw_value.isdigit() else None
+    for date_key in ('factus_resolution_start_date', 'factus_resolution_end_date'):
+        raw_date = str(persistable_fields.get(date_key) or '').strip()
+        persistable_fields[date_key] = raw_date.split('T')[0] if raw_date else None
 
     try:
         with transaction.atomic():
