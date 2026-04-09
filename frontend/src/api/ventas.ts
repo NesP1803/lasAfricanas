@@ -110,6 +110,7 @@ export interface Venta {
     id: number;
     venta_id: number;
     numero: string;
+    number?: string;
     reference_code?: string;
     cufe?: string;
     uuid?: string;
@@ -239,6 +240,7 @@ export interface FacturarCajaResponse {
   factura_electronica: FacturaElectronicaResultado;
   factura_lista?: FacturaLista;
   numero_factura: string;
+  number?: string;
   estado_local?: string;
   estado_electronico?: string;
   status: string;
@@ -281,6 +283,7 @@ export interface VentaListItem {
     id: number;
     venta_id: number;
     numero: string;
+    number?: string;
     reference_code?: string;
     cufe?: string;
     uuid?: string;
