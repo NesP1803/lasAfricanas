@@ -322,6 +322,11 @@ def _build_customer_payload(cliente) -> dict:
 def build_invoice_payload(venta: Venta) -> dict:
     cliente = venta.cliente
     numbering_range_id = resolve_electronic_numbering_range_id(document_code='FACTURA_VENTA')
+    logger.info(
+        'factus_payload.invoice.range_resolved venta_id=%s numbering_range_id=%s',
+        venta.id,
+        numbering_range_id,
+    )
     configuracion = ConfiguracionFacturacion.objects.order_by('-id').first()
     detalles = list(venta.detalles.select_related('producto').all())
     items: list[dict[str, Any]] = []

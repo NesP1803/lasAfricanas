@@ -657,7 +657,20 @@ class FactusClient:
 
     def get_numbering_ranges(self) -> dict[str, Any]:
         """Consulta los rangos de numeración autorizados en Factus."""
-        return self.request('GET', self.numbering_ranges_path)
+        params = {'filter[is_active]': 1}
+        logger.info(
+            'factus.numbering_ranges.request endpoint=%s method=GET params=%s environment=%s',
+            self.numbering_ranges_path,
+            params,
+            self.environment,
+        )
+        response = self.request('GET', self.numbering_ranges_path, params=params)
+        logger.info(
+            'factus.numbering_ranges.response endpoint=%s body_preview=%s',
+            self.numbering_ranges_path,
+            str(response)[:1200],
+        )
+        return response
 
     def get_numbering_range(self, factus_id: int) -> dict[str, Any]:
         return self.request('GET', self.numbering_range_show_path.format(id=factus_id))
@@ -676,7 +689,18 @@ class FactusClient:
         )
 
     def get_software_numbering_ranges(self) -> dict[str, Any]:
-        return self.request('GET', self.numbering_ranges_dian_path)
+        logger.info(
+            'factus.numbering_ranges.software.request endpoint=%s method=GET environment=%s',
+            self.numbering_ranges_dian_path,
+            self.environment,
+        )
+        response = self.request('GET', self.numbering_ranges_dian_path)
+        logger.info(
+            'factus.numbering_ranges.software.response endpoint=%s body_preview=%s',
+            self.numbering_ranges_dian_path,
+            str(response)[:1200],
+        )
+        return response
 
     def health_check(self) -> dict[str, Any]:
         """Smoke test de credenciales/token/acceso a rangos."""
