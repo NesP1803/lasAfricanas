@@ -652,6 +652,15 @@ class FactusClient:
             )
         if not payload.get('items'):
             raise FactusValidationError('La nota de ajuste no contiene ítems para enviar a Factus.')
+        numbering_range_id = int(payload.get('numbering_range_id') or 0)
+        if numbering_range_id <= 0:
+            raise FactusValidationError('La nota de ajuste debe incluir numbering_range_id válido para enviar a Factus.')
+        logger.info(
+            'factus.support_adjustment_note.create request_path=%s reference_support_document_number=%s numbering_range_id=%s',
+            self.support_adjustment_note_validate_path,
+            payload.get('reference_support_document_number'),
+            numbering_range_id,
+        )
         return self.request('POST', self.support_adjustment_note_validate_path, json=payload)
 
 

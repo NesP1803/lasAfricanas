@@ -34,7 +34,7 @@ def _remote_document_value(raw: dict[str, Any]) -> str:
 
 
 def map_remote_document_to_local(raw_document: str) -> str:
-    return normalize_local_document_code(raw_document)
+    return normalize_local_document_code(raw_document, default='')
 
 
 def get_authorized_software_ranges(document_code: str) -> list[dict[str, Any]]:

@@ -28,6 +28,13 @@ from .serializers import (
 from apps.facturacion.services.consecutivo_service import resolve_electronic_numbering_range_id
 
 logger = logging.getLogger(__name__)
+TECHNICAL_DOCUMENT_CODES = (
+    'FACTURA_VENTA',
+    'NOTA_CREDITO',
+    'NOTA_DEBITO',
+    'DOCUMENTO_SOPORTE',
+    'NOTA_AJUSTE_DOCUMENTO_SOPORTE',
+)
 
 
 class ConfiguracionEmpresaViewSet(viewsets.ModelViewSet):
@@ -82,6 +89,9 @@ class ConfiguracionFacturacionViewSet(viewsets.ModelViewSet):
                 'ambiente_factus': 'SANDBOX',
                 'factus_numbering_range_id_factura_venta': None,
                 'factus_numbering_range_id_nota_credito': None,
+                'factus_numbering_range_id_nota_debito': None,
+                'factus_numbering_range_id_documento_soporte': None,
+                'factus_numbering_range_id_nota_ajuste_documento_soporte': None,
                 'prefijo_factura_electronica': '',
                 'factus_factura_venta_document_code': '',
                 'factus_factura_venta_range_name': '',
@@ -95,6 +105,54 @@ class ConfiguracionFacturacionViewSet(viewsets.ModelViewSet):
                 'factus_factura_venta_current': None,
                 'factus_factura_venta_is_valid': False,
                 'factus_factura_venta_last_sync_at': None,
+                'factus_nota_credito_document_code': '',
+                'factus_nota_credito_range_name': '',
+                'factus_nota_credito_range_prefix': '',
+                'factus_nota_credito_resolution_number': '',
+                'factus_nota_credito_range_from': None,
+                'factus_nota_credito_range_to': None,
+                'factus_nota_credito_valid_from': None,
+                'factus_nota_credito_valid_to': None,
+                'factus_nota_credito_environment': '',
+                'factus_nota_credito_current': None,
+                'factus_nota_credito_is_valid': False,
+                'factus_nota_credito_last_sync_at': None,
+                'factus_nota_debito_document_code': '',
+                'factus_nota_debito_range_name': '',
+                'factus_nota_debito_range_prefix': '',
+                'factus_nota_debito_resolution_number': '',
+                'factus_nota_debito_range_from': None,
+                'factus_nota_debito_range_to': None,
+                'factus_nota_debito_valid_from': None,
+                'factus_nota_debito_valid_to': None,
+                'factus_nota_debito_environment': '',
+                'factus_nota_debito_current': None,
+                'factus_nota_debito_is_valid': False,
+                'factus_nota_debito_last_sync_at': None,
+                'factus_documento_soporte_document_code': '',
+                'factus_documento_soporte_range_name': '',
+                'factus_documento_soporte_range_prefix': '',
+                'factus_documento_soporte_resolution_number': '',
+                'factus_documento_soporte_range_from': None,
+                'factus_documento_soporte_range_to': None,
+                'factus_documento_soporte_valid_from': None,
+                'factus_documento_soporte_valid_to': None,
+                'factus_documento_soporte_environment': '',
+                'factus_documento_soporte_current': None,
+                'factus_documento_soporte_is_valid': False,
+                'factus_documento_soporte_last_sync_at': None,
+                'factus_nota_ajuste_documento_soporte_document_code': '',
+                'factus_nota_ajuste_documento_soporte_range_name': '',
+                'factus_nota_ajuste_documento_soporte_range_prefix': '',
+                'factus_nota_ajuste_documento_soporte_resolution_number': '',
+                'factus_nota_ajuste_documento_soporte_range_from': None,
+                'factus_nota_ajuste_documento_soporte_range_to': None,
+                'factus_nota_ajuste_documento_soporte_valid_from': None,
+                'factus_nota_ajuste_documento_soporte_valid_to': None,
+                'factus_nota_ajuste_documento_soporte_environment': '',
+                'factus_nota_ajuste_documento_soporte_current': None,
+                'factus_nota_ajuste_documento_soporte_is_valid': False,
+                'factus_nota_ajuste_documento_soporte_last_sync_at': None,
                 'modo_operacion_electronica': 'FACTUS_MANAGED',
                 'permitir_cache_metadatos_factus': True,
                 'notas_factura': '',
@@ -108,14 +166,14 @@ class ConfiguracionFacturacionViewSet(viewsets.ModelViewSet):
                 'redondeo_caja_incremento': 100,
             },
         )
-        should_refresh = (
-            not configuracion.factus_numbering_range_id_factura_venta
-            or not configuracion.factus_factura_venta_last_sync_at
-            or not configuracion.factus_factura_venta_is_valid
+        should_refresh = any(
+            not getattr(configuracion, f'factus_{doc.lower()}_is_valid', False)
+            for doc in ['factura_venta', 'nota_credito', 'nota_debito', 'documento_soporte', 'nota_ajuste_documento_soporte']
         )
         if should_refresh:
             try:
-                resolve_electronic_numbering_range_id('FACTURA_VENTA', force_refresh=True)
+                for document_code in TECHNICAL_DOCUMENT_CODES:
+                    resolve_electronic_numbering_range_id(document_code, force_refresh=True)
                 configuracion.refresh_from_db()
             except Exception as exc:
                 logger.warning(

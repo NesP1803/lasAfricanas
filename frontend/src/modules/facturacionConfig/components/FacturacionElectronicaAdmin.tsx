@@ -10,11 +10,16 @@ type Props = {
 };
 
 const TECH_STATUS_OK = (facturacion: ConfiguracionFacturacion) =>
-  Boolean(
-    facturacion.ambiente_factus &&
-    facturacion.factus_numbering_range_id_factura_venta &&
-    facturacion.factus_factura_venta_is_valid
-  );
+  ['factura_venta', 'nota_credito', 'nota_debito', 'documento_soporte', 'nota_ajuste_documento_soporte']
+    .some((doc) => Boolean((facturacion as Record<string, unknown>)[`factus_${doc}_is_valid`]));
+
+const DOCUMENTS = [
+  { key: 'factura_venta', label: 'Factura de venta' },
+  { key: 'nota_credito', label: 'Nota crédito' },
+  { key: 'nota_debito', label: 'Nota débito' },
+  { key: 'documento_soporte', label: 'Documento soporte' },
+  { key: 'nota_ajuste_documento_soporte', label: 'Nota ajuste documento soporte' },
+] as const;
 
 export default function FacturacionElectronicaAdmin({
   isAdmin,
@@ -56,43 +61,35 @@ export default function FacturacionElectronicaAdmin({
       ) : null}
 
       <div className="rounded-xl border border-slate-200 p-4">
-        <h4 className="text-sm font-semibold text-slate-800">Rango técnico de factura electrónica (Factus)</h4>
-
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
-          <Info label="Ambiente" value={facturacion.factus_factura_venta_environment || facturacion.ambiente_factus || 'No disponible'} />
-          <Info
-            label="Estado de configuración técnica"
-            value={TECH_STATUS_OK(facturacion) ? 'Válida' : 'Inválida'}
-            icon={
-              TECH_STATUS_OK(facturacion)
-                ? <CheckCircle2 size={14} className="text-emerald-600" />
-                : <AlertCircle size={14} className="text-amber-600" />
-            }
-          />
-          <Info
-            label="Rango técnico activo"
-            value={facturacion.factus_numbering_range_id_factura_venta ? `ID ${facturacion.factus_numbering_range_id_factura_venta}` : 'No encontrado'}
-          />
-          <Info
-            label="Código documento Factus"
-            value={facturacion.factus_factura_venta_document_code || 'No identificado'}
-          />
-          <Info label="Prefijo" value={facturacion.factus_factura_venta_range_prefix || facturacion.prefijo_factura_electronica || 'No disponible'} />
-          <Info label="Resolución" value={facturacion.factus_factura_venta_resolution_number || 'No disponible'} />
-          <Info label="Desde" value={facturacion.factus_factura_venta_range_from ? String(facturacion.factus_factura_venta_range_from) : 'No disponible'} />
-          <Info label="Hasta" value={facturacion.factus_factura_venta_range_to ? String(facturacion.factus_factura_venta_range_to) : 'No disponible'} />
-          <Info
-            label="Vigencia"
-            value={
-              facturacion.factus_factura_venta_valid_from && facturacion.factus_factura_venta_valid_to
-                ? `${facturacion.factus_factura_venta_valid_from} a ${facturacion.factus_factura_venta_valid_to}`
-                : 'No disponible'
-            }
-          />
-          <Info
-            label="Último número conocido"
-            value={facturacion.factus_factura_venta_current ? String(facturacion.factus_factura_venta_current) : 'No disponible'}
-          />
+        <h4 className="text-sm font-semibold text-slate-800">Rangos técnicos Factus por documento electrónico</h4>
+        <div className="mt-4 space-y-4">
+          {DOCUMENTS.map((document) => {
+            const id = (facturacion as Record<string, unknown>)[`factus_numbering_range_id_${document.key}`] as number | null | undefined;
+            const prefix = (facturacion as Record<string, unknown>)[`factus_${document.key}_range_prefix`] as string | undefined;
+            const resolution = (facturacion as Record<string, unknown>)[`factus_${document.key}_resolution_number`] as string | undefined;
+            const from = (facturacion as Record<string, unknown>)[`factus_${document.key}_range_from`] as number | null | undefined;
+            const to = (facturacion as Record<string, unknown>)[`factus_${document.key}_range_to`] as number | null | undefined;
+            const validFrom = (facturacion as Record<string, unknown>)[`factus_${document.key}_valid_from`] as string | null | undefined;
+            const validTo = (facturacion as Record<string, unknown>)[`factus_${document.key}_valid_to`] as string | null | undefined;
+            const current = (facturacion as Record<string, unknown>)[`factus_${document.key}_current`] as number | null | undefined;
+            const isValid = Boolean((facturacion as Record<string, unknown>)[`factus_${document.key}_is_valid`]);
+            const environment = ((facturacion as Record<string, unknown>)[`factus_${document.key}_environment`] as string | undefined) || facturacion.ambiente_factus || 'No disponible';
+            return (
+              <div key={document.key} className="rounded-lg border border-slate-200 p-3">
+                <p className="text-sm font-semibold text-slate-800">{document.label}</p>
+                <div className="mt-2 grid gap-3 md:grid-cols-2">
+                  <Info label="Ambiente" value={environment} />
+                  <Info label="Estado" value={isValid ? 'Válida' : 'Inválida'} icon={isValid ? <CheckCircle2 size={14} className="text-emerald-600" /> : <AlertCircle size={14} className="text-amber-600" />} />
+                  <Info label="ID técnico activo" value={id ? `ID ${id}` : 'No encontrado'} />
+                  <Info label="Prefijo" value={prefix || (document.key === 'factura_venta' ? facturacion.prefijo_factura_electronica || '' : '') || 'No disponible'} />
+                  <Info label="Resolución" value={resolution || 'No disponible'} />
+                  <Info label="Rango" value={from && to ? `${from} - ${to}` : 'No disponible'} />
+                  <Info label="Vigencia" value={validFrom && validTo ? `${validFrom} a ${validTo}` : 'No disponible'} />
+                  <Info label="Último número conocido" value={current ? String(current) : 'No disponible'} />
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 

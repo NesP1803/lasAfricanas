@@ -98,6 +98,11 @@ def build_support_document_payload(data: dict[str, Any]) -> dict[str, Any]:
     )
     try:
         numbering_range_id = int(resolve_electronic_numbering_range_id(document_code='DOCUMENTO_SOPORTE') or 0)
+        logger.info(
+            'factus_payload.support_document.range_selected document_code=%s numbering_range_id=%s',
+            'DOCUMENTO_SOPORTE',
+            numbering_range_id,
+        )
     except Exception as exc:
         logger.warning(
             'factus_payload.support_document.range_fallback detail=%s fallback_numbering_range_id=%s',
