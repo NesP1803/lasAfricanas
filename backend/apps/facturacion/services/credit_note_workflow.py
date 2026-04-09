@@ -14,7 +14,7 @@ from apps.facturacion.services.electronic_state_machine import extract_bill_erro
 from apps.facturacion.services.factus_client import FactusAPIError, FactusClient, FactusPendingCreditNoteError
 from apps.facturacion.services.factus_catalog_lookup import get_tribute_id, get_unit_measure_id
 from apps.facturacion.services.factus_catalog_lookup import get_payment_method_code
-from apps.facturacion.services.consecutivo_service import resolve_numbering_range
+from apps.facturacion.services.consecutivo_service import resolve_electronic_numbering_range_id
 from apps.facturacion.services.document_totals import calculate_document_detail_totals, q_money, to_decimal
 from apps.facturacion.services.factus_payload_builder import build_invoice_payload
 from apps.inventario.models import MovimientoInventario, Producto
@@ -272,10 +272,12 @@ def _map_payload_for_factus(factura: FacturaElectronica, motivo: str, preview_li
     local_customer = reference_payload.get('customer', {})
     reference_items = {str(item.get('code_reference') or ''): item for item in reference_payload.get('items', [])}
     bill_id, customer = _resolve_bill_id_and_customer(factura, client, local_customer=local_customer)
-    numbering_range = resolve_numbering_range(document_code='NOTA_CREDITO')
-    numbering_range_id = int(numbering_range.factus_range_id or 0)
+    numbering_range_id = int(resolve_electronic_numbering_range_id(document_code='NOTA_CREDITO') or 0)
     if numbering_range_id <= 0:
-        raise CreditNoteValidationError('El rango activo de nota crédito no tiene factus_range_id válido.')
+        raise CreditNoteValidationError(
+            'La referencia técnica del rango electrónico configurado en Factus no es válida. '
+            'Actualice el identificador técnico del rango activo.'
+        )
     concepto = 'ANULACION_TOTAL' if is_total else 'DEVOLUCION_PARCIAL'
     reference_code = _build_reference_code(factura, is_total=is_total)
     logger.info(
@@ -283,8 +285,8 @@ def _map_payload_for_factus(factura: FacturaElectronica, motivo: str, preview_li
         factura.id,
         reference_code,
         numbering_range_id,
-        numbering_range.factus_range_id,
-        numbering_range.prefijo,
+        numbering_range_id,
+        '',
     )
     items = []
     for line in preview_lines:
@@ -825,16 +827,6 @@ def create_credit_note(*, factura: FacturaElectronica, motivo: str, lines: list[
         'range_prefix': '',
         'range_resolution': '',
     }
-    try:
-        selected_range = resolve_numbering_range(document_code='NOTA_CREDITO')
-        range_trace['range_prefix'] = str(selected_range.prefijo or '')
-        range_trace['range_resolution'] = str(selected_range.resolucion or '')
-    except Exception:
-        logger.warning(
-            'facturacion.nota_credito.create.range_trace_unavailable factura_id=%s reference_code=%s',
-            factura.id,
-            reference_code,
-        )
     payload['range_trace'] = range_trace
 
     with transaction.atomic():
