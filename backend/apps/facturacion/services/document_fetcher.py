@@ -48,8 +48,8 @@ def sync_existing_pending_invoice(
     assert_emitted_document_matches_sale(
         venta=venta,
         fields=fields,
-        expected_number=factura.number or str(venta.numero_comprobante or ''),
-        expected_reference_code=factura.reference_code or str(venta.numero_comprobante or ''),
+        expected_number=factura.number or '',
+        expected_reference_code=factura.reference_code or '',
     )
     bill_errors = _extract_bill_errors(response)
     missing_after_show = [field for field in ['xml_url', 'pdf_url'] if not fields.get(field)]
@@ -60,8 +60,8 @@ def sync_existing_pending_invoice(
             assert_emitted_document_matches_sale(
                 venta=venta,
                 fields=fields,
-                expected_number=factura.number or str(venta.numero_comprobante or ''),
-                expected_reference_code=factura.reference_code or str(venta.numero_comprobante or ''),
+                expected_number=factura.number or '',
+                expected_reference_code=factura.reference_code or '',
             )
             if not bill_errors:
                 bill_errors = _extract_bill_errors(response_download)

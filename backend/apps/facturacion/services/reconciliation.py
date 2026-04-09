@@ -118,6 +118,7 @@ def assert_emitted_document_matches_sale(
     returned_sequence = ''.join(char for char in number if char.isdigit())
     has_prefix_mismatch = bool(expected_prefix and returned_prefix and expected_prefix != returned_prefix)
     has_sequence_mismatch = bool(expected_sequence and returned_sequence and expected_sequence != returned_sequence)
+    expected_looks_like_local_legacy = expected_number.upper().startswith('FAC-')
 
     logger.info(
         'facturar_venta.validacion_documental venta_id=%s expected_reference=%s expected_number=%s '
@@ -130,10 +131,23 @@ def assert_emitted_document_matches_sale(
         fields.get('status', ''),
     )
 
-    if number and expected_number and (number != expected_number or has_prefix_mismatch or has_sequence_mismatch):
+    if (
+        number
+        and expected_number
+        and not expected_looks_like_local_legacy
+        and (number != expected_number or has_prefix_mismatch or has_sequence_mismatch)
+    ):
         raise FactusValidationError(
             f'Factus devolvió number={number} pero la venta {venta.id} esperaba {expected_number}. '
             'Se bloquea la asociación para evitar enlazar CUFE/QR de otro documento.'
+        )
+    if number and expected_looks_like_local_legacy and number != expected_number:
+        logger.info(
+            'facturar_venta.validacion_documental_legacy_number_ignored venta_id=%s expected_legacy=%s '
+            'returned_number=%s',
+            venta.id,
+            expected_number,
+            number,
         )
 
     if number and FacturaElectronica.objects.filter(number=number).exclude(venta=venta).exists():

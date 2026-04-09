@@ -39,7 +39,10 @@ from apps.facturacion.services.factus_catalog_lookup import (
 )
 from apps.facturacion.services.factus_payload_builder import build_invoice_payload
 from apps.facturacion.services.reference_code import resolve_reference_code
-from apps.facturacion.services.reconciliation import merge_factus_fields
+from apps.facturacion.services.reconciliation import (
+    assert_emitted_document_matches_sale,
+    merge_factus_fields,
+)
 from apps.facturacion.services.validators import to_bool
 from apps.facturacion.services.support_document_payload_builder import build_support_document_payload
 from apps.facturacion.services.exceptions import DescargaFacturaError
@@ -152,6 +155,36 @@ class FacturaDownloadFilesTests(TestCase):
         self.factura.save(update_fields=['number'])
         with self.assertRaises(DescargaFacturaError):
             download_pdf(self.factura)
+
+
+class FacturacionReconciliationTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(username='reconciliation-user', password='1234')
+        self.cliente = Cliente.objects.create(numero_documento='987654321', nombre='Cliente Reconciliation')
+        self.venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            numero_comprobante='FAC-100012',
+            cliente=self.cliente,
+            vendedor=self.user,
+            subtotal=Decimal('100.00'),
+            descuento_porcentaje=Decimal('0.00'),
+            descuento_valor=Decimal('0.00'),
+            iva=Decimal('19.00'),
+            total=Decimal('119.00'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('119.00'),
+            cambio=Decimal('0.00'),
+            estado='FACTURADA',
+        )
+
+    def test_ignora_mismatch_consecutivo_local_fac_para_factura_electronica(self):
+        assert_emitted_document_matches_sale(
+            venta=self.venta,
+            fields={'number': 'SETP990029878', 'reference_code': '', 'status': 'ACEPTADA'},
+            expected_number='FAC-100012',
+            expected_reference_code='',
+        )
 
 
 class FacturarVentaReferenceCodeTests(TestCase):
