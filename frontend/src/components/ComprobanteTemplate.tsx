@@ -290,7 +290,7 @@ export default function ComprobanteTemplate({
             {infoEmpresa.telefono ? <p className="text-[9px]">Tel: {infoEmpresa.telefono}</p> : null}
             <div className="mt-1 px-0.5 py-1 text-left">
               <p className="text-[8px] font-semibold uppercase tracking-wide text-slate-600">Resolución / Numeración</p>
-              <p className="break-words text-[8px] text-slate-700">{resolucion || 'No informada'}</p>
+              <p className="break-words text-[8px] text-slate-700">{resolucion || 'Pendiente de consulta electrónica'}</p>
             </div>
           </div>
 

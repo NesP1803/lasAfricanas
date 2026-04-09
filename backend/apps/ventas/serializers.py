@@ -24,6 +24,17 @@ def _build_factura_electronica_data(venta):
     bill_errors = response_json.get('bill_errors', [])
     public_url = resolve_public_invoice_url(factura)
     documento_inconsistente = has_documental_inconsistency(factura)
+    numbering_info = factura.numbering_resolution_info
+    resolucion_num = numbering_info.get('resolucion') or ''
+    vigencia_desde = numbering_info.get('vigencia_desde')
+    vigencia_hasta = numbering_info.get('vigencia_hasta')
+    rango_desde = numbering_info.get('rango_desde')
+    rango_hasta = numbering_info.get('rango_hasta')
+    resolucion_display = resolucion_num
+    if resolucion_num and (vigencia_desde or vigencia_hasta):
+        resolucion_display = f"Resolución {resolucion_num} · Vigencia {vigencia_desde or '-'} a {vigencia_hasta or '-'}"
+    if resolucion_num and (rango_desde or rango_hasta):
+        resolucion_display = f"{resolucion_display} · Rango autorizado {rango_desde or '-'} - {rango_hasta or '-'}"
     return {
         'id': factura.id,
         'venta_id': factura.venta_id,
@@ -45,6 +56,8 @@ def _build_factura_electronica_data(venta):
         'qr_image': final_fields.get('qr_image', '') or factura.qr_image_url or factura.qr_image_data or '',
         'xml_url': factura.xml_url,
         'pdf_url': factura.pdf_url,
+        'numbering_resolution_info': numbering_info,
+        'resolucion_numeracion': resolucion_display,
     }
 
 

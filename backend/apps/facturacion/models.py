@@ -29,6 +29,8 @@ class FacturaElectronica(models.Model):
     cufe = models.CharField(max_length=128, unique=True, null=True, blank=True, db_index=True, verbose_name='CUFE')
     uuid = models.CharField(max_length=128, null=True, blank=True, db_index=True, verbose_name='UUID')
     number = models.CharField(max_length=64, null=True, blank=True, db_index=True, verbose_name='Número de factura')
+    factus_number_prefix = models.CharField(max_length=20, blank=True, default='', verbose_name='Prefijo oficial Factus')
+    factus_consecutive_number = models.BigIntegerField(null=True, blank=True, verbose_name='Consecutivo oficial Factus')
     reference_code = models.CharField(
         max_length=100,
         unique=True,
@@ -36,6 +38,14 @@ class FacturaElectronica(models.Model):
         blank=True,
         verbose_name='Código de referencia',
     )
+    factus_numbering_range_id = models.PositiveIntegerField(null=True, blank=True, verbose_name='ID rango Factus')
+    factus_numbering_range_name = models.CharField(max_length=120, blank=True, default='')
+    factus_resolution_number = models.CharField(max_length=80, blank=True, default='')
+    factus_resolution_text = models.TextField(blank=True, default='')
+    factus_resolution_start_date = models.DateField(null=True, blank=True)
+    factus_resolution_end_date = models.DateField(null=True, blank=True)
+    factus_authorized_from = models.BigIntegerField(null=True, blank=True)
+    factus_authorized_to = models.BigIntegerField(null=True, blank=True)
     status = models.CharField(
         max_length=40,
         choices=ELECTRONIC_STATUS_CHOICES,
@@ -129,6 +139,21 @@ class FacturaElectronica(models.Model):
             self.estado_electronico = 'PENDIENTE_REINTENTO'
             self.status = self.estado_electronico
         super().save(*args, **kwargs)
+
+    @property
+    def numbering_resolution_info(self) -> dict:
+        return {
+            'numero_oficial': self.number or '',
+            'prefijo': self.factus_number_prefix or '',
+            'consecutivo': self.factus_consecutive_number,
+            'resolucion': self.factus_resolution_number or self.factus_resolution_text or '',
+            'vigencia_desde': self.factus_resolution_start_date.isoformat() if self.factus_resolution_start_date else None,
+            'vigencia_hasta': self.factus_resolution_end_date.isoformat() if self.factus_resolution_end_date else None,
+            'rango_desde': self.factus_authorized_from,
+            'rango_hasta': self.factus_authorized_to,
+            'factus_numbering_range_id': self.factus_numbering_range_id,
+            'factus_numbering_range_name': self.factus_numbering_range_name or '',
+        }
 
 
 class NotaCreditoElectronica(models.Model):

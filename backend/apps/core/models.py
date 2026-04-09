@@ -90,11 +90,25 @@ class ConfiguracionEmpresa(models.Model):
 
 
 class ConfiguracionFacturacion(models.Model):
+    FACTUS_OPERATION_MODES = [
+        ('FACTUS_MANAGED', 'Numeración oficial gestionada en Factus'),
+    ]
+
     prefijo_factura = models.CharField(max_length=10, default='FAC')
     numero_factura = models.IntegerField(default=1)
     prefijo_remision = models.CharField(max_length=10, blank=True)
     numero_remision = models.IntegerField(default=1)
     resolucion = models.TextField(blank=True)
+    ambiente_factus = models.CharField(max_length=20, default='SANDBOX')
+    factus_numbering_range_id_factura_venta = models.PositiveIntegerField(null=True, blank=True)
+    factus_numbering_range_id_nota_credito = models.PositiveIntegerField(null=True, blank=True)
+    prefijo_factura_electronica = models.CharField(max_length=20, blank=True, default='')
+    modo_operacion_electronica = models.CharField(
+        max_length=30,
+        choices=FACTUS_OPERATION_MODES,
+        default='FACTUS_MANAGED',
+    )
+    permitir_cache_metadatos_factus = models.BooleanField(default=True)
     notas_factura = models.TextField(blank=True)
     plantilla_factura_carta = models.TextField(blank=True)
     plantilla_factura_tirilla = models.TextField(blank=True)

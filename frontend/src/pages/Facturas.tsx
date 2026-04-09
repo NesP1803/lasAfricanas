@@ -806,7 +806,7 @@ export default function Facturas() {
                       : undefined
                   }
                   notas={facturacion?.notas_factura}
-                  resolucion={facturacion?.resolucion}
+                  resolucion={documento.factura.electronica?.resolucion_numeracion || facturacion?.resolucion}
                   empresa={empresa}
                   cufe={documento.factura.electronica?.cufe}
                   qrUrl={documento.factura.electronica?.public_url || documento.factura.electronica?.qr_factus}
@@ -867,7 +867,7 @@ export default function Facturas() {
                           ? Number(detalle.cambio)
                           : undefined,
                       notas: facturacion?.notas_factura,
-                      resolucion: facturacion?.resolucion,
+                      resolucion: documento.factura.electronica?.resolucion_numeracion || facturacion?.resolucion,
                       empresa,
                       cufe: documento.factura.electronica?.cufe,
                       qrUrl:
