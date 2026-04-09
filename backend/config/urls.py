@@ -18,13 +18,13 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from django.http import JsonResponse
 from rest_framework_simplejwt.views import TokenRefreshView
 from apps.usuarios.serializers import CustomTokenObtainPairView
 from .api_router import router
 from apps.facturacion.views import (
     ConfiguracionDIANViewSet,
     FacturaElectronicaViewSet,
-    FacturacionRangosViewSet,
     RemisionesNumeracionViewSet,
 )
 from apps.facturacion.views import NotasCreditoViewSet
@@ -59,17 +59,20 @@ documento_soporte_estado_remoto = DocumentosSoporteViewSet.as_view({'get': 'esta
 documento_soporte_pdf = DocumentosSoporteViewSet.as_view({'get': 'pdf_by_id'})
 documento_soporte_xml = DocumentosSoporteViewSet.as_view({'get': 'xml_by_id'})
 documento_soporte_eliminar = DocumentosSoporteViewSet.as_view({'post': 'eliminar'})
-facturacion_rangos_list = FacturacionRangosViewSet.as_view({'get': 'list', 'post': 'create'})
-facturacion_rangos_sync = FacturacionRangosViewSet.as_view({'post': 'sync'})
-facturacion_rangos_detail = FacturacionRangosViewSet.as_view({'get': 'retrieve', 'patch': 'partial_update', 'delete': 'destroy'})
-facturacion_rangos_consecutivo = FacturacionRangosViewSet.as_view({'patch': 'consecutivo'})
-facturacion_rangos_software = FacturacionRangosViewSet.as_view({'get': 'software'})
-facturacion_rangos_autorizados_disponibles = FacturacionRangosViewSet.as_view({'get': 'autorizados_disponibles'})
-facturacion_rangos_select = FacturacionRangosViewSet.as_view({'patch': 'seleccionar_activo'})
-facturacion_rangos_select_simple = FacturacionRangosViewSet.as_view({'patch': 'seleccionar'})
-facturacion_rangos_activar = FacturacionRangosViewSet.as_view({'patch': 'activar'})
 remisiones_numeracion = RemisionesNumeracionViewSet.as_view({'get': 'numeracion', 'patch': 'actualizar_numeracion'})
 remisiones_historial = RemisionesNumeracionViewSet.as_view({'get': 'historial'})
+
+
+def electronic_ranges_deprecated(_request, *args, **kwargs):
+    return JsonResponse(
+        {
+            'detail': (
+                'La gestión local de rangos electrónicos fue deshabilitada. '
+                'Los documentos electrónicos se administran directamente en Factus.'
+            )
+        },
+        status=410,
+    )
 
 urlpatterns = [
     # Admin de Django
@@ -89,15 +92,15 @@ urlpatterns = [
     path('api/factus/rangos/sincronizar/', configuracion_dian_rangos_sync, name='factus-rangos-sync'),
     path('api/factus/rangos/seleccionar-activo/', configuracion_dian_rangos_select, name='factus-rangos-select'),
     path('api/factus/health/', configuracion_dian_factus_health, name='factus-health'),
-    path('api/facturacion/rangos/', facturacion_rangos_list, name='facturacion-rangos'),
-    path('api/facturacion/rangos/sync/', facturacion_rangos_sync, name='facturacion-rangos-sync'),
-    path('api/facturacion/rangos/software/', facturacion_rangos_software, name='facturacion-rangos-software'),
-    path('api/facturacion/rangos/autorizados-disponibles/', facturacion_rangos_autorizados_disponibles, name='facturacion-rangos-autorizados-disponibles'),
-    path('api/facturacion/rangos/<int:pk>/', facturacion_rangos_detail, name='facturacion-rangos-detail'),
-    path('api/facturacion/rangos/<int:pk>/consecutivo/', facturacion_rangos_consecutivo, name='facturacion-rangos-consecutivo'),
-    path('api/facturacion/rangos/<int:pk>/seleccionar-activo/', facturacion_rangos_select, name='facturacion-rangos-select'),
-    path('api/facturacion/rangos/<int:pk>/seleccionar/', facturacion_rangos_select_simple, name='facturacion-rangos-select-simple'),
-    path('api/facturacion/rangos/<int:pk>/activar/', facturacion_rangos_activar, name='facturacion-rangos-activar'),
+    path('api/facturacion/rangos/', electronic_ranges_deprecated, name='facturacion-rangos'),
+    path('api/facturacion/rangos/sync/', electronic_ranges_deprecated, name='facturacion-rangos-sync'),
+    path('api/facturacion/rangos/software/', electronic_ranges_deprecated, name='facturacion-rangos-software'),
+    path('api/facturacion/rangos/autorizados-disponibles/', electronic_ranges_deprecated, name='facturacion-rangos-autorizados-disponibles'),
+    path('api/facturacion/rangos/<int:pk>/', electronic_ranges_deprecated, name='facturacion-rangos-detail'),
+    path('api/facturacion/rangos/<int:pk>/consecutivo/', electronic_ranges_deprecated, name='facturacion-rangos-consecutivo'),
+    path('api/facturacion/rangos/<int:pk>/seleccionar-activo/', electronic_ranges_deprecated, name='facturacion-rangos-select'),
+    path('api/facturacion/rangos/<int:pk>/seleccionar/', electronic_ranges_deprecated, name='facturacion-rangos-select-simple'),
+    path('api/facturacion/rangos/<int:pk>/activar/', electronic_ranges_deprecated, name='facturacion-rangos-activar'),
     path('api/facturacion/remisiones/numeracion/', remisiones_numeracion, name='facturacion-remisiones-numeracion'),
     path('api/facturacion/remisiones/historial/', remisiones_historial, name='facturacion-remisiones-historial'),
     path('api/facturacion/facturas-electronicas/<int:pk>/xml/', factura_electronica_xml, name='factura-electronica-xml'),

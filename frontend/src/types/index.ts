@@ -153,6 +153,8 @@ export interface ConfiguracionFacturacion {
   numero_factura: number;
   prefijo_remision: string;
   numero_remision: number;
+  prefijo_cotizacion?: string;
+  numero_cotizacion?: number;
   resolucion: string;
   ambiente_factus?: 'SANDBOX' | 'PRODUCTION';
   factus_numbering_range_id_factura_venta?: number | null;

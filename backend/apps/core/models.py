@@ -98,6 +98,8 @@ class ConfiguracionFacturacion(models.Model):
     numero_factura = models.IntegerField(default=1)
     prefijo_remision = models.CharField(max_length=10, blank=True)
     numero_remision = models.IntegerField(default=1)
+    prefijo_cotizacion = models.CharField(max_length=10, default='COT')
+    numero_cotizacion = models.IntegerField(default=1)
     resolucion = models.TextField(blank=True)
     ambiente_factus = models.CharField(max_length=20, default='SANDBOX')
     factus_numbering_range_id_factura_venta = models.PositiveIntegerField(null=True, blank=True)
@@ -125,7 +127,7 @@ class ConfiguracionFacturacion(models.Model):
         db_table = 'configuracion_facturacion'
 
     def __str__(self):
-        return f"{self.prefijo_factura} {self.numero_factura}"
+        return f"REM {self.prefijo_remision}-{self.numero_remision} | COT {self.prefijo_cotizacion}-{self.numero_cotizacion}"
 
 
 class Impuesto(BaseModel):

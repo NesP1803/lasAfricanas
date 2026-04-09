@@ -10,7 +10,7 @@ import uuid
 from django.conf import settings
 
 from apps.facturacion.exceptions import DocumentoSoporteInvalido
-from apps.facturacion.services.consecutivo_service import resolve_numbering_range
+from apps.facturacion.services.consecutivo_service import resolve_electronic_numbering_range_id
 from apps.facturacion.services.factus_catalog_lookup import (
     get_municipality_id,
     get_document_type_id,
@@ -97,8 +97,7 @@ def build_support_document_payload(data: dict[str, Any]) -> dict[str, Any]:
         or 1
     )
     try:
-        numbering_range = resolve_numbering_range(document_code='DOCUMENTO_SOPORTE')
-        numbering_range_id = int(numbering_range.factus_range_id or numbering_range.factus_id or 0)
+        numbering_range_id = int(resolve_electronic_numbering_range_id(document_code='DOCUMENTO_SOPORTE') or 0)
     except Exception as exc:
         logger.warning(
             'factus_payload.support_document.range_fallback detail=%s fallback_numbering_range_id=%s',

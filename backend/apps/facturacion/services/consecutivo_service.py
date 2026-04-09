@@ -8,8 +8,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.core.models import ConfiguracionFacturacion
-from apps.facturacion.models import FactusNumberingRange, RangoNumeracionDIAN
-from apps.facturacion.services.factus_environment import resolve_factus_environment
+from apps.facturacion.models import FactusNumberingRange
 from apps.facturacion.services.factus_client import FactusValidationError
 
 
@@ -23,7 +22,9 @@ def resolve_numbering_range(document_code: str = 'FACTURA_VENTA') -> FactusNumbe
     today = timezone.now().date()
 
     if not FactusNumberingRange.objects.exists():
-        raise FactusValidationError('No hay rangos sincronizados con Factus')
+        raise FactusValidationError(
+            'No hay rangos técnicos disponibles en la caché local de Factus para este documento.'
+        )
 
     rango = (
         FactusNumberingRange.objects.filter(
@@ -36,7 +37,7 @@ def resolve_numbering_range(document_code: str = 'FACTURA_VENTA') -> FactusNumbe
     )
     if not rango:
         raise FactusValidationError(
-            'No hay rangos DIAN asociados al software en Factus. Debe sincronizar.'
+            'No hay rangos técnicos vigentes disponibles en Factus para este documento.'
         )
 
     return rango
@@ -46,9 +47,8 @@ def resolve_electronic_numbering_range_id(document_code: str = 'FACTURA_VENTA') 
     """
     Resuelve el identificador técnico del rango electrónico administrado en Factus.
 
-    Prioridad:
-    1) Configuración explícita (Configuración > Facturación).
-    2) Caché técnica local de rangos sincronizados (solo lectura).
+    Fuente única:
+    - Configuración técnica explícita (Configuración > Facturación).
     """
     configuracion = ConfiguracionFacturacion.objects.order_by('-id').first()
     field_name = {
@@ -60,25 +60,9 @@ def resolve_electronic_numbering_range_id(document_code: str = 'FACTURA_VENTA') 
         if configured_id > 0:
             return configured_id
 
-    environment = resolve_factus_environment()
-    fallback = (
-        RangoNumeracionDIAN.objects.filter(
-            environment=environment,
-            document_code=document_code,
-            activo=True,
-            is_active_remote=True,
-        )
-        .exclude(factus_range_id__isnull=True)
-        .order_by('-is_selected_local', '-created_at', '-id')
-        .first()
-    )
-    fallback_id = int(getattr(fallback, 'factus_range_id', 0) or 0)
-    if fallback_id > 0:
-        return fallback_id
-
     raise FactusValidationError(
-        'La factura electrónica no tiene configurado el identificador técnico del rango en Factus. '
-        'Configure la referencia del rango electrónico activo en la sección de facturación.'
+        'La referencia técnica del rango electrónico configurado en Factus no es válida. '
+        'Actualice el identificador técnico del rango activo.'
     )
 
 
