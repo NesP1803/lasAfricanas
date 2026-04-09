@@ -514,6 +514,13 @@ class FactusClient:
         logger.info('factus.credit_note.show request_path=%s number=%s', self.credit_note_show_path, number)
         return self.request('GET', self.credit_note_show_path.format(number=number))
 
+
+    def get_credit_note_pdf_payload(self, number: str) -> dict[str, Any]:
+        return self.request('GET', self.credit_note_download_pdf_path.format(number=number))
+
+    def get_credit_note_xml_payload(self, number: str) -> dict[str, Any]:
+        return self.request('GET', self.credit_note_download_xml_path.format(number=number))
+
     def download_credit_note_pdf(self, number: str) -> bytes:
         payload = self.request('GET', self.credit_note_download_pdf_path.format(number=number))
         content = self._decode_base64_payload(payload, field='pdf_base_64_encoded')
@@ -546,8 +553,20 @@ class FactusClient:
     def get_credit_note_email_content(self, number: str) -> dict[str, Any]:
         return self.request('GET', self.credit_note_email_content_path.format(number=number))
 
-    def send_credit_note_email(self, number: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
-        return self.request('POST', self.credit_note_send_email_path.format(number=number), json=payload or {})
+    def send_credit_note_email(
+        self,
+        number: str,
+        payload: dict[str, Any] | None = None,
+        *,
+        email: str | None = None,
+        pdf_base_64_encoded: str | None = None,
+    ) -> dict[str, Any]:
+        resolved_payload: dict[str, Any] = dict(payload or {})
+        if email:
+            resolved_payload['email'] = email
+        if pdf_base_64_encoded:
+            resolved_payload['pdf_base_64_encoded'] = pdf_base_64_encoded
+        return self.request('POST', self.credit_note_send_email_path.format(number=number), json=resolved_payload)
 
     def delete_credit_note(self, reference_code: str) -> dict[str, Any]:
         return self.request('DELETE', self.credit_note_delete_by_reference_path.format(reference_code=reference_code))
@@ -592,6 +611,13 @@ class FactusClient:
 
     def get_support_document(self, number: str) -> dict[str, Any]:
         return self.request('GET', self.support_document_show_path.format(number=number))
+
+
+    def get_support_document_pdf_payload(self, number: str) -> dict[str, Any]:
+        return self.request('GET', self.support_document_download_pdf_path.format(number=number))
+
+    def get_support_document_xml_payload(self, number: str) -> dict[str, Any]:
+        return self.request('GET', self.support_document_download_xml_path.format(number=number))
 
     def download_support_document_pdf(self, number: str) -> bytes:
         path = self.support_document_download_pdf_path.format(number=number)
