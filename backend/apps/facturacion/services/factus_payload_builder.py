@@ -361,5 +361,15 @@ def build_invoice_payload(venta: Venta) -> dict:
     }
     if configuracion and configuracion.prefijo_factura_electronica:
         payload['prefix'] = str(configuracion.prefijo_factura_electronica).strip()
+    logger.info(
+        'factus_payload.invoice.final venta_id=%s document=%s numbering_range_id=%s prefix=%s payment_method=%s customer_identification=%s items=%s',
+        venta.id,
+        payload.get('document'),
+        payload.get('numbering_range_id'),
+        payload.get('prefix', ''),
+        payload.get('payment_method_code'),
+        ((payload.get('customer') or {}).get('identification') if isinstance(payload.get('customer'), dict) else ''),
+        len(items),
+    )
     logger.info('factus_payload.final payload=%s', payload)
     return payload

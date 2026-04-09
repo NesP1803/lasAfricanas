@@ -10,7 +10,11 @@ type Props = {
 };
 
 const TECH_STATUS_OK = (facturacion: ConfiguracionFacturacion) =>
-  Boolean(facturacion.ambiente_factus && facturacion.factus_numbering_range_id_factura_venta);
+  Boolean(
+    facturacion.ambiente_factus &&
+    facturacion.factus_numbering_range_id_factura_venta &&
+    facturacion.factus_factura_venta_is_valid
+  );
 
 export default function FacturacionElectronicaAdmin({
   isAdmin,
@@ -52,21 +56,13 @@ export default function FacturacionElectronicaAdmin({
       ) : null}
 
       <div className="rounded-xl border border-slate-200 p-4">
-        <h4 className="text-sm font-semibold text-slate-800">Documentos electrónicos administrados en Factus</h4>
-        <p className="mt-1 text-sm text-slate-600">
-          La resolución y numeración oficial de los documentos electrónicos se administran directamente en Factus.
-        </p>
-        <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-700">
-          <li>Factura electrónica: gestionada en Factus.</li>
-          <li>Nota crédito electrónica: gestionada en Factus.</li>
-          <li>Documento soporte electrónico: gestionado en Factus.</li>
-        </ul>
+        <h4 className="text-sm font-semibold text-slate-800">Rango técnico de factura electrónica (Factus)</h4>
 
         <div className="mt-4 grid gap-3 md:grid-cols-2">
-          <Info label="Ambiente" value={facturacion.ambiente_factus || 'No configurado'} />
+          <Info label="Ambiente" value={facturacion.factus_factura_venta_environment || facturacion.ambiente_factus || 'No disponible'} />
           <Info
             label="Estado de configuración técnica"
-            value={TECH_STATUS_OK(facturacion) ? 'Configuración técnica válida' : 'Configuración técnica incompleta'}
+            value={TECH_STATUS_OK(facturacion) ? 'Válida' : 'Inválida'}
             icon={
               TECH_STATUS_OK(facturacion)
                 ? <CheckCircle2 size={14} className="text-emerald-600" />
@@ -74,12 +70,28 @@ export default function FacturacionElectronicaAdmin({
             }
           />
           <Info
-            label="Último número conocido"
-            value={facturacion.prefijo_factura_electronica ? `${facturacion.prefijo_factura_electronica}-...` : 'Pendiente de consulta electrónica'}
+            label="Rango técnico activo"
+            value={facturacion.factus_numbering_range_id_factura_venta ? `ID ${facturacion.factus_numbering_range_id_factura_venta}` : 'No encontrado'}
           />
           <Info
-            label="Configuración técnica de emisión"
-            value={facturacion.factus_numbering_range_id_factura_venta ? `Factura: ${facturacion.factus_numbering_range_id_factura_venta}` : 'Sin ID técnico de factura'}
+            label="Código documento Factus"
+            value={facturacion.factus_factura_venta_document_code || 'No identificado'}
+          />
+          <Info label="Prefijo" value={facturacion.factus_factura_venta_range_prefix || facturacion.prefijo_factura_electronica || 'No disponible'} />
+          <Info label="Resolución" value={facturacion.factus_factura_venta_resolution_number || 'No disponible'} />
+          <Info label="Desde" value={facturacion.factus_factura_venta_range_from ? String(facturacion.factus_factura_venta_range_from) : 'No disponible'} />
+          <Info label="Hasta" value={facturacion.factus_factura_venta_range_to ? String(facturacion.factus_factura_venta_range_to) : 'No disponible'} />
+          <Info
+            label="Vigencia"
+            value={
+              facturacion.factus_factura_venta_valid_from && facturacion.factus_factura_venta_valid_to
+                ? `${facturacion.factus_factura_venta_valid_from} a ${facturacion.factus_factura_venta_valid_to}`
+                : 'No disponible'
+            }
+          />
+          <Info
+            label="Último número conocido"
+            value={facturacion.factus_factura_venta_current ? String(facturacion.factus_factura_venta_current) : 'No disponible'}
           />
         </div>
       </div>

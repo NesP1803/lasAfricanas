@@ -11,7 +11,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.core.models import ConfiguracionFacturacion
-from apps.facturacion.constants import normalize_local_document_code
+from apps.facturacion.constants import LOCAL_TO_FACTUS_CODE, normalize_local_document_code
 from apps.facturacion.models import ConfiguracionDIAN, FactusNumberingRange
 from apps.facturacion.services.factus_client import FactusClient, FactusValidationError
 from apps.facturacion.services.factus_environment import resolve_factus_environment
@@ -29,7 +29,11 @@ class InvoiceSequence:
 class TechnicalRange:
     factus_id: int
     document_code: str
+    factus_document_code: str
     prefix: str
+    from_number: int | None
+    to_number: int | None
+    current_number: int | None
     is_active: bool
     is_expired: bool
     is_associated_to_software: bool
@@ -145,7 +149,11 @@ def _normalize_technical_range(raw: dict[str, Any], *, environment: str) -> Tech
     return TechnicalRange(
         factus_id=factus_id,
         document_code=document_code,
+        factus_document_code=str(raw.get('document_code') or raw.get('document') or raw.get('document_type') or '').strip(),
         prefix=str(raw.get('prefix') or '').strip(),
+        from_number=int(raw.get('from') or raw.get('from_number') or 0) or None,
+        to_number=int(raw.get('to') or raw.get('to_number') or 0) or None,
+        current_number=int(raw.get('current') or raw.get('current_number') or raw.get('from') or 0) or None,
         is_active=is_active,
         is_expired=is_expired,
         is_associated_to_software=is_associated,
@@ -157,12 +165,16 @@ def _normalize_technical_range(raw: dict[str, Any], *, environment: str) -> Tech
     )
 
 
-def _range_match_signature(item: TechnicalRange) -> tuple[str, str, str, str]:
+def _range_match_signature(item: TechnicalRange) -> tuple[str, str, str, str, str, str, str, str]:
     return (
         str(item.prefix or '').strip().upper(),
         str(item.resolution_number or '').strip().upper(),
+        str(item.from_number or ''),
+        str(item.to_number or ''),
         str(item.start_date or ''),
         str(item.end_date or ''),
+        str(item.document_code or '').strip().upper(),
+        str(item.environment or '').strip().upper(),
     )
 
 
@@ -188,7 +200,11 @@ def _merge_software_association(
             TechnicalRange(
                 factus_id=item.factus_id,
                 document_code=item.document_code,
+                factus_document_code=item.factus_document_code,
                 prefix=item.prefix,
+                from_number=item.from_number,
+                to_number=item.to_number,
+                current_number=item.current_number,
                 is_active=item.is_active,
                 is_expired=item.is_expired,
                 is_associated_to_software=associated,
@@ -218,10 +234,31 @@ def _resolve_config_field(document_code: str) -> str:
 def _fetch_factus_technical_ranges() -> list[TechnicalRange]:
     environment = resolve_factus_environment()
     client = FactusClient()
+    logger.info(
+        'facturacion.numbering_ranges.fetch.call endpoint=%s params=%s environment=%s',
+        client.numbering_ranges_path,
+        {'filter[is_active]': 1},
+        environment,
+    )
     payload = client.get_numbering_ranges()
     ranges = [_normalize_technical_range(raw, environment=environment) for raw in _extract_ranges_list(payload)]
+    logger.info(
+        'facturacion.numbering_ranges.fetch.call endpoint=%s params=%s environment=%s',
+        client.numbering_ranges_dian_path,
+        {},
+        environment,
+    )
     software_payload = client.get_software_numbering_ranges()
     ranges = _merge_software_association(ranges, software_payload, environment=environment)
+    software_signatures = {
+        _range_match_signature(_normalize_technical_range(item, environment=environment))
+        for item in _extract_ranges_list(software_payload)
+    }
+    logger.info(
+        'facturacion.numbering_ranges.fetch.software_signatures count=%s sample=%s',
+        len(software_signatures),
+        list(software_signatures)[:5],
+    )
     logger.info(
         'facturacion.numbering_ranges.fetch environment=%s endpoint=%s total=%s sample_ids=%s',
         environment,
@@ -244,13 +281,25 @@ def _pick_valid_range(
 
     by_document = [
         item for item in ranges
-        if _matches_local_document(document_code, item.document_code) and item.factus_id > 0 and item.environment == environment
+        if (
+            _matches_local_document(document_code, item.document_code)
+            and str(item.factus_document_code).strip() in {
+                LOCAL_TO_FACTUS_CODE.get(document_code, ''),
+                document_code,
+            }
+            and item.factus_id > 0
+            and item.environment == environment
+        )
     ]
 
     for item in ranges:
         if not _matches_local_document(document_code, item.document_code):
             discard_reasons.append(
-                f'id={item.factus_id}:descartado_documento={item.document_code}:admitidos={accepted_doc_aliases}'
+                f'id={item.factus_id}:descartado_documento={item.document_code}/{item.factus_document_code}:admitidos={accepted_doc_aliases}'
+            )
+        elif str(item.factus_document_code).strip() and str(item.factus_document_code).strip() != LOCAL_TO_FACTUS_CODE.get(document_code, ''):
+            discard_reasons.append(
+                f'id={item.factus_id}:descartado_document_code_factus={item.factus_document_code}:esperado={LOCAL_TO_FACTUS_CODE.get(document_code, "")}'
             )
         elif item.environment != environment:
             discard_reasons.append(f'id={item.factus_id}:descartado_ambiente={item.environment}')
@@ -274,6 +323,68 @@ def _pick_valid_range(
 
     usable.sort(key=lambda item: ((item.end_date or date.max), (item.start_date or date.min)), reverse=True)
     return int(usable[0].factus_id), discard_reasons
+
+
+def _persist_selected_range_metadata(
+    *,
+    configuracion: ConfiguracionFacturacion,
+    selected: TechnicalRange,
+    document_code: str,
+    field_name: str,
+    environment: str,
+) -> None:
+    fields_to_update = [
+        field_name,
+        'ambiente_factus',
+        'prefijo_factura_electronica',
+        'factus_factura_venta_document_code',
+        'factus_factura_venta_range_name',
+        'factus_factura_venta_range_prefix',
+        'factus_factura_venta_resolution_number',
+        'factus_factura_venta_range_from',
+        'factus_factura_venta_range_to',
+        'factus_factura_venta_valid_from',
+        'factus_factura_venta_valid_to',
+        'factus_factura_venta_environment',
+        'factus_factura_venta_current',
+        'factus_factura_venta_is_valid',
+        'factus_factura_venta_last_sync_at',
+    ]
+    setattr(configuracion, field_name, selected.factus_id)
+    configuracion.ambiente_factus = environment
+    configuracion.prefijo_factura_electronica = selected.prefix or ''
+    configuracion.factus_factura_venta_document_code = selected.factus_document_code or LOCAL_TO_FACTUS_CODE.get(document_code, '')
+    configuracion.factus_factura_venta_range_name = str(selected.raw.get('name') or selected.raw.get('description') or '').strip()
+    configuracion.factus_factura_venta_range_prefix = selected.prefix or ''
+    configuracion.factus_factura_venta_resolution_number = selected.resolution_number or ''
+    configuracion.factus_factura_venta_range_from = selected.from_number
+    configuracion.factus_factura_venta_range_to = selected.to_number
+    configuracion.factus_factura_venta_valid_from = selected.start_date
+    configuracion.factus_factura_venta_valid_to = selected.end_date
+    configuracion.factus_factura_venta_environment = selected.environment
+    configuracion.factus_factura_venta_current = selected.current_number
+    configuracion.factus_factura_venta_is_valid = bool(
+        selected.factus_id > 0 and selected.is_associated_to_software and selected.is_active
+    )
+    configuracion.factus_factura_venta_last_sync_at = timezone.now()
+    configuracion.save(update_fields=fields_to_update)
+    logger.info(
+        'facturacion.numbering_range.resolve.persisted_metadata document_code=%s config_id=%s field=%s range_id=%s prefix=%s doc=%s resolution=%s from=%s to=%s start=%s end=%s env=%s current=%s valid=%s',
+        document_code,
+        configuracion.pk,
+        field_name,
+        selected.factus_id,
+        selected.prefix,
+        configuracion.factus_factura_venta_document_code,
+        selected.resolution_number,
+        selected.from_number,
+        selected.to_number,
+        selected.start_date,
+        selected.end_date,
+        selected.environment,
+        selected.current_number,
+        configuracion.factus_factura_venta_is_valid,
+    )
 
 
 def resolve_numbering_range(document_code: str = 'FACTURA_VENTA') -> FactusNumberingRange:
@@ -301,7 +412,7 @@ def resolve_numbering_range(document_code: str = 'FACTURA_VENTA') -> FactusNumbe
     return rango
 
 
-def resolve_electronic_numbering_range_id(document_code: str = 'FACTURA_VENTA') -> int:
+def resolve_electronic_numbering_range_id(document_code: str = 'FACTURA_VENTA', *, force_refresh: bool = False) -> int:
     """
     Resuelve automáticamente el identificador técnico de rango electrónico.
 
@@ -332,14 +443,20 @@ def resolve_electronic_numbering_range_id(document_code: str = 'FACTURA_VENTA') 
     ranges = _fetch_factus_technical_ranges()
     for item in ranges:
         logger.info(
-            'facturacion.numbering_range.resolve.range_summary id=%s doc=%s prefix=%s environment=%s active=%s expired=%s valid_to=%s associated_to_software=%s',
+            'facturacion.numbering_range.resolve.range_summary id=%s prefix=%s document=%s/%s resolution=%s start_date=%s end_date=%s from=%s to=%s current=%s active=%s expired=%s environment=%s associated_to_software=%s',
             item.factus_id,
-            item.document_code,
             item.prefix,
-            item.environment,
+            item.document_code,
+            item.factus_document_code,
+            item.resolution_number,
+            item.start_date,
+            item.end_date,
+            item.from_number,
+            item.to_number,
+            item.current_number,
             item.is_active,
             item.is_expired,
-            item.end_date,
+            item.environment,
             item.is_associated_to_software,
         )
     selected_id, discard_reasons = _pick_valid_range(
@@ -398,20 +515,18 @@ def resolve_electronic_numbering_range_id(document_code: str = 'FACTURA_VENTA') 
             modo_operacion_electronica='FACTUS_MANAGED',
         )
 
-    if configured_id != selected_id:
+    if force_refresh or configured_id != selected_id or document_code == 'FACTURA_VENTA':
         with transaction.atomic():
             locked = ConfiguracionFacturacion.objects.select_for_update().get(pk=configuracion.pk)
-            setattr(locked, field_name, selected_id)
-            locked.ambiente_factus = environment
-            locked.save(update_fields=[field_name, 'ambiente_factus'])
-        logger.info(
-            'facturacion.numbering_range.resolve.persisted document_code=%s field=%s previous_id=%s selected_id=%s config_id=%s',
-            document_code,
-            field_name,
-            configured_id,
-            selected_id,
-            configuracion.pk,
-        )
+            selected_range = selected_range or next((item for item in ranges if item.factus_id == selected_id), None)
+            if selected_range:
+                _persist_selected_range_metadata(
+                    configuracion=locked,
+                    selected=selected_range,
+                    document_code=document_code,
+                    field_name=field_name,
+                    environment=environment,
+                )
 
     return selected_id
 

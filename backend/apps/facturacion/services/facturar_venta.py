@@ -26,6 +26,7 @@ from apps.facturacion.services.factus_client import (
     FactusValidationError,
 )
 from apps.facturacion.services.factus_payload_builder import build_invoice_payload
+from apps.facturacion.services.consecutivo_service import resolve_electronic_numbering_range_id
 from apps.facturacion.services.generate_qr_dian import generate_qr_dian
 from apps.facturacion.services.persistence import (
     assign_qr_image_fields,
@@ -740,15 +741,46 @@ def facturar_venta(
             stage='send_invoice',
             error=exc,
         )
+        handled_with_retry = False
         if isinstance(exc, FactusAPIError):
             rejection = str(getattr(exc, 'provider_detail', '') or '')
             provider_payload = getattr(exc, 'provider_payload', {}) or {}
             provider_errors = (((provider_payload.get('data') or {}).get('errors') or {}) if isinstance(provider_payload, dict) else {})
             if int(getattr(exc, 'status_code', 0) or 0) == 422 and 'numbering_range_id' in provider_errors:
-                raise FactusValidationError(
-                    'La referencia técnica del rango electrónico configurado en Factus no es válida. '
-                    'Actualice el identificador técnico del rango activo.'
-                ) from exc
+                logger.warning(
+                    'facturar_venta.retry_numbering_range_on_422 venta_id=%s current_numbering_range_id=%s provider_errors=%s',
+                    ctx.venta.id,
+                    ctx.payload.get('numbering_range_id'),
+                    provider_errors,
+                )
+                refreshed_id = resolve_electronic_numbering_range_id('FACTURA_VENTA', force_refresh=True)
+                if int(refreshed_id or 0) > 0 and int(refreshed_id) != int(ctx.payload.get('numbering_range_id') or 0):
+                    ctx.payload['numbering_range_id'] = int(refreshed_id)
+                    logger.info(
+                        'facturar_venta.retry_numbering_range_attempt venta_id=%s refreshed_numbering_range_id=%s',
+                        ctx.venta.id,
+                        refreshed_id,
+                    )
+                    try:
+                        response_json = client.create_and_validate_invoice(ctx.payload)
+                        logger.info(
+                            'facturar_venta.retry_numbering_range_success venta_id=%s numbering_range_id=%s',
+                            ctx.venta.id,
+                            refreshed_id,
+                        )
+                        handled_with_retry = True
+                    except (FactusAPIError, FactusAuthError) as retry_exc:
+                        logger.warning(
+                            'facturar_venta.retry_numbering_range_failed venta_id=%s refreshed_numbering_range_id=%s detail=%s',
+                            ctx.venta.id,
+                            refreshed_id,
+                            str(retry_exc),
+                        )
+                if not handled_with_retry:
+                    raise FactusValidationError(
+                        'La referencia técnica del rango electrónico configurado en Factus no es válida. '
+                        'No fue posible resolver automáticamente un rango Factus válido para factura electrónica.'
+                    ) from exc
             if 'FAK21' in rejection:
                 logger.warning(
                     'facturar_venta.rechazo_cliente_sin_id venta_id=%s cliente_id=%s numero=%s resumen=FAK21',
@@ -756,8 +788,9 @@ def facturar_venta(
                     ctx.venta.cliente_id,
                     ctx.numero,
                 )
-        logger.warning('facturar_venta.factus_rechazo venta_id=%s numero=%s', ctx.venta.id, ctx.numero)
-        raise
+        if not handled_with_retry:
+            logger.warning('facturar_venta.factus_rechazo venta_id=%s numero=%s', ctx.venta.id, ctx.numero)
+            raise
     logger.info('facturar_venta.factus_response venta_id=%s keys=%s', ctx.venta.id, sorted(response_json.keys()))
 
     fields = extract_factus_data(response_json)
