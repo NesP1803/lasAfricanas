@@ -6,6 +6,7 @@ from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 from io import StringIO
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from apps.facturacion.exceptions import DocumentoSoporteInvalido
@@ -20,6 +21,7 @@ from rest_framework.test import APIClient
 from apps.facturacion.models import DocumentoSoporteElectronico, FacturaElectronica, NotaCreditoElectronica
 from apps.facturacion_electronica.catalogos.models import DocumentoIdentificacionFactus
 from apps.facturacion.services.download_invoice_files import download_pdf, download_xml
+from apps.facturacion.services.electronic_document_service import DownloadedDocument, ElectronicDocumentFileService
 from apps.facturacion.services.electronic_state_machine import map_factus_status, resolve_actions
 from apps.facturacion.services.facturar_venta import (
     DOCUMENT_CONCILIATION_ERROR_CODE,
@@ -3657,3 +3659,186 @@ class FacturacionRefactorHelpersTests(TestCase):
         self.assertTrue(to_bool('sí'))
         self.assertTrue(to_bool('TRUE'))
         self.assertFalse(to_bool('0'))
+
+
+class ElectronicDocumentFileServiceTests(TestCase):
+    def setUp(self):
+        self.client = FactusClient()
+        self.service = ElectronicDocumentFileService(client=self.client)
+
+    def test_download_invoice_pdf_local_fallback(self):
+        with tempfile.TemporaryDirectory() as media_root:
+            with self.settings(MEDIA_ROOT=media_root):
+                factura = FacturaElectronica.objects.create(
+                    venta=self._build_sale(),
+                    number='FV-LOCAL-1',
+                    reference_code='FV-LOCAL-1',
+                    estado_electronico='ACEPTADA',
+                    response_json={},
+                    pdf_local_path='facturas/facturas/pdf/FV-LOCAL-1.pdf',
+                )
+                abs_path = Path(media_root) / factura.pdf_local_path
+                abs_path.parent.mkdir(parents=True, exist_ok=True)
+                abs_path.write_bytes(b'%PDF-local')
+                with patch.object(self.client, 'get_invoice_pdf_payload') as mocked_remote:
+                    downloaded = self.service.download_invoice_pdf(factura.number, factura=factura)
+                self.assertEqual(downloaded.content, b'%PDF-local')
+                self.assertEqual(downloaded.source, 'local')
+                mocked_remote.assert_not_called()
+
+    def test_download_invoice_xml_remote_persists_local(self):
+        with tempfile.TemporaryDirectory() as media_root:
+            with self.settings(MEDIA_ROOT=media_root):
+                factura = FacturaElectronica.objects.create(
+                    venta=self._build_sale(numero='V-XML-REMOTE'),
+                    number='FV-REMOTE-XML',
+                    reference_code='FV-REMOTE-XML',
+                    estado_electronico='ACEPTADA',
+                    response_json={},
+                )
+                payload = {
+                    'data': {
+                        'file_name': 'FV-REMOTE-XML.xml',
+                        'xml_base_64_encoded': base64.b64encode(b'<xml>ok</xml>').decode('ascii'),
+                    }
+                }
+                with patch.object(self.client, 'get_invoice_xml_payload', return_value=payload):
+                    downloaded = self.service.download_invoice_xml(factura.number, factura=factura)
+                factura.refresh_from_db()
+                self.assertEqual(downloaded.source, 'remote')
+                self.assertTrue(factura.xml_local_path.endswith('FV-REMOTE-XML.xml'))
+                self.assertEqual((Path(media_root) / factura.xml_local_path).read_bytes(), b'<xml>ok</xml>')
+
+    def _build_sale(self, numero='V-LOCAL-1'):
+        user = get_user_model().objects.create_user(username=f'u-{numero}', password='1234')
+        cliente = Cliente.objects.create(numero_documento=f'C-{numero}', nombre=f'Cliente {numero}')
+        return Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            cliente=cliente,
+            vendedor=user,
+            numero_comprobante=numero,
+            subtotal=Decimal('100'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('19'),
+            total=Decimal('119'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('119'),
+            cambio=Decimal('0'),
+            estado='COMPLETADA',
+        )
+
+
+class FactusClientReauthTests(TestCase):
+    @patch('apps.facturacion.services.factus_client.requests.request')
+    def test_request_reautentica_si_expira_token(self, mocked_request):
+        response_401 = MagicMock()
+        response_401.status_code = 401
+        response_401.raise_for_status.return_value = None
+
+        response_ok = MagicMock()
+        response_ok.status_code = 200
+        response_ok.raise_for_status.return_value = None
+        response_ok.json.return_value = {'ok': True}
+
+        mocked_request.side_effect = [response_401, response_ok]
+
+        client = FactusClient()
+        with patch.object(client, 'get_valid_token', return_value='expired-token'):
+            with patch.object(client, 'authenticate', return_value=SimpleNamespace(access_token='new-token')):
+                payload = client.request('GET', '/v1/bills/show/FV1')
+
+        self.assertEqual(payload, {'ok': True})
+        self.assertEqual(mocked_request.call_count, 2)
+
+
+class NotaCreditoCorreoYDocumentoSoporteEndpointsTests(TestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        self.user = user_model.objects.create_user(username='api-docs-mail', password='1234')
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+        self.cliente = Cliente.objects.create(
+            numero_documento='DOC-10',
+            nombre='Cliente API',
+            email='cliente@example.com',
+        )
+        self.venta = Venta.objects.create(
+            tipo_comprobante='FACTURA',
+            cliente=self.cliente,
+            vendedor=self.user,
+            subtotal=Decimal('100'),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('19'),
+            total=Decimal('119'),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal('119'),
+            cambio=Decimal('0'),
+            estado='COMPLETADA',
+            numero_comprobante='V-CORREO-1',
+        )
+        self.factura = FacturaElectronica.objects.create(
+            venta=self.venta,
+            number='FV-CORREO-1',
+            reference_code='FV-CORREO-1',
+            estado_electronico='ACEPTADA',
+            response_json={},
+        )
+        self.nota = NotaCreditoElectronica.objects.create(
+            factura=self.factura,
+            number='NC-100',
+            reference_code='NC-100',
+            estado_local='ACEPTADA',
+            estado_electronico='ACEPTADA',
+            status='ACEPTADA',
+        )
+        self.documento = DocumentoSoporteElectronico.objects.create(
+            number='DS-100',
+            proveedor_nombre='Proveedor',
+            proveedor_documento='900',
+            proveedor_tipo_documento='CC',
+            status='ACEPTADA',
+        )
+
+    @patch('apps.facturacion.views.ElectronicDocumentFileService.send_credit_note_email')
+    def test_enviar_correo_nota_credito(self, mocked_send):
+        mocked_send.return_value = {'ok': True}
+        response = self.client.post(
+            f'/api/notas-credito/{self.nota.id}/enviar-correo/',
+            {'email': 'nc@example.com'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, {'ok': True})
+
+    def test_correo_contenido_nota_credito_explica_limitacion(self):
+        response = self.client.get(f'/api/notas-credito/{self.nota.id}/correo/contenido/')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('Factus solo expone email-content para facturas', response.data['detail'])
+
+    @patch('apps.facturacion.views.ElectronicDocumentFileService.download_support_document_pdf')
+    @patch('apps.facturacion.views.ElectronicDocumentFileService.download_support_document_xml')
+    def test_descarga_documento_soporte_por_id(self, mocked_xml, mocked_pdf):
+        mocked_xml.return_value = DownloadedDocument(
+            content=b'<xml>support</xml>',
+            filename='DS-100.xml',
+            source='remote',
+            local_path='',
+        )
+        mocked_pdf.return_value = DownloadedDocument(
+            content=b'%PDF-support',
+            filename='DS-100.pdf',
+            source='remote',
+            local_path='',
+        )
+
+        xml_response = self.client.get(f'/api/documentos-soporte/{self.documento.id}/xml/')
+        pdf_response = self.client.get(f'/api/documentos-soporte/{self.documento.id}/pdf/')
+
+        self.assertEqual(xml_response.status_code, 200)
+        self.assertEqual(xml_response['Content-Type'], 'application/xml')
+        self.assertEqual(xml_response.content, b'<xml>support</xml>')
+        self.assertEqual(pdf_response.status_code, 200)
+        self.assertEqual(pdf_response['Content-Type'], 'application/pdf')
+        self.assertEqual(pdf_response.content, b'%PDF-support')
