@@ -34,7 +34,6 @@ import { printComprobante } from '../utils/printComprobante';
 import { descuentosApi, type SolicitudDescuento } from '../api/descuentos';
 import type { ConfiguracionEmpresa } from '../types';
 import type { ConfiguracionFacturacion } from '../types';
-import type { FacturacionRango } from '../api/configuracion';
 import {
   formatCurrencyCOP,
   formatMoneyCOP,
@@ -291,11 +290,6 @@ export default function Ventas() {
   const location = useLocation();
   const navigate = useNavigate();
   const [configuracion, setConfiguracion] = useState<ConfiguracionFacturacion | null>(null);
-  const [rangoFacturaActivo, setRangoFacturaActivo] = useState<FacturacionRango | null>(null);
-  const [numeracionRemision, setNumeracionRemision] = useState<{
-    prefix?: string;
-    current?: number;
-  } | null>(null);
   const [empresa, setEmpresa] = useState<ConfiguracionEmpresa | null>(null);
   const [clienteDocumento, setClienteDocumento] = useState('');
   const [clienteNombre, setClienteNombre] = useState('Cliente general');
@@ -358,21 +352,6 @@ export default function Ventas() {
       .then(setEmpresa)
       .catch(() => setEmpresa(null));
 
-    configuracionAPI
-      .listarRangosFacturacion({ document_code: 'FACTURA_VENTA' })
-      .then((rangosFactura) => {
-        const rangoSeleccionado = rangosFactura.find((rango) => rango.is_selected_local);
-        const rangoAsociado = rangosFactura.find((rango) => rango.is_associated_to_software);
-        setRangoFacturaActivo(rangoSeleccionado ?? rangoAsociado ?? rangosFactura[0] ?? null);
-      })
-      .catch(() => setRangoFacturaActivo(null));
-
-    configuracionAPI
-      .obtenerNumeracionRemision()
-      .then((respuesta) => {
-        setNumeracionRemision(respuesta || null);
-      })
-      .catch(() => setNumeracionRemision(null));
   }, []);
 
   useEffect(() => {
@@ -1205,10 +1184,10 @@ export default function Ventas() {
       const numeroComprobante =
         venta.numero_comprobante ||
         (tipo === 'FACTURA'
-          ? `${configuracion?.prefijo_factura ?? ''} ${configuracion?.numero_factura ?? ''}`
+          ? 'Factura electrónica (numeración oficial Factus)'
           : tipo === 'REMISION'
             ? `${configuracion?.prefijo_remision ?? ''} ${configuracion?.numero_remision ?? ''}`
-            : venta.numero_comprobante || 'COTIZACIÓN');
+            : `${configuracion?.prefijo_cotizacion ?? 'COT'}-${configuracion?.numero_cotizacion ?? 1}`);
 
       setDocumentoGenerado({
         tipo,
@@ -1353,10 +1332,8 @@ export default function Ventas() {
             </label>
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700">
               {configuracion
-                ? rangoFacturaActivo
-                  ? `${rangoFacturaActivo.prefijo}-${rangoFacturaActivo.consecutivo_actual}`
-                  : `${configuracion.prefijo_factura}-${configuracion.numero_factura}`
-                : 'FAC-000000'}
+                ? 'Factus administra la numeración oficial'
+                : 'Pendiente de configuración técnica'}
             </div>
           </div>
 
@@ -1366,9 +1343,7 @@ export default function Ventas() {
             </label>
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700">
               {configuracion
-                ? numeracionRemision?.prefix && numeracionRemision.current
-                  ? `${numeracionRemision.prefix}-${numeracionRemision.current}`
-                  : `${configuracion.prefijo_remision}-${configuracion.numero_remision}`
+                ? `${configuracion.prefijo_remision || 'REM'}-${configuracion.numero_remision || 1}`
                 : 'REM-000000'}
             </div>
           </div>
@@ -1866,7 +1841,7 @@ export default function Ventas() {
                   efectivoRecibido={documentoPreview.efectivoRecibido}
                   cambio={documentoPreview.cambio}
                   notas={configuracion?.notas_factura}
-                  resolucion={documentoPreview.resolucion || configuracion?.resolucion}
+                  resolucion={documentoPreview.resolucion || 'Pendiente de consulta electrónica'}
                   empresa={empresa}
                   cufe={documentoPreview.cufe}
                   qrUrl={documentoPreview.qrUrl}
@@ -1900,7 +1875,7 @@ export default function Ventas() {
                       efectivoRecibido: documentoPreview.efectivoRecibido,
                       cambio: documentoPreview.cambio,
                       notas: configuracion?.notas_factura,
-                      resolucion: documentoPreview.resolucion || configuracion?.resolucion,
+                      resolucion: documentoPreview.resolucion || 'Pendiente de consulta electrónica',
                       empresa,
                       cufe: documentoPreview.cufe,
                       qrUrl: documentoPreview.qrUrl,

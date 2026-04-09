@@ -746,8 +746,8 @@ def facturar_venta(
             provider_errors = (((provider_payload.get('data') or {}).get('errors') or {}) if isinstance(provider_payload, dict) else {})
             if int(getattr(exc, 'status_code', 0) or 0) == 422 and 'numbering_range_id' in provider_errors:
                 raise FactusValidationError(
-                    'El rango seleccionado localmente no es válido en Factus. '
-                    'Resincronice los rangos autorizados y seleccione uno vigente.'
+                    'La referencia técnica del rango electrónico configurado en Factus no es válida. '
+                    'Actualice el identificador técnico del rango activo.'
                 ) from exc
             if 'FAK21' in rejection:
                 logger.warning(

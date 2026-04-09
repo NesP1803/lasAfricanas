@@ -72,6 +72,8 @@ class ConfiguracionFacturacionViewSet(viewsets.ModelViewSet):
                 'numero_factura': 1,
                 'prefijo_remision': '',
                 'numero_remision': 1,
+                'prefijo_cotizacion': 'COT',
+                'numero_cotizacion': 1,
                 'resolucion': '',
                 'ambiente_factus': 'SANDBOX',
                 'factus_numbering_range_id_factura_venta': None,
