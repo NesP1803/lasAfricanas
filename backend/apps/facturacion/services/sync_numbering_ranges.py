@@ -6,6 +6,7 @@ from datetime import date
 
 from django.utils import timezone
 
+from apps.facturacion.constants import normalize_local_document_code
 from apps.facturacion.models import FactusNumberingRange
 from apps.facturacion.services.factus_client import FactusClient
 
@@ -14,8 +15,10 @@ FACTURA_VENTA = 'FACTURA_VENTA'
 
 
 def _resolve_document_code(raw_range: dict[str, object]) -> str:
-    """Compatibilidad legacy: endpoint /dian aplica a factura de venta."""
-    return FACTURA_VENTA
+    return normalize_local_document_code(
+        str(raw_range.get('document') or raw_range.get('document_code') or ''),
+        default=FACTURA_VENTA,
+    )
 
 
 def _as_date(value: str | None) -> date:
@@ -42,7 +45,7 @@ def sync_factus_dian_ranges() -> list[FactusNumberingRange]:
         end_date = _as_date(raw.get('end_date'))
         created.append(
             FactusNumberingRange.objects.create(
-                document=FACTURA_VENTA,
+                document=_resolve_document_code(raw),
                 prefix=str(raw.get('prefix') or '').strip(),
                 resolution_number=str(raw.get('resolution_number') or '').strip(),
                 from_number=int(raw.get('from') or 0),

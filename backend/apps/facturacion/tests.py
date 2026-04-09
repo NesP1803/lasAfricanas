@@ -49,6 +49,7 @@ from apps.facturacion.services.factus_client import (
     FactusPendingCreditNoteError,
     FactusValidationError,
 )
+from apps.facturacion.constants import document_matches_local_code, normalize_local_document_code
 from apps.facturacion.services.sync_numbering_ranges import _resolve_document_code
 from apps.facturacion.services.credit_note_workflow import (
     _map_payload_for_factus,
@@ -1715,6 +1716,31 @@ class NumberingRangeDocumentMappingTests(TestCase):
             'NOTA_AJUSTE_DOCUMENTO_SOPORTE',
         )
         self.assertEqual(_resolve_document_code({'document': 'NADS'}), 'NOTA_AJUSTE_DOCUMENTO_SOPORTE')
+
+    def test_normalizacion_documental_admite_alias_texto(self):
+        self.assertEqual(normalize_local_document_code('Factura de Venta', default=''), 'FACTURA_VENTA')
+        self.assertEqual(normalize_local_document_code('NOTA CRÉDITO', default=''), 'NOTA_CREDITO')
+        self.assertEqual(normalize_local_document_code('Nota Débito', default=''), 'NOTA_DEBITO')
+        self.assertEqual(normalize_local_document_code('Documento Soporte', default=''), 'DOCUMENTO_SOPORTE')
+        self.assertEqual(
+            normalize_local_document_code('Nota de Ajuste Documento Soporte', default=''),
+            'NOTA_AJUSTE_DOCUMENTO_SOPORTE',
+        )
+
+    def test_document_matches_local_code_acepta_texto_y_codigo(self):
+        self.assertTrue(document_matches_local_code('FACTURA_VENTA', 'Factura de Venta'))
+        self.assertTrue(document_matches_local_code('FACTURA_VENTA', '21'))
+        self.assertTrue(document_matches_local_code('NOTA_CREDITO', 'Nota Crédito'))
+        self.assertTrue(document_matches_local_code('NOTA_CREDITO', '22'))
+        self.assertTrue(document_matches_local_code('NOTA_DEBITO', 'DEBIT NOTE'))
+        self.assertTrue(document_matches_local_code('DOCUMENTO_SOPORTE', 'Documento Soporte'))
+        self.assertTrue(
+            document_matches_local_code(
+                'NOTA_AJUSTE_DOCUMENTO_SOPORTE',
+                'Nota de Ajuste Documento Soporte',
+            )
+        )
+        self.assertFalse(document_matches_local_code('FACTURA_VENTA', 'Nota Crédito'))
 
 
 class DocumentosSoporteResourceEndpointsTests(TestCase):

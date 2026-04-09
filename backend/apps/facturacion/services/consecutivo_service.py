@@ -11,7 +11,11 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.core.models import ConfiguracionFacturacion
-from apps.facturacion.constants import LOCAL_TO_FACTUS_CODE, normalize_local_document_code
+from apps.facturacion.constants import (
+    LOCAL_TO_FACTUS_CODE,
+    document_matches_local_code,
+    normalize_local_document_code,
+)
 from apps.facturacion.models import ConfiguracionDIAN, FactusNumberingRange
 from apps.facturacion.services.factus_client import FactusClient, FactusValidationError
 from apps.facturacion.services.factus_environment import resolve_factus_environment
@@ -44,17 +48,26 @@ class TechnicalRange:
     raw: dict[str, Any]
 
 
-LOCAL_TO_FACTUS_DOCUMENT_ALIASES: dict[str, set[str]] = {
-    'FACTURA_VENTA': {'21', 'FACTURA_VENTA', 'FACTURA DE VENTA', 'FACTURA', 'INVOICE', 'BILL'},
-    'NOTA_CREDITO': {'22', 'NOTA_CREDITO', 'NOTA CREDITO', 'CREDIT_NOTE', 'CREDIT NOTE', 'NC'},
-    'NOTA_DEBITO': {'23', 'NOTA_DEBITO', 'NOTA DEBITO', 'DEBIT_NOTE', 'DEBIT NOTE', 'ND'},
-    'DOCUMENTO_SOPORTE': {'24', 'DOCUMENTO_SOPORTE', 'DOCUMENTO SOPORTE', 'SUPPORT_DOCUMENT', 'SUPPORT DOCUMENT'},
+DOCUMENT_CONFIG_MAP: dict[str, dict[str, str]] = {
+    'FACTURA_VENTA': {
+        'id_field': 'factus_numbering_range_id_factura_venta',
+        'meta_prefix': 'factus_factura_venta',
+    },
+    'NOTA_CREDITO': {
+        'id_field': 'factus_numbering_range_id_nota_credito',
+        'meta_prefix': 'factus_nota_credito',
+    },
+    'NOTA_DEBITO': {
+        'id_field': 'factus_numbering_range_id_nota_debito',
+        'meta_prefix': 'factus_nota_debito',
+    },
+    'DOCUMENTO_SOPORTE': {
+        'id_field': 'factus_numbering_range_id_documento_soporte',
+        'meta_prefix': 'factus_documento_soporte',
+    },
     'NOTA_AJUSTE_DOCUMENTO_SOPORTE': {
-        '25',
-        'NOTA_AJUSTE_DOCUMENTO_SOPORTE',
-        'NOTA DE AJUSTE DOCUMENTO SOPORTE',
-        'SUPPORT_DOCUMENT_ADJUSTMENT_NOTE',
-        'NADS',
+        'id_field': 'factus_numbering_range_id_nota_ajuste_documento_soporte',
+        'meta_prefix': 'factus_nota_ajuste_documento_soporte',
     },
 }
 
@@ -105,38 +118,14 @@ def _normalize_environment(value: Any, *, fallback: str) -> str:
     return fallback
 
 
-def _extract_document_tokens(value: Any) -> set[str]:
-    raw = str(value or '').strip()
-    if not raw:
-        return set()
-    normalized = (
-        raw.upper()
-        .replace('-', '_')
-        .replace('Á', 'A')
-        .replace('É', 'E')
-        .replace('Í', 'I')
-        .replace('Ó', 'O')
-        .replace('Ú', 'U')
-    )
-    tokens = {normalized, normalized.replace('_', ' '), normalized.replace(' ', '_')}
-    mapped_local = normalize_local_document_code(raw)
-    if mapped_local:
-        tokens.add(mapped_local)
-    return {token.strip() for token in tokens if token.strip()}
-
-
 def _matches_local_document(local_document_code: str, remote_document_code: str) -> bool:
-    accepted = LOCAL_TO_FACTUS_DOCUMENT_ALIASES.get(local_document_code, {local_document_code})
-    remote_tokens = _extract_document_tokens(remote_document_code)
-    if not remote_tokens:
-        return local_document_code == 'FACTURA_VENTA'
-    return any(token in accepted for token in remote_tokens)
+    return document_matches_local_code(local_document_code, remote_document_code)
 
 
 def _normalize_technical_range(raw: dict[str, Any], *, environment: str) -> TechnicalRange:
     factus_id = int(raw.get('id') or raw.get('numbering_range_id') or raw.get('range_id') or 0)
     remote_doc = str(raw.get('document') or raw.get('document_code') or raw.get('document_type') or '').strip()
-    document_code = normalize_local_document_code(remote_doc) if remote_doc else 'FACTURA_VENTA'
+    document_code = normalize_local_document_code(remote_doc, default='') if remote_doc else ''
     end_date = _as_date(raw.get('end_date') or raw.get('valid_to'))
     start_date = _as_date(raw.get('start_date') or raw.get('valid_from'))
     is_expired = _as_bool(raw.get('is_expired'), default=False)
@@ -225,10 +214,30 @@ def _get_configured_range_id(configuracion: ConfiguracionFacturacion | None, fie
 
 
 def _resolve_config_field(document_code: str) -> str:
-    return {
-        'FACTURA_VENTA': 'factus_numbering_range_id_factura_venta',
-        'NOTA_CREDITO': 'factus_numbering_range_id_nota_credito',
-    }.get(document_code, '')
+    config = DOCUMENT_CONFIG_MAP.get(document_code, {})
+    return config.get('id_field', '')
+
+
+def _metadata_field_names(document_code: str) -> tuple[str, list[str]]:
+    config = DOCUMENT_CONFIG_MAP.get(document_code, {})
+    meta_prefix = config.get('meta_prefix', '')
+    if not meta_prefix:
+        return '', []
+    fields = [
+        f'{meta_prefix}_document_code',
+        f'{meta_prefix}_range_name',
+        f'{meta_prefix}_range_prefix',
+        f'{meta_prefix}_resolution_number',
+        f'{meta_prefix}_range_from',
+        f'{meta_prefix}_range_to',
+        f'{meta_prefix}_valid_from',
+        f'{meta_prefix}_valid_to',
+        f'{meta_prefix}_environment',
+        f'{meta_prefix}_current',
+        f'{meta_prefix}_is_valid',
+        f'{meta_prefix}_last_sync_at',
+    ]
+    return meta_prefix, fields
 
 
 def _fetch_factus_technical_ranges() -> list[TechnicalRange]:
@@ -277,38 +286,36 @@ def _pick_valid_range(
     environment: str,
 ) -> tuple[int, list[str]]:
     discard_reasons: list[str] = []
-    accepted_doc_aliases = sorted(LOCAL_TO_FACTUS_DOCUMENT_ALIASES.get(document_code, {document_code}))
-
     by_document = [
         item for item in ranges
         if (
-            _matches_local_document(document_code, item.document_code)
-            and str(item.factus_document_code).strip() in {
-                LOCAL_TO_FACTUS_CODE.get(document_code, ''),
-                document_code,
-            }
+            (
+                _matches_local_document(document_code, item.document_code)
+                or _matches_local_document(document_code, item.factus_document_code)
+            )
             and item.factus_id > 0
             and item.environment == environment
         )
     ]
 
     for item in ranges:
-        if not _matches_local_document(document_code, item.document_code):
+        if not (
+            _matches_local_document(document_code, item.document_code)
+            or _matches_local_document(document_code, item.factus_document_code)
+        ):
             discard_reasons.append(
-                f'id={item.factus_id}:descartado_documento={item.document_code}/{item.factus_document_code}:admitidos={accepted_doc_aliases}'
-            )
-        elif str(item.factus_document_code).strip() and str(item.factus_document_code).strip() != LOCAL_TO_FACTUS_CODE.get(document_code, ''):
-            discard_reasons.append(
-                f'id={item.factus_id}:descartado_document_code_factus={item.factus_document_code}:esperado={LOCAL_TO_FACTUS_CODE.get(document_code, "")}'
+                f'id={item.factus_id}:descartado_documento_incorrecto local={document_code} remote={item.document_code}/{item.factus_document_code}'
             )
         elif item.environment != environment:
-            discard_reasons.append(f'id={item.factus_id}:descartado_ambiente={item.environment}')
+            discard_reasons.append(f'id={item.factus_id}:descartado_ambiente_incorrecto={item.environment}')
         elif item.factus_id <= 0:
             discard_reasons.append(f'id={item.factus_id}:descartado_id_invalido')
         elif not item.is_associated_to_software:
             discard_reasons.append(f'id={item.factus_id}:descartado_no_asociado_software')
+        elif item.is_expired:
+            discard_reasons.append(f'id={item.factus_id}:descartado_expirado')
         elif not item.is_active:
-            discard_reasons.append(f'id={item.factus_id}:descartado_inactivo_o_expirado')
+            discard_reasons.append(f'id={item.factus_id}:descartado_inactivo')
 
     usable = [item for item in by_document if item.is_associated_to_software and item.is_active]
 
@@ -333,40 +340,33 @@ def _persist_selected_range_metadata(
     field_name: str,
     environment: str,
 ) -> None:
+    meta_prefix, metadata_fields = _metadata_field_names(document_code)
+    if not meta_prefix:
+        return
     fields_to_update = [
         field_name,
         'ambiente_factus',
         'prefijo_factura_electronica',
-        'factus_factura_venta_document_code',
-        'factus_factura_venta_range_name',
-        'factus_factura_venta_range_prefix',
-        'factus_factura_venta_resolution_number',
-        'factus_factura_venta_range_from',
-        'factus_factura_venta_range_to',
-        'factus_factura_venta_valid_from',
-        'factus_factura_venta_valid_to',
-        'factus_factura_venta_environment',
-        'factus_factura_venta_current',
-        'factus_factura_venta_is_valid',
-        'factus_factura_venta_last_sync_at',
+        *metadata_fields,
     ]
     setattr(configuracion, field_name, selected.factus_id)
     configuracion.ambiente_factus = environment
-    configuracion.prefijo_factura_electronica = selected.prefix or ''
-    configuracion.factus_factura_venta_document_code = selected.factus_document_code or LOCAL_TO_FACTUS_CODE.get(document_code, '')
-    configuracion.factus_factura_venta_range_name = str(selected.raw.get('name') or selected.raw.get('description') or '').strip()
-    configuracion.factus_factura_venta_range_prefix = selected.prefix or ''
-    configuracion.factus_factura_venta_resolution_number = selected.resolution_number or ''
-    configuracion.factus_factura_venta_range_from = selected.from_number
-    configuracion.factus_factura_venta_range_to = selected.to_number
-    configuracion.factus_factura_venta_valid_from = selected.start_date
-    configuracion.factus_factura_venta_valid_to = selected.end_date
-    configuracion.factus_factura_venta_environment = selected.environment
-    configuracion.factus_factura_venta_current = selected.current_number
-    configuracion.factus_factura_venta_is_valid = bool(
+    if document_code == 'FACTURA_VENTA':
+        configuracion.prefijo_factura_electronica = selected.prefix or ''
+    setattr(configuracion, f'{meta_prefix}_document_code', selected.factus_document_code or LOCAL_TO_FACTUS_CODE.get(document_code, ''))
+    setattr(configuracion, f'{meta_prefix}_range_name', str(selected.raw.get('name') or selected.raw.get('description') or '').strip())
+    setattr(configuracion, f'{meta_prefix}_range_prefix', selected.prefix or '')
+    setattr(configuracion, f'{meta_prefix}_resolution_number', selected.resolution_number or '')
+    setattr(configuracion, f'{meta_prefix}_range_from', selected.from_number)
+    setattr(configuracion, f'{meta_prefix}_range_to', selected.to_number)
+    setattr(configuracion, f'{meta_prefix}_valid_from', selected.start_date)
+    setattr(configuracion, f'{meta_prefix}_valid_to', selected.end_date)
+    setattr(configuracion, f'{meta_prefix}_environment', selected.environment)
+    setattr(configuracion, f'{meta_prefix}_current', selected.current_number)
+    setattr(configuracion, f'{meta_prefix}_is_valid', bool(
         selected.factus_id > 0 and selected.is_associated_to_software and selected.is_active
-    )
-    configuracion.factus_factura_venta_last_sync_at = timezone.now()
+    ))
+    setattr(configuracion, f'{meta_prefix}_last_sync_at', timezone.now())
     configuracion.save(update_fields=fields_to_update)
     logger.info(
         'facturacion.numbering_range.resolve.persisted_metadata document_code=%s config_id=%s field=%s range_id=%s prefix=%s doc=%s resolution=%s from=%s to=%s start=%s end=%s env=%s current=%s valid=%s',
@@ -375,7 +375,7 @@ def _persist_selected_range_metadata(
         field_name,
         selected.factus_id,
         selected.prefix,
-        configuracion.factus_factura_venta_document_code,
+        getattr(configuracion, f'{meta_prefix}_document_code', ''),
         selected.resolution_number,
         selected.from_number,
         selected.to_number,
@@ -383,7 +383,7 @@ def _persist_selected_range_metadata(
         selected.end_date,
         selected.environment,
         selected.current_number,
-        configuracion.factus_factura_venta_is_valid,
+        getattr(configuracion, f'{meta_prefix}_is_valid', False),
     )
 
 
@@ -437,7 +437,7 @@ def resolve_electronic_numbering_range_id(document_code: str = 'FACTURA_VENTA', 
 
     if not field_name:
         raise FactusValidationError(
-            'No se encontró en Factus un rango autorizado y vigente para factura electrónica en el ambiente actual.'
+            f'No se encontró en Factus un rango autorizado y vigente para {document_code} en el ambiente actual.'
         )
 
     ranges = _fetch_factus_technical_ranges()
@@ -494,7 +494,7 @@ def resolve_electronic_numbering_range_id(document_code: str = 'FACTURA_VENTA', 
             [item.raw for item in ranges[:10]],
         )
         raise FactusValidationError(
-            'No se encontró en Factus un rango autorizado y vigente para factura electrónica en el ambiente actual.'
+            f'No se encontró en Factus un rango autorizado y vigente para {document_code} en el ambiente actual.'
         )
     selected_range = next((item for item in ranges if item.factus_id == selected_id), None)
     if selected_range:
@@ -515,7 +515,7 @@ def resolve_electronic_numbering_range_id(document_code: str = 'FACTURA_VENTA', 
             modo_operacion_electronica='FACTUS_MANAGED',
         )
 
-    if force_refresh or configured_id != selected_id or document_code == 'FACTURA_VENTA':
+    if force_refresh or configured_id != selected_id:
         with transaction.atomic():
             locked = ConfiguracionFacturacion.objects.select_for_update().get(pk=configuracion.pk)
             selected_range = selected_range or next((item for item in ranges if item.factus_id == selected_id), None)

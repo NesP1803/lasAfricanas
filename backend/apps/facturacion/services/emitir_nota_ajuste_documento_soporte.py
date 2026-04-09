@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from django.db import transaction
@@ -11,6 +12,8 @@ from apps.facturacion.models import DocumentoSoporteElectronico, NotaAjusteDocum
 from apps.facturacion.services.facturar_venta import map_factus_status
 from apps.facturacion.services.factus_client import FactusClient, FactusValidationError
 from apps.facturacion.services.support_document_adjustment_payload_builder import build_adjustment_payload
+
+logger = logging.getLogger(__name__)
 
 
 def _extract_adjustment_note_data(response_json: dict[str, Any]) -> dict[str, str]:
@@ -44,6 +47,12 @@ def emitir_nota_ajuste_documento_soporte(
         raise FactusValidationError('La nota de ajuste debe contener al menos un ítem.')
 
     payload = build_adjustment_payload(documento_soporte=documento_soporte, motivo=motivo, items=items)
+    logger.info(
+        'facturacion.nota_ajuste_documento_soporte.payload.range_selected document_code=%s numbering_range_id=%s support_document_id=%s',
+        'NOTA_AJUSTE_DOCUMENTO_SOPORTE',
+        payload.get('numbering_range_id'),
+        documento_soporte_id,
+    )
     response_json = FactusClient().send_support_document_adjustment(payload)
     fields = _extract_adjustment_note_data(response_json)
 
