@@ -313,8 +313,8 @@ def _sync_existing_pending_invoice(
     _assert_emitted_document_matches_sale(
         venta=venta,
         fields=fields,
-        expected_number=factura.number or str(venta.numero_comprobante or ''),
-        expected_reference_code=factura.reference_code or str(venta.numero_comprobante or ''),
+        expected_number=factura.number or '',
+        expected_reference_code=factura.reference_code or '',
     )
     bill_errors = _extract_bill_errors(response)
     missing_after_show = [field for field in ['xml_url', 'pdf_url'] if not fields.get(field)]
@@ -325,8 +325,8 @@ def _sync_existing_pending_invoice(
             _assert_emitted_document_matches_sale(
                 venta=venta,
                 fields=fields,
-                expected_number=factura.number or str(venta.numero_comprobante or ''),
-                expected_reference_code=factura.reference_code or str(venta.numero_comprobante or ''),
+                expected_number=factura.number or '',
+                expected_reference_code=factura.reference_code or '',
             )
             if not bill_errors:
                 bill_errors = _extract_bill_errors(response_download)
@@ -647,11 +647,8 @@ def facturar_venta(
             local_totals['total'],
         )
         numero = str(venta.numero_comprobante or '').strip()
-        should_lock_expected_number = bool(numero)
-        if should_lock_expected_number:
-            payload['number'] = numero
-        else:
-            payload.pop('number', None)
+        should_lock_expected_number = False
+        payload.pop('number', None)
         reference_code = resolve_reference_code(venta=venta, factura_existente=factura_existente, numero=numero)
         payload['reference_code'] = reference_code
         if FacturaElectronica.objects.filter(reference_code=reference_code).exclude(venta=venta).exists():
@@ -663,7 +660,7 @@ def facturar_venta(
                 # Fuente canónica: solo estado_electronico.
                 # `status` legado se sincroniza automáticamente en FacturaElectronica.save().
                 'estado_electronico': 'PENDIENTE_REINTENTO',
-                'number': numero,
+                'number': (factura_existente.number if factura_existente and factura_existente.number else ''),
                 'reference_code': reference_code,
                 'response_json': build_attempt_trace(
                     factura=factura_existente,

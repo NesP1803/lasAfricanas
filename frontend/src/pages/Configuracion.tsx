@@ -83,6 +83,8 @@ export default function Configuracion() {
   const [facturacion, setFacturacion] = useState<ConfiguracionFacturacion | null>(
     null
   );
+  const [facturacionLoading, setFacturacionLoading] = useState(true);
+  const [facturacionLoadError, setFacturacionLoadError] = useState(false);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoRemoved, setLogoRemoved] = useState(false);
@@ -252,11 +254,16 @@ export default function Configuracion() {
       }
 
       try {
+        setFacturacionLoading(true);
+        setFacturacionLoadError(false);
         const data = await configuracionAPI.obtenerFacturacion({ force: true });
         setFacturacion(data ?? null);
       } catch (error) {
         console.error("Error cargando configuración de facturación:", error);
         setFacturacion(null);
+        setFacturacionLoadError(true);
+      } finally {
+        setFacturacionLoading(false);
       }
 
     };
@@ -892,7 +899,10 @@ export default function Configuracion() {
         </div>
       </div>
 
-      {activeTab === "facturacion" && facturacion && (
+      {activeTab === "facturacion" && facturacionLoading && (
+        <FacturacionLoadingSkeleton />
+      )}
+      {activeTab === "facturacion" && !facturacionLoading && facturacion && (
         <FacturacionElectronicaAdmin
           isAdmin={isAdmin}
           facturacion={facturacion}
@@ -900,7 +910,7 @@ export default function Configuracion() {
           onSaveFacturacion={handleGuardarFacturacion}
         />
       )}
-      {activeTab === "facturacion" && !facturacion && (
+      {activeTab === "facturacion" && !facturacionLoading && !facturacion && facturacionLoadError && (
         <section className="rounded-2xl bg-white p-5 shadow-sm">
           <p className="text-sm text-slate-600">
             No se encontró configuración de facturación. Verifica la conexión con
@@ -2026,5 +2036,42 @@ export default function Configuracion() {
         }}
       />
     </div>
+  );
+}
+
+function FacturacionLoadingSkeleton() {
+  return (
+    <section className="space-y-4 rounded-2xl bg-white p-5 shadow-sm animate-pulse">
+      <div className="space-y-2 border-b border-slate-200 pb-4">
+        <div className="h-5 w-64 rounded bg-slate-200" />
+        <div className="h-4 w-96 max-w-full rounded bg-slate-100" />
+      </div>
+
+      <div className="rounded-xl border border-slate-200 p-4">
+        <div className="h-4 w-72 rounded bg-slate-200" />
+        <div className="mt-4 space-y-3">
+          {Array.from({ length: 3 }).map((_, idx) => (
+            <div key={idx} className="rounded-lg border border-slate-200 p-3">
+              <div className="h-4 w-40 rounded bg-slate-200" />
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                {Array.from({ length: 6 }).map((__, infoIdx) => (
+                  <div key={infoIdx} className="h-12 rounded-lg border border-slate-200 bg-slate-50" />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-slate-200 p-4">
+        <div className="h-4 w-44 rounded bg-slate-200" />
+        <div className="mt-1 h-3 w-64 rounded bg-slate-100" />
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
+          {Array.from({ length: 4 }).map((_, idx) => (
+            <div key={idx} className="h-14 rounded-lg border border-slate-200 bg-slate-50" />
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }

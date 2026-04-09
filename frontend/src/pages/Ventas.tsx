@@ -1332,7 +1332,7 @@ export default function Ventas() {
             </label>
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700">
               {configuracion
-                ? 'Factus administra la numeración oficial'
+                ? 'Número oficial asignado por Factus al facturar'
                 : 'Pendiente de configuración técnica'}
             </div>
           </div>
