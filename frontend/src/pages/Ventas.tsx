@@ -1886,6 +1886,7 @@ export default function Ventas() {
                   qrImageUrl={documentoPreview.qrImageUrl}
                   referenceCode={documentoPreview.referenceCode}
                   representacionGrafica={documentoPreview.representacionGrafica}
+                  emissionStatusLabel={documentoPreview.emissionStatus}
                 />
               </div>
               <div className="flex flex-wrap justify-end gap-2">

@@ -327,6 +327,8 @@ export interface EstadisticasVentas {
   total_remisiones_valor: string | null;
   facturas_por_usuario?: { usuario: string; cuentas: number }[];
   remisiones_por_usuario?: { usuario: string; cuentas: number }[];
+  facturas_detalle?: VentaListItem[];
+  remisiones_detalle?: VentaListItem[];
 }
 
 export const ventasApi = {

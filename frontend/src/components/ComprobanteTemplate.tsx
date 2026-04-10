@@ -43,6 +43,7 @@ type DocumentoTemplateProps = {
   qrImageUrl?: string;
   referenceCode?: string;
   representacionGrafica?: string;
+  emissionStatusLabel?: string;
 };
 
 const currencyFormatter = new Intl.NumberFormat('es-CO', {
@@ -130,6 +131,7 @@ export default function ComprobanteTemplate({
   qrUrl,
   qrImageUrl,
   representacionGrafica,
+  emissionStatusLabel,
 }: DocumentoTemplateProps) {
   const infoEmpresa = getEmpresaInfo(empresa);
   const fechaFormateada = formatFechaHora(fecha);
@@ -304,6 +306,9 @@ export default function ComprobanteTemplate({
         ) : null}
         {cufe ? <span className="w-px self-stretch bg-slate-300" aria-hidden="true" /> : null}
         <div className="min-w-0 flex-1">
+          {emissionStatusLabel ? (
+            <p className="mt-1 text-[8px] font-semibold text-slate-700">Estado emisión: {emissionStatusLabel}</p>
+          ) : null}
           <div className="text-center">
             <img src={getLogoEmpresa(empresa)} alt="Logo empresa" className="mx-auto mb-1.5 h-11 max-w-[52mm] rounded-lg object-contain" />
             <p className="text-[11px] font-bold uppercase tracking-wide">{infoEmpresa.nombre}</p>

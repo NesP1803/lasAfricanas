@@ -813,6 +813,7 @@ export default function Facturas() {
                   qrUrl={documento.factura.electronica?.public_url || documento.factura.electronica?.qr_factus}
                   qrImageUrl={documento.factura.electronica?.qr_image}
                   referenceCode={documento.factura.electronica?.reference_code}
+                  emissionStatusLabel={String((documento.factura.electronica?.print_context as Record<string, unknown> | undefined)?.emission_status || '')}
                 />
               </div>
               <div className="flex items-center justify-end gap-3">
