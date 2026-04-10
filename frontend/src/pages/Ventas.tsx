@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Barcode,
   FileText,
+  FileDown,
   MinusCircle,
   PlusCircle,
   Printer,
@@ -30,7 +31,13 @@ import ComprobanteTemplate, {
   type DocumentoDetalle,
   type DocumentoFormato,
 } from '../components/ComprobanteTemplate';
-import { printComprobante } from '../utils/printComprobante';
+import {
+  exportComprobantePdf,
+  POS_PAPER_WIDTH_MM,
+  POS_PAPER_WIDTH_MM_COMPACT,
+  printComprobante,
+  type PosPaperWidthMm,
+} from '../utils/printComprobante';
 import { descuentosApi, type SolicitudDescuento } from '../api/descuentos';
 import type { ConfiguracionEmpresa } from '../types';
 import type { ConfiguracionFacturacion } from '../types';
@@ -87,6 +94,7 @@ type DocumentoPreview = {
   clienteTelefono?: string;
   clienteEmail?: string;
   representacionGrafica?: string;
+  emissionStatus?: string;
 };
 
 type TallerVentaPayload = {
@@ -343,6 +351,7 @@ export default function Ventas() {
   const [documentoGenerado, setDocumentoGenerado] = useState<DocumentoGenerado | null>(null);
   const [documentoPreview, setDocumentoPreview] = useState<DocumentoPreview | null>(null);
   const [documentoFormato, setDocumentoFormato] = useState<DocumentoFormato>('POS');
+  const [documentoPosPaperWidthMm, setDocumentoPosPaperWidthMm] = useState<PosPaperWidthMm>(POS_PAPER_WIDTH_MM);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [mostrarBusqueda, setMostrarBusqueda] = useState(false);
   const [mostrarBusquedaClientes, setMostrarBusquedaClientes] = useState(false);
@@ -1856,6 +1865,32 @@ export default function Ventas() {
                 >
                   Formato Carta/A4
                 </button>
+                {documentoFormato === 'POS' ? (
+                  <>
+                    <button
+                      type="button"
+                      className={`rounded border px-3 py-1 text-xs font-semibold ${
+                        documentoPosPaperWidthMm === POS_PAPER_WIDTH_MM
+                          ? 'border-emerald-600 bg-emerald-600 text-white'
+                          : 'border-slate-300 text-slate-700'
+                      }`}
+                      onClick={() => setDocumentoPosPaperWidthMm(POS_PAPER_WIDTH_MM)}
+                    >
+                      POS 80 mm
+                    </button>
+                    <button
+                      type="button"
+                      className={`rounded border px-3 py-1 text-xs font-semibold ${
+                        documentoPosPaperWidthMm === POS_PAPER_WIDTH_MM_COMPACT
+                          ? 'border-emerald-600 bg-emerald-600 text-white'
+                          : 'border-slate-300 text-slate-700'
+                      }`}
+                      onClick={() => setDocumentoPosPaperWidthMm(POS_PAPER_WIDTH_MM_COMPACT)}
+                    >
+                      POS 75 mm
+                    </button>
+                  </>
+                ) : null}
               </div>
               <div className="max-h-[70vh] overflow-auto rounded border border-slate-200 bg-slate-50 p-4">
                 <ComprobanteTemplate
@@ -1896,6 +1931,7 @@ export default function Ventas() {
                     if (!documentoPreview) return;
                     printComprobante({
                       formato: documentoFormato,
+                      posPaperWidthMm: documentoPosPaperWidthMm,
                       tipo: documentoPreview.tipo,
                       numero: documentoPreview.numero,
                       fecha: documentoPreview.fecha,
@@ -1927,6 +1963,45 @@ export default function Ventas() {
                 >
                   <Printer size={16} />
                   Imprimir
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!documentoPreview) return;
+                    await exportComprobantePdf({
+                      formato: documentoFormato,
+                      posPaperWidthMm: documentoPosPaperWidthMm,
+                      tipo: documentoPreview.tipo,
+                      numero: documentoPreview.numero,
+                      fecha: documentoPreview.fecha,
+                      clienteNombre: documentoPreview.clienteNombre,
+                      clienteDocumento: documentoPreview.clienteDocumento,
+                      clienteDireccion: documentoPreview.clienteDireccion,
+                      clienteTelefono: documentoPreview.clienteTelefono,
+                      clienteEmail: documentoPreview.clienteEmail,
+                      medioPago: documentoPreview.medioPago,
+                      estado: documentoPreview.estado,
+                      detalles: documentoPreview.detalles,
+                      subtotal: documentoPreview.subtotal,
+                      descuento: documentoPreview.descuento,
+                      iva: documentoPreview.iva,
+                      total: documentoPreview.totalFiscal,
+                      efectivoRecibido: documentoPreview.efectivoRecibido,
+                      cambio: documentoPreview.cambio,
+                      notas: configuracion?.notas_factura,
+                      resolucion: documentoPreview.resolucion || 'Documento pendiente de emisión electrónica',
+                      empresa,
+                      cufe: documentoPreview.cufe,
+                      qrUrl: documentoPreview.qrUrl,
+                      qrImageUrl: documentoPreview.qrImageUrl,
+                      referenceCode: documentoPreview.referenceCode,
+                      representacionGrafica: documentoPreview.representacionGrafica,
+                    });
+                  }}
+                  className="flex items-center gap-2 rounded bg-emerald-600 px-4 py-2 text-sm font-semibold text-white"
+                >
+                  <FileDown size={16} />
+                  Descargar PDF
                 </button>
                 <button
                   type="button"

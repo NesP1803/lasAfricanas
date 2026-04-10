@@ -1,3 +1,5 @@
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 import type { ConfiguracionEmpresa } from '../types';
 
 export type DocumentoDetalle = {
@@ -14,9 +16,16 @@ export type DocumentoDetalle = {
 
 type DocumentoTipo = 'FACTURA' | 'REMISION' | 'COTIZACION';
 export type DocumentoFormato = 'POS' | 'CARTA';
+export type PosPaperWidthMm = 75 | 80;
+
+export const POS_PAPER_WIDTH_MM: PosPaperWidthMm = 80;
+export const POS_PAPER_WIDTH_MM_COMPACT: PosPaperWidthMm = 75;
+
+const PX_PER_MM = 96 / 25.4;
 
 type PrintComprobanteParams = {
   formato?: DocumentoFormato;
+  posPaperWidthMm?: PosPaperWidthMm;
   tipo: DocumentoTipo;
   numero: string;
   fecha: string;
@@ -102,8 +111,9 @@ const getEstadoVisual = (estado?: string) => {
 const POLITICAS_CAMBIOS_GARANTIAS =
   'Para trámites de cambios y garantías, indispensable presentar la factura de venta. Tiene hasta 5 días para realizar el trámite. Las partes eléctricas NO tienen devolución. Los productos deben estar en perfecto estado y empaque original.';
 
-export const printComprobante = ({
+const buildComprobanteDocument = ({
   formato = 'POS',
+  posPaperWidthMm = POS_PAPER_WIDTH_MM,
   tipo,
   numero,
   fecha,
@@ -129,9 +139,6 @@ export const printComprobante = ({
   qrImageUrl,
   representacionGrafica,
 }: PrintComprobanteParams) => {
-  const printWindow = window.open('', '_blank', 'width=960,height=860');
-  if (!printWindow) return;
-
   const infoEmpresa = getEmpresaInfo(empresa);
   const fechaFormateada = formatFechaHora(fecha);
   const fechaDocumento = formatFechaDocumento(fecha);
@@ -160,8 +167,12 @@ export const printComprobante = ({
       const divisorIva = 1 + ivaPorcentaje / 100;
       const base = Number.isFinite(subtotalDetalle)
         ? subtotalDetalle
-        : (ivaPorcentaje > 0 ? totalDetalle / divisorIva : totalDetalle);
-      const ivaDetalle = Number.isFinite(ivaDetalleExplicito) ? ivaDetalleExplicito : (totalDetalle - base);
+        : ivaPorcentaje > 0
+          ? totalDetalle / divisorIva
+          : totalDetalle;
+      const ivaDetalle = Number.isFinite(ivaDetalleExplicito)
+        ? ivaDetalleExplicito
+        : totalDetalle - base;
       const item = acc.get(ivaPorcentaje) || { base: 0, iva: 0, total: 0 };
       acc.set(ivaPorcentaje, {
         base: item.base + base,
@@ -175,12 +186,13 @@ export const printComprobante = ({
   const estilos =
     formato === 'POS'
       ? `
-      :root { --ticket-width: 80mm; }
+      :root { --ticket-width: ${posPaperWidthMm}mm; }
       * { box-sizing: border-box; }
-      @page { size: 80mm auto; margin: 0; }
-      html, body { width: var(--ticket-width); margin: 0; padding: 0; background: #fff; }
+      @page { size: var(--ticket-width) auto; margin: 0; }
+      html, body { width: var(--ticket-width); min-width: var(--ticket-width); max-width: var(--ticket-width); margin: 0; padding: 0; background: #fff; overflow: visible; }
       body { font-family: Arial, sans-serif; color: #0f172a; font-size: 10px; line-height: 1.28; }
-      .ticket { width: var(--ticket-width); border: 1px solid #cbd5e1; padding: 6px 5px; }
+      .print-root { width: var(--ticket-width); min-width: var(--ticket-width); max-width: var(--ticket-width); margin: 0; padding: 0; }
+      .ticket { width: var(--ticket-width); margin: 0; padding: 6px 5px; border: 0; }
       .content { display: flex; align-items: stretch; gap: 4px; }
       .cufe-side { width: 12px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; padding-left: 1px; }
       .cufe-divider { width: 1px; align-self: stretch; background: #cbd5e1; }
@@ -192,8 +204,6 @@ export const printComprobante = ({
       .row { display: flex; justify-content: space-between; gap: 6px; margin: 1px 0; }
       .row .value { text-align: right; font-weight: 700; }
       .break { overflow-wrap: anywhere; word-break: break-word; }
-      .item { margin: 4px 0; }
-      .item strong { display: block; text-transform: uppercase; }
       .total-row { font-size: 11px; font-weight: 700; margin-top: 3px; }
       .qr { margin-top: 0; text-align: center; }
       .qr img { width: 94px; height: 94px; object-fit: contain; display: block; margin: 0 auto; }
@@ -213,6 +223,13 @@ export const printComprobante = ({
       .iva-grid { display: grid; grid-template-columns: .85fr 1fr 1fr 1fr; gap: 4px; align-items: start; }
       .right { text-align: right; }
       .policies { margin-top: 6px; font-size: 8px; line-height: 1.4; color: #334155; padding: 2px 4px; text-align: center; }
+      @media print {
+        @page { size: var(--ticket-width) auto; margin: 0; }
+        html, body { width: var(--ticket-width) !important; min-width: var(--ticket-width) !important; max-width: var(--ticket-width) !important; margin: 0 !important; padding: 0 !important; }
+        body * { visibility: hidden; }
+        .print-root, .print-root * { visibility: visible; }
+        .print-root { position: absolute; left: 0; top: 0; }
+      }
     `
       : `
       * { box-sizing: border-box; }
@@ -246,63 +263,66 @@ export const printComprobante = ({
       }
     `;
 
-  const html = formato === 'POS'
-    ? `
-      <div class="ticket">
-        <div class="content">
-          ${cufe ? `<div class="cufe-side"><div class="cufe-vertical">CUFE · ${cufe}</div></div><div class="cufe-divider" aria-hidden="true"></div>` : ''}
-          <div class="main">
-            <div class="center">
-              <img src="${getLogoEmpresa(empresa)}" alt="Logo empresa" class="logo"/>
-              <strong>${infoEmpresa.nombre}</strong>
-              <div>${infoEmpresa.nit}</div>
-              <div>${infoEmpresa.regimen}</div>
-              <div class="break">${infoEmpresa.direccion}</div>
-              ${infoEmpresa.telefono ? `<div>Tel: ${infoEmpresa.telefono}</div>` : ''}
-              <div class="resolution">
-                <div class="resolution-title">Resolución / Numeración</div>
-                <div class="muted break">${resolucion || 'Pendiente de consulta electrónica'}</div>
+  const html =
+    formato === 'POS'
+      ? `
+      <div class="print-root">
+        <div class="ticket">
+          <div class="content">
+            ${cufe ? `<div class="cufe-side"><div class="cufe-vertical">CUFE · ${cufe}</div></div><div class="cufe-divider" aria-hidden="true"></div>` : ''}
+            <div class="main">
+              <div class="center">
+                <img src="${getLogoEmpresa(empresa)}" alt="Logo empresa" class="logo"/>
+                <strong>${infoEmpresa.nombre}</strong>
+                <div>${infoEmpresa.nit}</div>
+                <div>${infoEmpresa.regimen}</div>
+                <div class="break">${infoEmpresa.direccion}</div>
+                ${infoEmpresa.telefono ? `<div>Tel: ${infoEmpresa.telefono}</div>` : ''}
+                <div class="resolution">
+                  <div class="resolution-title">Resolución / Numeración</div>
+                  <div class="muted break">${resolucion || 'Pendiente de consulta electrónica'}</div>
+                </div>
               </div>
-            </div>
-            <div class="line"></div>
-            <div class="center"><strong>${tituloDocumento}</strong><div><strong>${numero}</strong></div><div class="doc-datetime"><div class="doc-grid"><span class="muted" style="text-align:left">Fecha:</span><strong style="text-align:right">${fechaDocumento}</strong><span class="muted" style="text-align:left">Hora:</span><strong style="text-align:right">${horaDocumento || fechaFormateada}</strong></div></div></div>
-            <div class="line"></div>
-            <div class="row"><span>Cliente:</span><span class="value break">${clienteNombre}</span></div>
-            <div class="row"><span>NIT/CC:</span><span class="value">${clienteDocumento || 'N/D'}</span></div>
-            <div class="row"><span>Pago:</span><span class="value">${medioPago || 'N/D'}</span></div>
-            <div class="row"><span>Estado:</span><span class="value">${estadoVisual}</span></div>
-            <div class="line"></div>
-            <div class="items-header"><span>Descripción</span><span class="right">Valor</span><span class="right">IVA %</span></div>
-            ${detallesMostrar
-              .map(
-                (d) => `<div class="item-row"><div><strong class="break">${d.descripcion}</strong>${d.codigo ? `<div class="tiny">Cod: ${d.codigo}</div>` : ''}<div class="tiny">${d.cantidad} x ${currencyFormatter.format(d.precioUnitario)}</div></div><strong class="right">${currencyFormatter.format(d.total)}</strong><span class="right">${Number.isFinite(d.ivaPorcentaje) ? d.ivaPorcentaje : 0}%</span></div>`
-              )
-              .join('')}
-            <div class="totals-box">
-              <div class="row"><span>Subtotal</span><span>${currencyFormatter.format(subtotal)}</span></div>
-              <div class="row"><span>Impuestos</span><span>${currencyFormatter.format(iva)}</span></div>
-              <div class="row"><span>Descuentos</span><span>-${currencyFormatter.format(descuento)}</span></div>
-              <div class="row total-row"><span>Total a pagar</span><span>${currencyFormatter.format(total)}</span></div>
-              ${efectivoRecibido !== undefined && cambio !== undefined ? `<div class="row"><span>Recibido</span><span>${currencyFormatter.format(efectivoRecibido)}</span></div><div class="row"><span>Cambio</span><span>${currencyFormatter.format(cambio)}</span></div>` : ''}
-            </div>
-            <div class="iva-box">
-              <div style="font-size:8px;font-weight:700;text-transform:uppercase;color:#334155;">Discriminación IVA</div>
-              <div class="iva-grid muted" style="font-size:7px;font-weight:700;text-transform:uppercase;margin-top:2px;">
-                <span>Tarifa</span><span class="right">Valor compra</span><span class="right">Base/Imp</span><span class="right">Valor IVA</span>
+              <div class="line"></div>
+              <div class="center"><strong>${tituloDocumento}</strong><div><strong>${numero}</strong></div><div class="doc-datetime"><div class="doc-grid"><span class="muted" style="text-align:left">Fecha:</span><strong style="text-align:right">${fechaDocumento}</strong><span class="muted" style="text-align:left">Hora:</span><strong style="text-align:right">${horaDocumento || fechaFormateada}</strong></div></div></div>
+              <div class="line"></div>
+              <div class="row"><span>Cliente:</span><span class="value break">${clienteNombre}</span></div>
+              <div class="row"><span>NIT/CC:</span><span class="value">${clienteDocumento || 'N/D'}</span></div>
+              <div class="row"><span>Pago:</span><span class="value">${medioPago || 'N/D'}</span></div>
+              <div class="row"><span>Estado:</span><span class="value">${estadoVisual}</span></div>
+              <div class="line"></div>
+              <div class="items-header"><span>Descripción</span><span class="right">Valor</span><span class="right">IVA %</span></div>
+              ${detallesMostrar
+                .map(
+                  (d) => `<div class="item-row"><div><strong class="break">${d.descripcion}</strong>${d.codigo ? `<div class="tiny">Cod: ${d.codigo}</div>` : ''}<div class="tiny">${d.cantidad} x ${currencyFormatter.format(d.precioUnitario)}</div></div><strong class="right">${currencyFormatter.format(d.total)}</strong><span class="right">${Number.isFinite(d.ivaPorcentaje) ? d.ivaPorcentaje : 0}%</span></div>`
+                )
+                .join('')}
+              <div class="totals-box">
+                <div class="row"><span>Subtotal</span><span>${currencyFormatter.format(subtotal)}</span></div>
+                <div class="row"><span>Impuestos</span><span>${currencyFormatter.format(iva)}</span></div>
+                <div class="row"><span>Descuentos</span><span>-${currencyFormatter.format(descuento)}</span></div>
+                <div class="row total-row"><span>Total a pagar</span><span>${currencyFormatter.format(total)}</span></div>
+                ${efectivoRecibido !== undefined && cambio !== undefined ? `<div class="row"><span>Recibido</span><span>${currencyFormatter.format(efectivoRecibido)}</span></div><div class="row"><span>Cambio</span><span>${currencyFormatter.format(cambio)}</span></div>` : ''}
               </div>
-              ${resumenIvaArray.map((item) => `<div class="iva-grid" style="margin-top:2px;"><span>${item.porcentaje}%</span><span class="right">${currencyFormatter.format(item.total)}</span><span class="right">${currencyFormatter.format(item.base)}</span><span class="right">${currencyFormatter.format(item.iva)}</span></div>`).join('')}
+              <div class="iva-box">
+                <div style="font-size:8px;font-weight:700;text-transform:uppercase;color:#334155;">Discriminación IVA</div>
+                <div class="iva-grid muted" style="font-size:7px;font-weight:700;text-transform:uppercase;margin-top:2px;">
+                  <span>Tarifa</span><span class="right">Valor compra</span><span class="right">Base/Imp</span><span class="right">Valor IVA</span>
+                </div>
+                ${resumenIvaArray.map((item) => `<div class="iva-grid" style="margin-top:2px;"><span>${item.porcentaje}%</span><span class="right">${currencyFormatter.format(item.total)}</span><span class="right">${currencyFormatter.format(item.base)}</span><span class="right">${currencyFormatter.format(item.iva)}</span></div>`).join('')}
+              </div>
+              <div class="qr">
+                ${qrImageUrl ? `<img src="${qrImageUrl}" alt="QR factura electrónica"/>` : qrUrl ? `<div class="muted break">Verificación: ${qrUrl}</div>` : '<div class="placeholder">Espacio reservado para QR DIAN</div>'}
+              </div>
+              ${notas ? `<div class="muted break" style="margin-top:4px;">${notas}</div>` : ''}
+              <div class="policies">${POLITICAS_CAMBIOS_GARANTIAS}</div>
+              <div class="thank-you">Gracias por su compra, es un placer atenderlo.</div>
             </div>
-            <div class="qr">
-              ${qrImageUrl ? `<img src="${qrImageUrl}" alt="QR factura electrónica"/>` : qrUrl ? `<div class="muted break">Verificación: ${qrUrl}</div>` : '<div class="placeholder">Espacio reservado para QR DIAN</div>'}
-            </div>
-            ${notas ? `<div class="muted break" style="margin-top:4px;">${notas}</div>` : ''}
-            <div class="policies">${POLITICAS_CAMBIOS_GARANTIAS}</div>
-            <div class="thank-you">Gracias por su compra, es un placer atenderlo.</div>
           </div>
         </div>
       </div>
     `
-    : `
+      : `
       <div class="sheet">
         <div class="header">
           <div>
@@ -364,9 +384,101 @@ export const printComprobante = ({
       </div>
     `;
 
-  printWindow.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"/><title>${tituloDocumento} ${numero}</title><style>${estilos}</style></head><body>${html}</body></html>`);
+  return { estilos, html, tituloDocumento };
+};
+
+const sanitizeFilename = (text: string) =>
+  text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9-_]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .toLowerCase();
+
+const waitForImages = async (element: HTMLElement) => {
+  const images = Array.from(element.querySelectorAll('img'));
+  await Promise.all(
+    images.map(
+      (image) =>
+        new Promise<void>((resolve) => {
+          if (image.complete) {
+            resolve();
+            return;
+          }
+          image.addEventListener('load', () => resolve(), { once: true });
+          image.addEventListener('error', () => resolve(), { once: true });
+        })
+    )
+  );
+};
+
+export const printComprobante = (params: PrintComprobanteParams) => {
+  const { estilos, html, tituloDocumento } = buildComprobanteDocument(params);
+  const printWindow = window.open('', '_blank', 'width=960,height=860');
+  if (!printWindow) return;
+
+  printWindow.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"/><title>${tituloDocumento} ${params.numero}</title><style>${estilos}</style></head><body>${html}</body></html>`);
   printWindow.document.close();
   printWindow.focus();
   printWindow.print();
   printWindow.close();
+};
+
+export const exportComprobantePdf = async (params: PrintComprobanteParams) => {
+  const formato = params.formato ?? 'POS';
+  if (formato !== 'POS') {
+    printComprobante(params);
+    return;
+  }
+
+  const { estilos, html, tituloDocumento } = buildComprobanteDocument(params);
+  const wrapper = document.createElement('div');
+  wrapper.style.position = 'fixed';
+  wrapper.style.left = '-100000px';
+  wrapper.style.top = '0';
+  wrapper.style.zIndex = '-1';
+  wrapper.style.background = '#fff';
+  wrapper.innerHTML = `<style>${estilos}</style>${html}`;
+  document.body.appendChild(wrapper);
+
+  try {
+    const printRoot = wrapper.querySelector<HTMLElement>('.print-root');
+    if (!printRoot) return;
+
+    await waitForImages(printRoot);
+
+    const widthMm = params.posPaperWidthMm ?? POS_PAPER_WIDTH_MM;
+    const widthPx = Math.ceil(widthMm * PX_PER_MM);
+    printRoot.style.width = `${widthPx}px`;
+    printRoot.style.minWidth = `${widthPx}px`;
+    printRoot.style.maxWidth = `${widthPx}px`;
+
+    const contentHeightPx = Math.ceil(printRoot.scrollHeight);
+    const heightMm = Math.max(10, Number((contentHeightPx / PX_PER_MM).toFixed(2)));
+
+    const canvas = await html2canvas(printRoot, {
+      backgroundColor: '#ffffff',
+      scale: 2,
+      useCORS: true,
+      width: widthPx,
+      height: contentHeightPx,
+      windowWidth: widthPx,
+      windowHeight: contentHeightPx,
+    });
+
+    const pdf = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: [widthMm, heightMm],
+      compress: true,
+    });
+
+    pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, widthMm, heightMm, undefined, 'FAST');
+
+    const numeroSafe = sanitizeFilename(params.numero || 'documento');
+    pdf.save(`${sanitizeFilename(tituloDocumento)}-${numeroSafe}.pdf`);
+  } finally {
+    wrapper.remove();
+  }
 };

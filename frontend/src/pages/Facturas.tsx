@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { FileSearch, Printer, Ban, Eye, X, ChevronDown, FileText } from 'lucide-react';
+import { FileSearch, Printer, Ban, Eye, X, ChevronDown, FileText, FileDown } from 'lucide-react';
 import { configuracionAPI } from '../api/configuracion';
 import { ventasApi, type Venta, type VentaListItem } from '../api/ventas';
 import { facturacionApi, resolveEstadoFactura, type FacturaElectronica } from '../modules/facturacionElectronica/services/facturacionApi';
 import { useNotification } from '../contexts/NotificationContext';
 import ComprobanteTemplate from '../components/ComprobanteTemplate';
 import type { ConfiguracionEmpresa, ConfiguracionFacturacion } from '../types';
-import { printComprobante } from '../utils/printComprobante';
+import { exportComprobantePdf, printComprobante } from '../utils/printComprobante';
 import { getLocalDateInputValue } from '../utils/date';
 
 type DocumentoTipo = 'POS' | 'CARTA';
@@ -883,6 +883,62 @@ export default function Facturas() {
                 >
                   <Printer size={16} />
                   Imprimir
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!documento) return;
+                    const detalle = detalleFactura;
+                    const detalles = detalle?.detalles?.map((item) => ({
+                      descripcion: item.producto_nombre ?? 'Producto',
+                      codigo: item.producto_codigo ?? '',
+                      cantidad: Number(item.cantidad),
+                      precioUnitario: Number(item.precio_unitario),
+                      descuento: Number(item.descuento_unitario),
+                      subtotal: Number(item.subtotal),
+                      ivaPorcentaje: Number(item.iva_porcentaje),
+                      ivaValor: Number(item.total) - Number(item.subtotal),
+                      total: Number(item.total),
+                    }));
+                    await exportComprobantePdf({
+                      formato: documento.tipo,
+                      tipo: 'FACTURA',
+                      numero: String(documento.factura.electronica?.numero || `${documento.factura.prefijo} ${documento.factura.numero}`),
+                      fecha: detalle?.fecha ?? documento.factura.fechaIso,
+                      clienteNombre: detalle?.cliente_info?.nombre ?? documento.factura.cliente,
+                      clienteDocumento:
+                        detalle?.cliente_info?.numero_documento ?? documento.factura.nitCc,
+                      medioPago: detalle?.medio_pago_display ?? documento.factura.medioPagoDisplay,
+                      estado: detalle?.estado_display ?? documento.factura.estadoDisplay,
+                      detalles: detalles ?? [],
+                      subtotal: detalle ? Number(detalle.subtotal) : documento.factura.total,
+                      descuento: detalle ? Number(detalle.descuento_valor) : 0,
+                      iva: detalle ? Number(detalle.iva) : 0,
+                      total: detalle ? Number(detalle.total) : documento.factura.total,
+                      efectivoRecibido:
+                        detalle?.efectivo_recibido !== undefined &&
+                        detalle?.efectivo_recibido !== null
+                          ? Number(detalle.efectivo_recibido)
+                          : undefined,
+                      cambio:
+                        detalle?.cambio !== undefined && detalle?.cambio !== null
+                          ? Number(detalle.cambio)
+                          : undefined,
+                      notas: facturacion?.notas_factura,
+                      resolucion: documento.factura.electronica?.resolucion_numeracion || 'Documento pendiente de emisión electrónica',
+                      empresa,
+                      cufe: documento.factura.electronica?.cufe,
+                      qrUrl:
+                        documento.factura.electronica?.public_url ||
+                        documento.factura.electronica?.qr_factus,
+                      qrImageUrl: documento.factura.electronica?.qr_image,
+                      referenceCode: documento.factura.electronica?.reference_code,
+                    });
+                  }}
+                  className="flex items-center gap-2 rounded bg-emerald-600 px-4 py-2 text-sm font-semibold text-white"
+                >
+                  <FileDown size={16} />
+                  Descargar PDF
                 </button>
               </div>
             </div>
