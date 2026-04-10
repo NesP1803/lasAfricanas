@@ -36,14 +36,19 @@ def get_cuentas_del_dia_queryset(
     base_queryset: QuerySet[Venta] | None = None,
 ) -> QuerySet[Venta]:
     """Retorna el queryset base para cuentas del día (tirilla/dashboard)."""
-    detalles_queryset = DetalleVenta.objects.select_related(
-        'producto',
-        'producto__categoria',
-        'producto__proveedor',
-    )
-    ventas = (base_queryset or Venta.objects.all()).select_related(
-        'cliente', 'vendedor', 'factura_electronica_factus'
-    ).prefetch_related(Prefetch('detalles', queryset=detalles_queryset))
+    if base_queryset is not None:
+        # Reutiliza prefetch/select_related ya aplicados por el caller.
+        # Evita colisionar con otro Prefetch('detalles', queryset=...) distinto.
+        ventas = base_queryset
+    else:
+        detalles_queryset = DetalleVenta.objects.select_related(
+            'producto',
+            'producto__categoria',
+            'producto__proveedor',
+        )
+        ventas = Venta.objects.select_related(
+            'cliente', 'vendedor', 'factura_electronica_factus'
+        ).prefetch_related(Prefetch('detalles', queryset=detalles_queryset))
 
     ventas = ventas.filter(
         estado='COBRADA',
