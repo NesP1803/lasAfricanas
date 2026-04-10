@@ -218,7 +218,7 @@ export default function ComprobanteTemplate({
           <div className="rounded border border-slate-300 bg-white p-3 text-right">
             <p><span className="text-slate-500">Fecha/Hora:</span> <span className="font-semibold">{fechaFormateada}</span></p>
             <p><span className="text-slate-500">Medio pago:</span> <span className="font-semibold">{medioPago || 'N/D'}</span></p>
-            <p><span className="text-slate-500">Estado:</span> <span className="font-semibold">{estado || 'N/D'}</span></p>
+            <p><span className="text-slate-500">Estado:</span> <span className="font-semibold">{estadoVisual}</span></p>
           </div>
         </section>
 
@@ -266,7 +266,6 @@ export default function ComprobanteTemplate({
             <p className="mt-1">{notas || 'Gracias por su compra. Presentar factura para garantías y devoluciones.'}</p>
           </div>
           <div className="rounded border border-slate-300 bg-white p-3 text-[10px]">
-            <div className="flex justify-between"><span>Nro líneas</span><span>{detallesMostrar.length}</span></div>
             <div className="mt-1 flex justify-between"><span>Valor bruto</span><span>{currencyFormatter.format(subtotal + iva)}</span></div>
             <div className="mt-1 flex justify-between"><span>Base imponible</span><span>{currencyFormatter.format(subtotal)}</span></div>
             <div className="mt-1 flex justify-between"><span>Impuestos</span><span>{currencyFormatter.format(iva)}</span></div>
@@ -277,12 +276,12 @@ export default function ComprobanteTemplate({
 
         <footer className="mt-4 rounded border border-slate-300 bg-slate-100 p-3 text-[10px] text-slate-700">
           {cufe ? (
-            <p className="min-w-0 max-w-full overflow-hidden whitespace-normal break-all">
+            <p className="min-w-0 max-w-full overflow-hidden whitespace-normal break-all text-center">
               <span className="font-semibold text-slate-700">CUFE:</span> {cufe}
             </p>
           ) : null}
           {representacionGrafica ? <p className="mt-1">{representacionGrafica}</p> : null}
-          {qrUrl ? <p className="mt-1 break-all">Verificación DIAN: {qrUrl}</p> : null}
+          {qrUrl ? <p className="mt-1 break-all text-center">Verificación DIAN: {qrUrl}</p> : null}
           {resolutionRows.length > 0 ? (
             <div className="mt-2 border-t border-slate-300 pt-2 text-center">
               {resolutionRows.map((line, index) => (
@@ -317,7 +316,7 @@ export default function ComprobanteTemplate({
             <p className="text-[9px]">{infoEmpresa.regimen}</p>
             <p className="break-words">{infoEmpresa.direccion}</p>
             {infoEmpresa.telefono ? <p className="text-[9px]">Tel: {infoEmpresa.telefono}</p> : null}
-            <div className="mt-1 px-0.5 py-1 text-left">
+            <div className="mt-1 px-0.5 py-1 text-center">
               <p className="text-[8px] font-semibold uppercase tracking-wide text-slate-600">Resolución / Numeración</p>
               {resolucionLineas.length > 0 ? (
                 <div className="space-y-0.5">
