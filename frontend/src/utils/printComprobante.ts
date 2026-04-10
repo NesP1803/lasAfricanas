@@ -21,11 +21,22 @@ export const POS_PAPER_WIDTH_MM_COMPACT: PosPaperWidthMm = 75;
 
 const PX_PER_MM = 96 / 25.4;
 
+const lazyImport = async <T>(moduleName: string): Promise<T> => {
+  const importer = new Function('moduleName', 'return import(moduleName);') as (
+    name: string
+  ) => Promise<T>;
+  return importer(moduleName);
+};
+
 const loadPdfDependencies = async () => {
   try {
     const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
-      import('html2canvas'),
-      import('jspdf'),
+      lazyImport<{ default: (element: HTMLElement, options?: object) => Promise<HTMLCanvasElement> }>(
+        'html2canvas'
+      ),
+      lazyImport<{ jsPDF: new (options?: object) => { addImage: (...args: unknown[]) => void; save: (filename: string) => void } }>(
+        'jspdf'
+      ),
     ]);
     return { html2canvas, jsPDF };
   } catch (error) {
