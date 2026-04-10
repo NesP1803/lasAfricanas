@@ -1919,3 +1919,73 @@ class EmisionFacturaUseCaseAndViewDelegationTests(TestCase):
         response = self.client.post(f'/api/caja/{venta.id}/facturar/')
         self.assertEqual(response.status_code, 200)
         mocked_use_case.assert_called()
+
+
+class CuentasDelDiaEstadisticasTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.usuario = Usuario.objects.create_user(
+            username='usuario-cuentas',
+            password='pass1234',
+            tipo_usuario='VENDEDOR',
+        )
+        self.client.force_authenticate(user=self.usuario)
+        self.cliente = Cliente.objects.create(
+            tipo_documento='CC',
+            numero_documento='11001',
+            nombre='Cliente cuentas',
+        )
+
+    def _crear_venta(self, *, tipo_comprobante, estado, total, numero_comprobante):
+        return Venta.objects.create(
+            tipo_comprobante=tipo_comprobante,
+            cliente=self.cliente,
+            vendedor=self.usuario,
+            subtotal=Decimal(total),
+            descuento_porcentaje=Decimal('0'),
+            descuento_valor=Decimal('0'),
+            iva=Decimal('0'),
+            total=Decimal(total),
+            medio_pago='EFECTIVO',
+            efectivo_recibido=Decimal(total),
+            cambio=Decimal('0'),
+            estado=estado,
+            numero_comprobante=numero_comprobante,
+        )
+
+    def test_estadisticas_incluye_detalles_facturas_y_remisiones_desde_misma_fuente(self):
+        fecha_en_rango = timezone.make_aware(datetime(2026, 4, 5, 10, 30))
+        factura = self._crear_venta(
+            tipo_comprobante='FACTURA',
+            estado='COBRADA',
+            total='30000.00',
+            numero_comprobante='FAC-1001',
+        )
+        remision = self._crear_venta(
+            tipo_comprobante='REMISION',
+            estado='COBRADA',
+            total='10000.00',
+            numero_comprobante='REM-2001',
+        )
+        venta_legacy = self._crear_venta(
+            tipo_comprobante='FACTURA',
+            estado='FACTURADA',
+            total='9999.00',
+            numero_comprobante='FAC-LEGACY-1',
+        )
+
+        Venta.objects.filter(id__in=[factura.id, remision.id, venta_legacy.id]).update(fecha=fecha_en_rango)
+
+        response = self.client.get('/api/ventas/estadisticas/?fecha_inicio=2026-04-05&fecha_fin=2026-04-05')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['total_facturas'], 1)
+        self.assertEqual(response.data['total_remisiones'], 1)
+        self.assertEqual(response.data['total_facturas_valor'], '30000')
+        self.assertEqual(response.data['total_remisiones_valor'], '10000')
+
+        facturas_detalle = response.data['facturas_detalle']
+        remisiones_detalle = response.data['remisiones_detalle']
+        self.assertEqual(len(facturas_detalle), 1)
+        self.assertEqual(len(remisiones_detalle), 1)
+        self.assertEqual(facturas_detalle[0]['numero_comprobante'], 'FAC-1001')
+        self.assertEqual(remisiones_detalle[0]['numero_comprobante'], 'REM-2001')
