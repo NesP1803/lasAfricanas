@@ -1,6 +1,7 @@
 import axios from 'axios';
 import apiClient from './client';
 import type { Cliente, PaginatedResponse } from '../types';
+import { getLocalDateInputValue } from '../utils/date';
 
 export type { Cliente };
 
@@ -723,7 +724,7 @@ export const ventasApi = {
   },
 
   async getEstadisticasHoy(): Promise<EstadisticasVentas> {
-    const hoy = new Date().toISOString().split('T')[0];
+    const hoy = getLocalDateInputValue();
     const queryParams = new URLSearchParams({
       fecha_inicio: hoy,
       fecha_fin: hoy,

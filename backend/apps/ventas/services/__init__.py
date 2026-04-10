@@ -8,6 +8,7 @@ from .cerrar_venta import (
     registrar_salida_inventario,
     validar_para_facturar_en_caja,
 )
+from .cuentas_del_dia import build_cuentas_del_dia_summary, get_cuentas_del_dia_queryset
 from .enviar_venta_a_caja import enviar_venta_a_caja
 
 __all__ = [
@@ -16,6 +17,8 @@ __all__ = [
     'calcular_detalle_venta',
     'build_pos_ticket_payload',
     'cerrar_venta_local',
+    'build_cuentas_del_dia_summary',
+    'get_cuentas_del_dia_queryset',
     'enviar_venta_a_caja',
     'recalcular_totales_venta',
     'estado_electronico_ui',
