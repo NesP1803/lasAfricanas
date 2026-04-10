@@ -194,7 +194,7 @@ class VentaViewSet(viewsets.ModelViewSet):
             )
         return inicio_dt, fin_dt
 
-    def get_queryset(self):
+    def _base_queryset(self):
         detalles_queryset = DetalleVenta.objects.select_related(
             # Evita N+1 al serializar cada detalle de venta.
             'producto',
@@ -207,6 +207,19 @@ class VentaViewSet(viewsets.ModelViewSet):
         ).prefetch_related(
             Prefetch('detalles', queryset=detalles_queryset)
         ).all()
+        return queryset
+
+    def _cuentas_del_dia_queryset(self, fecha_inicio, fecha_fin):
+        ventas = self._base_queryset().filter(estado='COBRADA')
+        inicio_dt, fin_dt = self._get_fecha_range(fecha_inicio, fecha_fin)
+        if inicio_dt:
+            ventas = ventas.filter(fecha__gte=inicio_dt)
+        if fin_dt:
+            ventas = ventas.filter(fecha__lte=fin_dt)
+        return ventas
+
+    def get_queryset(self):
+        queryset = self._base_queryset()
         fecha_inicio = self.request.query_params.get('fecha_inicio')
         fecha_fin = self.request.query_params.get('fecha_fin')
         estado = self.request.query_params.get('estado')
@@ -612,13 +625,7 @@ class VentaViewSet(viewsets.ModelViewSet):
         fecha_inicio = request.query_params.get('fecha_inicio')
         fecha_fin = request.query_params.get('fecha_fin')
         
-        ventas = self.get_queryset().filter(estado='COBRADA')
-        
-        inicio_dt, fin_dt = self._get_fecha_range(fecha_inicio, fecha_fin)
-        if inicio_dt:
-            ventas = ventas.filter(fecha__gte=inicio_dt)
-        if fin_dt:
-            ventas = ventas.filter(fecha__lte=fin_dt)
+        ventas = self._cuentas_del_dia_queryset(fecha_inicio, fecha_fin)
         
         stats = ventas.aggregate(
             total_ventas=Count('id'),
@@ -661,6 +668,16 @@ class VentaViewSet(viewsets.ModelViewSet):
 
         stats['facturas_por_usuario'] = facturas_por_usuario
         stats['remisiones_por_usuario'] = remisiones_por_usuario
+        stats['facturas_detalle'] = VentaListSerializer(
+            ventas.filter(tipo_comprobante='FACTURA').order_by('-fecha', '-id'),
+            many=True,
+            context={'request': request},
+        ).data
+        stats['remisiones_detalle'] = VentaListSerializer(
+            ventas.filter(tipo_comprobante='REMISION').order_by('-fecha', '-id'),
+            many=True,
+            context={'request': request},
+        ).data
         
         return Response(stats)
 

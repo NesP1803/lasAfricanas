@@ -73,16 +73,13 @@ export default function CuentasDia() {
   );
   const totalCaja = facturasValor + remisionesValor;
 
-  const getResumenVentas = async (
+  const getResumenVentas = (
     tipoComprobante: 'FACTURA' | 'REMISION'
-  ): Promise<{ ventas: VentaListItem[]; total: number }> => {
-    const ventas = await ventasApi.getVentas({
-      tipoComprobante,
-      estado: 'FACTURADA',
-      fechaInicio,
-      fechaFin,
-      ordering: '-fecha',
-    });
+  ): { ventas: VentaListItem[]; total: number } => {
+    const ventas =
+      tipoComprobante === 'FACTURA'
+        ? (stats?.facturas_detalle ?? [])
+        : (stats?.remisiones_detalle ?? []);
     const total = ventas.reduce((acc, venta) => acc + toNumber(venta.total), 0);
     return { ventas, total };
   };
@@ -92,7 +89,7 @@ export default function CuentasDia() {
     const titulo = tipo === 'FACTURAS' ? 'Recibo de facturas' : 'Recibo de remisiones';
     try {
       const tipoComprobante = tipo === 'FACTURAS' ? 'FACTURA' : 'REMISION';
-      const { ventas, total } = await getResumenVentas(tipoComprobante);
+      const { ventas, total } = getResumenVentas(tipoComprobante);
       const printWindow = window.open('', '_blank', 'width=820,height=700');
 
       if (!printWindow) {
@@ -309,7 +306,7 @@ export default function CuentasDia() {
                   type="button"
                   onClick={() => imprimirRecibo('FACTURAS')}
                   className="flex items-center justify-between rounded-lg border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={loading || printing}
+                  disabled={loading || printing || !stats}
                 >
                   Tirilla
                   <Printer size={18} />
@@ -325,7 +322,7 @@ export default function CuentasDia() {
                   type="button"
                   onClick={() => imprimirRecibo('REMISIONES')}
                   className="flex items-center justify-between rounded-lg border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={loading || printing}
+                  disabled={loading || printing || !stats}
                 >
                   Tirilla
                   <Printer size={18} />
