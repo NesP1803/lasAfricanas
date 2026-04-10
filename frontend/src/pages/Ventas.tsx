@@ -82,6 +82,8 @@ type DocumentoPreview = {
   qrImageUrl?: string;
   referenceCode?: string;
   resolucion?: string;
+  resolucionLineas?: string[];
+  emissionStatus?: string;
   clienteDireccion?: string;
   clienteTelefono?: string;
   clienteEmail?: string;
@@ -160,6 +162,10 @@ const buildDocumentoPreviewFromVenta = (
   emision?: Partial<FacturarCajaResponse>
 ): DocumentoPreview => {
   const facturaVenta = venta.factura_electronica;
+  const printContext =
+    facturaVenta?.print_context && typeof facturaVenta.print_context === 'object'
+      ? (facturaVenta.print_context as Record<string, unknown>)
+      : {};
   const responseJson =
     facturaVenta?.response_json && typeof facturaVenta.response_json === 'object'
       ? (facturaVenta.response_json as Record<string, unknown>)
@@ -226,9 +232,14 @@ const buildDocumentoPreviewFromVenta = (
     representacionGrafica:
       'Representación gráfica de factura electrónica de venta. Valide en DIAN con CUFE.',
     resolucion:
+      (typeof printContext.resolucion_texto === 'string' ? printContext.resolucion_texto : undefined) ||
       facturaVenta?.resolucion_numeracion ||
       (facturaVenta?.numbering_resolution_info?.resolucion as string | undefined) ||
       (typeof finalFields.factus_resolution_number === 'string' ? finalFields.factus_resolution_number : undefined),
+    resolucionLineas: Array.isArray(printContext.resolucion_lines)
+      ? (printContext.resolucion_lines as string[])
+      : [],
+    emissionStatus: typeof printContext.emission_status === 'string' ? printContext.emission_status : '',
   };
 };
 const unidadPermiteDecimales = (unidadMedida?: string) =>
@@ -1869,13 +1880,15 @@ export default function Ventas() {
                   efectivoRecibido={documentoPreview.efectivoRecibido}
                   cambio={documentoPreview.cambio}
                   notas={configuracion?.notas_factura}
-                  resolucion={documentoPreview.resolucion || 'Se asignará al facturar'}
+                  resolucion={documentoPreview.resolucion || 'Documento pendiente de emisión electrónica'}
+                  resolucionLineas={documentoPreview.resolucionLineas || []}
                   empresa={empresa}
                   cufe={documentoPreview.cufe}
                   qrUrl={documentoPreview.qrUrl}
                   qrImageUrl={documentoPreview.qrImageUrl}
                   referenceCode={documentoPreview.referenceCode}
                   representacionGrafica={documentoPreview.representacionGrafica}
+                  emissionStatusLabel={documentoPreview.emissionStatus}
                 />
               </div>
               <div className="flex flex-wrap justify-end gap-2">
@@ -1903,7 +1916,7 @@ export default function Ventas() {
                       efectivoRecibido: documentoPreview.efectivoRecibido,
                       cambio: documentoPreview.cambio,
                       notas: configuracion?.notas_factura,
-                      resolucion: documentoPreview.resolucion || 'Se asignará al facturar',
+                      resolucion: documentoPreview.resolucion || 'Documento pendiente de emisión electrónica',
                       empresa,
                       cufe: documentoPreview.cufe,
                       qrUrl: documentoPreview.qrUrl,

@@ -769,7 +769,7 @@ export default function Facturas() {
                 <ComprobanteTemplate
                   formato={documento.tipo}
                   tipo="FACTURA"
-                  numero={`${documento.factura.prefijo} ${documento.factura.numero}`}
+                  numero={String(documento.factura.electronica?.numero || `${documento.factura.prefijo} ${documento.factura.numero}`)}
                   fecha={detalleFactura?.fecha ?? documento.factura.fechaIso}
                   clienteNombre={detalleFactura?.cliente_info?.nombre ?? documento.factura.cliente}
                   clienteDocumento={
@@ -806,12 +806,14 @@ export default function Facturas() {
                       : undefined
                   }
                   notas={facturacion?.notas_factura}
-                  resolucion={documento.factura.electronica?.resolucion_numeracion || 'Pendiente de consulta electrónica'}
+                  resolucion={documento.factura.electronica?.resolucion_numeracion || 'Documento pendiente de emisión electrónica'}
+                  resolucionLineas={Array.isArray((documento.factura.electronica?.print_context as Record<string, unknown> | undefined)?.resolucion_lines) ? ((documento.factura.electronica?.print_context as Record<string, unknown>).resolucion_lines as string[]) : []}
                   empresa={empresa}
                   cufe={documento.factura.electronica?.cufe}
                   qrUrl={documento.factura.electronica?.public_url || documento.factura.electronica?.qr_factus}
                   qrImageUrl={documento.factura.electronica?.qr_image}
                   referenceCode={documento.factura.electronica?.reference_code}
+                  emissionStatusLabel={String((documento.factura.electronica?.print_context as Record<string, unknown> | undefined)?.emission_status || '')}
                 />
               </div>
               <div className="flex items-center justify-end gap-3">
@@ -845,7 +847,7 @@ export default function Facturas() {
                     printComprobante({
                       formato: documento.tipo,
                       tipo: 'FACTURA',
-                      numero: `${documento.factura.prefijo} ${documento.factura.numero}`,
+                      numero: String(documento.factura.electronica?.numero || `${documento.factura.prefijo} ${documento.factura.numero}`),
                       fecha: detalle?.fecha ?? documento.factura.fechaIso,
                       clienteNombre: detalle?.cliente_info?.nombre ?? documento.factura.cliente,
                       clienteDocumento:
@@ -867,7 +869,7 @@ export default function Facturas() {
                           ? Number(detalle.cambio)
                           : undefined,
                       notas: facturacion?.notas_factura,
-                      resolucion: documento.factura.electronica?.resolucion_numeracion || 'Pendiente de consulta electrónica',
+                      resolucion: documento.factura.electronica?.resolucion_numeracion || 'Documento pendiente de emisión electrónica',
                       empresa,
                       cufe: documento.factura.electronica?.cufe,
                       qrUrl:
