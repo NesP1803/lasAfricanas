@@ -1,5 +1,3 @@
-import html2canvas from 'html2canvas';
-import { jsPDF } from 'jspdf';
 import type { ConfiguracionEmpresa } from '../types';
 
 export type DocumentoDetalle = {
@@ -22,6 +20,32 @@ export const POS_PAPER_WIDTH_MM: PosPaperWidthMm = 80;
 export const POS_PAPER_WIDTH_MM_COMPACT: PosPaperWidthMm = 75;
 
 const PX_PER_MM = 96 / 25.4;
+
+const lazyImport = async <T>(moduleName: string): Promise<T> => {
+  const importer = new Function('moduleName', 'return import(moduleName);') as (
+    name: string
+  ) => Promise<T>;
+  return importer(moduleName);
+};
+
+const loadPdfDependencies = async () => {
+  try {
+    const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+      lazyImport<{ default: (element: HTMLElement, options?: object) => Promise<HTMLCanvasElement> }>(
+        'html2canvas'
+      ),
+      lazyImport<{ jsPDF: new (options?: object) => { addImage: (...args: unknown[]) => void; save: (filename: string) => void } }>(
+        'jspdf'
+      ),
+    ]);
+    return { html2canvas, jsPDF };
+  } catch (error) {
+    throw new Error(
+      'No se pudieron cargar las dependencias de impresión (html2canvas/jspdf). Ejecuta npm install en /frontend.',
+      { cause: error },
+    );
+  }
+};
 
 type PrintComprobanteParams = {
   formato?: DocumentoFormato;
@@ -443,6 +467,7 @@ export const exportComprobantePdf = async (params: PrintComprobanteParams) => {
   document.body.appendChild(wrapper);
 
   try {
+    const { html2canvas, jsPDF } = await loadPdfDependencies();
     const printRoot = wrapper.querySelector<HTMLElement>('.print-root');
     if (!printRoot) return;
 
