@@ -36,12 +36,14 @@ type DocumentoTemplateProps = {
   cambio?: number;
   notas?: string;
   resolucion?: string;
+  resolucionLineas?: string[];
   empresa?: ConfiguracionEmpresa | null;
   cufe?: string;
   qrUrl?: string;
   qrImageUrl?: string;
   referenceCode?: string;
   representacionGrafica?: string;
+  emissionStatusLabel?: string;
 };
 
 const currencyFormatter = new Intl.NumberFormat('es-CO', {
@@ -123,12 +125,14 @@ export default function ComprobanteTemplate({
   cambio,
   notas,
   resolucion,
+  resolucionLineas = [],
   empresa,
   cufe,
   qrUrl,
   qrImageUrl,
   referenceCode,
   representacionGrafica,
+  emissionStatusLabel,
 }: DocumentoTemplateProps) {
   const infoEmpresa = getEmpresaInfo(empresa);
   const fechaFormateada = formatFechaHora(fecha);
@@ -172,14 +176,15 @@ export default function ComprobanteTemplate({
   ).map(([porcentaje, valores]) => ({ porcentaje, ...valores }));
 
   if (formato === 'CARTA') {
+    const resolutionRows = resolucionLineas.length > 0 ? resolucionLineas : (resolucion ? [resolucion] : []);
     return (
       <div className="mx-auto w-full max-w-[210mm] border border-slate-300 bg-white p-7 font-sans text-[11px] text-slate-800">
-        <header className="grid grid-cols-[1.2fr,1fr] gap-6 border-b border-slate-200 pb-4">
-          <div className="space-y-1">
+        <header className="grid grid-cols-[1.4fr,1fr] gap-6 border-b border-slate-200 pb-4">
+          <div className="space-y-1 text-center">
             <img
               src={getLogoEmpresa(empresa)}
               alt="Logo empresa"
-              className="mb-2 h-14 max-w-[80mm] rounded-md object-contain object-left"
+              className="mx-auto mb-2 h-14 max-w-[80mm] rounded-md object-contain"
             />
             <p className="text-base font-bold uppercase tracking-wide">{infoEmpresa.nombre}</p>
             <p>{infoEmpresa.nit}</p>
@@ -190,6 +195,7 @@ export default function ComprobanteTemplate({
           <div className="space-y-1 text-right">
             <p className="text-[10px] uppercase tracking-wider text-slate-500">{tituloDocumento}</p>
             <p className="text-xl font-bold leading-tight">{numero}</p>
+            {emissionStatusLabel ? <p className="text-[10px] text-slate-600">Estado: {emissionStatusLabel}</p> : null}
             {referenceCode ? <p className="text-[10px] text-slate-500">Doc. Ref: {referenceCode}</p> : null}
             {qrImageUrl ? (
               <img src={qrImageUrl} alt="QR factura electrónica" className="ml-auto mt-2 h-20 w-20 border border-slate-200 p-1" />
@@ -199,16 +205,16 @@ export default function ComprobanteTemplate({
           </div>
         </header>
 
-        {resolucion ? <p className="mt-3 text-[10px] text-slate-600">{resolucion}</p> : null}
-
         <section className="mt-4 grid grid-cols-2 gap-4">
           <div className="rounded border border-slate-200 p-3">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Datos cliente</p>
-            <p className="mt-1 font-semibold">{clienteNombre}</p>
-            <p>NIT/CC: {clienteDocumento || 'N/D'}</p>
-            {clienteDireccion ? <p className="break-words">Dir: {clienteDireccion}</p> : null}
-            {clienteTelefono ? <p>Tel: {clienteTelefono}</p> : null}
-            {clienteEmail ? <p className="break-all">Email: {clienteEmail}</p> : null}
+            <div className="mt-2 grid grid-cols-[130px,1fr] gap-y-1 text-[10px]">
+              <span className="text-slate-500">Nombre:</span><span className="font-semibold">{clienteNombre}</span>
+              <span className="text-slate-500">NIT/CC:</span><span>{clienteDocumento || 'N/D'}</span>
+              <span className="text-slate-500">Dirección:</span><span className="break-words">{clienteDireccion || 'N/D'}</span>
+              <span className="text-slate-500">Teléfono:</span><span>{clienteTelefono || 'N/D'}</span>
+              <span className="text-slate-500">Correo:</span><span className="break-all">{clienteEmail || 'N/D'}</span>
+            </div>
           </div>
           <div className="rounded border border-slate-200 p-3 text-right">
             <p><span className="text-slate-500">Fecha/Hora:</span> <span className="font-semibold">{fechaFormateada}</span></p>
@@ -263,6 +269,13 @@ export default function ComprobanteTemplate({
           ) : null}
           {representacionGrafica ? <p className="mt-1">{representacionGrafica}</p> : null}
           {qrUrl ? <p className="mt-1 break-all">Verificación DIAN: {qrUrl}</p> : null}
+          {resolutionRows.length > 0 ? (
+            <div className="mt-2 border-t border-slate-200 pt-2">
+              {resolutionRows.map((line, index) => (
+                <p key={`res-carta-${index}`} className="break-words">{line}</p>
+              ))}
+            </div>
+          ) : null}
           <p className="mt-1">{notas || 'Gracias por su compra. Presentar factura para garantías y devoluciones.'}</p>
         </footer>
       </div>
@@ -281,6 +294,9 @@ export default function ComprobanteTemplate({
         ) : null}
         {cufe ? <span className="w-px self-stretch bg-slate-300" aria-hidden="true" /> : null}
         <div className="min-w-0 flex-1">
+          {emissionStatusLabel ? (
+            <p className="mt-1 text-[8px] font-semibold text-slate-700">Estado emisión: {emissionStatusLabel}</p>
+          ) : null}
           <div className="text-center">
             <img src={getLogoEmpresa(empresa)} alt="Logo empresa" className="mx-auto mb-1.5 h-11 max-w-[52mm] rounded-lg object-contain" />
             <p className="text-[11px] font-bold uppercase tracking-wide">{infoEmpresa.nombre}</p>
@@ -290,7 +306,15 @@ export default function ComprobanteTemplate({
             {infoEmpresa.telefono ? <p className="text-[9px]">Tel: {infoEmpresa.telefono}</p> : null}
             <div className="mt-1 px-0.5 py-1 text-left">
               <p className="text-[8px] font-semibold uppercase tracking-wide text-slate-600">Resolución / Numeración</p>
-              <p className="break-words text-[8px] text-slate-700">{resolucion || 'Pendiente de consulta electrónica'}</p>
+              {resolucionLineas.length > 0 ? (
+                <div className="space-y-0.5">
+                  {resolucionLineas.map((line, index) => (
+                    <p key={`res-pos-${index}`} className="break-words text-[8px] text-slate-700">{line}</p>
+                  ))}
+                </div>
+              ) : (
+                <p className="break-words text-[8px] text-slate-700">{resolucion || 'Documento pendiente de emisión electrónica'}</p>
+              )}
             </div>
           </div>
 
