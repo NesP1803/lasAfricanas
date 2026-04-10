@@ -7,6 +7,14 @@ from typing import Any
 from apps.facturacion.models import FacturaElectronica, RangoNumeracionDIAN
 
 
+def _fmt_human_date(value: Any) -> str:
+    if value is None:
+        return '-'
+    if hasattr(value, 'strftime'):
+        return value.strftime('%d-%m-%Y')
+    return str(value).strip() or '-'
+
+
 def _fmt_date(value: Any) -> str:
     if value is None:
         return ''
@@ -64,8 +72,8 @@ def build_document_print_context(
             'vigencia_hasta': '',
             'tipo_rango': 'PENDIENTE',
             'tipo_rango_label': 'Pendiente de emisión',
-            'resolucion_lines': ['Documento pendiente de emisión electrónica.'],
-            'resolucion_texto': 'Documento pendiente de emisión electrónica.',
+            'resolucion_lines': ['Resolución de Facturación Electrónica: pendiente por emisión.'],
+            'resolucion_texto': 'Resolución de Facturación Electrónica: pendiente por emisión.',
         }
 
     emitted = bool(str(factura.number or '').strip())
@@ -99,19 +107,14 @@ def build_document_print_context(
         tipo_rango_label = 'Pendiente de emisión'
 
     emission_status = str(factura.estado_electronico or factura.status or '').strip() or 'PENDIENTE_REINTENTO'
-    lines = []
-    if resolucion:
-        lines.append(f'Resolución DIAN/Facturación: {resolucion}')
-    if prefijo:
-        lines.append(f'Prefijo: {prefijo}')
-    if rango_desde is not None or rango_hasta is not None:
-        lines.append(f'Rango: {rango_desde if rango_desde is not None else "-"} al {rango_hasta if rango_hasta is not None else "-"}')
-    if vigencia_desde or vigencia_hasta:
-        lines.append(f'Vigencia: {vigencia_desde or "-"} a {vigencia_hasta or "-"}')
-    lines.append(f'Tipo de rango: {tipo_rango_label}')
-
-    if not lines:
-        lines = ['Documento pendiente de emisión electrónica.']
+    resolucion_human = (
+        f'Resolución de Facturación Electrónica No: {resolucion or "-"}'
+        f' - Prefijo: {prefijo or "-"}'
+        f' Rango {rango_desde if rango_desde is not None else "-"} Al {rango_hasta if rango_hasta is not None else "-"}'
+        f' - Vigencia desde {_fmt_human_date(vigencia_desde or factura.factus_resolution_start_date)}'
+        f' - hasta {_fmt_human_date(vigencia_hasta or factura.factus_resolution_end_date)}'
+    )
+    lines = [resolucion_human]
 
     return {
         'is_emitted': emitted,

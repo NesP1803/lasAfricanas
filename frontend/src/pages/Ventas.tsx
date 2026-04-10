@@ -83,7 +83,6 @@ type DocumentoPreview = {
   referenceCode?: string;
   resolucion?: string;
   resolucionLineas?: string[];
-  emissionStatus?: string;
   clienteDireccion?: string;
   clienteTelefono?: string;
   clienteEmail?: string;
@@ -239,7 +238,6 @@ const buildDocumentoPreviewFromVenta = (
     resolucionLineas: Array.isArray(printContext.resolucion_lines)
       ? (printContext.resolucion_lines as string[])
       : [],
-    emissionStatus: typeof printContext.emission_status === 'string' ? printContext.emission_status : '',
   };
 };
 const unidadPermiteDecimales = (unidadMedida?: string) =>

@@ -127,7 +127,6 @@ export const printComprobante = ({
   cufe,
   qrUrl,
   qrImageUrl,
-  referenceCode,
   representacionGrafica,
 }: PrintComprobanteParams) => {
   const printWindow = window.open('', '_blank', 'width=960,height=860');
@@ -266,7 +265,7 @@ export const printComprobante = ({
               </div>
             </div>
             <div class="line"></div>
-            <div class="center"><strong>${tituloDocumento}</strong><div><strong>${numero}</strong></div>${referenceCode ? `<div class="muted">Ref: ${referenceCode}</div>` : ''}<div class="doc-datetime"><div class="doc-grid"><span class="muted" style="text-align:left">Fecha:</span><strong style="text-align:right">${fechaDocumento}</strong><span class="muted" style="text-align:left">Hora:</span><strong style="text-align:right">${horaDocumento || fechaFormateada}</strong></div></div></div>
+            <div class="center"><strong>${tituloDocumento}</strong><div><strong>${numero}</strong></div><div class="doc-datetime"><div class="doc-grid"><span class="muted" style="text-align:left">Fecha:</span><strong style="text-align:right">${fechaDocumento}</strong><span class="muted" style="text-align:left">Hora:</span><strong style="text-align:right">${horaDocumento || fechaFormateada}</strong></div></div></div>
             <div class="line"></div>
             <div class="row"><span>Cliente:</span><span class="value break">${clienteNombre}</span></div>
             <div class="row"><span>NIT/CC:</span><span class="value">${clienteDocumento || 'N/D'}</span></div>
@@ -317,7 +316,6 @@ export const printComprobante = ({
           <div class="doc">
             <p class="muted">${tituloDocumento}</p>
             <p class="doc-number">${numero}</p>
-            ${referenceCode ? `<p class="muted">Doc. Ref: ${referenceCode}</p>` : ''}
             ${qrImageUrl ? `<div class="qr"><img src="${qrImageUrl}" alt="QR factura electrónica"/></div>` : qrUrl ? `<p class="muted break">${qrUrl}</p>` : ''}
           </div>
         </div>
