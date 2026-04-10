@@ -1989,3 +1989,60 @@ class CuentasDelDiaEstadisticasTests(TestCase):
         self.assertEqual(len(remisiones_detalle), 1)
         self.assertEqual(facturas_detalle[0]['numero_comprobante'], 'FAC-1001')
         self.assertEqual(remisiones_detalle[0]['numero_comprobante'], 'REM-2001')
+
+    def test_estadisticas_excluye_documentos_anulados(self):
+        fecha_en_rango = timezone.make_aware(datetime(2026, 4, 5, 11, 0))
+        factura_cobrada = self._crear_venta(
+            tipo_comprobante='FACTURA',
+            estado='COBRADA',
+            total='10000.00',
+            numero_comprobante='FAC-2001',
+        )
+        factura_anulada = self._crear_venta(
+            tipo_comprobante='FACTURA',
+            estado='ANULADA',
+            total='90000.00',
+            numero_comprobante='FAC-ANU-1',
+        )
+        remision_cobrada = self._crear_venta(
+            tipo_comprobante='REMISION',
+            estado='COBRADA',
+            total='20000.00',
+            numero_comprobante='REM-2002',
+        )
+        Venta.objects.filter(id__in=[factura_cobrada.id, factura_anulada.id, remision_cobrada.id]).update(
+            fecha=fecha_en_rango
+        )
+
+        response = self.client.get('/api/ventas/estadisticas/?fecha_inicio=2026-04-05&fecha_fin=2026-04-05')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['total_facturas'], 1)
+        self.assertEqual(response.data['total_remisiones'], 1)
+        self.assertEqual(response.data['total_facturas_valor'], '10000')
+        self.assertEqual(response.data['total_remisiones_valor'], '20000')
+        self.assertEqual(response.data['total_ventas'], 2)
+
+    def test_estadisticas_respeta_rango_en_zona_horaria_local(self):
+        venta_local_5 = self._crear_venta(
+            tipo_comprobante='FACTURA',
+            estado='COBRADA',
+            total='10000.00',
+            numero_comprobante='FAC-TZ-LOCAL',
+        )
+        venta_local_6 = self._crear_venta(
+            tipo_comprobante='REMISION',
+            estado='COBRADA',
+            total='20000.00',
+            numero_comprobante='REM-TZ-FUERA',
+        )
+
+        fecha_local_5 = timezone.make_aware(datetime(2026, 4, 5, 23, 59, 0))
+        fecha_local_6 = timezone.make_aware(datetime(2026, 4, 6, 0, 1, 0))
+        Venta.objects.filter(id=venta_local_5.id).update(fecha=fecha_local_5)
+        Venta.objects.filter(id=venta_local_6.id).update(fecha=fecha_local_6)
+
+        response = self.client.get('/api/ventas/estadisticas/?fecha_inicio=2026-04-05&fecha_fin=2026-04-05')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['total_facturas'], 1)
+        self.assertEqual(response.data['total_remisiones'], 0)
+        self.assertEqual(response.data['total_ventas'], 1)

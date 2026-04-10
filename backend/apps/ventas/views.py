@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
-from django.db.models import Sum, Count, Q, Prefetch
+from django.db.models import Count, Q, Prefetch
 from django.db import DataError, transaction
 from django.utils import timezone
 from datetime import datetime, time
@@ -21,11 +21,13 @@ from apps.facturacion.services import (
 )
 from apps.ventas.services import (
     anular_venta,
+    build_cuentas_del_dia_summary,
     build_factura_ready_payload,
     build_pos_ticket_payload,
     cerrar_venta_local,
     enviar_venta_a_caja,
     estado_electronico_ui,
+    get_cuentas_del_dia_queryset,
     registrar_salida_inventario,
 )
 from apps.ventas.permissions import has_caja_access, is_admin_user
@@ -210,13 +212,11 @@ class VentaViewSet(viewsets.ModelViewSet):
         return queryset
 
     def _cuentas_del_dia_queryset(self, fecha_inicio, fecha_fin):
-        ventas = self._base_queryset().filter(estado='COBRADA')
-        inicio_dt, fin_dt = self._get_fecha_range(fecha_inicio, fecha_fin)
-        if inicio_dt:
-            ventas = ventas.filter(fecha__gte=inicio_dt)
-        if fin_dt:
-            ventas = ventas.filter(fecha__lte=fin_dt)
-        return ventas
+        return get_cuentas_del_dia_queryset(
+            fecha_inicio,
+            fecha_fin,
+            base_queryset=self._base_queryset(),
+        )
 
     def get_queryset(self):
         queryset = self._base_queryset()
@@ -625,17 +625,12 @@ class VentaViewSet(viewsets.ModelViewSet):
         fecha_inicio = request.query_params.get('fecha_inicio')
         fecha_fin = request.query_params.get('fecha_fin')
         
-        ventas = self._cuentas_del_dia_queryset(fecha_inicio, fecha_fin)
-        
-        stats = ventas.aggregate(
-            total_ventas=Count('id'),
-            total_facturado=Sum('total'),
-            total_cotizaciones=Count('id', filter=Q(tipo_comprobante='COTIZACION')),
-            total_remisiones=Count('id', filter=Q(tipo_comprobante='REMISION')),
-            total_facturas=Count('id', filter=Q(tipo_comprobante='FACTURA')),
-            total_facturas_valor=Sum('total', filter=Q(tipo_comprobante='FACTURA')),
-            total_remisiones_valor=Sum('total', filter=Q(tipo_comprobante='REMISION')),
+        stats = build_cuentas_del_dia_summary(
+            fecha_inicio,
+            fecha_fin,
+            base_queryset=self._base_queryset(),
         )
+        ventas = stats.pop('ventas_queryset')
 
         ventas_por_usuario = (
             ventas.values(
