@@ -1145,6 +1145,8 @@ class FacturaQRYPosEndpointsTests(TestCase):
         self.assertEqual(response.data['cliente'], 'Cliente POS')
         self.assertEqual(response.data['nit_cliente'], '789')
         self.assertEqual(response.data['cufe'], 'CUFE-3')
+        self.assertIn('print_context', response.data)
+        self.assertIn('resolucion_numeracion', response.data)
 
 
 class DocumentoSoporteBuilderTests(TestCase):

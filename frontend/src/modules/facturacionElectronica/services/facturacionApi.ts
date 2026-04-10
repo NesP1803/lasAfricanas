@@ -36,6 +36,7 @@ export interface FacturaElectronica {
   pdf_url?: string;
   resolucion_numeracion?: string;
   numbering_resolution_info?: Record<string, unknown>;
+  print_context?: Record<string, unknown>;
   xml_local_path?: string;
   pdf_local_path?: string;
   pdf_uploaded_to_factus?: boolean;

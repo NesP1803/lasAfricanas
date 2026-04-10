@@ -36,6 +36,7 @@ type DocumentoTemplateProps = {
   cambio?: number;
   notas?: string;
   resolucion?: string;
+  resolucionLineas?: string[];
   empresa?: ConfiguracionEmpresa | null;
   cufe?: string;
   qrUrl?: string;
@@ -123,11 +124,11 @@ export default function ComprobanteTemplate({
   cambio,
   notas,
   resolucion,
+  resolucionLineas = [],
   empresa,
   cufe,
   qrUrl,
   qrImageUrl,
-  referenceCode,
   representacionGrafica,
 }: DocumentoTemplateProps) {
   const infoEmpresa = getEmpresaInfo(empresa);
@@ -172,57 +173,59 @@ export default function ComprobanteTemplate({
   ).map(([porcentaje, valores]) => ({ porcentaje, ...valores }));
 
   if (formato === 'CARTA') {
+    const resolutionRows = resolucionLineas.length > 0 ? resolucionLineas : (resolucion ? [resolucion] : []);
     return (
-      <div className="mx-auto w-full max-w-[210mm] border border-slate-300 bg-white p-7 font-sans text-[11px] text-slate-800">
-        <header className="grid grid-cols-[1.2fr,1fr] gap-6 border-b border-slate-200 pb-4">
-          <div className="space-y-1">
+      <div className="mx-auto w-full max-w-[210mm] border border-slate-300 bg-[#f7f8fa] p-6 font-sans text-[11px] text-slate-800">
+        <header className="grid grid-cols-[1fr,1.3fr,0.8fr] items-center gap-4 border-b border-slate-300 pb-4">
+          <div className="text-center">
             <img
               src={getLogoEmpresa(empresa)}
               alt="Logo empresa"
-              className="mb-2 h-14 max-w-[80mm] rounded-md object-contain object-left"
+              className="mx-auto h-20 max-w-[70mm] rounded-md object-contain"
             />
-            <p className="text-base font-bold uppercase tracking-wide">{infoEmpresa.nombre}</p>
+          </div>
+          <div className="space-y-1 text-center">
+            <p className="text-2xl font-bold uppercase tracking-wide">{infoEmpresa.nombre}</p>
             <p>{infoEmpresa.nit}</p>
             <p>{infoEmpresa.regimen}</p>
             <p className="break-words">{infoEmpresa.direccion}</p>
             {infoEmpresa.telefono ? <p>Tel: {infoEmpresa.telefono}</p> : null}
           </div>
-          <div className="space-y-1 text-right">
+          <div className="space-y-1 text-center">
             <p className="text-[10px] uppercase tracking-wider text-slate-500">{tituloDocumento}</p>
             <p className="text-xl font-bold leading-tight">{numero}</p>
-            {referenceCode ? <p className="text-[10px] text-slate-500">Doc. Ref: {referenceCode}</p> : null}
             {qrImageUrl ? (
-              <img src={qrImageUrl} alt="QR factura electrónica" className="ml-auto mt-2 h-20 w-20 border border-slate-200 p-1" />
+              <img src={qrImageUrl} alt="QR factura electrónica" className="mx-auto mt-2 h-24 w-24 border border-slate-300 bg-white p-1" />
             ) : qrUrl ? (
               <p className="break-all text-[10px] text-slate-600">{qrUrl}</p>
             ) : null}
           </div>
         </header>
 
-        {resolucion ? <p className="mt-3 text-[10px] text-slate-600">{resolucion}</p> : null}
-
         <section className="mt-4 grid grid-cols-2 gap-4">
-          <div className="rounded border border-slate-200 p-3">
+          <div className="rounded border border-slate-300 bg-white p-3">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Datos cliente</p>
-            <p className="mt-1 font-semibold">{clienteNombre}</p>
-            <p>NIT/CC: {clienteDocumento || 'N/D'}</p>
-            {clienteDireccion ? <p className="break-words">Dir: {clienteDireccion}</p> : null}
-            {clienteTelefono ? <p>Tel: {clienteTelefono}</p> : null}
-            {clienteEmail ? <p className="break-all">Email: {clienteEmail}</p> : null}
+            <div className="mt-2 grid grid-cols-[130px,1fr] gap-y-1 text-[10px]">
+              <span className="text-slate-500">Nombre:</span><span className="font-semibold">{clienteNombre}</span>
+              <span className="text-slate-500">NIT/CC:</span><span>{clienteDocumento || 'N/D'}</span>
+              <span className="text-slate-500">Dirección:</span><span className="break-words">{clienteDireccion || 'N/D'}</span>
+              <span className="text-slate-500">Teléfono:</span><span>{clienteTelefono || 'N/D'}</span>
+              <span className="text-slate-500">Correo:</span><span className="break-all">{clienteEmail || 'N/D'}</span>
+            </div>
           </div>
-          <div className="rounded border border-slate-200 p-3 text-right">
+          <div className="rounded border border-slate-300 bg-white p-3 text-right">
             <p><span className="text-slate-500">Fecha/Hora:</span> <span className="font-semibold">{fechaFormateada}</span></p>
             <p><span className="text-slate-500">Medio pago:</span> <span className="font-semibold">{medioPago || 'N/D'}</span></p>
-            <p><span className="text-slate-500">Estado:</span> <span className="font-semibold">{estado || 'N/D'}</span></p>
+            <p><span className="text-slate-500">Estado:</span> <span className="font-semibold">{estadoVisual}</span></p>
           </div>
         </section>
 
-        <section className="mt-4 overflow-hidden border border-slate-200">
-          <div className="grid grid-cols-[2.6fr,0.6fr,1fr,0.9fr,1fr,0.6fr] gap-2 bg-slate-100 px-3 py-2 text-[10px] font-semibold uppercase text-slate-600">
+        <section className="mt-4 overflow-hidden border border-slate-300 bg-white">
+          <div className="grid grid-cols-[2.6fr,0.6fr,1fr,0.9fr,1fr,0.6fr] gap-2 bg-slate-200 px-3 py-2 text-[10px] font-semibold uppercase text-slate-700">
             <span>Descripción</span><span className="text-center">Cant.</span><span className="text-right">Vlr U.</span><span className="text-right">Desc.</span><span className="text-right">Total</span><span className="text-right">IVA</span>
           </div>
           {detallesMostrar.map((detalle, index) => (
-            <div key={`${detalle.descripcion}-${index}`} className="grid break-inside-avoid grid-cols-[2.6fr,0.6fr,1fr,0.9fr,1fr,0.6fr] gap-2 border-t border-slate-200 px-3 py-2 text-[10px]">
+            <div key={`${detalle.descripcion}-${index}`} className="grid break-inside-avoid grid-cols-[2.6fr,0.6fr,1fr,0.9fr,1fr,0.6fr] gap-2 border-t border-slate-300 px-3 py-2 text-[10px]">
               <div className="min-w-0"><p className="font-semibold break-words">{detalle.descripcion}</p>{detalle.codigo ? <p className="text-[9px] text-slate-500">Cod. {detalle.codigo}</p> : null}</div>
               <span className="text-center">{detalle.cantidad}</span>
               <span className="text-right">{currencyFormatter.format(detalle.precioUnitario)}</span>
@@ -234,14 +237,14 @@ export default function ComprobanteTemplate({
         </section>
 
         <section className="mt-4 grid grid-cols-[1.3fr,1fr] gap-4">
-          <div className="rounded border border-slate-200 p-3">
+          <div className="rounded border border-slate-300 bg-white p-3">
             <p className="text-[10px] font-semibold uppercase text-slate-600">Discriminación IVA</p>
             <div className="mt-2 grid grid-cols-[0.6fr,1fr,1fr,1fr] text-[10px] text-slate-500"><span>IVA%</span><span className="text-right">Base</span><span className="text-right">IVA</span><span className="text-right">Total</span></div>
             {resumenIvaArray.map((item) => (
               <div key={`iva-${item.porcentaje}`} className="mt-1 grid grid-cols-[0.6fr,1fr,1fr,1fr] text-[10px]"><span>{item.porcentaje}%</span><span className="text-right">{currencyFormatter.format(item.base)}</span><span className="text-right">{currencyFormatter.format(item.iva)}</span><span className="text-right">{currencyFormatter.format(item.total)}</span></div>
             ))}
           </div>
-          <div className="rounded border border-slate-200 p-3 text-[10px]">
+          <div className="rounded border border-slate-300 bg-white p-3 text-[10px]">
             <div className="flex justify-between"><span>Subtotal</span><span className="font-semibold">{currencyFormatter.format(subtotal)}</span></div>
             <div className="mt-1 flex justify-between"><span>Impuestos</span><span className="font-semibold">{currencyFormatter.format(iva)}</span></div>
             <div className="mt-1 flex justify-between"><span>Descuento</span><span className="font-semibold">-{currencyFormatter.format(descuento)}</span></div>
@@ -255,15 +258,35 @@ export default function ComprobanteTemplate({
           </div>
         </section>
 
-        <footer className="mt-4 rounded border border-slate-200 bg-slate-50 p-3 text-[10px] text-slate-600">
+        <section className="mt-4 grid grid-cols-[1.4fr,1fr] gap-4">
+          <div className="min-h-[90px] rounded border border-slate-300 bg-white p-3 text-[10px] text-slate-600">
+            <p className="font-semibold text-slate-700">Observaciones</p>
+            <p className="mt-1">{notas || 'Gracias por su compra. Presentar factura para garantías y devoluciones.'}</p>
+          </div>
+          <div className="rounded border border-slate-300 bg-white p-3 text-[10px]">
+            <div className="mt-1 flex justify-between"><span>Valor bruto</span><span>{currencyFormatter.format(subtotal + iva)}</span></div>
+            <div className="mt-1 flex justify-between"><span>Base imponible</span><span>{currencyFormatter.format(subtotal)}</span></div>
+            <div className="mt-1 flex justify-between"><span>Impuestos</span><span>{currencyFormatter.format(iva)}</span></div>
+            <div className="mt-1 flex justify-between"><span>Descuento global</span><span>-{currencyFormatter.format(descuento)}</span></div>
+            <div className="mt-2 flex justify-between border-t border-slate-300 pt-2 text-sm font-bold"><span>Total factura</span><span>{currencyFormatter.format(total)}</span></div>
+          </div>
+        </section>
+
+        <footer className="mt-4 rounded border border-slate-300 bg-slate-100 p-3 text-[10px] text-slate-700">
           {cufe ? (
-            <p className="min-w-0 max-w-full overflow-hidden whitespace-normal break-all">
+            <p className="min-w-0 max-w-full overflow-hidden whitespace-normal break-all text-center">
               <span className="font-semibold text-slate-700">CUFE:</span> {cufe}
             </p>
           ) : null}
           {representacionGrafica ? <p className="mt-1">{representacionGrafica}</p> : null}
-          {qrUrl ? <p className="mt-1 break-all">Verificación DIAN: {qrUrl}</p> : null}
-          <p className="mt-1">{notas || 'Gracias por su compra. Presentar factura para garantías y devoluciones.'}</p>
+          {qrUrl ? <p className="mt-1 break-all text-center">Verificación DIAN: {qrUrl}</p> : null}
+          {resolutionRows.length > 0 ? (
+            <div className="mt-2 border-t border-slate-300 pt-2 text-center">
+              {resolutionRows.map((line, index) => (
+                <p key={`res-carta-${index}`} className="break-words">{line}</p>
+              ))}
+            </div>
+          ) : null}
         </footer>
       </div>
     );
@@ -288,16 +311,23 @@ export default function ComprobanteTemplate({
             <p className="text-[9px]">{infoEmpresa.regimen}</p>
             <p className="break-words">{infoEmpresa.direccion}</p>
             {infoEmpresa.telefono ? <p className="text-[9px]">Tel: {infoEmpresa.telefono}</p> : null}
-            <div className="mt-1 px-0.5 py-1 text-left">
+            <div className="mt-1 px-0.5 py-1 text-center">
               <p className="text-[8px] font-semibold uppercase tracking-wide text-slate-600">Resolución / Numeración</p>
-              <p className="break-words text-[8px] text-slate-700">{resolucion || 'Pendiente de consulta electrónica'}</p>
+              {resolucionLineas.length > 0 ? (
+                <div className="space-y-0.5">
+                  {resolucionLineas.map((line, index) => (
+                    <p key={`res-pos-${index}`} className="break-words text-[8px] text-slate-700">{line}</p>
+                  ))}
+                </div>
+              ) : (
+                <p className="break-words text-[8px] text-slate-700">{resolucion || 'Documento pendiente de emisión electrónica'}</p>
+              )}
             </div>
           </div>
 
           <div className="mt-2 border-y border-slate-300 py-2 text-center">
             <p className="text-[11px] font-bold uppercase">{tituloDocumento}</p>
             <p className="font-semibold">{numero}</p>
-            {referenceCode ? <p className="text-[8px] text-slate-600">Ref: {referenceCode}</p> : null}
             <div className="mt-1 grid grid-cols-[auto,1fr] gap-x-1 gap-y-0.5 px-0 py-0 text-[8px]">
             <span className="text-left text-slate-600">Fecha:</span>
             <span className="text-left font-semibold text-slate-800">{fechaDocumento}</span>

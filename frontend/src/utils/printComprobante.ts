@@ -127,7 +127,6 @@ export const printComprobante = ({
   cufe,
   qrUrl,
   qrImageUrl,
-  referenceCode,
   representacionGrafica,
 }: PrintComprobanteParams) => {
   const printWindow = window.open('', '_blank', 'width=960,height=860');
@@ -200,7 +199,7 @@ export const printComprobante = ({
       .qr img { width: 94px; height: 94px; object-fit: contain; display: block; margin: 0 auto; }
       .placeholder { border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px; font-size: 8px; color: #64748b; }
       .logo { display: block; margin: 0 auto 4px; height: 42px; max-width: 52mm; object-fit: contain; border-radius: 5px; }
-      .resolution { margin-top: 4px; padding: 2px 0; text-align: left; }
+      .resolution { margin-top: 4px; padding: 2px 0; text-align: center; }
       .resolution-title { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #475569; }
       .totals-box { border: 1px solid #cbd5e1; margin-top: 6px; padding: 4px; }
       .thank-you { text-align: center; font-size: 9px; font-weight: 600; margin-top: 7px; }
@@ -266,7 +265,7 @@ export const printComprobante = ({
               </div>
             </div>
             <div class="line"></div>
-            <div class="center"><strong>${tituloDocumento}</strong><div><strong>${numero}</strong></div>${referenceCode ? `<div class="muted">Ref: ${referenceCode}</div>` : ''}<div class="doc-datetime"><div class="doc-grid"><span class="muted" style="text-align:left">Fecha:</span><strong style="text-align:right">${fechaDocumento}</strong><span class="muted" style="text-align:left">Hora:</span><strong style="text-align:right">${horaDocumento || fechaFormateada}</strong></div></div></div>
+            <div class="center"><strong>${tituloDocumento}</strong><div><strong>${numero}</strong></div><div class="doc-datetime"><div class="doc-grid"><span class="muted" style="text-align:left">Fecha:</span><strong style="text-align:right">${fechaDocumento}</strong><span class="muted" style="text-align:left">Hora:</span><strong style="text-align:right">${horaDocumento || fechaFormateada}</strong></div></div></div>
             <div class="line"></div>
             <div class="row"><span>Cliente:</span><span class="value break">${clienteNombre}</span></div>
             <div class="row"><span>NIT/CC:</span><span class="value">${clienteDocumento || 'N/D'}</span></div>
@@ -317,7 +316,6 @@ export const printComprobante = ({
           <div class="doc">
             <p class="muted">${tituloDocumento}</p>
             <p class="doc-number">${numero}</p>
-            ${referenceCode ? `<p class="muted">Doc. Ref: ${referenceCode}</p>` : ''}
             ${qrImageUrl ? `<div class="qr"><img src="${qrImageUrl}" alt="QR factura electrónica"/></div>` : qrUrl ? `<p class="muted break">${qrUrl}</p>` : ''}
           </div>
         </div>
@@ -334,7 +332,7 @@ export const printComprobante = ({
           <div class="box" style="text-align:right;">
             <p><span class="muted">Fecha/Hora:</span> <strong>${fechaFormateada}</strong></p>
             <p><span class="muted">Medio pago:</span> <strong>${medioPago || 'N/D'}</strong></p>
-            <p><span class="muted">Estado:</span> <strong>${estado || 'N/D'}</strong></p>
+            <p><span class="muted">Estado:</span> <strong>${estadoVisual}</strong></p>
           </div>
         </div>
         <table class="table">
@@ -358,9 +356,9 @@ export const printComprobante = ({
           </div>
         </div>
         <div class="footer">
-          ${cufe ? `<p class="cufe-inline"><strong>CUFE:</strong> ${cufe}</p>` : ''}
+          ${cufe ? `<p class="cufe-inline" style="text-align:center;"><strong>CUFE:</strong> ${cufe}</p>` : ''}
           ${representacionGrafica ? `<p>${representacionGrafica}</p>` : ''}
-          ${qrUrl ? `<p class="break">Verificación DIAN: ${qrUrl}</p>` : ''}
+          ${qrUrl ? `<p class="break" style="text-align:center;">Verificación DIAN: ${qrUrl}</p>` : ''}
           <p>${notas || 'Gracias por su compra. Presentar factura para garantías y devoluciones.'}</p>
         </div>
       </div>

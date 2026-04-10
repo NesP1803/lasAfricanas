@@ -10,11 +10,18 @@ from .models import (
 )
 from apps.usuarios.models import Usuario
 from apps.ventas.services.calculo_venta import calcular_detalle_venta, recalcular_totales_venta
+from apps.facturacion.models import RangoNumeracionDIAN
+from apps.facturacion.services.document_print_context import build_document_print_context
 from apps.facturacion.services.public_invoice_url import has_documental_inconsistency, resolve_public_invoice_url
 
 
 def _build_factura_electronica_data(venta):
     factura = getattr(venta, 'factura_electronica_factus', None)
+    pending_range = (
+        RangoNumeracionDIAN.objects.filter(document_code='FACTURA_VENTA', is_selected_local=True)
+        .order_by('-created_at')
+        .first()
+    )
     if not factura:
         return None
     response_json = factura.response_json if isinstance(factura.response_json, dict) else {}
@@ -25,20 +32,11 @@ def _build_factura_electronica_data(venta):
     public_url = resolve_public_invoice_url(factura)
     documento_inconsistente = has_documental_inconsistency(factura)
     numbering_info = factura.numbering_resolution_info
-    resolucion_num = numbering_info.get('resolucion') or ''
-    vigencia_desde = numbering_info.get('vigencia_desde')
-    vigencia_hasta = numbering_info.get('vigencia_hasta')
-    rango_desde = numbering_info.get('rango_desde')
-    rango_hasta = numbering_info.get('rango_hasta')
-    resolucion_display = resolucion_num
-    if resolucion_num and (vigencia_desde or vigencia_hasta):
-        resolucion_display = f"Resolución {resolucion_num} · Vigencia {vigencia_desde or '-'} a {vigencia_hasta or '-'}"
-    if resolucion_num and (rango_desde or rango_hasta):
-        resolucion_display = f"{resolucion_display} · Rango autorizado {rango_desde or '-'} - {rango_hasta or '-'}"
+    print_context = build_document_print_context(factura, pending_range=pending_range)
     return {
         'id': factura.id,
         'venta_id': factura.venta_id,
-        'numero': factura.number,
+        'numero': print_context.get('numero_documento') or factura.number,
         'reference_code': factura.reference_code,
         'cufe': factura.cufe,
         'uuid': factura.uuid,
@@ -57,7 +55,8 @@ def _build_factura_electronica_data(venta):
         'xml_url': factura.xml_url,
         'pdf_url': factura.pdf_url,
         'numbering_resolution_info': numbering_info,
-        'resolucion_numeracion': resolucion_display,
+        'resolucion_numeracion': print_context.get('resolucion_texto') or 'Documento pendiente de emisión electrónica.',
+        'print_context': print_context,
     }
 
 
