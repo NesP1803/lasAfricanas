@@ -128,6 +128,7 @@ export interface Venta {
     pdf_url?: string;
     resolucion_numeracion?: string;
     numbering_resolution_info?: Record<string, unknown>;
+    print_context?: Record<string, unknown>;
     response_json?: Record<string, unknown>;
   } | null;
   nota_credito_emitida?: {
