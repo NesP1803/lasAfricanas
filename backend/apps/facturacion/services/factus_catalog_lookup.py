@@ -36,14 +36,13 @@ DOCUMENT_TYPE_ALIASES: dict[str, str] = {
 }
 
 DOCUMENT_TYPE_FACTUS_CODE_CANDIDATES: dict[str, tuple[str, ...]] = {
-    # Códigos frecuentes DIAN/Factus por tipo.
-    'CC': ('CC', '13'),
-    'NIT': ('NIT', '31'),
-    'CE': ('CE', '22'),
-    'TI': ('TI', '12'),
-    'PASAPORTE': ('PASAPORTE', 'PAS', '41'),
-    'PEP': ('PEP', '47'),
-    'PPT': ('PPT', '48'),
+    'CC': ('13', 'CC'),
+    'NIT': ('31', 'NIT'),
+    'CE': ('22', 'CE'),
+    'TI': ('12', 'TI'),
+    'PASAPORTE': ('41', 'PASAPORTE', 'PAS'),
+    'PEP': ('47', 'PEP'),
+    'PPT': ('48', 'PPT'),
 }
 
 
@@ -102,6 +101,22 @@ def _homologacion_lookup(model, field_name: str, codigo: str):
     )
 
 
+def _catalog_code_lookup(model, codigo: str, *, default: str, field: str = 'codigo') -> str:
+    raw = str(codigo or '').strip()
+    if not raw:
+        return default
+    value = (
+        model.objects.filter(codigo__iexact=raw, is_active=True)
+        .values_list(field, flat=True)
+        .first()
+    )
+    return str(value or raw or default)
+
+
+# =========================
+# Compatibilidad V1 por ID
+# =========================
+
 def get_municipality_id(codigo: str, default: int = 149) -> int:
     by_homologacion = _homologacion_lookup(HomologacionMunicipio, 'municipality_id', codigo)
     if by_homologacion:
@@ -136,18 +151,6 @@ def get_first_active_tribute_id(default: int = 1) -> int:
     return int(value or default)
 
 
-def get_payment_method_code(codigo: str, default: str = '10') -> str:
-    by_homologacion = _homologacion_lookup(HomologacionMedioPago, 'payment_method_code', codigo)
-    if by_homologacion:
-        return str(by_homologacion)
-    value = (
-        MetodoPagoFactus.objects.filter(codigo=str(codigo), is_active=True)
-        .values_list('codigo', flat=True)
-        .first()
-    )
-    return str(value or default)
-
-
 def get_unit_measure_id(codigo: str, default: int = 70) -> int:
     by_homologacion = _homologacion_lookup(HomologacionUnidadMedida, 'unit_measure_id', codigo)
     if by_homologacion:
@@ -169,7 +172,6 @@ def get_document_type_id(codigo: str, default: int = 3, seed_if_missing: bool = 
         candidates = list(DOCUMENT_TYPE_FACTUS_CODE_CANDIDATES.get(normalized, (normalized,)))
         if normalized not in candidates:
             candidates.insert(0, normalized)
-
         for candidate in candidates:
             factus_id = (
                 DocumentoIdentificacionFactus.objects.filter(codigo__iexact=candidate, is_active=True)
@@ -188,4 +190,82 @@ def get_document_type_id(codigo: str, default: int = 3, seed_if_missing: bool = 
         result = _resolve()
         if result:
             return result
+    return default
+
+
+# =========================
+# Contrato Factus V2 por código
+# =========================
+
+def get_payment_method_code(codigo: str, default: str = '10') -> str:
+    by_homologacion = _homologacion_lookup(HomologacionMedioPago, 'payment_method_code', codigo)
+    if by_homologacion:
+        return str(by_homologacion)
+    value = (
+        MetodoPagoFactus.objects.filter(codigo=str(codigo), is_active=True)
+        .values_list('codigo', flat=True)
+        .first()
+    )
+    return str(value or default)
+
+
+def get_municipality_code(codigo: str, default: str = '47001') -> str:
+    """Retorna código de municipio requerido por Factus V2."""
+    raw = str(codigo or '').strip()
+    if raw.isdigit() and len(raw) >= 5:
+        return raw
+    by_homologacion = _homologacion_lookup(HomologacionMunicipio, 'municipality_id', codigo)
+    if by_homologacion:
+        value = MunicipioFactus.objects.filter(factus_id=int(by_homologacion)).values_list('codigo', flat=True).first()
+        if value:
+            return str(value)
+    return _catalog_code_lookup(MunicipioFactus, raw, default=default)
+
+
+def get_tribute_code(codigo: str, default: str = '01') -> str:
+    raw = str(codigo or '').strip().upper()
+    if raw in {'IVA', '01'}:
+        raw = '01'
+    elif raw in {'ZZ', 'NO_CAUSA', 'NO CAUSA', 'EXCLUIDO'}:
+        raw = 'ZZ'
+    by_homologacion = _homologacion_lookup(HomologacionTributo, 'tribute_id', raw)
+    if by_homologacion:
+        value = TributoFactus.objects.filter(factus_id=int(by_homologacion)).values_list('codigo', flat=True).first()
+        if value:
+            return str(value)
+    return _catalog_code_lookup(TributoFactus, raw, default=default)
+
+
+def get_unit_measure_code(codigo: str, default: str = '94') -> str:
+    by_homologacion = _homologacion_lookup(HomologacionUnidadMedida, 'unit_measure_id', codigo)
+    if by_homologacion:
+        value = UnidadMedidaFactus.objects.filter(factus_id=int(by_homologacion)).values_list('codigo', flat=True).first()
+        if value:
+            return str(value)
+    return _catalog_code_lookup(UnidadMedidaFactus, codigo, default=default)
+
+
+def get_document_type_code(codigo: str, default: str = '13') -> str:
+    normalized = normalize_document_type_code(codigo)
+    candidates = list(DOCUMENT_TYPE_FACTUS_CODE_CANDIDATES.get(normalized, (normalized,)))
+    for candidate in candidates:
+        value = (
+            DocumentoIdentificacionFactus.objects.filter(codigo__iexact=candidate, is_active=True)
+            .values_list('codigo', flat=True)
+            .first()
+        )
+        if value:
+            return str(value)
+        if str(candidate).isdigit():
+            return str(candidate)
+    return default
+
+
+def get_legal_organization_code(tipo_documento: str, default: str = '2') -> str:
+    """1=persona jurídica, 2=persona natural según tablas Factus V2."""
+    return '1' if normalize_document_type_code(tipo_documento) == 'NIT' else default
+
+
+def get_standard_code(default: str = '999') -> str:
+    """999 = estándar de adopción del contribuyente."""
     return default
