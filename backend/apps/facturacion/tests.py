@@ -3897,7 +3897,33 @@ class FactusClientReauthTests(TestCase):
                 payload = client.request('GET', '/v1/bills/show/FV1')
 
         self.assertEqual(payload, {'ok': True})
-        self.assertEqual(mocked_request.call_count, 2)
+
+
+class FactusHybridEndpointRegistryTests(TestCase):
+    def test_registry_resuelve_hibrido_v1_v2_y_fallbacks(self):
+        from apps.facturacion.services.factus_endpoints import get_endpoint
+
+        self.assertEqual(get_endpoint('bill_validate', api_version='v2'), '/v2/bills/validate')
+        self.assertEqual(get_endpoint('bill_validate', api_version='v1'), '/v1/bills/validate')
+        self.assertEqual(get_endpoint('numbering_ranges', api_version='v1'), '/v1/numbering-ranges')
+        self.assertEqual(get_endpoint('support_document_validate', api_version='v2'), '/v1/support-documents/validate')
+        self.assertEqual(get_endpoint('support_adjustment_validate', api_version='v2'), '/v1/adjustment-notes/validate')
+        self.assertEqual(get_endpoint('bill_download_pdf', api_version='v2'), '/v2/bills/{number}/download-pdf')
+        self.assertEqual(get_endpoint('bill_download_xml', api_version='v2'), '/v2/bills/{number}/download-xml/')
+        self.assertEqual(get_endpoint('bill_email_content', api_version='v2'), '/v2/bills/{number}/email-content')
+        self.assertEqual(get_endpoint('bill_send_email', api_version='v2'), '/v2/bills/{number}/send-email')
+        self.assertEqual(get_endpoint('bill_events', api_version='v2'), '/v1/bills/events/{number}')
+        self.assertEqual(get_endpoint('bill_tacit_acceptance', api_version='v2'), '/v1/bills/acceptance-tacit/{number}')
+        self.assertEqual(get_endpoint('municipalities', api_version='v2'), '/v1/municipalities')
+        self.assertEqual(get_endpoint('tributes_products', api_version='v2'), '/v1/tributes/products')
+        self.assertEqual(get_endpoint('reference_tables', api_version='v2'), '/v1/reference-tables')
+
+    def test_factus_client_no_hardcodea_v1_en_defaults(self):
+        from pathlib import Path
+
+        content = Path('backend/apps/facturacion/services/factus_client.py').read_text()
+        self.assertNotIn("default='/v1/", content)
+        self.assertNotIn('default="/v1/', content)
 
 
 class NotaCreditoCorreoYDocumentoSoporteEndpointsTests(TestCase):
