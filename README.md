@@ -110,15 +110,25 @@ Variables mínimas de Factus:
 
 ```env
 FACTUS_ENV=sandbox
+FACTUS_API_VERSION=v2
 FACTUS_API_URL=https://api-sandbox.factus.com.co
 FACTUS_AUTH_PATH=/oauth/token
 FACTUS_REFRESH_TOKEN_PATH=/oauth/token
-FACTUS_INVOICE_PATH=/v1/bills/validate
-FACTUS_BILL_SHOW_PATH=/v1/bills/show/{number}
-FACTUS_CREDIT_NOTE_PATH=/v1/credit-notes/validate
+FACTUS_INVOICE_PATH=/v2/bills/validate
+FACTUS_BILL_SHOW_PATH=/v2/bills/{number}
+FACTUS_CREDIT_NOTE_PATH=/v2/credit-notes/validate
+# Excepción híbrida oficial vigente en V1 (según docs/Postman): documentos soporte
 FACTUS_SUPPORT_DOCUMENT_VALIDATE_PATH=/v1/support-documents/validate
+# Excepción híbrida: rangos de numeración puede seguir en V1 según colección oficial
 FACTUS_NUMBERING_RANGES_PATH=/v1/numbering-ranges
 ```
+
+### Arquitectura híbrida Factus V1/V2
+
+- El proyecto centraliza rutas versionables en `backend/apps/facturacion/services/factus_endpoints.py`.
+- `FactusClient` resuelve rutas con `get_endpoint(...)` y `FACTUS_API_VERSION` (`v2` por defecto).
+- Para recursos sin equivalencia V2 confirmada en documentación oficial, el registry aplica fallback a V1 (sin hardcodear rutas en el cliente).
+- Si necesitas forzar una ruta puntual, puedes sobreescribir variables `FACTUS_*_PATH` en `.env` sin romper la compatibilidad global.
 
 Para pasar a producción normalmente basta con cambiar:
 

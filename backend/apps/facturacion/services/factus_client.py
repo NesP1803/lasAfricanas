@@ -69,31 +69,31 @@ class FactusClient:
         self.bill_download_xml_path = config('FACTUS_BILL_DOWNLOAD_XML_PATH', default=get_endpoint('bill_download_xml', api_version=self.api_version))
         self.bill_email_content_path = config(
             'FACTUS_BILL_EMAIL_CONTENT_PATH',
-            default='/v1/bills/{number}/email-content',
+            default=get_endpoint('bill_email_content', api_version=self.api_version),
         )
         self.bill_send_email_path = config('FACTUS_BILL_SEND_EMAIL_PATH', default=get_endpoint('bill_send_email', api_version=self.api_version))
         self.bill_custom_pdf_upload_path = config(
             'FACTUS_BILL_CUSTOM_PDF_UPLOAD_PATH',
-            default='/v1/bills/custom-pdf/{number}',
+            default=get_endpoint('bill_custom_pdf_upload', api_version=self.api_version),
         )
         self.bill_delete_by_reference_path = config(
             'FACTUS_BILL_DELETE_BY_REFERENCE_PATH',
-            default='/v1/bills/reference/{reference_code}',
+            default=get_endpoint('bill_delete_reference', api_version=self.api_version),
         )
         self.credit_note_path = config('FACTUS_CREDIT_NOTE_PATH', default=get_endpoint('credit_note_validate', api_version=self.api_version))
         self.credit_notes_list_path = config('FACTUS_CREDIT_NOTES_LIST_PATH', default=get_endpoint('credit_note_list', api_version=self.api_version))
         self.credit_note_show_path = config('FACTUS_CREDIT_NOTE_SHOW_PATH', default=get_endpoint('credit_note_show', api_version=self.api_version))
         self.credit_note_download_pdf_path = config(
             'FACTUS_CREDIT_NOTE_DOWNLOAD_PDF_PATH',
-            default='/v1/credit-notes/download-pdf/{number}',
+            default=get_endpoint('credit_note_download_pdf', api_version=self.api_version),
         )
         self.credit_note_download_xml_path = config(
             'FACTUS_CREDIT_NOTE_DOWNLOAD_XML_PATH',
-            default='/v1/credit-notes/download-xml/{number}',
+            default=get_endpoint('credit_note_download_xml', api_version=self.api_version),
         )
         self.credit_note_email_content_path = config(
             'FACTUS_CREDIT_NOTE_EMAIL_CONTENT_PATH',
-            default='/v1/credit-notes/{number}/email-content',
+            default=get_endpoint('credit_note_email_content', api_version=self.api_version),
         )
         self.credit_note_send_email_path = config(
             'FACTUS_CREDIT_NOTE_SEND_EMAIL_PATH',
@@ -105,87 +105,87 @@ class FactusClient:
         )
         self.support_document_validate_path = config(
             'FACTUS_SUPPORT_DOCUMENT_VALIDATE_PATH',
-            default='/v1/support-documents/validate',
+            default=get_endpoint('support_document_validate', api_version=self.api_version),
         )
-        self.support_documents_list_path = config('FACTUS_SUPPORT_DOCUMENTS_LIST_PATH', default='/v1/support-documents')
-        self.support_document_show_path = config('FACTUS_SUPPORT_DOCUMENT_SHOW_PATH', default='/v1/support-documents/show/{number}')
+        self.support_documents_list_path = config('FACTUS_SUPPORT_DOCUMENTS_LIST_PATH', default=get_endpoint('support_document_list', api_version=self.api_version))
+        self.support_document_show_path = config('FACTUS_SUPPORT_DOCUMENT_SHOW_PATH', default=get_endpoint('support_document_show', api_version=self.api_version))
         self.support_document_download_pdf_path = config(
             'FACTUS_SUPPORT_DOCUMENT_DOWNLOAD_PDF_PATH',
-            default='/v1/support-documents/download-pdf/{number}',
+            default=get_endpoint('support_document_download_pdf', api_version=self.api_version),
         )
         self.support_document_download_xml_path = config(
             'FACTUS_SUPPORT_DOCUMENT_DOWNLOAD_XML_PATH',
-            default='/v1/support-documents/download-xml/{number}',
+            default=get_endpoint('support_document_download_xml', api_version=self.api_version),
         )
         self.support_document_delete_by_reference_path = config(
             'FACTUS_SUPPORT_DOCUMENT_DELETE_BY_REFERENCE_PATH',
-            default='/v1/support-documents/reference/{reference_code}',
+            default=get_endpoint('support_document_delete_reference', api_version=self.api_version),
         )
         self.support_adjustment_note_validate_path = config(
             'FACTUS_SUPPORT_ADJUSTMENT_NOTE_VALIDATE_PATH',
-            default='/v1/adjustment-notes/validate',
+            default=get_endpoint('support_adjustment_validate', api_version=self.api_version),
         )
         self.support_adjustment_notes_list_path = config(
             'FACTUS_SUPPORT_ADJUSTMENT_NOTES_LIST_PATH',
-            default='/v1/adjustment-notes',
+            default=get_endpoint('support_adjustment_list', api_version=self.api_version),
         )
         self.support_adjustment_note_show_path = config(
             'FACTUS_SUPPORT_ADJUSTMENT_NOTE_SHOW_PATH',
-            default='/v1/adjustment-notes/show/{number}',
+            default=get_endpoint('support_adjustment_show', api_version=self.api_version),
         )
         self.support_adjustment_note_download_pdf_path = config(
             'FACTUS_SUPPORT_ADJUSTMENT_NOTE_DOWNLOAD_PDF_PATH',
-            default='/v1/adjustment-notes/download-pdf/{number}',
+            default=get_endpoint('support_adjustment_download_pdf', api_version=self.api_version),
         )
         self.support_adjustment_note_download_xml_path = config(
             'FACTUS_SUPPORT_ADJUSTMENT_NOTE_DOWNLOAD_XML_PATH',
-            default='/v1/adjustment-notes/download-xml/{number}',
+            default=get_endpoint('support_adjustment_download_xml', api_version=self.api_version),
         )
         self.support_adjustment_note_delete_by_reference_path = config(
             'FACTUS_SUPPORT_ADJUSTMENT_NOTE_DELETE_BY_REFERENCE_PATH',
-            default='/v1/adjustment-notes/reference/{reference_code}',
+            default=get_endpoint('support_adjustment_delete_reference', api_version=self.api_version),
         )
         self.numbering_ranges_path = config('FACTUS_NUMBERING_RANGES_PATH', default=get_endpoint('numbering_ranges', api_version=self.api_version))
         self.numbering_range_show_path = config(
             'FACTUS_NUMBERING_RANGE_SHOW_PATH',
-            default='/v1/numbering-ranges/{id}',
+            default=get_endpoint('numbering_range_show', api_version=self.api_version),
         )
         self.numbering_range_create_path = config(
             'FACTUS_NUMBERING_RANGE_CREATE_PATH',
-            default='/v1/numbering-ranges',
+            default=get_endpoint('numbering_range_create', api_version=self.api_version),
         )
         self.numbering_range_delete_path = config(
             'FACTUS_NUMBERING_RANGE_DELETE_PATH',
-            default='/v1/numbering-ranges/{id}',
+            default=get_endpoint('numbering_range_delete', api_version=self.api_version),
         )
         self.numbering_range_update_path = config(
             'FACTUS_NUMBERING_RANGE_UPDATE_PATH',
-            default='/v1/numbering-ranges/{id}/update-number',
+            default=get_endpoint('numbering_range_update_current', api_version=self.api_version),
         )
         self.numbering_ranges_dian_path = config(
             'FACTUS_NUMBERING_RANGES_DIAN_PATH',
             default=get_endpoint('numbering_ranges_dian', api_version=self.api_version),
         )
-        self.bill_events_path = config('FACTUS_BILL_EVENTS_PATH', default='/v1/bills/events/{number}')
+        self.bill_events_path = config('FACTUS_BILL_EVENTS_PATH', default=get_endpoint('bill_events', api_version=self.api_version))
         self.bill_tacit_acceptance_path = config(
             'FACTUS_BILL_TACIT_ACCEPTANCE_PATH',
-            default='/v1/bills/acceptance-tacit/{number}',
+            default=get_endpoint('bill_tacit_acceptance', api_version=self.api_version),
         )
         self.bill_email_template_path = config(
             'FACTUS_BILL_EMAIL_TEMPLATE_PATH',
-            default='/v1/bills/email-template/{number}',
+            default=get_endpoint('bill_email_template', api_version=self.api_version),
         )
-        self.company_show_path = config('FACTUS_COMPANY_SHOW_PATH', default='/v1/company')
-        self.company_update_path = config('FACTUS_COMPANY_UPDATE_PATH', default='/v1/company')
-        self.company_update_logo_path = config('FACTUS_COMPANY_UPDATE_LOGO_PATH', default='/v1/company/update-image')
-        self.tributes_path = config('FACTUS_TRIBUTES_PATH', default='/v1/tributes/products')
-        self.measurement_units_path = config('FACTUS_MEASUREMENT_UNITS_PATH', default='/v1/measurement-units')
-        self.countries_path = config('FACTUS_COUNTRIES_PATH', default='/v1/countries')
-        self.municipalities_path = config('FACTUS_MUNICIPALITIES_PATH', default='/v1/municipalities')
-        self.reference_tables_path = config('FACTUS_REFERENCE_TABLES_PATH', default='/v1/reference-tables')
-        self.customers_lookup_path = config('FACTUS_CUSTOMERS_LOOKUP_PATH', default='/v1/customers')
-        self.document_receptions_path = config('FACTUS_DOCUMENT_RECEPTIONS_PATH', default='/v1/document-receptions')
-        self.subscriptions_path = config('FACTUS_SUBSCRIPTIONS_PATH', default='/v1/subscriptions')
+        self.company_show_path = config('FACTUS_COMPANY_SHOW_PATH', default=get_endpoint('company_show', api_version=self.api_version))
+        self.company_update_path = config('FACTUS_COMPANY_UPDATE_PATH', default=get_endpoint('company_update', api_version=self.api_version))
+        self.company_update_logo_path = config('FACTUS_COMPANY_UPDATE_LOGO_PATH', default=get_endpoint('company_update_logo', api_version=self.api_version))
+        self.tributes_path = config('FACTUS_TRIBUTES_PATH', default=get_endpoint('tributes_products', api_version=self.api_version))
+        self.measurement_units_path = config('FACTUS_MEASUREMENT_UNITS_PATH', default=get_endpoint('unit_measures', api_version=self.api_version))
+        self.countries_path = config('FACTUS_COUNTRIES_PATH', default=get_endpoint('countries', api_version=self.api_version))
+        self.municipalities_path = config('FACTUS_MUNICIPALITIES_PATH', default=get_endpoint('municipalities', api_version=self.api_version))
+        self.reference_tables_path = config('FACTUS_REFERENCE_TABLES_PATH', default=get_endpoint('reference_tables', api_version=self.api_version))
+        self.customers_lookup_path = config('FACTUS_CUSTOMERS_LOOKUP_PATH', default=get_endpoint('customers_lookup', api_version=self.api_version))
+        self.document_receptions_path = config('FACTUS_DOCUMENT_RECEPTIONS_PATH', default=get_endpoint('document_receptions', api_version=self.api_version))
+        self.subscriptions_path = config('FACTUS_SUBSCRIPTIONS_PATH', default=get_endpoint('subscriptions', api_version=self.api_version))
 
         # Alias internos temporales para mantener compatibilidad en módulos/tests existentes.
         self.refresh_path = self.refresh_token_path
