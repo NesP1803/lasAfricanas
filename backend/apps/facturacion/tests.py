@@ -3990,3 +3990,36 @@ class NotaCreditoCorreoYDocumentoSoporteEndpointsTests(TestCase):
         self.assertEqual(pdf_response.status_code, 200)
         self.assertEqual(pdf_response['Content-Type'], 'application/pdf')
         self.assertEqual(pdf_response.content, b'%PDF-support')
+
+class FactusEndpointRegistryTests(TestCase):
+    def test_default_version_is_v2(self):
+        from apps.facturacion.services.factus_endpoints import get_endpoint
+
+        self.assertEqual(get_endpoint('bill_validate'), '/v2/bills/validate')
+
+    def test_can_resolve_v1_and_v2_paths(self):
+        from apps.facturacion.services.factus_endpoints import get_endpoint
+
+        self.assertEqual(get_endpoint('numbering_ranges', api_version='v1'), '/v1/numbering-ranges')
+        self.assertEqual(get_endpoint('numbering_ranges', api_version='v2'), '/v2/numbering-ranges')
+
+    def test_client_uses_v2_by_default(self):
+        with patch.dict(os.environ, {'FACTUS_API_VERSION': 'v2'}, clear=False):
+            client = FactusClient()
+        self.assertEqual(client.invoice_path, '/v2/bills/validate')
+        self.assertEqual(client.credit_note_path, '/v2/credit-notes/validate')
+
+
+class FactusV2PayloadShapeTests(TestCase):
+    def test_v2_payload_uses_payment_details_and_taxes(self):
+        from apps.facturacion.services.factus_payload_builder_v2 import build_v2_payment_details, build_v2_item_taxes
+
+        payment = build_v2_payment_details(payment_form='1', payment_method_code='10', amount=100000)
+        self.assertEqual(payment[0]['payment_form'], '1')
+        self.assertEqual(payment[0]['payment_method_code'], '10')
+        self.assertEqual(payment[0]['amount'], '100000.00')
+
+        taxed = build_v2_item_taxes(Decimal('19'))
+        excluded = build_v2_item_taxes(Decimal('0'))
+        self.assertEqual(taxed, [{'code': '01', 'rate': '19.00'}])
+        self.assertEqual(excluded, [{'is_excluded': True}])

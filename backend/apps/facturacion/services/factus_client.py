@@ -13,6 +13,7 @@ from decouple import config
 from django.utils import timezone
 
 from apps.facturacion_electronica.models import FactusToken
+from apps.facturacion.services.factus_endpoints import get_endpoint, resolve_api_version
 from apps.facturacion.services.factus_environment import (
     resolve_factus_base_url,
     resolve_factus_environment,
@@ -58,18 +59,19 @@ class FactusClient:
     def __init__(self) -> None:
         self.base_url = self._resolve_factus_base_url()
         self.environment = resolve_factus_environment()
+        self.api_version = resolve_api_version()
         self.auth_path = config('FACTUS_AUTH_PATH', default='/oauth/token')
         self.refresh_token_path = config('FACTUS_REFRESH_TOKEN_PATH', default='/oauth/token')
-        self.invoice_path = config('FACTUS_INVOICE_PATH', default='/v1/bills/validate')
-        self.bills_list_path = config('FACTUS_BILLS_LIST_PATH', default='/v1/bills')
-        self.bill_show_path = config('FACTUS_BILL_SHOW_PATH', default='/v1/bills/show/{number}')
-        self.bill_download_pdf_path = config('FACTUS_BILL_DOWNLOAD_PDF_PATH', default='/v1/bills/download-pdf/{number}')
-        self.bill_download_xml_path = config('FACTUS_BILL_DOWNLOAD_XML_PATH', default='/v1/bills/download-xml/{number}')
+        self.invoice_path = config('FACTUS_INVOICE_PATH', default=get_endpoint('bill_validate', api_version=self.api_version))
+        self.bills_list_path = config('FACTUS_BILLS_LIST_PATH', default=get_endpoint('bill_list', api_version=self.api_version))
+        self.bill_show_path = config('FACTUS_BILL_SHOW_PATH', default=get_endpoint('bill_show', api_version=self.api_version))
+        self.bill_download_pdf_path = config('FACTUS_BILL_DOWNLOAD_PDF_PATH', default=get_endpoint('bill_download_pdf', api_version=self.api_version))
+        self.bill_download_xml_path = config('FACTUS_BILL_DOWNLOAD_XML_PATH', default=get_endpoint('bill_download_xml', api_version=self.api_version))
         self.bill_email_content_path = config(
             'FACTUS_BILL_EMAIL_CONTENT_PATH',
             default='/v1/bills/{number}/email-content',
         )
-        self.bill_send_email_path = config('FACTUS_BILL_SEND_EMAIL_PATH', default='/v1/bills/send-email/{number}')
+        self.bill_send_email_path = config('FACTUS_BILL_SEND_EMAIL_PATH', default=get_endpoint('bill_send_email', api_version=self.api_version))
         self.bill_custom_pdf_upload_path = config(
             'FACTUS_BILL_CUSTOM_PDF_UPLOAD_PATH',
             default='/v1/bills/custom-pdf/{number}',
@@ -78,9 +80,9 @@ class FactusClient:
             'FACTUS_BILL_DELETE_BY_REFERENCE_PATH',
             default='/v1/bills/reference/{reference_code}',
         )
-        self.credit_note_path = config('FACTUS_CREDIT_NOTE_PATH', default='/v1/credit-notes/validate')
-        self.credit_notes_list_path = config('FACTUS_CREDIT_NOTES_LIST_PATH', default='/v1/credit-notes')
-        self.credit_note_show_path = config('FACTUS_CREDIT_NOTE_SHOW_PATH', default='/v1/credit-notes/show/{number}')
+        self.credit_note_path = config('FACTUS_CREDIT_NOTE_PATH', default=get_endpoint('credit_note_validate', api_version=self.api_version))
+        self.credit_notes_list_path = config('FACTUS_CREDIT_NOTES_LIST_PATH', default=get_endpoint('credit_note_list', api_version=self.api_version))
+        self.credit_note_show_path = config('FACTUS_CREDIT_NOTE_SHOW_PATH', default=get_endpoint('credit_note_show', api_version=self.api_version))
         self.credit_note_download_pdf_path = config(
             'FACTUS_CREDIT_NOTE_DOWNLOAD_PDF_PATH',
             default='/v1/credit-notes/download-pdf/{number}',
@@ -95,11 +97,11 @@ class FactusClient:
         )
         self.credit_note_send_email_path = config(
             'FACTUS_CREDIT_NOTE_SEND_EMAIL_PATH',
-            default='/v1/credit-notes/send-email/{number}',
+            default=get_endpoint('credit_note_send_email', api_version=self.api_version),
         )
         self.credit_note_delete_by_reference_path = config(
             'FACTUS_CREDIT_NOTE_DELETE_BY_REFERENCE_PATH',
-            default='/v1/credit-notes/reference/{reference_code}',
+            default=get_endpoint('credit_note_delete_reference', api_version=self.api_version),
         )
         self.support_document_validate_path = config(
             'FACTUS_SUPPORT_DOCUMENT_VALIDATE_PATH',
@@ -143,7 +145,7 @@ class FactusClient:
             'FACTUS_SUPPORT_ADJUSTMENT_NOTE_DELETE_BY_REFERENCE_PATH',
             default='/v1/adjustment-notes/reference/{reference_code}',
         )
-        self.numbering_ranges_path = config('FACTUS_NUMBERING_RANGES_PATH', default='/v1/numbering-ranges')
+        self.numbering_ranges_path = config('FACTUS_NUMBERING_RANGES_PATH', default=get_endpoint('numbering_ranges', api_version=self.api_version))
         self.numbering_range_show_path = config(
             'FACTUS_NUMBERING_RANGE_SHOW_PATH',
             default='/v1/numbering-ranges/{id}',
@@ -162,7 +164,7 @@ class FactusClient:
         )
         self.numbering_ranges_dian_path = config(
             'FACTUS_NUMBERING_RANGES_DIAN_PATH',
-            default='/v1/numbering-ranges/dian',
+            default=get_endpoint('numbering_ranges_dian', api_version=self.api_version),
         )
         self.bill_events_path = config('FACTUS_BILL_EVENTS_PATH', default='/v1/bills/events/{number}')
         self.bill_tacit_acceptance_path = config(
