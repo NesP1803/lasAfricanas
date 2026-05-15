@@ -186,6 +186,10 @@ class FactusClient:
         self.customers_lookup_path = config('FACTUS_CUSTOMERS_LOOKUP_PATH', default=get_endpoint('customers_lookup', api_version=self.api_version))
         self.document_receptions_path = config('FACTUS_DOCUMENT_RECEPTIONS_PATH', default=get_endpoint('document_receptions', api_version=self.api_version))
         self.subscriptions_path = config('FACTUS_SUBSCRIPTIONS_PATH', default=get_endpoint('subscriptions', api_version=self.api_version))
+        self.document_download_xml_attached_path = config(
+            'FACTUS_DOCUMENT_DOWNLOAD_XML_ATTACHED_PATH',
+            default=get_endpoint('document_download_xml_attached', api_version=self.api_version),
+        )
 
         # Alias internos temporales para mantener compatibilidad en módulos/tests existentes.
         self.refresh_path = self.refresh_token_path

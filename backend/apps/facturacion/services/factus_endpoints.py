@@ -74,7 +74,40 @@ DEFAULTS = {
         "credit_note_email_content": "/v2/credit-notes/{number}/email-content",
         "credit_note_delete_reference": "/v2/credit-notes/destroy/reference/{reference_code}",
         "numbering_ranges": "/v2/numbering-ranges",
+        "numbering_range_show": "/v2/numbering-ranges/{id}",
+        "numbering_range_create": "/v2/numbering-ranges",
+        "numbering_range_delete": "/v2/numbering-ranges/{id}",
+        "numbering_range_update_current": "/v2/numbering-ranges/{id}/update-number",
+        "numbering_range_change_status": "/v2/numbering-ranges/{id}/change-state",
         "numbering_ranges_dian": "/v2/numbering-ranges/dian",
+        "support_document_validate": "/v2/support-documents/validate",
+        "support_document_list": "/v2/support-documents",
+        "support_document_show": "/v2/support-documents/{number}",
+        "support_document_download_pdf": "/v2/support-documents/{number}/download-pdf",
+        "support_document_download_xml": "/v2/support-documents/{number}/download-xml/",
+        "support_document_delete_reference": "/v2/support-documents/destroy/reference/{reference_code}",
+        "support_adjustment_validate": "/v2/adjustment-notes/validate",
+        "support_adjustment_list": "/v2/adjustment-notes",
+        "support_adjustment_show": "/v2/adjustment-notes/{number}",
+        "support_adjustment_download_pdf": "/v2/adjustment-notes/{number}/download-pdf",
+        "support_adjustment_download_xml": "/v2/adjustment-notes/{number}/download-xml/",
+        "support_adjustment_delete_reference": "/v2/adjustment-notes/destroy/reference/{reference_code}",
+        "document_download_xml_attached": "/v2/documents/{number}/download-xml-attacheddocument/",
+        "bill_events": "/v2/bills/events/{number}",
+        "bill_tacit_acceptance": "/v2/bills/acceptance-tacit/{number}",
+        "bill_email_template": "/v2/bills/email-template/{number}",
+        "bill_custom_pdf_upload": "/v2/bills/custom-pdf/{number}",
+        "company_show": "/v2/company",
+        "company_update": "/v2/company",
+        "company_update_logo": "/v2/company/update-image",
+        "countries": "/v2/countries",
+        "municipalities": "/v2/municipalities",
+        "tributes_products": "/v2/tributes/products",
+        "unit_measures": "/v2/measurement-units",
+        "reference_tables": "/v2/reference-tables",
+        "customers_lookup": "/v2/customers",
+        "document_receptions": "/v2/document-receptions",
+        "subscriptions": "/v2/subscriptions",
     },
 }
 
@@ -93,6 +126,7 @@ def get_endpoint(name: str, *, api_version: str | None = None) -> str:
     table = DEFAULTS.get(version, DEFAULTS["v2"])
     if name in table:
         return table[name]
-    if version == "v2" and name in FALLBACK_TO_V1:
+    strict_v2 = str(config("FACTUS_STRICT_V2_ENDPOINTS", default="false")).lower().strip() in {"1", "true", "yes", "on"}
+    if version == "v2" and not strict_v2 and name in FALLBACK_TO_V1:
         return DEFAULTS["v1"][name]
     raise KeyError(f"Endpoint '{name}' no está registrado para versión '{version}'")
