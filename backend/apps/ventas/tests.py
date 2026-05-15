@@ -11,6 +11,7 @@ from apps.facturacion.models import FacturaElectronica
 from apps.ventas.models import Cliente, Venta, DetalleVenta
 from apps.ventas.views import _factus_http_status_and_code, _registrar_salida_inventario
 from apps.ventas.services.cerrar_venta import build_pos_ticket_payload, cerrar_venta_local
+from apps.ventas.services.cuentas_del_dia import build_cuentas_del_dia_ticket_summary
 from apps.ventas.services.enviar_venta_a_caja import enviar_venta_a_caja
 
 
@@ -160,6 +161,48 @@ class CajaVentaFlowTests(TestCase):
         self.client.force_authenticate(user=self.cajero)
         response = self.client.post(f'/api/caja/{venta.id}/facturar/')
         self.assertEqual(response.status_code, 200)
+
+
+class CuentasDiaTicketSummaryTests(TestCase):
+    def setUp(self):
+        self.user = Usuario.objects.create_user(username='u1', password='pass1234', tipo_usuario='VENDEDOR')
+        self.cliente = Cliente.objects.create(tipo_documento='CC', numero_documento='999', nombre='Cliente')
+        categoria = Categoria.objects.create(nombre='Aceites')
+        proveedor = Proveedor.objects.create(nombre='Prov')
+        self.producto_gravado = Producto.objects.create(
+            codigo='GR-1', nombre='Prod gravado', categoria=categoria, proveedor=proveedor,
+            precio_costo=Decimal('10'), precio_venta=Decimal('20'), precio_venta_minimo=Decimal('20'),
+            stock=10, stock_minimo=1, iva_porcentaje=Decimal('19'), iva_exento=False
+        )
+        self.producto_exento = Producto.objects.create(
+            codigo='EX-1', nombre='Prod exento', categoria=categoria, proveedor=proveedor,
+            precio_costo=Decimal('10'), precio_venta=Decimal('20'), precio_venta_minimo=Decimal('20'),
+            stock=10, stock_minimo=1, iva_porcentaje=Decimal('0'), iva_exento=True
+        )
+
+    def test_build_ticket_summary_factura(self):
+        venta = Venta.objects.create(
+            tipo_comprobante='FACTURA', cliente=self.cliente, vendedor=self.user, subtotal=Decimal('300'),
+            descuento_porcentaje=Decimal('0'), descuento_valor=Decimal('0'), iva=Decimal('38'),
+            total=Decimal('338'), medio_pago='EFECTIVO', efectivo_recibido=Decimal('338'),
+            cambio=Decimal('0'), estado='COBRADA',
+        )
+        DetalleVenta.objects.create(venta=venta, producto=self.producto_gravado, cantidad=2, precio_unitario=Decimal('100'),
+                                    descuento_unitario=Decimal('10'), iva_porcentaje=Decimal('19'),
+                                    subtotal=Decimal('180'), total=Decimal('214.2'))
+        DetalleVenta.objects.create(venta=venta, producto=self.producto_exento, cantidad=1, precio_unitario=Decimal('100'),
+                                    descuento_unitario=Decimal('0'), iva_porcentaje=Decimal('0'),
+                                    subtotal=Decimal('100'), total=Decimal('100'))
+        Venta.objects.create(
+            tipo_comprobante='FACTURA', cliente=self.cliente, vendedor=self.user, subtotal=Decimal('100'),
+            descuento_porcentaje=Decimal('0'), descuento_valor=Decimal('0'), iva=Decimal('0'),
+            total=Decimal('100'), medio_pago='TARJETA', efectivo_recibido=Decimal('0'),
+            cambio=Decimal('0'), estado='ANULADA',
+        )
+        result = build_cuentas_del_dia_ticket_summary(None, None, 'FACTURA')
+        self.assertEqual(result['total_documentos'], 1)
+        self.assertEqual(result['resumen_estados'][0]['cantidad'], 1)
+        self.assertEqual(result['totales_iva']['compra'], '314.20')
 
         venta.refresh_from_db()
         self.assertTrue(venta.inventario_ya_afectado)

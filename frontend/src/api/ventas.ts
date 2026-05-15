@@ -318,6 +318,46 @@ export interface CajaPendiente {
   estado_display: string;
 }
 
+
+export interface ResumenIvaTirilla {
+  tipo: string;
+  compra: string;
+  base: string;
+  iva: string;
+  descuento: string;
+}
+
+export interface ResumenCategoriaTirilla {
+  categoria: string;
+  facturado: string;
+}
+
+export interface ResumenEstadoTirilla {
+  estado: string;
+  cantidad: number;
+}
+
+export interface ResumenMedioPagoTirilla {
+  cantidad: number;
+  medio_pago: string;
+  facturado: string;
+}
+
+export interface ResumenTirillaCuentasDia {
+  tipo_comprobante: 'FACTURA' | 'REMISION';
+  documento_label: string;
+  titulo: string;
+  fecha_inicio: string | null;
+  fecha_fin: string | null;
+  total_documentos: number;
+  total_facturado: string;
+  resumen_iva: ResumenIvaTirilla[];
+  totales_iva: { compra: string; base: string; iva: string; descuento: string };
+  resumen_categorias: ResumenCategoriaTirilla[];
+  resumen_estados: ResumenEstadoTirilla[];
+  resumen_medios_pago: ResumenMedioPagoTirilla[];
+}
+
 export interface EstadisticasVentas {
   total_ventas: number;
   total_facturado: string | null;
@@ -330,6 +370,10 @@ export interface EstadisticasVentas {
   remisiones_por_usuario?: { usuario: string; cuentas: number }[];
   facturas_detalle?: VentaListItem[];
   remisiones_detalle?: VentaListItem[];
+  resumen_tirilla?: {
+    FACTURA: ResumenTirillaCuentasDia;
+    REMISION: ResumenTirillaCuentasDia;
+  };
 }
 
 export const ventasApi = {
