@@ -15,15 +15,119 @@ const currencyFormatter = new Intl.NumberFormat('es-CO', {
 const toNumber = (value?: string | null) => (value ? Number(value) : 0);
 
 const today = getLocalDateInputValue();
-const TICKET_SEPARATOR = '--------------------------------';
-const formatTicketMoney = (value?: string | number | null) =>
-  new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 }).format(Number(value ?? 0));
+const TICKET_COLS = 42;
+const line = () => '='.repeat(TICKET_COLS);
+const thinLine = () => '-'.repeat(TICKET_COLS);
+
 const formatTicketDate = (value?: string | null) => {
   if (!value) return '';
   const [year, month, day] = value.split('-').map(Number);
   const meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   return `${day}-${meses[(month || 1) - 1]}-${year}`;
 };
+
+function fit(value: string, width: number): string {
+  const text = String(value ?? '').toUpperCase();
+  if (text.length > width) return text.slice(0, width);
+  return text.padEnd(width, ' ');
+}
+
+function right(value: string | number, width: number): string {
+  const text = String(value ?? '');
+  if (text.length > width) return text.slice(0, width);
+  return text.padStart(width, ' ');
+}
+
+function center(value: string): string {
+  const text = String(value ?? '').toUpperCase();
+  if (text.length >= TICKET_COLS) return text.slice(0, TICKET_COLS);
+  const left = Math.floor((TICKET_COLS - text.length) / 2);
+  return ' '.repeat(left) + text;
+}
+
+function money(value: string | number | null | undefined): string {
+  return new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0, minimumFractionDigits: 0 }).format(Number(value ?? 0));
+}
+
+function row2(label: string, value: string | number, leftWidth = 22, rightWidth = 18): string {
+  return fit(label, leftWidth) + right(value, rightWidth);
+}
+
+function section(title: string): string {
+  return '\n' + line() + '\n' + center(title) + '\n' + line() + '\n';
+}
+
+function ivaHeader() {
+  return fit('Tipo', 5) + right('Compra', 10) + right('Base', 10) + right('IVA', 8) + right('Desc', 9);
+}
+
+function ivaRow(row: { tipo: string; compra: string; base: string; iva: string; descuento: string }) {
+  return fit(row.tipo, 5) + right(money(row.compra), 10) + right(money(row.base), 10) + right(money(row.iva), 8) + right(money(row.descuento), 9);
+}
+
+function categoriaHeader() {
+  return fit('Categorias', 28) + right('Facturado', 14);
+}
+
+function categoriaRow(row: { categoria: string; facturado: string }) {
+  return fit(row.categoria, 28) + right(money(row.facturado), 14);
+}
+
+function estadoHeader(tipo: 'FACTURAS' | 'REMISIONES') {
+  return fit(tipo === 'FACTURAS' ? 'ESTADOS DE FACTURAS' : 'ESTADOS DE REMISIONES', 30) + right('CANTIDAD', 12);
+}
+
+function estadoRow(row: { estado: string; cantidad: number }) {
+  return fit(row.estado, 30) + right(row.cantidad, 12);
+}
+
+function medioPagoHeader(tipo: 'FACTURAS' | 'REMISIONES') {
+  return fit(tipo === 'FACTURAS' ? 'No. Facturas' : 'No. Remis.', 10) + fit('Medio Pago', 16) + right('Facturado', 16);
+}
+
+function medioPagoRow(row: { cantidad: number; medio_pago: string; facturado: string }) {
+  return right(row.cantidad, 10) + fit(row.medio_pago, 16) + right(money(row.facturado), 16);
+}
+
+function buildTicketText(tirilla: NonNullable<EstadisticasVentas['resumen_tirilla']>['FACTURA'], tipo: 'FACTURAS' | 'REMISIONES', empresa: ConfiguracionEmpresa | null) {
+  const nombreEmpresa = empresa?.razon_social || 'MOTOREPUESTOS LAS AFRICANAS';
+  const nitEmpresa = empresa
+    ? `${empresa.tipo_identificacion} ${empresa.identificacion}${empresa.dv ? `-${empresa.dv}` : ''}`
+    : 'NIT 91.068.915-8';
+  const regimen = empresa?.regimen || 'REGIMEN COMUN';
+  const telefono = empresa?.telefono || '54350548';
+  const direccion = empresa?.direccion || 'CALLE 6 # 12A-45 GAIRA';
+  const ciudad = empresa?.ciudad || 'SANTA MARTA MAGDALENA';
+  const titulo = tipo === 'FACTURAS' ? 'COMPROBANTE DE FACTURACION' : 'COMPROBANTE DE REMISIONES';
+  const rango = `${formatTicketDate(tirilla.fecha_inicio)} A ${formatTicketDate(tirilla.fecha_fin)}`;
+  const lines: string[] = [];
+  lines.push(center(nombreEmpresa), center(nitEmpresa), center(regimen), center(telefono), center(direccion), center(ciudad), '', center(titulo), center(rango));
+  lines.push(section('RESUMEN DE IVA').trimEnd());
+  lines.push(ivaHeader());
+  for (const row of tirilla.resumen_iva || []) lines.push(ivaRow(row));
+  lines.push(thinLine(), center('TOTALES'));
+  lines.push(row2('Compra:', money(tirilla.totales_iva?.compra)));
+  lines.push(row2('Base:', money(tirilla.totales_iva?.base)));
+  lines.push(row2('IVA:', money(tirilla.totales_iva?.iva)));
+  lines.push(row2('Descuentos:', money(tirilla.totales_iva?.descuento)));
+  lines.push(section('RESUMEN A CATEGORIAS').trimEnd());
+  lines.push(categoriaHeader());
+  for (const row of tirilla.resumen_categorias || []) lines.push(categoriaRow(row));
+  lines.push(thinLine());
+  lines.push(row2('TOTAL', money(tirilla.total_facturado), 28, 14));
+  lines.push(section('RESUMEN A ESTADOS').trimEnd());
+  lines.push(estadoHeader(tipo));
+  for (const row of tirilla.resumen_estados || []) lines.push(estadoRow(row));
+  lines.push(section('RESUMEN A MEDIO DE PAGO').trimEnd());
+  lines.push(medioPagoHeader(tipo));
+  for (const row of tirilla.resumen_medios_pago || []) lines.push(medioPagoRow(row));
+  lines.push(thinLine());
+  lines.push(right('TOTAL', 26) + right(money(tirilla.total_facturado), 16));
+  if (tirilla.total_documentos === 0) lines.push('', center('SIN DOCUMENTOS EN EL RANGO'));
+  lines.push('');
+  return lines.join('\n');
+}
+
 const escapeHtml = (value: string) =>
   value
     .replaceAll('&', '&amp;')
@@ -95,23 +199,7 @@ export default function CuentasDia() {
         setMensaje('No se pudo abrir la ventana de impresión.');
         return;
       }
-      const renderRows = (rows: string[]) => rows.join('');
-      const nombreEmpresa = (empresa?.razon_social || 'MOTOREPUESTOS LAS AFRICANAS').toUpperCase();
-      const nitEmpresa = empresa
-        ? `${empresa.tipo_identificacion} ${empresa.identificacion}${empresa.dv ? `-${empresa.dv}` : ''}`
-        : 'NIT 91.068.915-8';
-      const regimen = (empresa?.regimen || 'Régimen común').toUpperCase();
-      const telefono = empresa?.telefono || '54350548';
-      const direccion = (empresa?.direccion || 'Calle 6 # 12A-45 Gaira').toUpperCase();
-      const ciudad = `${empresa?.ciudad || 'Santa Marta'} ${empresa?.municipio || 'Magdalena'}`.toUpperCase();
-      const rango = `${formatTicketDate(tirilla.fecha_inicio)} A ${formatTicketDate(tirilla.fecha_fin)}`;
-      const estadoTitulo = tipo === 'FACTURAS' ? 'ESTADOS DE FACTURAS' : 'ESTADOS DE REMISIONES';
-      const medioTitulo = tipo === 'FACTURAS' ? 'No. de Facturas' : 'No. de Remisiones';
-      const ivaRows = renderRows((tirilla.resumen_iva || []).map((row) => `<tr><td>${escapeHtml(row.tipo)}</td><td class="right">${formatTicketMoney(row.compra)}</td><td class="right">${formatTicketMoney(row.base)}</td><td class="right">${formatTicketMoney(row.iva)}</td><td class="right">${formatTicketMoney(row.descuento)}</td></tr>`));
-      const categoriaRows = renderRows((tirilla.resumen_categorias || []).map((row) => `<tr><td>${escapeHtml(row.categoria)}</td><td class="right">${formatTicketMoney(row.facturado)}</td></tr>`));
-      const estadoRows = renderRows((tirilla.resumen_estados || []).map((row) => `<tr><td>${escapeHtml(row.estado)}</td><td class="right">${row.cantidad}</td></tr>`));
-      const medioRows = renderRows((tirilla.resumen_medios_pago || []).map((row) => `<tr><td class="right">${row.cantidad}</td><td>${escapeHtml(row.medio_pago)}</td><td class="right">${formatTicketMoney(row.facturado)}</td></tr>`));
-      const sinDocumentos = tirilla.total_documentos === 0 ? '<p class="center">SIN DOCUMENTOS EN EL RANGO</p>' : '';
+      const ticketText = buildTicketText(tirilla, tipo, empresa);
 
       printWindow.document.write(`
         <!doctype html>
@@ -122,37 +210,25 @@ export default function CuentasDia() {
             <style>
               @page { size: 80mm auto; margin: 0; }
               html, body { width: 80mm; margin: 0; padding: 0; }
-              body { font-family: 'Arial Narrow', monospace; font-size: 10px; padding: 3mm; color: #000; }
-              table { width: 100%; border-collapse: collapse; }
-              th, td { padding: 1px 0; }
-              .center { text-align: center; }
-              .right { text-align: right; }
-              h1, h2, p { margin: 1px 0; }
+              html, body { width: 80mm; margin: 0; padding: 0; background: #fff; }
+              body { color: #000; }
+              .ticket { width: 80mm; box-sizing: border-box; padding: 3mm 3mm 4mm 3mm; }
+              .ticket-text {
+                margin: 0; padding: 0; white-space: pre;
+                font-family: "Courier New", "Lucida Console", monospace;
+                font-size: 10px; line-height: 1.15; font-weight: 700; color: #000;
+              }
+              @media print {
+                html, body { width: 80mm; }
+                .ticket { width: 80mm; }
+                .ticket-text { font-size: 10px; line-height: 1.15; }
+              }
             </style>
           </head>
           <body>
-            <h1 class="center">${escapeHtml(nombreEmpresa)}</h1>
-            <p class="center">${escapeHtml(nitEmpresa)}</p>
-            <p class="center">${escapeHtml(regimen)}</p>
-            <p class="center">${escapeHtml(telefono)}</p>
-            <p class="center">${escapeHtml(direccion)}</p>
-            <p class="center">${escapeHtml(ciudad)}</p>
-            <h2 class="center">${escapeHtml(tirilla.titulo)}</h2>
-            <p class="center">${escapeHtml(rango)}</p>
-            ${sinDocumentos}
-            <p>${TICKET_SEPARATOR}</p><p>RESUMEN DE IVA</p><p>${TICKET_SEPARATOR}</p>
-            <table><thead><tr><th>Tipo</th><th class="right">Compra</th><th class="right">Base</th><th class="right">IVA</th><th class="right">Desc</th></tr></thead><tbody>${ivaRows}</tbody></table>
-            <p>TOTALES</p>
-            <p>Compra: ${formatTicketMoney(tirilla.totales_iva.compra)}</p>
-            <p>Base: ${formatTicketMoney(tirilla.totales_iva.base)}</p>
-            <p>IVA: ${formatTicketMoney(tirilla.totales_iva.iva)}</p>
-            <p>Descuentos: ${formatTicketMoney(tirilla.totales_iva.descuento)}</p>
-            <p>${TICKET_SEPARATOR}</p><p>RESUMEN A CATEGORÍAS</p><p>${TICKET_SEPARATOR}</p>
-            <table><thead><tr><th>Categoría</th><th class="right">Facturado</th></tr></thead><tbody>${categoriaRows}<tr><td>TOTAL</td><td class="right">${formatTicketMoney(tirilla.total_facturado)}</td></tr></tbody></table>
-            <p>${TICKET_SEPARATOR}</p><p>RESUMEN A ESTADOS</p><p>${TICKET_SEPARATOR}</p>
-            <table><thead><tr><th>${estadoTitulo}</th><th class="right">CANTIDAD</th></tr></thead><tbody>${estadoRows}</tbody></table>
-            <p>${TICKET_SEPARATOR}</p><p>RESUMEN A MEDIO DE PAGO</p><p>${TICKET_SEPARATOR}</p>
-            <table><thead><tr><th>${medioTitulo}</th><th>Medio Pago</th><th class="right">Facturado</th></tr></thead><tbody>${medioRows}<tr><td></td><td>TOTAL</td><td class="right">${formatTicketMoney(tirilla.total_facturado)}</td></tr></tbody></table>
+            <div class="ticket">
+              <pre class="ticket-text">${escapeHtml(ticketText)}</pre>
+            </div>
           </body>
         </html>
       `);
