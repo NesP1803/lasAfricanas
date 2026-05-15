@@ -4049,3 +4049,30 @@ class FactusV2PayloadShapeTests(TestCase):
         excluded = build_v2_item_taxes(Decimal('0'))
         self.assertEqual(taxed, [{'code': '01', 'rate': '19.00'}])
         self.assertEqual(excluded, [{'is_excluded': True}])
+
+class FactusEndpointsV2Tests(TestCase):
+    def test_resuelve_endpoint_v2_nuevo_sin_fallback(self):
+        from apps.facturacion.services.factus_endpoints import get_endpoint
+
+        endpoint = get_endpoint('numbering_range_change_status', api_version='v2')
+        self.assertEqual(endpoint, '/v2/numbering-ranges/{id}/change-state')
+
+    def test_resuelve_endpoint_xml_attached_document_v2(self):
+        from apps.facturacion.services.factus_endpoints import get_endpoint
+
+        endpoint = get_endpoint('document_download_xml_attached', api_version='v2')
+        self.assertEqual(endpoint, '/v2/documents/{number}/download-xml-attacheddocument/')
+
+    @patch('apps.facturacion.services.factus_endpoints.config')
+    def test_modo_estricto_v2_bloquea_fallback_a_v1(self, mock_config):
+        from apps.facturacion.services.factus_endpoints import get_endpoint
+
+        def _fake_config(key, default=None):
+            if key == 'FACTUS_STRICT_V2_ENDPOINTS':
+                return 'true'
+            return default
+
+        mock_config.side_effect = _fake_config
+
+        with self.assertRaises(KeyError):
+            get_endpoint('non_existing_endpoint', api_version='v2')
